@@ -110,7 +110,7 @@ pub(super) fn local_config(bind_addr: SocketAddr) -> SocketLocalResponderConfig 
 }
 
 pub(super) fn limits() -> SocketPipelineLimits {
-    SocketPipelineLimits::new(1_024, 1_024, 7, Duration::from_secs(1)).unwrap()
+    SocketPipelineLimits::new(1_024, 1_024, 7).unwrap()
 }
 
 #[derive(Debug, Clone, Copy)]

@@ -30,7 +30,7 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
                 records
                     .into_iter()
                     .map(|record| {
-                        let online = self.is_online(record.registration.package().identity());
+                        let online = self.is_online(&record.registration.package().identity());
                         application_summary(&record, online)
                     })
                     .collect()

@@ -12,7 +12,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{ListenerId, ProtocolPackageRef};
 
 use super::{ExternalPackageConnectionId, ExternalPackageRegistryAdapter, recent_error_view};
-use crate::adapters::external_packages::ExternalPackageConnectionError;
+use crate::adapters::PackageTransportError;
 
 impl ExternalPackageRegistryAdapter {
     pub(super) fn publish_service_listening(&self, websocket_url: &str) {
@@ -62,11 +62,11 @@ impl ExternalPackageRegistryAdapter {
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
-        reason: &ExternalPackageConnectionError,
+        reason: &PackageTransportError,
     ) {
         let package = package_identity(package);
         let error = recent_error_view(reason);
-        let level = if matches!(reason, ExternalPackageConnectionError::Disconnected) {
+        let level = if matches!(reason, PackageTransportError::Disconnected) {
             DiagnosticLogLevel::Warning
         } else {
             DiagnosticLogLevel::Error
@@ -105,7 +105,7 @@ impl ExternalPackageRegistryAdapter {
     pub(crate) fn record_registration_failure(
         &self,
         remote_address: SocketAddr,
-        reason: &ExternalPackageConnectionError,
+        reason: &PackageTransportError,
     ) {
         let error = recent_error_view(reason);
         self.record_connection_attempt_failure("registration", remote_address, &error.code);
@@ -213,7 +213,7 @@ impl ExternalPackageRegistryAdapter {
             Utc::now(),
             entity_id,
             None,
-            UiEventPayload::DiagnosticLogAdded(entry),
+            UiEventPayload::DiagnosticLogAdded(Box::new(entry)),
         );
     }
 }

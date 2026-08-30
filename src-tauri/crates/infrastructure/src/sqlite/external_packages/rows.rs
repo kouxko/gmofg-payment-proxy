@@ -5,7 +5,7 @@
 use std::net::SocketAddr;
 
 use chrono::{DateTime, Utc};
-use intercept_proxy_domain::ExternalPackageRegistration;
+use intercept_proxy_package_contract::PackageManifest;
 
 use super::{
     InfrastructureError, canonical_external_registration_fingerprint, corrupt_external_package,
@@ -15,7 +15,7 @@ use super::{
 #[derive(Clone, Debug, Eq, PartialEq)]
 pub(crate) struct StoredExternalPackage {
     /// 经过领域严格校验的完整注册合同。
-    pub registration: ExternalPackageRegistration,
+    pub registration: PackageManifest,
     /// Proxy 对规范化注册合同计算的 SHA-256 指纹。
     pub fingerprint: [u8; 32],
     /// 用户显式设置的启用位；与当前在线状态相互独立。
@@ -103,7 +103,7 @@ pub(super) fn parse_external_package_row(
         recent_error_occurred_at,
     ): ExternalPackageRow,
 ) -> Result<StoredExternalPackage, InfrastructureError> {
-    let registration = serde_json::from_str::<ExternalPackageRegistration>(&registration_json)
+    let registration = serde_json::from_str::<PackageManifest>(&registration_json)
         .map_err(|error| corrupt_external_package(format!("registration_json 无效：{error}")))?;
     let identity = registration.package().identity();
     if identity.id.as_str() != package_id || identity.version.as_str() != version {

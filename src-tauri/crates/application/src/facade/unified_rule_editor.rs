@@ -400,7 +400,9 @@ fn document_capability(
         ProtocolRuleFieldActionCapability::ClearField,
     ];
     let mut fields = Vec::new();
-    collect_document_schema_fields(&schema.root, "", &actions, &mut fields);
+    if let Some(schema) = schema {
+        collect_document_schema_fields(&schema.root, "", &actions, &mut fields);
+    }
     Some(DocumentCapability {
         fields,
         common_actions: vec![ProtocolRuleCommonActionCapability::RecordMatch],

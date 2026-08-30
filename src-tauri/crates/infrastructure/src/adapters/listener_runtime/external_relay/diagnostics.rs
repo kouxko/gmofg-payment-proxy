@@ -6,7 +6,7 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
-use crate::adapters::external_packages::ExternalPackageConnectionError;
+use crate::adapters::PackageTransportError;
 
 pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
     package: &ProtocolPackageRef,
@@ -14,21 +14,19 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
     direction: ProtocolDirection,
     stage: ExternalPackageCallStage,
     method: &str,
-    error: &ExternalPackageConnectionError,
+    error: &PackageTransportError,
 ) -> ExternalPackageCallDiagnosticViewModel {
-    let (request_id, remote_code, remote_message, remote_data) = match error {
-        ExternalPackageConnectionError::Timeout { request_id, .. } => {
-            (Some(request_id.as_str()), None, None, "none".to_owned())
-        }
-        ExternalPackageConnectionError::Remote {
+    let (request_id, remote_code, stable_code, remote_message, remote_data) = match error {
+        PackageTransportError::Remote {
             request_id, error, ..
         } => (
             Some(request_id.as_str()),
             Some(error.code()),
+            Some(error.data().code().as_str()),
             Some(error.message()),
-            redacted_data_summary(error.data()),
+            "object(fields=1)".to_owned(),
         ),
-        _ => (None, None, None, "none".to_owned()),
+        _ => (None, None, None, None, "none".to_owned()),
     };
     let direction_text = match direction {
         ProtocolDirection::Upstream => "upstream",
@@ -41,6 +39,7 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
         method: method.to_owned(),
         request_id: request_id.map(ToOwned::to_owned),
         remote_code,
+        stable_code: stable_code.map(ToOwned::to_owned),
         remote_message: remote_message.map(ToOwned::to_owned),
         remote_data_summary: (remote_data != "none").then_some(remote_data.clone()),
     }
@@ -64,6 +63,7 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
     diagnostic
 }
 
+#[cfg(test)]
 pub(super) fn redacted_data_summary(data: Option<&serde_json::Value>) -> String {
     match data {
         None => "none".to_owned(),

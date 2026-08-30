@@ -367,10 +367,10 @@ pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescrip
             },
             display: true,
         },
-        upstream_schema: upstream_schema.clone(),
-        downstream_schema: ProtocolPackageSchemaViewModel {
+        upstream_schema: Some(upstream_schema.clone()),
+        downstream_schema: Some(ProtocolPackageSchemaViewModel {
             root: upstream_schema.root,
-        },
+        }),
     }
 }
 

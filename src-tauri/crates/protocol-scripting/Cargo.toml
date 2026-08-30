@@ -6,6 +6,7 @@ rust-version.workspace = true
 
 [dependencies]
 intercept-proxy-domain = { path = "../domain" }
+intercept-proxy-package-runtime = { path = "../package-runtime" }
 rhai.workspace = true
 serde.workspace = true
 serde_path_to_error.workspace = true

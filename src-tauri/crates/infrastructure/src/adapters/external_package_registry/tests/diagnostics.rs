@@ -41,10 +41,7 @@ async fn connection_attempt_failures_are_queryable_without_secret_values() {
         remote_address,
         "EXTERNAL_PACKAGE_HANDSHAKE_REJECTED",
     );
-    registry.record_registration_failure(
-        remote_address,
-        &ExternalPackageConnectionError::Disconnected,
-    );
+    registry.record_registration_failure(remote_address, &PackageTransportError::Disconnected);
 
     let rendered = rendered_diagnostics(&events);
     assert!(rendered.contains("EXTERNAL_PACKAGE_SERVICE_BIND_FAILED"));
@@ -87,7 +84,7 @@ fn clean_disconnect_is_reported_as_a_stable_offline_event() {
     registry.publish_connection_offline(
         &package,
         connection_id,
-        &ExternalPackageConnectionError::Disconnected,
+        &PackageTransportError::Disconnected,
     );
 
     let rendered = rendered_diagnostics(&events);

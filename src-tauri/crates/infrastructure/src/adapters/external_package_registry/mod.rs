@@ -10,7 +10,8 @@ use intercept_proxy_application::{
     AppResult, EventHub, ExternalPackageServiceStateViewModel,
     ExternalPackageServiceStatusViewModel, UiEventPayload,
 };
-use intercept_proxy_domain::{ExternalPackageRegistration, ProtocolPackageRef};
+use intercept_proxy_domain::ProtocolPackageRef;
+use intercept_proxy_package_contract::PackageManifest;
 use parking_lot::{Mutex, RwLock};
 
 #[cfg(test)]
@@ -18,8 +19,8 @@ use crate::SqliteStore;
 use crate::{IntoSqlitePersistence, SqliteExecutor};
 
 use super::{
+    PackageTransportClient, PackageTransportError,
     common::app_error,
-    external_packages::{ExternalPackageClient, ExternalPackageConnectionError},
     listener_runtime::{ExternalSocketPackageBinding, ExternalSocketPackageProvider},
 };
 use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
@@ -140,9 +141,9 @@ impl ExternalPackageRegistryAdapter {
     /// 比较，避免接线层传错摘要。相同精确身份已有 Active 或 Closing 连接时，后注册者被拒绝。
     pub async fn accept_registration(
         &self,
-        registration: &ExternalPackageRegistration,
+        registration: &PackageManifest,
         fingerprint: [u8; 32],
-        client: ExternalPackageClient,
+        client: PackageTransportClient,
     ) -> AppResult<AcceptedExternalPackageConnection> {
         let computed = external_package_registration_fingerprint(registration)?;
         let package = registration.package().identity().clone();
@@ -188,7 +189,6 @@ impl ExternalPackageRegistryAdapter {
             StoredExternalPackageRegistrationOutcome::Reconnected { enabled } => enabled,
         };
         let connection_id = ExternalPackageConnectionId::new();
-        let rpc_timeout = client.rpc_timeout();
         {
             // SQLite 完成后才发布内存代次；所有 parking_lot guard 都局限在无 await 的作用域内。
             // 始终按 online -> connection_details 的顺序持锁，使 Active 与详情快照一起可见。
@@ -198,7 +198,6 @@ impl ExternalPackageRegistryAdapter {
                 ConnectionDetailSnapshot {
                     connection_id,
                     remote_address: None,
-                    rpc_timeout,
                     recent_error: None,
                 },
             );
@@ -264,7 +263,7 @@ impl ExternalPackageRegistryAdapter {
         &self,
         package: &ProtocolPackageRef,
         connection_id: ExternalPackageConnectionId,
-        reason: &ExternalPackageConnectionError,
+        reason: &PackageTransportError,
     ) -> AppResult<bool> {
         let _environment_apply_gate = self.acquire_environment_apply_package_gate(package).await;
         let gate = self.connection_mutation(package);
@@ -306,7 +305,7 @@ impl ExternalPackageRegistryAdapter {
 
     /// 返回在线精确版本的 client 快照，供 Socket 运行时创建单业务连接适配器。
     #[must_use]
-    pub fn client(&self, package: &ProtocolPackageRef) -> Option<ExternalPackageClient> {
+    pub fn client(&self, package: &ProtocolPackageRef) -> Option<PackageTransportClient> {
         match self.online.lock().get(package) {
             Some(OnlineConnection::Active { client, .. }) => Some(client.clone()),
             Some(OnlineConnection::Closing { .. }) | None => None,
@@ -456,12 +455,10 @@ impl ExternalSocketPackageProvider for ExternalPackageRegistryAdapter {
             )
         })?;
         let max_frame_bytes = client.max_logical_frame_bytes();
-        let rpc_timeout = client.rpc_timeout();
         Ok(Some(ExternalSocketPackageBinding::with_limits(
             stored.registration,
             Arc::new(client),
             max_frame_bytes,
-            rpc_timeout,
         )))
     }
 }

@@ -17,7 +17,7 @@ impl Application {
                 .clone()
                 .or_else(|| entry.device_serial.clone()),
             None,
-            UiEventPayload::DiagnosticLogAdded(entry),
+            UiEventPayload::DiagnosticLogAdded(Box::new(entry)),
         );
     }
 

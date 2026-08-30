@@ -8,6 +8,7 @@ use std::{
     time::SystemTime,
 };
 
+use intercept_proxy_exchange::ExternalPackageCallFailure;
 use uuid::Uuid;
 
 use crate::transport::relay::{RelayBytes, RelayIoBytes, RelayProgress};
@@ -139,11 +140,12 @@ pub enum SocketRejectionReason {
     Capacity,
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Debug, PartialEq, Eq)]
 pub struct SocketRelayFailure {
     pub stage: SocketRelayStage,
     pub direction: Option<SocketRelayDirection>,
     pub code: &'static str,
+    pub external_package_call: Option<Box<ExternalPackageCallFailure>>,
 }
 
 #[derive(Clone, Debug, PartialEq, Eq)]

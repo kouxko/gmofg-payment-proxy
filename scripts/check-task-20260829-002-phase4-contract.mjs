@@ -577,6 +577,8 @@ export async function checkPhase4({ inventory, read = readFile, discoveredTests 
   const rustFiles = await filesBelow(path.join(root, "src-tauri"), ".rs");
   const legacySymbol = /pub\s+(?:struct|enum|type)\s+(External(?:DocumentWire|Package(?:MethodSuffix|Direction|MethodNamespace|Metadata|DocumentDirection|Documents|DirectionHooks|Hooks|Registration)|Frame(?:Request|Result)|Decode(?:Request|Response)|Encode(?:Request|Response)|Display(?:Request|Response)))\b/gu;
   const allowlist = active.phase7_legacy_wire_allowlist ?? [];
+  if (!Array.isArray(allowlist) || allowlist.length !== 0)
+    failures.push("Phase 7 legacy wire allowlist must remain empty after Phase 7 migration");
   const allowedLegacyDefinitions = new Map();
   for (const entry of allowlist) {
     if (!exactKeys(entry, ["file", "symbol", "reason"])

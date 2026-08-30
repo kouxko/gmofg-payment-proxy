@@ -417,12 +417,18 @@ pub(super) fn ensure_external_description(
         && capabilities.downstream.encode
         && capabilities.display
         && matches!(
-            description.upstream_schema.root,
-            intercept_proxy_domain::DocumentSchemaNode::Object { .. }
+            description
+                .upstream_schema
+                .as_ref()
+                .map(|schema| &schema.root),
+            Some(intercept_proxy_domain::DocumentSchemaNode::Object { .. })
         )
         && matches!(
-            description.downstream_schema.root,
-            intercept_proxy_domain::DocumentSchemaNode::Object { .. }
+            description
+                .downstream_schema
+                .as_ref()
+                .map(|schema| &schema.root),
+            Some(intercept_proxy_domain::DocumentSchemaNode::Object { .. })
         )
     {
         return Ok(());

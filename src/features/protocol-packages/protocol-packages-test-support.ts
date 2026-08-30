@@ -84,7 +84,6 @@ function externalDetail(): NonNullable<ProtocolPackageDetailViewModel["external"
     first_connected_at: "2026-08-20T08:00:00Z",
     last_connected_at: "2026-08-20T09:00:00Z",
     registration_fingerprint_sha256: "ab".repeat(32),
-    rpc_timeout_seconds: 5,
     upstream_methods: externalMethods("upstream"),
     downstream_methods: externalMethods("downstream"),
     recent_error: null,

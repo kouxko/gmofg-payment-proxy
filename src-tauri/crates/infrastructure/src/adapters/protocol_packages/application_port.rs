@@ -168,8 +168,12 @@ pub(in crate::adapters) fn application_description(
             },
             display: compiled.supports_display(),
         },
-        upstream_schema: application_schema(compiled.schema(ProtocolDirection::Upstream)),
-        downstream_schema: application_schema(compiled.schema(ProtocolDirection::Downstream)),
+        upstream_schema: Some(application_schema(
+            compiled.schema(ProtocolDirection::Upstream),
+        )),
+        downstream_schema: Some(application_schema(
+            compiled.schema(ProtocolDirection::Downstream),
+        )),
     }
 }
 

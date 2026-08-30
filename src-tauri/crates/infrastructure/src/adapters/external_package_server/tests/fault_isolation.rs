@@ -75,7 +75,15 @@ async fn rejected_handshake_releases_the_accepted_connection_permit() {
         stream,
         remote_address,
         1,
-        ExternalPackageConnectionConfig::default(),
+        PackageTransportConfig::new(
+            Duration::from_secs(30),
+            Duration::from_secs(10),
+            Duration::from_secs(30),
+            8 * 1024 * 1024,
+            8 * 1024 * 1024,
+            1024 * 1024,
+            128 * 1024,
+        ),
         ConnectionServices {
             registry: Arc::new(ExternalPackageRegistryAdapter::new(Arc::new(
                 SqliteStore::in_memory().expect("in-memory store"),
@@ -166,10 +174,9 @@ async fn failed_package_cleanup_stops_only_its_listener_while_another_package_pr
     let healthy_client = registry.client(&healthy_package).expect("healthy online");
     let call = tokio::spawn(async move {
         healthy_client
-            .call::<_, Value>(
-                "hooks.upstream.decode",
-                &serde_json::json!({"healthy":true}),
-            )
+            .upstream_decode(intercept_proxy_package_contract::DecodeParams {
+                input: "aGVhbHRoeQ==".to_owned(),
+            })
             .await
     });
     let request = loop {
@@ -192,7 +199,7 @@ async fn failed_package_cleanup_stops_only_its_listener_while_another_package_pr
         .expect("response");
     assert_eq!(
         call.await.expect("join").expect("healthy progress"),
-        serde_json::json!({"ok":true})
+        serde_json::from_value(serde_json::json!({"ok":true})).unwrap()
     );
     registry
         .disconnect(&healthy_package)

@@ -91,7 +91,7 @@ pub(super) async fn run_scripted_exchange(
                 Err(ProtocolExchangeFailure::Preparation(failure))
             } else {
                 Err(ProtocolExchangeFailure::Processing(
-                    exchange_failure(&error.message).with_bytes(progress.snapshot()),
+                    exchange_failure(&error).with_bytes(progress.snapshot()),
                 ))
             }
         }
@@ -133,7 +133,7 @@ pub(super) async fn run_local_exchange(
     .map(|()| progress.snapshot())
     .map_err(|error| {
         ProtocolExchangeFailure::Processing(
-            exchange_failure(&error.message).with_bytes(progress.snapshot()),
+            exchange_failure(&error).with_bytes(progress.snapshot()),
         )
     })
 }
@@ -218,10 +218,15 @@ fn direction_error<D: Direction>(error: &Error) -> Error {
         intercept_proxy_exchange::DirectionKind::Upstream => "Upstream",
         intercept_proxy_exchange::DirectionKind::Downstream => "Downstream",
     };
-    Error::new(format!("{direction}|{}", error.message))
+    let mut mapped = Error::new(format!("{direction}|{}", error.message));
+    mapped
+        .external_package_call
+        .clone_from(&error.external_package_call);
+    mapped
 }
 
-fn exchange_failure(message: &str) -> SocketProcessingFailure {
+fn exchange_failure(error: &Error) -> SocketProcessingFailure {
+    let message = error.message.as_str();
     let direction = if message.starts_with("Upstream|") {
         Some(SocketPayloadDirection::AppToUpstream)
     } else if message.starts_with("Downstream|") {
@@ -234,7 +239,10 @@ fn exchange_failure(message: &str) -> SocketProcessingFailure {
         .map_or(message, |(_, rest)| rest)
         .split_once(':')
         .map_or(message, |(code, _)| code);
-    let failure = SocketProcessingFailure::new(kind_from_code(code), message);
+    let mut failure = SocketProcessingFailure::new(kind_from_code(code), message);
+    if let Some(external_package_call) = error.external_package_call.clone() {
+        failure = failure.with_external_package_call(*external_package_call);
+    }
     direction.map_or(failure.clone(), |direction| failure.in_direction(direction))
 }
 

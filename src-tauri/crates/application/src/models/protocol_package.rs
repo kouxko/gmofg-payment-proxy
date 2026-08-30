@@ -174,8 +174,8 @@ pub struct ProtocolPackageDetailViewModel {
     pub version: ProtocolPackageVersionViewModel,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub upstream_schema: ProtocolPackageSchemaViewModel,
-    pub downstream_schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: Option<ProtocolPackageSchemaViewModel>,
+    pub downstream_schema: Option<ProtocolPackageSchemaViewModel>,
     pub usages: Vec<ProtocolPackageUsageViewModel>,
     /// 仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。
     pub external: Option<ExternalPackageDetailViewModel>,
@@ -206,7 +206,6 @@ pub struct ExternalPackageDetailViewModel {
     pub first_connected_at: DateTime<Utc>,
     pub last_connected_at: DateTime<Utc>,
     pub registration_fingerprint_sha256: String,
-    pub rpc_timeout_seconds: u64,
     pub upstream_methods: ExternalPackageDirectionMethodsViewModel,
     pub downstream_methods: ExternalPackageDirectionMethodsViewModel,
     pub recent_error: Option<ExternalPackageRecentErrorViewModel>,
@@ -271,8 +270,8 @@ pub struct ProtocolPackageDescriptionViewModel {
     pub package: ProtocolPackageRef,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub upstream_schema: ProtocolPackageSchemaViewModel,
-    pub downstream_schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: Option<ProtocolPackageSchemaViewModel>,
+    pub downstream_schema: Option<ProtocolPackageSchemaViewModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -288,8 +287,8 @@ pub struct ListenerProtocolPackageOptionViewModel {
     pub source: ProtocolPackageSourceViewModel,
     pub kind: ProtocolPackageKindViewModel,
     pub capabilities: ProtocolPackageCapabilitiesViewModel,
-    pub upstream_schema: ProtocolPackageSchemaViewModel,
-    pub downstream_schema: ProtocolPackageSchemaViewModel,
+    pub upstream_schema: Option<ProtocolPackageSchemaViewModel>,
+    pub downstream_schema: Option<ProtocolPackageSchemaViewModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]

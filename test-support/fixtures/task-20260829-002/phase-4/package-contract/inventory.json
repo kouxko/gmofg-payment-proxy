@@ -28,7 +28,7 @@
       "canonical_golden_round_trips_every_request_result_and_error_shape"
     ]
   },
-  "generated_sha256": "897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e",
+  "generated_sha256": "413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123",
   "mcp_snapshot_sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe",
   "generated_required_fragments": [
     "export type PackageManifest =",
@@ -53,98 +53,7 @@
     "ExternalDisplayResponse"
   ],
   "phase7_manifest_owner_allowlist": [],
-  "phase7_legacy_wire_allowlist": [
-    {
-      "file": "src-tauri/crates/domain/src/external_package/document.rs",
-      "symbol": "ExternalDocumentWire",
-      "reason": "Phase 7 owns removal of the currently running proxy-initiated Socket actor wire. Phase 4 does not switch runtime lifecycle or behavior."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageMethodSuffix",
-      "reason": "Phase 7 owns removal of the legacy dynamic method registration wire."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageDirection",
-      "reason": "Phase 7 owns removal of the legacy dynamic method registration wire."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageMethodNamespace",
-      "reason": "Phase 7 owns removal of the legacy dynamic method registration wire."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageMetadata",
-      "reason": "Phase 7 owns removal of the legacy registration DTO after runtime migration."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageDocumentDirection",
-      "reason": "Phase 7 owns removal of the legacy registration DTO after runtime migration."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageDocuments",
-      "reason": "Phase 7 owns removal of the legacy registration DTO after runtime migration."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageDirectionHooks",
-      "reason": "Phase 7 owns removal of dynamic hook registration."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageHooks",
-      "reason": "Phase 7 owns removal of dynamic hook registration."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/registration.rs",
-      "symbol": "ExternalPackageRegistration",
-      "reason": "Phase 7 owns removal of the proxy-initiated registration DTO."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalFrameRequest",
-      "reason": "Phase 7 owns switching the running actor to the fixed frame request."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalFrameResult",
-      "reason": "Phase 7 owns switching the running actor to the final closed FrameResult."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalDecodeRequest",
-      "reason": "Phase 7 owns switching the running actor to fixed decode RPC."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalDecodeResponse",
-      "reason": "Phase 7 owns switching the running actor to fixed decode RPC."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalEncodeRequest",
-      "reason": "Phase 7 owns switching the running actor to fixed encode RPC."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalEncodeResponse",
-      "reason": "Phase 7 owns switching the running actor to fixed encode RPC."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalDisplayRequest",
-      "reason": "Phase 7 owns switching the running actor to fixed display RPC."
-    },
-    {
-      "file": "src-tauri/crates/domain/src/external_package/runtime.rs",
-      "symbol": "ExternalDisplayResponse",
-      "reason": "Phase 7 owns switching the running actor to fixed display RPC."
-    }
-  ],
+  "phase7_legacy_wire_allowlist": [],
   "evidence_byte_copies": [
     { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/http-manifest.json", "sha256": "19848d4e11f6aee5d0fc5ae68bc4fffeaef2d6049c2aaf7852eddfc3a9296a3f" },
     { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/socket-manifest.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/socket-manifest.json", "sha256": "0f18d983bccf26846121d4a999b4c201b06932bf39c16c5f00e01de9f5c8d0cd" },

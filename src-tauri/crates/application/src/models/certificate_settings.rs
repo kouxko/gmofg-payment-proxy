@@ -63,13 +63,10 @@ pub struct ChannelSettingsDraft {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 外部软件包 WebSocket 服务的启动配置。
 ///
-/// 监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。RPC 超时和并发上限
-/// 同样固定进一次连接快照，避免一个已建立连接在处理中途改变资源语义。
+/// 监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。
 pub struct ExternalPackageServiceSettingsDraft {
     pub bind_address: String,
     pub port: u16,
-    pub rpc_timeout_seconds: u64,
-    pub max_in_flight: usize,
 }
 
 impl Default for ExternalPackageServiceSettingsDraft {
@@ -77,8 +74,6 @@ impl Default for ExternalPackageServiceSettingsDraft {
         Self {
             bind_address: "0.0.0.0".into(),
             port: 8_765,
-            rpc_timeout_seconds: 5,
-            max_in_flight: 256,
         }
     }
 }

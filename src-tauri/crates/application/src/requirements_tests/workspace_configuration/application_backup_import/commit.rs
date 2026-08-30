@@ -198,6 +198,8 @@ async fn fresh_rule_schema_revalidation_failure_writes_nothing() {
             .get_mut(&candidate.protocol_packages[0].package)
             .unwrap()
             .upstream_schema
+            .as_mut()
+            .unwrap()
             .root;
         let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } = schema else {
             unreachable!()

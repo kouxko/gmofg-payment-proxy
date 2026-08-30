@@ -39,11 +39,21 @@ async fn listener_catalog_only_returns_enabled_valid_current_descriptions_in_sta
     );
     assert_eq!(catalog.options[0].name, format!("alpha {}", first.version));
     assert_eq!(
-        catalog.options[0].upstream_schema.root.title(),
+        catalog.options[0]
+            .upstream_schema
+            .as_ref()
+            .unwrap()
+            .root
+            .title(),
         Some("Payments")
     );
     assert_eq!(
-        catalog.options[0].downstream_schema.root.title(),
+        catalog.options[0]
+            .downstream_schema
+            .as_ref()
+            .unwrap()
+            .root
+            .title(),
         Some("Payments")
     );
     assert!(catalog.options[0].capabilities.upstream.encode);
@@ -169,7 +179,7 @@ async fn list_groups_versions_by_id_and_detail_uses_the_exact_version() {
         expected_description.downstream_schema
     );
     let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
-        &detail.upstream_schema.root
+        &detail.upstream_schema.as_ref().unwrap().root
     else {
         unreachable!()
     };
@@ -292,16 +302,16 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
         host_api: version.host_api,
         kind: description.kind,
         capabilities: description.capabilities,
-        upstream_schema: description.upstream_schema.clone(),
-        downstream_schema: description.downstream_schema.clone(),
+        upstream_schema: description.upstream_schema.clone().unwrap(),
+        downstream_schema: description.downstream_schema.clone().unwrap(),
     };
     let imported = ProtocolPackageImportViewModel {
         outcome: ProtocolPackageImportOutcomeViewModel::Installed,
         version,
         kind: description.kind,
         capabilities: description.capabilities,
-        upstream_schema: description.upstream_schema,
-        downstream_schema: description.downstream_schema,
+        upstream_schema: description.upstream_schema.unwrap(),
+        downstream_schema: description.downstream_schema.unwrap(),
     };
     services.push_import_response(Ok(None));
     services.push_import_response(Ok(Some(preview.clone())));

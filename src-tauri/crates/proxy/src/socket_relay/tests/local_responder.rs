@@ -333,7 +333,10 @@ async fn assert_local_failure(outcome: ProcessorOutcome, expected_code: &'static
         .collect::<Vec<_>>();
     assert_eq!(closed.len(), 1);
     assert_eq!(closed[0].1.server_to_client, 0);
-    let failure = closed[0].0.expect("processor failure must be observable");
+    let failure = closed[0]
+        .0
+        .as_ref()
+        .expect("processor failure must be observable");
     assert_eq!(failure.stage, SocketRelayStage::FrameProcess);
     assert_eq!(
         failure.direction,

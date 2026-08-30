@@ -151,7 +151,7 @@ describe("Socket Listener model", () => {
     })()],
     ["invalid Schema", (() => {
       const candidate = option();
-      candidate.upstream_schema.root = { type: "array", items: null as never };
+      candidate.upstream_schema!.root = { type: "array", items: null as never };
       return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
     })()],
     ["invalid capabilities", (() => {
@@ -389,7 +389,7 @@ describe("Socket Listener model", () => {
     ["empty Schema title", { type: "string", title: "" }],
   ])("rejects a catalog with %s", (_case, root) => {
     const candidate = option();
-    candidate.upstream_schema.root = root as never;
+    candidate.upstream_schema!.root = root as never;
 
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,

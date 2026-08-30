@@ -276,6 +276,18 @@ impl PackageRpcError {
     pub const fn data(&self) -> PackageRpcErrorData {
         self.data
     }
+
+    /// Returns the JSON-RPC numeric error code.
+    #[must_use]
+    pub const fn code(&self) -> i64 {
+        self.code
+    }
+
+    /// Returns the package-provided error message.
+    #[must_use]
+    pub fn message(&self) -> &str {
+        &self.message
+    }
 }
 
 /// Strict failed JSON-RPC response.

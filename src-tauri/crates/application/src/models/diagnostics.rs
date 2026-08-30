@@ -135,6 +135,7 @@ pub struct ExternalPackageCallDiagnosticViewModel {
     pub method: String,
     pub request_id: Option<String>,
     pub remote_code: Option<i64>,
+    pub stable_code: Option<String>,
     pub remote_message: Option<String>,
     /// 只允许 `null/bool/number/string(bytes=N)/array(items=N)/object(fields=N)` 形状摘要。
     pub remote_data_summary: Option<String>,
@@ -148,6 +149,8 @@ impl ExternalPackageCallDiagnosticViewModel {
             sanitize_optional(self.request_id.as_deref(), DIAGNOSTIC_CONTEXT_MAX_CHARS);
         self.remote_message =
             sanitize_optional(self.remote_message.as_deref(), DIAGNOSTIC_SUMMARY_MAX_CHARS);
+        self.stable_code =
+            sanitize_optional(self.stable_code.as_deref(), DIAGNOSTIC_CONTEXT_MAX_CHARS);
         self.remote_data_summary = sanitize_optional(
             self.remote_data_summary.as_deref(),
             DIAGNOSTIC_CONTEXT_MAX_CHARS,

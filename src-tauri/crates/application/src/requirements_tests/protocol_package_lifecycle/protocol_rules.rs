@@ -54,7 +54,7 @@ fn description_with_blob(package: ProtocolPackageRef) -> ProtocolPackageDescript
     let mut value = description(package);
     value.capabilities.downstream.encode = true;
     let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
-        &mut value.upstream_schema.root
+        &mut value.upstream_schema.as_mut().unwrap().root
     else {
         unreachable!()
     };

@@ -108,7 +108,6 @@ fn external_detail() -> ExternalPackageDetailViewModel {
         first_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
         last_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
         registration_fingerprint_sha256: "00".repeat(32),
-        rpc_timeout_seconds: 5,
         upstream_methods: methods.clone(),
         downstream_methods: methods,
         recent_error: None,
@@ -167,8 +166,8 @@ pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescrip
             },
             display: true,
         },
-        upstream_schema: schema.clone(),
-        downstream_schema: schema,
+        upstream_schema: Some(schema.clone()),
+        downstream_schema: Some(schema),
     }
 }
 

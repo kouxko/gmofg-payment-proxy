@@ -2,7 +2,7 @@ use super::*;
 use crate::sqlite::external_packages::registration_serialization_error;
 use intercept_proxy_domain::ProtocolPackageRef;
 
-fn insert_registration(store: &SqliteStore) -> (ExternalPackageRegistration, ProtocolPackageRef) {
+fn insert_registration(store: &SqliteStore) -> (PackageManifest, ProtocolPackageRef) {
     let registration = registration("Vendor ISO8583");
     let package = registration.package().identity().clone();
     store

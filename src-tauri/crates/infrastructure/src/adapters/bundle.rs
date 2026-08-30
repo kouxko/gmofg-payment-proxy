@@ -24,9 +24,9 @@ use super::{
     AndroidAdbAdapter, CaptureRepositoryAdapter, CertificateServiceAdapter,
     EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
     EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
-    ExternalPackageConnectionConfig, ExternalPackageRegistryAdapter, ExternalPackageServer,
-    ExternalPackageServerConfig, FaultServiceAdapter, HeaderBodyCodecResolver,
-    ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
+    ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
+    FaultServiceAdapter, HeaderBodyCodecResolver, ListenerRuntimeAdapter,
+    ManagedListenerCertificateAdapter, NativeFileDialog, PackageTransportConfig,
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
     RuntimePipelineProductHooks, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
@@ -262,15 +262,13 @@ impl InfrastructureServiceBundle {
             .saturating_mul(4)
             .div_ceil(3)
             .saturating_add(64 * 1024);
-        let connection = ExternalPackageConnectionConfig::new(
+        let connection = PackageTransportConfig::new(
             Duration::from_secs(30),
-            Duration::from_secs(external.rpc_timeout_seconds),
             Duration::from_secs(10),
             Duration::from_secs(30),
-            external.max_in_flight,
             usize::try_from(max_body_bytes).unwrap_or(usize::MAX),
-            1024 * 1024,
             rpc_message_bytes,
+            1024 * 1024,
             128 * 1024,
         );
         Ok(ExternalPackageServer::start(

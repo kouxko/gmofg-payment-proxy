@@ -38,7 +38,7 @@ pub enum UiEventPayload {
     CaptureRowsAdded(Vec<CaptureRowViewModel>),
     /// 一条连接级 Exchange 观测证据已成功写入内存；正文仍由查询接口按需读取。
     ExchangeObservationChanged,
-    DiagnosticLogAdded(crate::DiagnosticLogEntryViewModel),
+    DiagnosticLogAdded(Box<crate::DiagnosticLogEntryViewModel>),
     SessionUpdated(SessionSummaryViewModel),
     BreakpointQueued(BreakpointSummaryViewModel),
     BreakpointResolved(BreakpointSummaryViewModel),

@@ -4,13 +4,13 @@ use intercept_proxy_application::{
     EnvironmentApplyLeasePort, EnvironmentApplyLeaseRequest, ExternalPackageApplicationPort,
     ListenerRuntimePort, ProtocolPackageRef,
 };
-use intercept_proxy_domain::ExternalPackageRegistration;
 use intercept_proxy_domain::{ProxyListener, ProxyWorkspace};
+use intercept_proxy_package_contract::PackageManifest;
 
 use super::{
     AndroidAdbAdapter, EnvironmentApplyLeaseAdapter, EnvironmentApplyLeaseRuntime,
-    EnvironmentApplyResourceGateRegistry, ExternalPackageClient, ExternalPackageConnectionId,
-    ExternalPackageRegistryAdapter, ListenerRuntimeAdapter,
+    EnvironmentApplyResourceGateRegistry, ExternalPackageConnectionId,
+    ExternalPackageRegistryAdapter, ListenerRuntimeAdapter, PackageTransportClient,
 };
 
 fn poll_once<F: Future>(future: Pin<&mut F>) -> Poll<F::Output> {
@@ -74,9 +74,9 @@ async fn external_online_generation_publication_is_blocked_by_real_apply_lease(
     lease_adapter: &EnvironmentApplyLeaseAdapter,
     packages: &ExternalPackageRegistryAdapter,
     request: EnvironmentApplyLeaseRequest,
-    registration: ExternalPackageRegistration,
+    registration: PackageManifest,
     fingerprint: [u8; 32],
-    client: ExternalPackageClient,
+    client: PackageTransportClient,
 ) {
     let lease = lease_adapter.acquire(request).await.unwrap();
     let mut mutation = Box::pin(packages.accept_registration(&registration, fingerprint, client));

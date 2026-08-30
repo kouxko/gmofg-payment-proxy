@@ -127,7 +127,7 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_ide
 
     let mut incompatible = description_with_blob(package);
     let intercept_proxy_domain::DocumentSchemaNode::Object { properties, .. } =
-        &mut incompatible.upstream_schema.root
+        &mut incompatible.upstream_schema.as_mut().unwrap().root
     else {
         unreachable!()
     };

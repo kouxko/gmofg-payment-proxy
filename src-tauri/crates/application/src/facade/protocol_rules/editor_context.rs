@@ -134,7 +134,6 @@ struct ProtocolRuleDescriptionContext {
 
 pub(super) struct ProtocolRuleContext {
     pub(super) package: ProtocolPackageRef,
-    description: ProtocolPackageDescriptionViewModel,
     pub(super) schema: DocumentSchemaNode,
 }
 
@@ -153,10 +152,16 @@ fn protocol_rule_context_from_description(
             "本机应答只允许配置两个统一代理写出阶段。",
         ));
     }
-    let schema = domain_schema(schema_for_stage(&description_context.description, stage));
+    let schema = schema_for_stage(&description_context.description, stage)
+        .map(domain_schema)
+        .ok_or_else(|| {
+            AppError::new(
+                "PROTOCOL_PACKAGE_SCHEMA_MISSING",
+                "协议包未提供此方向的 Schema。",
+            )
+        })?;
     Ok(ProtocolRuleContext {
         package: description_context.package.clone(),
-        description: description_context.description.clone(),
         schema,
     })
 }
@@ -172,10 +177,10 @@ fn valid_protocol_rule_stages(_local_responder: bool) -> &'static [ProtocolRuleS
 fn schema_for_stage(
     description: &ProtocolPackageDescriptionViewModel,
     stage: ProtocolRuleStage,
-) -> &crate::ProtocolPackageSchemaViewModel {
+) -> Option<&crate::ProtocolPackageSchemaViewModel> {
     match stage.direction() {
-        ProtocolDirection::Upstream => &description.upstream_schema,
-        ProtocolDirection::Downstream => &description.downstream_schema,
+        ProtocolDirection::Upstream => description.upstream_schema.as_ref(),
+        ProtocolDirection::Downstream => description.downstream_schema.as_ref(),
     }
 }
 
@@ -192,12 +197,7 @@ pub(super) fn capability_catalog(
         ProtocolRuleFieldActionCapability::ClearField,
     ];
     let mut fields = Vec::new();
-    collect_schema_fields(
-        &schema_for_stage(&context.description, stage).root,
-        "",
-        &field_actions,
-        &mut fields,
-    );
+    collect_schema_fields(&context.schema, "", &field_actions, &mut fields);
     let common_actions = vec![ProtocolRuleCommonActionCapability::RecordMatch];
     ProtocolRuleCapabilityCatalog {
         package: context.package.clone(),

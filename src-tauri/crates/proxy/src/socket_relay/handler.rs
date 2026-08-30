@@ -208,6 +208,7 @@ impl SocketConnectionHandler {
                     },
                     direction: Some(SocketRelayDirection::Downstream),
                     code: error.code,
+                    external_package_call: None,
                 };
                 self.close(
                     run,
@@ -273,6 +274,7 @@ impl SocketConnectionHandler {
                 stage: SocketRelayStage::Shutdown,
                 direction: preparation.failure.direction,
                 code: error.code,
+                external_package_call: preparation.failure.external_package_call.clone(),
             }
         } else {
             SocketRelayFailure {
@@ -305,7 +307,13 @@ impl SocketConnectionHandler {
                 let socket_failure = socket_failure(&failure);
                 let code = socket_failure.code;
                 let bytes = failure.bytes;
-                self.close(run, connection_id, true, bytes, Some(socket_failure));
+                self.close(
+                    run,
+                    connection_id,
+                    true,
+                    bytes,
+                    Some(socket_failure.clone()),
+                );
                 Err(ProxyError {
                     code,
                     message: failure.error.message,
@@ -328,7 +336,13 @@ impl SocketConnectionHandler {
             Err(failure) => {
                 let socket_failure = processing_failure(&failure);
                 let bytes = failure.bytes();
-                self.close(run, connection_id, true, bytes, Some(socket_failure));
+                self.close(
+                    run,
+                    connection_id,
+                    true,
+                    bytes,
+                    Some(socket_failure.clone()),
+                );
                 Err(ProxyError {
                     code: socket_failure.code,
                     message: "socket frame processing failed".into(),

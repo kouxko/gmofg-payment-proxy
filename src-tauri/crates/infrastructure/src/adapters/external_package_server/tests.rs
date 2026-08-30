@@ -15,24 +15,75 @@ use intercept_proxy_application::{
     UiTone,
 };
 use intercept_proxy_domain::{
-    ExternalPackageRegistration, ListenerId, ProtocolPackageRef, ProxyListener, ProxyWorkspace,
-    WorkspaceId,
+    ListenerId, ProtocolPackageRef, ProxyListener, ProxyWorkspace, WorkspaceId,
 };
+use intercept_proxy_package_contract::{PackageManifest, PackageRegisterNotification};
 use parking_lot::Mutex;
-use serde_json::Value;
 use tokio::{io::DuplexStream, sync::Barrier};
 use tokio_tungstenite::{
-    WebSocketStream,
+    WebSocketStream, client_async,
     tungstenite::{Message, protocol::Role},
 };
 
 use super::*;
 use crate::{
     SqliteStore,
-    adapters::{ExternalPackageConnectionId, external_package_registration_fingerprint},
+    adapters::{
+        ExternalPackageConnectionId, accept_packages_websocket,
+        external_package_registration_fingerprint,
+    },
 };
 
 type Peer = WebSocketStream<DuplexStream>;
+
+#[tokio::test]
+async fn packages_websocket_uses_rpc_ceiling_but_rejects_rpc_plus_one() {
+    let registration_limit = 256;
+    let rpc_limit = 1024;
+    let config = PackageTransportConfig::new(
+        Duration::from_secs(30),
+        Duration::from_secs(10),
+        Duration::from_secs(30),
+        4096,
+        rpc_limit,
+        registration_limit,
+        512,
+    );
+    assert_eq!(config.websocket_message_bytes(), rpc_limit);
+    let (server_io, client_io) = tokio::io::duplex(4096);
+    let server = tokio::spawn(async move {
+        let mut websocket = accept_packages_websocket(server_io, config.websocket_message_bytes())
+            .await
+            .expect("/packages handshake");
+        let accepted = websocket
+            .next()
+            .await
+            .expect("response message")
+            .expect("within rpc ceiling");
+        assert_eq!(accepted.into_text().unwrap().len(), rpc_limit);
+        websocket
+            .next()
+            .await
+            .expect("oversized result")
+            .expect_err("rpc+1 must fail")
+    });
+    let (mut client, _) = client_async("ws://localhost/packages", client_io)
+        .await
+        .expect("client handshake");
+    client
+        .send(Message::Text("x".repeat(rpc_limit).into()))
+        .await
+        .unwrap();
+    client
+        .send(Message::Text("x".repeat(rpc_limit + 1).into()))
+        .await
+        .unwrap();
+    let error = server.await.unwrap();
+    assert!(
+        matches!(error, tokio_tungstenite::tungstenite::Error::Capacity(_)),
+        "{error:?}"
+    );
+}
 
 #[path = "tests/fault_isolation.rs"]
 mod fault_isolation;
@@ -334,41 +385,26 @@ async fn reconnect(registry: &ExternalPackageRegistryAdapter, generation: u64) -
 }
 
 async fn connected_client(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     generation: u64,
-) -> (ExternalPackageClient, Peer) {
+) -> (PackageTransportClient, Peer) {
     let (actor_io, peer_io) = tokio::io::duplex(2 * 1024 * 1024);
     let actor = WebSocketStream::from_raw_socket(actor_io, Role::Server, None).await;
     let mut peer = WebSocketStream::from_raw_socket(peer_io, Role::Client, None).await;
-    let config = ExternalPackageConnectionConfig::new(
+    let config = PackageTransportConfig::new(
         Duration::from_secs(30),
-        Duration::from_secs(5),
         Duration::from_secs(10),
         Duration::from_secs(30),
-        4,
         1024 * 1024,
         1024 * 1024,
         1024 * 1024,
         128 * 1024,
     );
-    let connecting = tokio::spawn(ExternalPackageClient::connect(actor, generation, config));
-    let Message::Text(request) = peer
-        .next()
-        .await
-        .expect("registration request")
-        .expect("valid frame")
-    else {
-        panic!("registration request must be text")
-    };
-    let request: Value = serde_json::from_str(&request).expect("valid JSON-RPC");
+    let connecting = tokio::spawn(PackageTransportClient::connect(actor, generation, config));
     peer.send(Message::Text(
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": request["id"],
-            "result": registration,
-        })
-        .to_string()
-        .into(),
+        serde_json::to_string(&PackageRegisterNotification::new(registration.clone()))
+            .expect("registration notification")
+            .into(),
     ))
     .await
     .expect("registration response");
@@ -409,13 +445,14 @@ fn stopped_status(listener_id: ListenerId) -> ListenerStatusViewModel {
     }
 }
 
-fn registration() -> ExternalPackageRegistration {
+fn registration() -> PackageManifest {
     registration_with_id("race-iso8583")
 }
 
-fn registration_with_id(package_id: &str) -> ExternalPackageRegistration {
+fn registration_with_id(package_id: &str) -> PackageManifest {
     serde_json::from_value(serde_json::json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": package_id, "name": "Race ISO8583", "version": "1.0.0",
             "description": "reconnect race test"
@@ -425,20 +462,14 @@ fn registration_with_id(package_id: &str) -> ExternalPackageRegistration {
                 "schema": {
                     "type": "object", "title": "Upstream",
                     "properties": {"mti": {"type": "string", "title": "MTI"}}
-                },
-                "display": "render"
+                }
             },
             "downstream": {
                 "schema": {
                     "type": "object", "title": "Downstream",
                     "properties": {"response_code": {"type": "string", "title": "RC"}}
-                },
-                "display": "render"
+                }
             }
-        },
-        "hooks": {
-            "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
-            "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
         }
     }))
     .expect("valid registration")

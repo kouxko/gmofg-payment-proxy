@@ -33,11 +33,11 @@ impl Application {
             .await?;
         let (schema, capabilities) = match rule.stage().direction() {
             Some(intercept_proxy_domain::ProtocolDirection::Upstream) => (
-                domain_schema(&description.upstream_schema),
+                description.upstream_schema.as_ref().map(domain_schema),
                 description.capabilities.upstream,
             ),
             Some(intercept_proxy_domain::ProtocolDirection::Downstream) => (
-                domain_schema(&description.downstream_schema),
+                description.downstream_schema.as_ref().map(domain_schema),
                 description.capabilities.downstream,
             ),
             None => return Err(rule_invalid("stage", "TLS 握手阶段不支持 Document 规则")),
@@ -54,8 +54,10 @@ impl Application {
                 "协议包未声明该方向的 Document Encode 能力",
             ));
         }
-        candidate.condition.validate_document_schema(&schema)?;
-        validate_unified_actions_schema(candidate.actions, &schema)?;
+        if let Some(schema) = schema {
+            candidate.condition.validate_document_schema(&schema)?;
+            validate_unified_actions_schema(candidate.actions, &schema)?;
+        }
         Ok(())
     }
 }

@@ -4,21 +4,21 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    DocumentAction, DocumentValue, ExternalDecodeRequest, ExternalDecodeResponse,
-    ExternalDisplayRequest, ExternalDisplayResponse, ExternalDocumentWire, ExternalEncodeRequest,
-    ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult, ExternalPackageRegistration,
-    JsonPointer, ListenerId, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolDocumentRuleProgram, SocketTopology,
+    Document, DocumentAction, DocumentValue, ErrorCode, JsonPointer, ListenerId,
+    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
+    SocketTopology,
 };
 use intercept_proxy_exchange::{FrameResult, SocketContext};
+use intercept_proxy_package_contract::{
+    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult as PackageFrameResult,
+    PackageManifest, PackageRpcError,
+};
 use parking_lot::Mutex;
 use serde_json::json;
 use uuid::Uuid;
 
 use super::*;
-use crate::adapters::external_packages::{
-    ExternalPackageConnectionError, ExternalPackageRemoteError,
-};
+use crate::adapters::PackageTransportError;
 
 #[test]
 fn remote_data_diagnostic_is_shape_only() {
@@ -52,13 +52,13 @@ fn remote_data_diagnostic_summarizes_every_json_shape_without_values() {
 #[test]
 fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
     let package = registration().package().identity().clone();
-    let error = ExternalPackageConnectionError::Remote {
+    let error = PackageTransportError::Remote {
         request_id: "g7-c42".to_owned(),
-        method: "hooks.upstream.decrypt_and_decode".to_owned(),
-        error: ExternalPackageRemoteError::new(
+        method: "hooks.upstream.decode",
+        error: PackageRpcError::new(
             -32_001,
             "decoder rejected message".to_owned(),
-            Some(json!({"pan": "4111111111111111"})),
+            ErrorCode::BodyDecodeFailed,
         ),
     };
     let diagnostic = trace_external_rpc_failure(
@@ -66,12 +66,16 @@ fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
         &connection(),
         ProtocolDirection::Upstream,
         ExternalPackageCallStage::Decode,
-        "hooks.upstream.decrypt_and_decode",
+        "hooks.upstream.decode",
         &error,
     );
 
     assert_eq!(diagnostic.request_id.as_deref(), Some("g7-c42"));
     assert_eq!(diagnostic.remote_code, Some(-32_001));
+    assert_eq!(
+        diagnostic.stable_code.as_deref(),
+        Some("BODY_DECODE_FAILED")
+    );
     assert_eq!(
         diagnostic.remote_message.as_deref(),
         Some("decoder rejected message")
@@ -84,29 +88,6 @@ fn remote_error_diagnostic_preserves_correlation_without_payload_values() {
 }
 
 #[test]
-fn timeout_diagnostic_preserves_request_id_without_remote_error_fields() {
-    let package = registration().package().identity().clone();
-    let error = ExternalPackageConnectionError::Timeout {
-        request_id: "timeout-request-7".to_owned(),
-        method: "hooks.upstream.split_frame".to_owned(),
-    };
-
-    let diagnostic = trace_external_rpc_failure(
-        &package,
-        &connection(),
-        ProtocolDirection::Upstream,
-        ExternalPackageCallStage::Frame,
-        "hooks.upstream.split_frame",
-        &error,
-    );
-
-    assert_eq!(diagnostic.request_id.as_deref(), Some("timeout-request-7"));
-    assert_eq!(diagnostic.remote_code, None);
-    assert_eq!(diagnostic.remote_message, None);
-    assert_eq!(diagnostic.remote_data_summary, None);
-}
-
-#[test]
 fn non_rpc_error_diagnostic_is_uncorrelated_and_supports_downstream_direction() {
     let package = registration().package().identity().clone();
 
@@ -116,7 +97,7 @@ fn non_rpc_error_diagnostic_is_uncorrelated_and_supports_downstream_direction() 
         ProtocolDirection::Downstream,
         ExternalPackageCallStage::Encode,
         "hooks.downstream.encode_and_encrypt",
-        &ExternalPackageConnectionError::Disconnected,
+        &PackageTransportError::Disconnected,
     );
 
     assert_eq!(diagnostic.direction, ProtocolDirection::Downstream);
@@ -162,10 +143,10 @@ async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
     assert_eq!(
         rpc.calls.lock().as_slice(),
         [
-            "hooks.upstream.split_frame",
-            "hooks.upstream.decrypt_and_decode",
-            "document.upstream.render_message",
-            "hooks.upstream.encode_and_encrypt",
+            "hooks.upstream.frame",
+            "hooks.upstream.decode",
+            "document.upstream.display",
+            "hooks.upstream.encode",
         ]
     );
     let encoded_document = rpc.encoded_document.lock().clone().unwrap();
@@ -175,53 +156,15 @@ async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
     );
 }
 
-#[tokio::test]
-async fn decode_timeout_is_fail_closed_and_never_reaches_encode() {
-    let registration = registration();
-    let rpc = Arc::new(FakeExternalRpc {
-        fail_decode: true,
-        ..FakeExternalRpc::default()
-    });
-    let snapshot = ExternalSocketRuntimeSnapshot::new(
-        ExternalSocketPackageBinding::new(registration.clone(), rpc.clone()),
-        rules(&registration),
-        SocketTopology::default(),
-    );
-    let factory = ExternalSocketCapabilityFactoryAdapter::new(&snapshot, observation_metadata());
-    let mut capabilities = factory.create_upstream(connection()).unwrap();
-
-    let failure = capabilities
-        .decode
-        .decode(&SocketContext {
-            data: b"abc".to_vec(),
-        })
-        .await
-        .unwrap_err();
-
-    assert!(failure.message.contains("PROCESSING_TIMEOUT"));
-    assert_eq!(
-        rpc.calls.lock().as_slice(),
-        ["hooks.upstream.decrypt_and_decode"]
-    );
-}
-
 #[derive(Debug, Default)]
 struct FakeExternalRpc {
     calls: Mutex<Vec<&'static str>>,
-    encoded_document: Mutex<Option<ExternalDocumentWire>>,
-    fail_decode: bool,
+    encoded_document: Mutex<Option<Document>>,
 }
 
 impl FakeExternalRpc {
-    fn record_method(&self, method: &str) {
-        let stable = match method {
-            "hooks.upstream.split_frame" => "hooks.upstream.split_frame",
-            "hooks.upstream.decrypt_and_decode" => "hooks.upstream.decrypt_and_decode",
-            "hooks.upstream.encode_and_encrypt" => "hooks.upstream.encode_and_encrypt",
-            "document.upstream.render_message" => "document.upstream.render_message",
-            other => panic!("unexpected method {other}"),
-        };
-        self.calls.lock().push(stable);
+    fn record_method(&self, method: &'static str) {
+        self.calls.lock().push(method);
     }
 }
 
@@ -229,57 +172,58 @@ impl FakeExternalRpc {
 impl ExternalPackageRpc for FakeExternalRpc {
     async fn frame(
         &self,
-        method: &str,
-        request: &ExternalFrameRequest,
-    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError> {
-        self.record_method(method);
-        Ok(ExternalFrameResult::Complete {
-            consumed_bytes: request.bytes().unwrap().len(),
-        })
+        direction: ProtocolDirection,
+        request: FrameParams,
+    ) -> Result<PackageFrameResult, PackageTransportError> {
+        self.record_method(match direction {
+            ProtocolDirection::Upstream => "hooks.upstream.frame",
+            ProtocolDirection::Downstream => "hooks.downstream.frame",
+        });
+        Ok(PackageFrameResult::complete(request.buffer.bytes().len()).unwrap())
     }
 
     async fn decode(
         &self,
-        method: &str,
-        _request: &ExternalDecodeRequest,
-    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError> {
-        self.record_method(method);
-        if self.fail_decode {
-            return Err(ExternalPackageConnectionError::Timeout {
-                request_id: "g1-c1".to_owned(),
-                method: method.to_owned(),
-            });
-        }
-        Ok(ExternalDecodeResponse {
-            document: serde_json::from_value(json!({"message_type": "0200"})).unwrap(),
-        })
+        direction: ProtocolDirection,
+        _request: DecodeParams,
+    ) -> Result<Document, PackageTransportError> {
+        self.record_method(match direction {
+            ProtocolDirection::Upstream => "hooks.upstream.decode",
+            ProtocolDirection::Downstream => "hooks.downstream.decode",
+        });
+        Ok(serde_json::from_value(json!({"message_type": "0200"})).unwrap())
     }
 
     async fn encode(
         &self,
-        method: &str,
-        request: &ExternalEncodeRequest,
-    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError> {
-        self.record_method(method);
+        direction: ProtocolDirection,
+        request: EncodeParams,
+    ) -> Result<String, PackageTransportError> {
+        self.record_method(match direction {
+            ProtocolDirection::Upstream => "hooks.upstream.encode",
+            ProtocolDirection::Downstream => "hooks.downstream.encode",
+        });
         *self.encoded_document.lock() = Some(request.document.clone());
-        Ok(ExternalEncodeResponse::from_bytes(b"encoded"))
+        Ok("ZW5jb2RlZA==".to_owned())
     }
 
     async fn display(
         &self,
-        method: &str,
-        _request: &ExternalDisplayRequest,
-    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
-        self.record_method(method);
-        Ok(ExternalDisplayResponse {
-            html: "<p>ok</p>".to_owned(),
-        })
+        direction: ProtocolDirection,
+        _request: DisplayParams,
+    ) -> Result<String, PackageTransportError> {
+        self.record_method(match direction {
+            ProtocolDirection::Upstream => "document.upstream.display",
+            ProtocolDirection::Downstream => "document.downstream.display",
+        });
+        Ok("<p>ok</p>".to_owned())
     }
 }
 
-fn registration() -> ExternalPackageRegistration {
+fn registration() -> PackageManifest {
     serde_json::from_value(json!({
         "api": 1,
+        "kind": "socket",
         "package": {
             "id": "external-runtime-test",
             "name": "External runtime test",
@@ -295,8 +239,7 @@ fn registration() -> ExternalPackageRegistration {
                         "message_type": {"type": "string", "title": "MTI"},
                         "amount": {"type": "number", "title": "Amount"}
                     }
-                },
-                "display": "render_message"
+                }
             },
             "downstream": {
                 "schema": {
@@ -305,20 +248,7 @@ fn registration() -> ExternalPackageRegistration {
                     "properties": {
                         "response_code": {"type": "string", "title": "Response code"}
                     }
-                },
-                "display": "render_message"
-            }
-        },
-        "hooks": {
-            "upstream": {
-                "frame": "split_frame",
-                "decode": "decrypt_and_decode",
-                "encode": "encode_and_encrypt"
-            },
-            "downstream": {
-                "frame": "split_frame",
-                "decode": "decrypt_and_decode",
-                "encode": "encode_and_encrypt"
+                }
             }
         }
     }))
@@ -344,10 +274,15 @@ fn connection() -> SocketConnectionIdentity {
     }
 }
 
-fn rules(registration: &ExternalPackageRegistration) -> ProtocolDocumentRuleConnectionFactory {
+fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactory {
     let package = registration.package().identity().clone();
-    let upstream = registration.document().upstream().schema().clone();
-    let downstream = registration.document().downstream().schema().clone();
+    let upstream = registration.document().upstream().schema().unwrap().clone();
+    let downstream = registration
+        .document()
+        .downstream()
+        .schema()
+        .unwrap()
+        .clone();
     let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
         ProtocolDocumentRuleId::new(),
         "set amount".to_owned(),

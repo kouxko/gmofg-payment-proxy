@@ -4,27 +4,26 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use intercept_proxy_application::ExternalPackageCallStage;
-use intercept_proxy_domain::{
-    ExternalDecodeRequest, ExternalDisplayRequest, ExternalDocumentWire, ExternalEncodeRequest,
-    ExternalFrameRequest, ExternalFrameResult, ProtocolDirection, ProtocolPackageRef,
-};
+use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, Encode, Error, Frame, FrameResult, Rules, Socket,
-    SocketContext,
+    Decode, Direction, Display, Document, Encode, Error, ExternalPackageCallFailure,
+    ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Rules,
+    Socket, SocketContext,
+};
+use intercept_proxy_package_contract::{
+    CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams,
+    FrameResult as PackageFrameResult,
 };
 use intercept_proxy_runtime::{SocketConnectionIdentity, SocketProcessingFailureKind};
 
 use super::{ExternalPackageRpc, trace_external_rpc_failure};
-use crate::adapters::{
-    external_packages::ExternalPackageConnectionError,
-    listener_runtime::ProtocolDocumentRuleConnection,
-};
+use crate::adapters::{PackageTransportError, listener_runtime::ProtocolDocumentRuleConnection};
 
 macro_rules! capability {
     ($name:ident $(<$d:ident>)?) => {
         pub(super) struct $name$(<$d: Direction>)? {
             rpc: Arc<dyn ExternalPackageRpc>,
-            method: String,
+            method: &'static str,
             package: ProtocolPackageRef,
             connection: SocketConnectionIdentity,
             direction: ProtocolDirection,
@@ -41,7 +40,7 @@ capability!(ExternalEncode<D>);
 impl<D: Direction> ExternalFrame<D> {
     pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
-        method: String,
+        method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
@@ -62,16 +61,22 @@ impl<D: Direction> Frame<D> for ExternalFrame<D> {
     async fn split(&mut self, buffer: &[u8]) -> Result<FrameResult, Error> {
         let result = self
             .rpc
-            .frame(&self.method, &ExternalFrameRequest::from_bytes(buffer))
+            .frame(
+                self.direction,
+                FrameParams {
+                    buffer: CanonicalBase64::from_bytes(buffer),
+                },
+            )
             .await
-            .map_err(|error| {
-                rpc_error::<D>(ExternalCallStage::Frame, &self.method, &error, self)
-            })?;
+            .map_err(|error| rpc_error::<D>(ExternalCallStage::Frame, self.method, &error, self))?;
         Ok(match result {
-            ExternalFrameResult::NeedMore => FrameResult::NeedMore,
-            ExternalFrameResult::Complete { consumed_bytes } => FrameResult::Complete {
-                consumed: consumed_bytes,
+            PackageFrameResult::NeedMore { .. } => FrameResult::NeedMore,
+            PackageFrameResult::Complete { consumed_bytes } => FrameResult::Complete {
+                consumed: consumed_bytes.get(),
             },
+            PackageFrameResult::Reject { reason } => {
+                return Err(Error::new(format!("frame rejected: {reason}")));
+            }
         })
     }
 }
@@ -79,7 +84,7 @@ impl<D: Direction> Frame<D> for ExternalFrame<D> {
 impl<D: Direction> ExternalDecode<D> {
     pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
-        method: String,
+        method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
@@ -101,21 +106,25 @@ impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
         let response = self
             .rpc
             .decode(
-                &self.method,
-                &ExternalDecodeRequest::from_bytes(&context.data),
+                self.direction,
+                DecodeParams {
+                    input: CanonicalBase64::from_bytes(&context.data)
+                        .as_str()
+                        .to_owned(),
+                },
             )
             .await
             .map_err(|error| {
-                rpc_error::<D>(ExternalCallStage::Decode, &self.method, &error, self)
+                rpc_error::<D>(ExternalCallStage::Decode, self.method, &error, self)
             })?;
-        Ok(response.document.into_document())
+        Ok(response)
     }
 }
 
 impl ExternalDisplay {
     pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
-        method: String,
+        method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
@@ -135,15 +144,14 @@ impl Display for ExternalDisplay {
     async fn display(&mut self, document: &Document) -> Result<String, Error> {
         self.rpc
             .display(
-                &self.method,
-                &ExternalDisplayRequest {
-                    document: ExternalDocumentWire::from_document(document),
+                self.direction,
+                DisplayParams {
+                    document: document.clone(),
                 },
             )
             .await
-            .map(|result| result.html)
             .map_err(|error| {
-                rpc_error_untyped(ExternalCallStage::Display, &self.method, &error, self)
+                rpc_error_untyped(ExternalCallStage::Display, self.method, &error, self)
             })
     }
 }
@@ -185,7 +193,7 @@ impl<D: Direction> Rules for OrderedRules<D> {
 impl<D: Direction> ExternalEncode<D> {
     pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
-        method: String,
+        method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
@@ -205,24 +213,28 @@ impl<D: Direction> ExternalEncode<D> {
 impl<D: Direction> Encode<Socket, D> for ExternalEncode<D> {
     async fn encode(
         &mut self,
-        _original: &SocketContext,
+        original: &SocketContext,
         document: &Document,
     ) -> Result<SocketContext, Error> {
         let result = self
             .rpc
             .encode(
-                &self.method,
-                &ExternalEncodeRequest {
-                    document: ExternalDocumentWire::from_document(document),
+                self.direction,
+                EncodeParams {
+                    original_input: CanonicalBase64::from_bytes(&original.data)
+                        .as_str()
+                        .to_owned(),
+                    document: document.clone(),
                 },
             )
             .await
             .map_err(|error| {
-                rpc_error::<D>(ExternalCallStage::Encode, &self.method, &error, self)
+                rpc_error::<D>(ExternalCallStage::Encode, self.method, &error, self)
             })?;
         Ok(SocketContext {
             data: result
-                .bytes()
+                .try_into()
+                .map(|value: CanonicalBase64| value.bytes())
                 .map_err(|_| stage_error::<D>(SocketProcessingFailureKind::EncodeFailed))?,
         })
     }
@@ -281,7 +293,7 @@ impl ExternalCallStage {
 fn rpc_error<D: Direction>(
     stage: ExternalCallStage,
     method: &str,
-    error: &ExternalPackageConnectionError,
+    error: &PackageTransportError,
     context: &impl DiagnosticContext,
 ) -> Error {
     rpc_error_inner(
@@ -296,7 +308,7 @@ fn rpc_error<D: Direction>(
 fn rpc_error_untyped(
     stage: ExternalCallStage,
     method: &str,
-    error: &ExternalPackageConnectionError,
+    error: &PackageTransportError,
     context: &impl DiagnosticContext,
 ) -> Error {
     rpc_error_inner(stage, method, error, context, None)
@@ -305,12 +317,12 @@ fn rpc_error_untyped(
 fn rpc_error_inner(
     stage: ExternalCallStage,
     method: &str,
-    error: &ExternalPackageConnectionError,
+    error: &PackageTransportError,
     context: &impl DiagnosticContext,
     direction_prefix: Option<String>,
 ) -> Error {
     let (package, connection, direction) = context.diagnostic();
-    trace_external_rpc_failure(
+    let diagnostic = trace_external_rpc_failure(
         package,
         connection,
         direction,
@@ -318,16 +330,28 @@ fn rpc_error_inner(
         method,
         error,
     );
-    let kind = if matches!(error, ExternalPackageConnectionError::Timeout { .. }) {
-        SocketProcessingFailureKind::ProcessingTimeout
-    } else {
-        stage.failure_kind()
-    };
+    let kind = stage.failure_kind();
     let prefix = direction_prefix.map_or_else(String::new, |value| format!("{value}|"));
     Error::new(format!(
         "{prefix}{}: external package RPC failed",
         kind.as_str()
     ))
+    .with_external_package_call(ExternalPackageCallFailure {
+        package: diagnostic.package,
+        direction: diagnostic.direction,
+        stage: match diagnostic.stage {
+            ExternalPackageCallStage::Frame => ExchangeExternalPackageCallStage::Frame,
+            ExternalPackageCallStage::Decode => ExchangeExternalPackageCallStage::Decode,
+            ExternalPackageCallStage::Display => ExchangeExternalPackageCallStage::Display,
+            ExternalPackageCallStage::Encode => ExchangeExternalPackageCallStage::Encode,
+        },
+        method: diagnostic.method,
+        request_id: diagnostic.request_id,
+        remote_code: diagnostic.remote_code,
+        stable_code: diagnostic.stable_code,
+        remote_message: diagnostic.remote_message,
+        remote_data_summary: diagnostic.remote_data_summary,
+    })
 }
 
 fn stage_error<D: Direction>(kind: SocketProcessingFailureKind) -> Error {

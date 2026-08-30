@@ -45,6 +45,7 @@ impl SocketConnectionHandler {
                     },
                     direction: Some(SocketRelayDirection::Downstream),
                     code: error.code,
+                    external_package_call: None,
                 };
                 self.close(
                     run,
@@ -91,6 +92,7 @@ impl SocketConnectionHandler {
                     stage: SocketRelayStage::RelayRead,
                     direction: None,
                     code: ErrorCode::Internal.as_str(),
+                    external_package_call: None,
                 };
                 self.close(run, connection_id, true, progress.snapshot(), Some(failure));
                 Err(ProxyError::new(ErrorCode::Internal, error.message))

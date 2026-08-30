@@ -148,7 +148,6 @@ export function ProtocolPackageDetail({
             <dt className="text-[var(--telemetry-muted)]">首次连接</dt><dd className="break-all">{external.first_connected_at}</dd>
             <dt className="text-[var(--telemetry-muted)]">最近连接</dt><dd className="break-all">{external.last_connected_at}</dd>
             <dt className="text-[var(--telemetry-muted)]">注册指纹</dt><dd className="break-all font-mono text-xs">{external.registration_fingerprint_sha256}</dd>
-            <dt className="text-[var(--telemetry-muted)]">RPC 超时</dt><dd>{external.rpc_timeout_seconds} 秒</dd>
             <dt className="text-[var(--telemetry-muted)]">上行方法</dt><dd className="break-all font-mono text-xs">{methodSummary(external.upstream_methods)}</dd>
             <dt className="text-[var(--telemetry-muted)]">下行方法</dt><dd className="break-all font-mono text-xs">{methodSummary(external.downstream_methods)}</dd>
           </dl>
@@ -223,6 +222,10 @@ function SchemaSection({ id, title, schema }: {
   title: string;
   schema: ProtocolPackageDetailViewModel["upstream_schema"];
 }) {
+  if (!schema) {
+    return <section aria-labelledby={`${id}-heading`}><h3 id={`${id}-heading`} className="mb-2 font-semibold">{title}</h3>
+      <p className="text-sm text-[var(--telemetry-muted)]">此方向未声明 Schema。</p></section>;
+  }
   return (
     <section aria-labelledby={`${id}-heading`}>
       <h3 id={`${id}-heading`} className="mb-2 font-semibold">{title}</h3>

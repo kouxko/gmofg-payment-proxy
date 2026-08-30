@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-30 11:04:03 +08:00`
+- 最后更新时间：`2026-08-30 21:21:22 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -368,7 +368,14 @@ result: "<HTML string>"
 - `2026-08-30 15:05:13 +08:00`：Repair checker mutation/正控 26/26，Cargo 实际发现 Domain8/Application11/Infrastructure6；Domain127/127、Application508/508、Infrastructure693/693、Host33/33、Tauri133/133、bindings deterministic、TS focused21/21、architecture/source-size/lint/typecheck/fmt/workspace strict Clippy/diff 全部 fresh PASS。最终完整十门仍为单一 PTY/session、exit0，前端63 files/543 tests、Rust workspace 0 failed/0 ignored。状态为 `REPAIR GREEN / RECHECK PENDING`、`checkpoint_ready=false`；Phase7/10/11/12/15、push/CI/Release 均 `NOT_RUN`。
 - `2026-08-30 15:38:58 +08:00`：第二轮独立复审再次 `REQUEST CHANGES`（P1=2）：crafted Nth-only delta 可绕过 adapter 禁用 one-shot；actor 在 Nth/runtime delta 校验失败前未恢复 checkpoint，可能消费内存状态。两项均先取得公开 adapter/actor 永久 RED，再以 Domain `RuleLifecycleDelta::validate_against` 统一校验 owner，并让 prepare、Nth validation、runtime validation、commit 任一失败均恢复 actor engine checkpoint、且不发布 message/control/trace/lifecycle。新增 checker mutations 后 28/28，Cargo 发现 Domain9/Application11/Infrastructure8；Domain128/128、Application508/508、Infrastructure695/695、Host33/33、Tauri133/133 与全部静态门 fresh PASS；单一 PTY 十门 exit0、前端63 files/543 tests、Rust workspace 0 failed/0 ignored。状态继续 `REPAIR GREEN / RECHECK PENDING`、`checkpoint_ready=false`。
 - `2026-08-30 15:52:01 +08:00`：G047 最终 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0、`blockers=[]`。最终计数为 checker28/28、Domain9/Application11/Infrastructure8 focused、Domain128/Application508/Infrastructure695/Host33/Tauri133 affected full、前端543/543、workspace 0 failed/0 ignored；初版 findings 与第二轮新增2个P1均已关闭。TASK 总体仍为进行中，Phase7/10/11/12/15、push/CI/Release 保持 `NOT_RUN`。
-- 下一步：创建 Phase 6 rollback checkpoint，随后进入 G048 / Phase 7。
+- `2026-08-30 17:24:55 +08:00`：G048 / Phase 7 新增严格根 ZIP reader 并直接消费 Phase4 唯一 `PackageManifest`；活动 `/packages` 服务、registry、Socket binding 与 relay 全部切换到唯一 `PackageTransportClient`。package 主动发起无 id `package.register` 且 Proxy 不回复；八个固定 typed methods、stable Domain code、canonical Base64、FrameResult buffer 校验落地。保留 registration deadline、heartbeat、wire-size、shutdown/backpressure；删除活动 public TOML/Rhai/dynamic DTO、旧 dynamic actor 及 Hook timeout/max-in-flight/Busy/retry/replay。唯一 legacy allowlist 精确为 `protocol-scripting/src/lib.rs#parse_protocol_manifest`、owner Phase13。
+- `2026-08-30 17:24:55 +08:00`：真实 RED 为 archive reader `E0432`、checker 13 failures、旧 transport integration 编译失败；GREEN 为 checker mutation/正控18/18、Cargo discovered ZIP4/transport4、active E2E4/4、Infrastructure full 590+4+24+7+8 全通过。source-size 首次拒绝 transport 561 行，拆为公共 client + 私有 driver 后在不放宽500行门禁下通过。十门前九项最终 PASS（前端63 files/543 tests、strict Clippy PASS），最后既有 MCP non-loopback HTTP 用例 132/133 后10秒超时，独立精确复测仍超时；不修改其超时/重试/网络合同，不把全仓 checkpoint 记为 PASS。正式证据：[phase7-package-runtime](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/README.md)。当前为 `LOCAL GREEN / GLOBAL CHECKPOINT ENVIRONMENT BLOCKED / RECHECK PENDING`、`checkpoint_ready=false`。
+- `2026-08-30 19:43:37 +08:00`：G048 review repair 已关闭全部 finding：活动 importer 真实消费 strict ZIP/shared Manifest 并在 Phase8 编译边界 fail-closed；复用 archive/entry/file/total/ratio/path-depth 产品限制；stable Domain code 贯穿 registry/relay/Application/Tauri/capture；预注册取消 owned/joined；删除永久 completed-ID 集合；raw logical frame 与 encoded wire budget 分离。checker 扩至20/20，Cargo发现 ZIP5/transport7，active E2E4/4；Phase6 精确 SHA 临时干净 worktree 重放 Cargo exit101、checker exit1 的真实 RED 原文与 SHA 已归档。
+- `2026-08-30 19:43:37 +08:00`：旧 Tauri/E2E/Host Rhai 成功夹具迁为严格 JS ZIP + Phase8 fail-closed，保留真实 IPC/Application 覆盖。fresh affected full 为 Tauri130/130、Application458/458、Host12/12、Infrastructure583/583；bindings deterministic、architecture/source-size/lint/typecheck/fmt/strict Clippy 全部 PASS。第三轮单一 PTY 完整十门 exit0，前端63 files/543 tests、workspace all-target/all-feature 0 failed；此前 non-loopback 环境失败本轮已通过并撤销 blocker。状态为 `REPAIR LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复审；Phase8+ 不提前实施。
+- `2026-08-30 20:39:34 +08:00`：第二轮 review repair 以 forged ZIP declared/actual mismatch 真实 RED 开始；修复 bounded actual-byte accounting、stable Domain code 经 Exchange/SocketProcessingFailure/terminal observer 到 `external_package_call.stable_code` 的活动链、production WebSocket 三类 wire ceiling 与 `/packages` RPC B/B+1，并修正 import Phase8/Rhai 边界注释。checker23/23、ZIP6/6、transport7/7、active E2E4/4、WS1/1、diagnostic1/1；affected full、bindings、architecture/source-size/lint/typecheck/fmt/workspace strict Clippy、diff 与唯一完整十门均 fresh PASS，Infrastructure585/585、前端63 files/543 tests、non-loopback通过。状态继续 `REPAIR LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复审；Phase8+、提交与推送未执行。
+- `2026-08-30 21:09:06 +08:00`：最终 cross-phase repair 删除活动 Phase4 inventory 中 18 条已完成迁移的 `phase7_legacy_wire_allowlist` 并以 checker 永久约束为空；活动 generated SHA 按 fresh deterministic bindings 复算为 `413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123`，Phase4 历史 evidence snapshot 未改。新增精确旧 wire reallow 与 stale SHA mutation，Phase4 23/23；Phase7 聚合真实纳入 Phase4 contract checker并 fresh 全部通过。bindings/static gates 与唯一完整十门 session51772 exit0，前端63 files/543 tests、workspace all-target/all-feature 0 failed/0 ignored。状态继续 `REPAIR LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复审；未提交、未推送。
+- `2026-08-30 21:21:22 +08:00`：G048 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0、`blockers=[]`、`checkpoint_ready=true`。全部历史 findings、repairs、RED/GREEN 与 `NOT_RUN` 边界保留，Phase 7 可创建 rollback checkpoint；TASK 总体仍为进行中，Phase8+、提交、推送、CI 与 Release 未执行。
+- 下一步：Phase 7 为 `VERIFIED / APPROVED / CHECKPOINT READY`，可创建 rollback checkpoint；Phase 8+ 暂不提前实施。
 
 ## 修改文件
 
@@ -389,6 +396,7 @@ result: "<HTML string>"
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/`：Phase 4 RED/GREEN、合同资源、门禁结果与当前非 loopback MCP 环境阻断证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/`：Phase 5 条件树、谓词、统一动作、排序/working-state/terminal、跨层消费者、mutation checker 与完整十门证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase6-rule-chain-transaction/`：Phase 6 共用 lifecycle/NthHit、唯一应用事务、delta no-retry、跨层原子性、checker mutation 与完整十门证据。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/`：Phase 7 严格 ZIP、package-initiated registration、固定 typed transport、canonical Base64/FrameResult、旧 dynamic path 删除、checker mutation、活动 E2E、Phase6 真实 RED、affected full 与完整十门 PASS 证据。
 
 ## 附加文件
 
@@ -412,6 +420,7 @@ result: "<HTML string>"
 - Phase 4 正式证据：[phase4-package-contract](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/README.md)。
 - Phase 5 正式证据：[phase5-unified-rule-domain](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/README.md)。
 - Phase 6 正式证据：[phase6-rule-chain-transaction](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase6-rule-chain-transaction/README.md)。
+- Phase 7 正式证据：[phase7-package-runtime](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/README.md)。
 
 ## 验收结果
 
@@ -421,7 +430,8 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G045 / Phase 4 全部 review findings 已修复；firewall permitted 后完整名定向 1/1 与独立十门 checkpoint 全部 PASS，Verifier P0/P1/P2=0，可创建 rollback checkpoint。历史 132/133 ALF timeout 与短名 `--exact` 0 tests 继续保留且不作为成功证据。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G046 / Phase 5 初始 Verifier/Review findings 已按 RED→GREEN 修复，领域合同、即时跨层消费者、checker 与完整十门均 fresh PASS；最终 reviewer/verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 5 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G047 / Phase 6 的 terminal-scoped Nth lifecycle、validated Application 唯一事务、save/runtime stats 分离、Infrastructure fail-closed delta no-retry、完整 AppError、即时 generated/TS 消费者与完整十门均 fresh PASS；初版 Reviewer `REQUEST CHANGES`（P1=4/P2=1）、Verifier `FAILED`（P1=2）及第二轮独立复审 `REQUEST CHANGES`（P1=2）均已按 RED→GREEN 修复，最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 6 rollback checkpoint。
-- `NOT_RUN`：Phase 7 至 Phase 18 产品合同替换、完整 Phase10/11 真实链路、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CHECKPOINT READY`：G048 / Phase 7 两轮 review finding 已按 RED→GREEN 关闭；strict ZIP/shared Manifest 与 actual-byte accounting、唯一 typed transport、package-initiated registration、canonical Base64/FrameResult、stable Domain code 贯穿真实 Socket diagnostic、production WebSocket ceiling、取消/顺序 RPC/raw-vs-wire 边界、活动 runtime 接入及旧 dynamic path 删除均 fresh PASS。完整十门 exit0；最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`、`checkpoint_ready=true`，可创建 Phase 7 rollback checkpoint。
+- `NOT_RUN`：Phase 8 至 Phase 18 产品合同替换、完整 Phase10/11 真实链路、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -439,6 +449,10 @@ result: "<HTML string>"
 - `PASS`：`pnpm test:task-20260829-002:phase6`；checker mutation/正控 28/28，Cargo 实际发现 Domain9/Application11/Infrastructure8，focused 9/9 + 11/11 + Infrastructure exact 8/8。
 - `PASS`：Phase 6 repair 受影响全量 Domain128/128、Application508/508、Infrastructure695/695、Host33/33、Tauri133/133；generated bindings fresh/deterministic、TS focused21/21。
 - `PASS`：Phase 6 完整十门单进程 checkpoint exit0；前端63 files/543 tests，Rust workspace all-target/all-feature 0 failed、0 ignored。
+- `PASS`：`pnpm test:task-20260829-002:phase7`；checker mutation/正控23/23、Cargo实际发现 ZIP6/transport7、active package peer E2E4/4、production WebSocket ceiling1/1、stable-code diagnostic1/1。
+- `PASS`：Phase 7 第二轮 repair 受影响全量 Exchange23/23、Runtime178/178、Infrastructure585/585 及全部 integration targets；bindings deterministic、architecture/source-size/lint/typecheck/fmt/workspace strict Clippy、前端63 files/543 tests 与 `git diff --check`。
+- `PASS`：Phase 7 第三轮完整十门单一 PTY exit0；workspace all-target/all-feature 0 failed，既有 MCP non-loopback HTTP 用例本轮通过。最终独立 Reviewer/Verifier 已确认 `VERIFIED / APPROVED / CHECKPOINT READY`，不是环境 blocker。
+- `PASS`：精确 Phase6 SHA `56becb38decb5fc836d8274f65cc0a10b0761260` 临时干净 worktree 真实重放 Phase7 transport test/checker，分别以 exit101/exit1 RED；原始输出与 SHA 已进入 Phase7 正式证据。
 - `PASS`：`pnpm test:task-20260829-002:phase2`；Node release-blocker tests 8/8、Infrastructure core 6/6、Host policy 3/3。
 - `PASS`：`cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host --all-targets --all-features`；Host unit 12/12 及全部 integration/architecture tests、Infrastructure unit 651/651 及全部 integration tests 通过。
 - `PASS`：`cargo check --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib`；Release composition 编译通过并显式选择 Preserve。

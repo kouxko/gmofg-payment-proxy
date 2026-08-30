@@ -45,8 +45,6 @@ const initialDraft = {
   external_package_service: {
     bind_address: "127.0.0.1",
     port: 8765,
-    rpc_timeout_seconds: 5,
-    max_in_flight: 256,
   },
 } as SettingsDraft;
 
@@ -89,11 +87,7 @@ describe("ExternalPackageServiceSettings", () => {
     expect(bindAddress).toHaveValue("0.0.0.0");
 
     await user.click(screen.getByRole("button", { name: "Increase 端口" }));
-    await user.click(screen.getByRole("button", { name: "Increase RPC 超时（秒）" }));
-    await user.click(screen.getByRole("button", { name: "Increase 最大并发 RPC" }));
     expect(screen.getByRole("textbox", { name: "端口" })).toHaveValue("8,766");
-    expect(screen.getByRole("textbox", { name: "RPC 超时（秒）" })).toHaveValue("6");
-    expect(screen.getByRole("textbox", { name: "最大并发 RPC" })).toHaveValue("257");
   });
 
   it("renders field errors and locks all editable controls", () => {
@@ -101,9 +95,9 @@ describe("ExternalPackageServiceSettings", () => {
       field.endsWith("bind_address") ? "必须是可绑定地址" : "必须在允许范围内"} />);
 
     expect(screen.getByText("必须是可绑定地址")).toBeVisible();
-    expect(screen.getAllByText("必须在允许范围内")).toHaveLength(3);
+    expect(screen.getAllByText("必须在允许范围内")).toHaveLength(1);
     expect(screen.getByRole("textbox", { name: "监听地址" })).toBeDisabled();
-    for (const name of ["端口", "RPC 超时（秒）", "最大并发 RPC"]) {
+    for (const name of ["端口"]) {
       expect(screen.getByRole("textbox", { name })).toBeDisabled();
     }
   });

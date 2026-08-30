@@ -1,10 +1,10 @@
 use std::time::Duration;
 
-use futures_util::{SinkExt, StreamExt};
+use futures_util::SinkExt;
 use intercept_proxy_application::{
     ExternalPackageApplicationPort, ExternalPackageServiceStateViewModel,
 };
-use intercept_proxy_domain::ExternalPackageRegistration;
+use intercept_proxy_package_contract::{PackageManifest, PackageRegisterNotification};
 use serde_json::Value;
 use tokio::io::DuplexStream;
 use tokio_tungstenite::{
@@ -16,40 +16,14 @@ use super::*;
 
 type Peer = WebSocketStream<DuplexStream>;
 
-fn registration(name: &str) -> ExternalPackageRegistration {
-    serde_json::from_value(serde_json::json!({
-        "api": 1,
-        "package": {
-            "id": "vendor-iso8583", "name": name, "version": "1.0.0",
-            "description": "external test package"
-        },
-        "document": {
-            "upstream": {
-                "schema": {
-                    "type": "object", "title": "Upstream",
-                    "properties": {
-                        "mti": {"type": "string", "title": "MTI"},
-                        "amount": {"type": "number", "title": "Amount"},
-                        "approved": {"type": "boolean", "title": "Approved"},
-                        "raw": {"type": "array", "title": "Raw", "items": {"type": "number"}}
-                    }
-                },
-                "display": "render"
-            },
-            "downstream": {
-                "schema": {
-                    "type": "object", "title": "Downstream",
-                    "properties": {"code": {"type": "string", "title": "Code"}}
-                },
-                "display": "render"
-            }
-        },
-        "hooks": {
-            "upstream": {"frame": "frame", "decode": "decode", "encode": "encode"},
-            "downstream": {"frame": "frame", "decode": "decode", "encode": "encode"}
-        }
-    }))
-    .expect("valid external registration")
+fn registration(name: &str) -> PackageManifest {
+    let mut value: Value = serde_json::from_str(include_str!(
+        "../../../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/socket-manifest.json"
+    ))
+    .expect("valid package fixture");
+    value["package"]["id"] = Value::String("vendor-iso8583".to_owned());
+    value["package"]["name"] = Value::String(name.to_owned());
+    serde_json::from_value(value).expect("valid external registration")
 }
 
 mod async_persistence;
@@ -60,41 +34,26 @@ mod error_views;
 mod lifecycle;
 
 async fn connected_client(
-    registration: &ExternalPackageRegistration,
+    registration: &PackageManifest,
     generation: u64,
-) -> (ExternalPackageClient, Peer) {
+) -> (PackageTransportClient, Peer) {
     let (actor_io, peer_io) = tokio::io::duplex(2 * 1024 * 1024);
     let actor = WebSocketStream::from_raw_socket(actor_io, Role::Server, None).await;
     let mut peer = WebSocketStream::from_raw_socket(peer_io, Role::Client, None).await;
-    let config = super::super::external_packages::ExternalPackageConnectionConfig::new(
+    let config = crate::adapters::PackageTransportConfig::new(
         Duration::from_secs(30),
-        Duration::from_secs(5),
         Duration::from_secs(10),
         Duration::from_secs(30),
-        4,
         1024 * 1024,
         1024 * 1024,
         1024 * 1024,
         128 * 1024,
     );
-    let connecting = tokio::spawn(ExternalPackageClient::connect(actor, generation, config));
-    let Message::Text(request) = peer
-        .next()
-        .await
-        .expect("registration request")
-        .expect("valid WebSocket frame")
-    else {
-        panic!("registration request must be text")
-    };
-    let request: Value = serde_json::from_str(&request).expect("valid JSON-RPC request");
+    let connecting = tokio::spawn(PackageTransportClient::connect(actor, generation, config));
     peer.send(Message::Text(
-        serde_json::json!({
-            "jsonrpc": "2.0",
-            "id": request["id"],
-            "result": registration,
-        })
-        .to_string()
-        .into(),
+        serde_json::to_string(&PackageRegisterNotification::new(registration.clone()))
+            .expect("registration notification")
+            .into(),
     ))
     .await
     .expect("registration response");
@@ -109,7 +68,7 @@ async fn connected_client(
 #[test]
 fn fingerprint_is_stable_and_covers_metadata() {
     let first = registration("First");
-    let same: ExternalPackageRegistration =
+    let same: PackageManifest =
         serde_json::from_slice(&serde_json::to_vec(&first).unwrap()).unwrap();
     let changed = registration("Changed");
 
@@ -284,7 +243,7 @@ async fn duplicate_online_is_rejected_and_reconnect_keeps_user_enablement() {
             .record_connection_error(
                 &package,
                 first.connection_id,
-                &ExternalPackageConnectionError::Transport("stale secret".to_owned()),
+                &PackageTransportError::Transport("stale secret".to_owned()),
             )
             .await
             .unwrap()
@@ -330,7 +289,7 @@ async fn detail_projects_connection_fingerprint_methods_timeout_and_recent_error
         .record_connection_error(
             &package,
             accepted.connection_id,
-            &ExternalPackageConnectionError::Disconnected,
+            &PackageTransportError::Disconnected,
         )
         .await
         .unwrap();
@@ -339,11 +298,10 @@ async fn detail_projects_connection_fingerprint_methods_timeout_and_recent_error
     assert_eq!(detail.remote_address.as_deref(), Some("127.0.0.1:49152"));
     assert_eq!(detail.connection_id, Some(accepted.connection_id.as_uuid()));
     assert_eq!(detail.registration_fingerprint_sha256.len(), 64);
-    assert_eq!(detail.rpc_timeout_seconds, 5);
     assert_eq!(detail.upstream_methods.frame, "hooks.upstream.frame");
     assert_eq!(
         detail.downstream_methods.display,
-        "document.downstream.render"
+        "document.downstream.display"
     );
     assert_eq!(
         detail.recent_error.expect("recent error").code,
@@ -377,7 +335,7 @@ async fn detail_restores_safe_connection_history_without_faking_online_state() {
             .record_connection_error(
                 &package,
                 accepted.connection_id,
-                &ExternalPackageConnectionError::Disconnected,
+                &PackageTransportError::Disconnected,
             )
             .await
             .unwrap();

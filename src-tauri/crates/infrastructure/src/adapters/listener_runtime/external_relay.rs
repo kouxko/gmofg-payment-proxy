@@ -7,9 +7,7 @@ use std::sync::Arc;
 
 #[cfg(test)]
 use intercept_proxy_application::ExternalPackageCallStage;
-use intercept_proxy_domain::{
-    ExternalPackageDirection, ExternalPackageMethodNamespace, ProtocolDirection, ProtocolRuleStage,
-};
+use intercept_proxy_domain::{ProtocolDirection, ProtocolRuleStage};
 use intercept_proxy_exchange::{Direction, Downstream, Upstream};
 use intercept_proxy_runtime::{
     SocketConnectionIdentity, SocketDirectionCapabilities, SocketObservationMetadata,
@@ -52,7 +50,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
     fn build<D: Direction>(
         &self,
         connection: SocketConnectionIdentity,
-        binding: DirectionBinding<'_>,
+        binding: DirectionBinding,
     ) -> SocketDirectionCapabilities<D> {
         let package = self.binding.registration.package().identity().clone();
         let methods = binding.methods();
@@ -94,24 +92,17 @@ impl ExternalSocketCapabilityFactoryAdapter {
         )
     }
 
-    fn direction(&self, direction: ExternalPackageDirection) -> DirectionBinding<'_> {
-        let registration = &self.binding.registration;
+    fn direction(direction: ProtocolDirection) -> DirectionBinding {
         match direction {
-            ExternalPackageDirection::Upstream => DirectionBinding {
-                external_direction: direction,
+            ProtocolDirection::Upstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Upstream,
                 first_rules: ProtocolRuleStage::AppToProxy,
                 second_rules: ProtocolRuleStage::ProxyToUpstream,
-                hooks: registration.hooks().upstream(),
-                document: registration.document().upstream(),
             },
-            ExternalPackageDirection::Downstream => DirectionBinding {
-                external_direction: direction,
+            ProtocolDirection::Downstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Downstream,
                 first_rules: ProtocolRuleStage::UpstreamToProxy,
                 second_rules: ProtocolRuleStage::ProxyToApp,
-                hooks: registration.hooks().downstream(),
-                document: registration.document().downstream(),
             },
         }
     }
@@ -126,61 +117,48 @@ impl SocketProtocolCapabilityFactory for ExternalSocketCapabilityFactoryAdapter 
         &self,
         connection: SocketConnectionIdentity,
     ) -> Result<SocketDirectionCapabilities<Upstream>, SocketProcessingFailure> {
-        Ok(self.build(
-            connection,
-            self.direction(ExternalPackageDirection::Upstream),
-        ))
+        Ok(self.build(connection, Self::direction(ProtocolDirection::Upstream)))
     }
 
     fn create_downstream(
         &self,
         connection: SocketConnectionIdentity,
     ) -> Result<SocketDirectionCapabilities<Downstream>, SocketProcessingFailure> {
-        Ok(self.build(
-            connection,
-            self.direction(ExternalPackageDirection::Downstream),
-        ))
+        Ok(self.build(connection, Self::direction(ProtocolDirection::Downstream)))
     }
 }
 
 #[derive(Clone, Copy)]
-struct DirectionBinding<'a> {
-    external_direction: ExternalPackageDirection,
+struct DirectionBinding {
     protocol_direction: ProtocolDirection,
     first_rules: ProtocolRuleStage,
     second_rules: ProtocolRuleStage,
-    hooks: &'a intercept_proxy_domain::ExternalPackageDirectionHooks,
-    document: &'a intercept_proxy_domain::ExternalPackageDocumentDirection,
 }
 
-impl DirectionBinding<'_> {
-    fn methods(&self) -> DirectionMethods {
-        DirectionMethods {
-            frame: self.hooks.frame().qualified(
-                ExternalPackageMethodNamespace::Hooks,
-                self.external_direction,
-            ),
-            decode: self.hooks.decode().qualified(
-                ExternalPackageMethodNamespace::Hooks,
-                self.external_direction,
-            ),
-            encode: self.hooks.encode().qualified(
-                ExternalPackageMethodNamespace::Hooks,
-                self.external_direction,
-            ),
-            display: self.document.display().qualified(
-                ExternalPackageMethodNamespace::Document,
-                self.external_direction,
-            ),
+impl DirectionBinding {
+    fn methods(self) -> DirectionMethods {
+        match self.protocol_direction {
+            ProtocolDirection::Upstream => DirectionMethods {
+                frame: "hooks.upstream.frame",
+                decode: "hooks.upstream.decode",
+                encode: "hooks.upstream.encode",
+                display: "document.upstream.display",
+            },
+            ProtocolDirection::Downstream => DirectionMethods {
+                frame: "hooks.downstream.frame",
+                decode: "hooks.downstream.decode",
+                encode: "hooks.downstream.encode",
+                display: "document.downstream.display",
+            },
         }
     }
 }
 
 struct DirectionMethods {
-    frame: String,
-    decode: String,
-    encode: String,
-    display: String,
+    frame: &'static str,
+    decode: &'static str,
+    encode: &'static str,
+    display: &'static str,
 }
 
 #[cfg(test)]

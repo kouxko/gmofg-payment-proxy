@@ -6,117 +6,120 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
 };
 
 use async_trait::async_trait;
 use intercept_proxy_application::AppResult;
 use intercept_proxy_domain::{
-    ExternalDecodeRequest, ExternalDecodeResponse, ExternalDisplayRequest, ExternalDisplayResponse,
-    ExternalEncodeRequest, ExternalEncodeResponse, ExternalFrameRequest, ExternalFrameResult,
-    ExternalPackageRegistration, ProtocolPackageRef, ProxyListener, ProxyWorkspace, SocketTopology,
+    Document, ProtocolDirection, ProtocolPackageRef, ProxyListener, ProxyWorkspace, SocketTopology,
+};
+use intercept_proxy_package_contract::{
+    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
 };
 
 use super::super::{ProtocolDocumentRuleConnectionFactory, scripted_snapshot};
-use crate::adapters::external_packages::{ExternalPackageClient, ExternalPackageConnectionError};
+use crate::adapters::{PackageTransportClient, PackageTransportError};
 
 /// 外部连接的协议入口窄接口。
 #[async_trait]
 pub(crate) trait ExternalPackageRpc: fmt::Debug + Send + Sync {
     async fn frame(
         &self,
-        method: &str,
-        request: &ExternalFrameRequest,
-    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError>;
+        direction: ProtocolDirection,
+        request: FrameParams,
+    ) -> Result<FrameResult, PackageTransportError>;
     async fn decode(
         &self,
-        method: &str,
-        request: &ExternalDecodeRequest,
-    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError>;
+        direction: ProtocolDirection,
+        request: DecodeParams,
+    ) -> Result<Document, PackageTransportError>;
     async fn encode(
         &self,
-        method: &str,
-        request: &ExternalEncodeRequest,
-    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError>;
+        direction: ProtocolDirection,
+        request: EncodeParams,
+    ) -> Result<String, PackageTransportError>;
     async fn display(
         &self,
-        method: &str,
-        request: &ExternalDisplayRequest,
-    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError>;
+        direction: ProtocolDirection,
+        request: DisplayParams,
+    ) -> Result<String, PackageTransportError>;
 }
 
 #[async_trait]
-impl ExternalPackageRpc for ExternalPackageClient {
+impl ExternalPackageRpc for PackageTransportClient {
     async fn frame(
         &self,
-        method: &str,
-        request: &ExternalFrameRequest,
-    ) -> Result<ExternalFrameResult, ExternalPackageConnectionError> {
-        self.call(method, request).await
+        direction: ProtocolDirection,
+        request: FrameParams,
+    ) -> Result<FrameResult, PackageTransportError> {
+        match direction {
+            ProtocolDirection::Upstream => self.upstream_frame(request).await,
+            ProtocolDirection::Downstream => self.downstream_frame(request).await,
+        }
     }
     async fn decode(
         &self,
-        method: &str,
-        request: &ExternalDecodeRequest,
-    ) -> Result<ExternalDecodeResponse, ExternalPackageConnectionError> {
-        self.call(method, request).await
+        direction: ProtocolDirection,
+        request: DecodeParams,
+    ) -> Result<Document, PackageTransportError> {
+        match direction {
+            ProtocolDirection::Upstream => self.upstream_decode(request).await,
+            ProtocolDirection::Downstream => self.downstream_decode(request).await,
+        }
     }
     async fn encode(
         &self,
-        method: &str,
-        request: &ExternalEncodeRequest,
-    ) -> Result<ExternalEncodeResponse, ExternalPackageConnectionError> {
-        self.call(method, request).await
+        direction: ProtocolDirection,
+        request: EncodeParams,
+    ) -> Result<String, PackageTransportError> {
+        match direction {
+            ProtocolDirection::Upstream => self.upstream_encode(request).await,
+            ProtocolDirection::Downstream => self.downstream_encode(request).await,
+        }
     }
     async fn display(
         &self,
-        method: &str,
-        request: &ExternalDisplayRequest,
-    ) -> Result<ExternalDisplayResponse, ExternalPackageConnectionError> {
-        self.call_display(method, request).await
+        direction: ProtocolDirection,
+        request: DisplayParams,
+    ) -> Result<String, PackageTransportError> {
+        match direction {
+            ProtocolDirection::Upstream => self.upstream_display(request).await,
+            ProtocolDirection::Downstream => self.downstream_display(request).await,
+        }
     }
 }
 
 /// 注册快照与对应在线 actor 的不可分割绑定。
 #[derive(Clone)]
 pub(crate) struct ExternalSocketPackageBinding {
-    pub(crate) registration: ExternalPackageRegistration,
+    pub(crate) registration: PackageManifest,
     pub(crate) rpc: Arc<dyn ExternalPackageRpc>,
     max_frame_bytes: usize,
-    rpc_timeout: Duration,
 }
 
 impl ExternalSocketPackageBinding {
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn new(
-        registration: ExternalPackageRegistration,
-        rpc: Arc<dyn ExternalPackageRpc>,
-    ) -> Self {
-        Self::with_limits(registration, rpc, 8 * 1024 * 1024, Duration::from_secs(5))
+    pub(crate) fn new(registration: PackageManifest, rpc: Arc<dyn ExternalPackageRpc>) -> Self {
+        Self::with_limits(registration, rpc, 8 * 1024 * 1024)
     }
 
     pub(crate) fn with_limits(
-        registration: ExternalPackageRegistration,
+        registration: PackageManifest,
         rpc: Arc<dyn ExternalPackageRpc>,
         max_frame_bytes: usize,
-        rpc_timeout: Duration,
     ) -> Self {
         Self {
             registration,
             rpc,
             max_frame_bytes,
-            rpc_timeout,
         }
     }
-    pub(crate) const fn registration(&self) -> &ExternalPackageRegistration {
+    pub(crate) const fn registration(&self) -> &PackageManifest {
         &self.registration
     }
     pub(crate) const fn max_frame_bytes(&self) -> usize {
         self.max_frame_bytes
-    }
-    pub(crate) const fn rpc_timeout(&self) -> Duration {
-        self.rpc_timeout
     }
 }
 
@@ -124,7 +127,7 @@ impl fmt::Debug for ExternalSocketPackageBinding {
     fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
         formatter
             .debug_struct("ExternalSocketPackageBinding")
-            .field("package", self.registration.package().identity())
+            .field("package", &self.registration.package().identity())
             .finish_non_exhaustive()
     }
 }
@@ -173,8 +176,18 @@ impl ExternalSocketRuntimeSnapshot {
         let workspace = workspace.clone();
         let listener = listener.clone();
         let package = registration.package().identity().clone();
-        let upstream_schema = registration.document().upstream().schema().clone();
-        let downstream_schema = registration.document().downstream().schema().clone();
+        let upstream_schema = registration
+            .document()
+            .upstream()
+            .schema()
+            .expect("validated Socket Manifest requires upstream schema")
+            .clone();
+        let downstream_schema = registration
+            .document()
+            .downstream()
+            .schema()
+            .expect("validated Socket Manifest requires downstream schema")
+            .clone();
         let topology = self.topology.clone();
         let replacement = adapter
             .compile_document_rules_on_blocking_owner(move || {

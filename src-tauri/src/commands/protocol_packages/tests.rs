@@ -12,16 +12,11 @@ mod tests {
     use intercept_proxy_infrastructure::{
         FileSelection, InfrastructureError, NativeFileDialog, SecretProtector,
     };
-    use intercept_proxy_domain::{
-        ListenerDataPlane, ProtocolPackageRef,
-        ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
-    };
     use intercept_proxy_product_api::InterceptProxyProfile;
     use serde::de::DeserializeOwned;
     use serde_json::{Value, json};
     use tauri::{
-        Manager, WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody,
-        test::MockRuntime,
+        WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody, test::MockRuntime,
     };
     use tempfile::TempDir;
     use zip::{ZipWriter, write::SimpleFileOptions};
@@ -34,52 +29,9 @@ mod tests {
     };
     use crate::app_state::AppState;
 
-    const MANIFEST: &str = r#"
-api = 1
-
-[package]
-id = "example-protocol"
-name = "Example Protocol"
-version = "1.0.0"
-
-[document.upstream]
-schema = "document.toml"
-display = "display"
-
-[document.downstream]
-schema = "document.toml"
-display = "display"
-
-[hooks.upstream]
-frame = "frame"
-decode = "decode"
-encode = "encode"
-
-[hooks.downstream]
-frame = "frame"
-decode = "decode"
-encode = "encode"
-"#;
-
-    const SCHEMA: &str = r#"
-type = "object"
-title = "Example Message"
-
-[properties.trace_id]
-type = "string"
-title = "Trace ID"
-
-[properties.amount]
-type = "number"
-title = "Amount"
-"#;
-
-    const SCRIPT: &str = r#"
-fn frame(reader, context) { framing::complete(1) }
-fn decode(origin, context) { document::create() }
-fn encode(origin, document, context) { origin }
-fn display(document, context) { "<p>ok</p>" }
-"#;
+    const MANIFEST: &str = include_str!(
+        "../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
+    );
 
     #[derive(Debug, Default)]
     struct QueueDialog {
@@ -124,159 +76,49 @@ fn display(document, context) { "<p>ok</p>" }
     }
 
     #[test]
-    fn every_protocol_package_command_round_trips_through_real_tauri_ipc() {
+    fn strict_import_contract_fails_closed_through_real_tauri_ipc() {
         let fixture = TempDir::new().unwrap();
-        let zip_path = fixture.path().join("example.zip");
-        std::fs::write(&zip_path, package_zip()).unwrap();
-        let app = test_app(
-            fixture.path(),
-            Arc::new(QueueDialog::with_open(Ok(Some(zip_path)))),
-        );
-        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
-            .build()
-            .unwrap();
-        let package = json!({ "id": "example-protocol", "version": "1.0.0" });
-
-        let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
-        assert_eq!(preview["package"], package);
-        assert_eq!(preview["disposition"], "new");
-        assert_eq!(preview["upstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
-        assert_eq!(preview["downstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
-        let imported: Value = invoke_ok(
-            &webview,
-            "protocol_package_import_commit",
-            json!({ "token": preview["token"] }),
-        );
-        assert_eq!(imported["outcome"], "installed");
-        assert_eq!(imported["version"]["package"], package);
-
-        let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
-        assert_eq!(list[0]["versions"][0]["package"], package);
-
-        let detail: Value = invoke_ok(
-            &webview,
-            "protocol_package_detail",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(detail["capabilities"]["upstream"]["encode"], true);
-        assert_eq!(detail["capabilities"]["downstream"]["encode"], true);
-        assert_eq!(detail["upstream_schema"]["root"]["properties"]["trace_id"]["type"], "string");
-        assert_eq!(detail["downstream_schema"]["root"]["properties"]["amount"]["type"], "number");
-        assert_no_source_fields(&detail);
-
-        let usages: Value = invoke_ok(
-            &webview,
-            "protocol_package_usage",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(usages, json!([]));
-        let enabled: Value = invoke_ok(
-            &webview,
-            "protocol_package_enable",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(enabled["enabled"], true);
-        let catalog: Value = invoke_ok(
-            &webview,
-            "listener_protocol_package_catalog",
-            json!({}),
-        );
-        assert_eq!(catalog["installed_version_count"], 1);
-        assert_eq!(catalog["unavailable_version_count"], 0);
-        assert_eq!(catalog["options"][0]["package"], package);
-        assert_eq!(
-            catalog["options"][0]["upstream_schema"]["root"]["title"],
-            "Example Message"
-        );
-        assert_no_source_fields(&catalog);
-        let disabled: Value = invoke_ok(
-            &webview,
-            "protocol_package_disable",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(disabled["enabled"], false);
-        let deleted: Value = invoke_ok(
-            &webview,
-            "protocol_package_delete",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(deleted["success"], true);
-
-        let error = invoke_error(
-            &webview,
-            "protocol_package_detail",
-            json!({ "packageRef": package }),
-        );
-        assert_eq!(error.code, "PROTOCOL_PACKAGE_NOT_FOUND");
-        assert_eq!(error.entity_id.as_deref(), Some("example-protocol@1.0.0"));
-    }
-
-    #[test]
-    fn import_disposition_discard_and_diagnostics_round_trip_through_real_tauri_ipc() {
-        let fixture = TempDir::new().unwrap();
-        let valid = fixture.path().join("valid.zip");
-        let conflict = fixture.path().join("conflict.zip");
         let invalid = fixture.path().join("invalid.zip");
-        std::fs::write(&valid, package_zip()).unwrap();
-        std::fs::write(
-            &conflict,
-            package_zip_with_script(&format!("{SCRIPT}\n// different immutable bytes")),
-        )
-        .unwrap();
-        std::fs::write(
-            &invalid,
-            package_zip_with_script("fn frame(reader, context) {\n  let card = ;\n}"),
-        )
-        .unwrap();
+        let javascript = fixture.path().join("javascript.zip");
+        std::fs::write(&invalid, b"not a zip archive").unwrap();
+        std::fs::write(&javascript, javascript_package_zip()).unwrap();
         let app = test_app(
             fixture.path(),
             Arc::new(QueueDialog::with_opens(vec![
-                Ok(Some(valid.clone())),
-                Ok(Some(valid)),
-                Ok(Some(conflict)),
-                Ok(Some(invalid.clone())),
+                Ok(Some(invalid)),
+                Ok(Some(javascript)),
             ])),
         );
         let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
             .build()
             .unwrap();
 
-        let discarded_preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
-        let discarded_token = discarded_preview["token"].clone();
-        let discarded: Value = invoke_ok(
-            &webview,
-            "protocol_package_import_discard",
-            json!({ "token": discarded_token.clone() }),
-        );
-        assert_eq!(discarded["success"], true);
+        let invalid_archive = invoke_error(&webview, "protocol_package_import", json!({}));
+        assert_eq!(invalid_archive.code, "PROTOCOL_PACKAGE_INVALID");
+        assert!(!invalid_archive.field_errors.contains_key("runtime"));
+
+        let phase8_boundary = invoke_error(&webview, "protocol_package_import", json!({}));
+        assert_eq!(phase8_boundary.code, "PROTOCOL_PACKAGE_INVALID");
+        assert!(phase8_boundary.field_errors.contains_key("runtime"));
+
         assert_eq!(
             invoke_error(
                 &webview,
                 "protocol_package_import_commit",
-                json!({ "token": discarded_token }),
+                json!({ "token": "00000000-0000-4000-8000-000000000000" }),
             )
             .code,
             "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
         );
-
-        let ready: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
-        let _: Value = invoke_ok(
+        let invalid_identity = invoke_error(
             &webview,
-            "protocol_package_import_commit",
-            json!({ "token": ready["token"] }),
+            "protocol_package_detail",
+            json!({ "packageRef": { "id": "../escape", "version": "latest" } }),
         );
-        let conflict_preview: Value =
-            invoke_ok(&webview, "protocol_package_import", json!({}));
-        assert_eq!(conflict_preview["disposition"], "identity_conflict");
-        assert_eq!(conflict_preview["token"], Value::Null);
-
-        let error = invoke_error(&webview, "protocol_package_import", json!({}));
-        let diagnostic = error.diagnostic.expect("safe compiler diagnostic");
-        assert_eq!(diagnostic.file.as_deref(), Some("display.rhai"));
-        assert_eq!(diagnostic.line, Some(2));
-        let serialized = serde_json::to_string(&diagnostic).unwrap();
-        assert!(!serialized.contains(invalid.to_string_lossy().as_ref()));
-        assert!(!serialized.contains("let card"));
+        assert_eq!(invalid_identity.code, "PROTOCOL_PACKAGE_INVALID");
+        assert!(!invalid_identity.field_errors.is_empty());
+        let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
+        assert_eq!(list, json!([]));
     }
 
     #[test]
@@ -296,155 +138,11 @@ fn display(document, context) { "<p>ok</p>" }
         let error = invoke_error(
             &webview,
             "protocol_package_import",
-            // 伪造路径不会成为命令参数；实际选择仍只能来自注入的 Rust 原生 Dialog。
             json!({ "path": "/tmp/forged.zip", "zipBytes": [1, 2, 3] }),
         );
         assert_eq!(error.code, "FILE_DIALOG_PERMISSION_DENIED");
         let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
         assert_eq!(list, json!([]));
-    }
-
-    #[test]
-    fn invalid_archive_identity_and_import_token_are_rejected_through_real_ipc() {
-        let fixture = TempDir::new().unwrap();
-        let invalid_zip = fixture.path().join("invalid.zip");
-        std::fs::write(&invalid_zip, b"not a zip archive").unwrap();
-        let app = test_app(
-            fixture.path(),
-            Arc::new(QueueDialog::with_open(Ok(Some(invalid_zip)))),
-        );
-        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
-            .build()
-            .unwrap();
-
-        assert_eq!(
-            invoke_error(&webview, "protocol_package_import", json!({})).code,
-            "INVALID_ZIP"
-        );
-        assert_eq!(
-            invoke_error(
-                &webview,
-                "protocol_package_import_commit",
-                json!({ "token": "00000000-0000-4000-8000-000000000000" }),
-            )
-            .code,
-            "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID"
-        );
-        let invalid_identity = invoke_error(
-            &webview,
-            "protocol_package_detail",
-            json!({
-                "packageRef": { "id": "../escape", "version": "latest" }
-            }),
-        );
-        assert_eq!(invalid_identity.code, "PROTOCOL_PACKAGE_INVALID");
-        assert!(!invalid_identity.field_errors.is_empty());
-        let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
-        assert_eq!(list, json!([]));
-    }
-
-    #[test]
-    fn forged_capability_cannot_bypass_reference_and_runtime_lifecycle_guards() {
-        let fixture = TempDir::new().unwrap();
-        let zip_path = fixture.path().join("example.zip");
-        std::fs::write(&zip_path, package_zip()).unwrap();
-        let app = test_app(
-            fixture.path(),
-            Arc::new(QueueDialog::with_open(Ok(Some(zip_path)))),
-        );
-        let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
-            .build()
-            .unwrap();
-        let package_json = json!({ "id": "example-protocol", "version": "1.0.0" });
-        let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
-        let _: Value = invoke_ok(
-            &webview,
-            "protocol_package_import_commit",
-            json!({ "token": preview["token"] }),
-        );
-        let _: Value = invoke_ok(
-            &webview,
-            "protocol_package_enable",
-            // 能力不是命令参数；伪造字段不能改变已编译能力。
-            json!({ "packageRef": package_json, "downstreamEncode": true }),
-        );
-        let detail: Value = invoke_ok(
-            &webview,
-            "protocol_package_detail",
-            json!({ "packageRef": package_json }),
-        );
-        assert_eq!(detail["capabilities"]["downstream"]["encode"], true);
-
-        let package: ProtocolPackageRef = serde_json::from_value(package_json.clone()).unwrap();
-        let application = Arc::clone(&app.state::<AppState>().application);
-        let mut workspace = tauri::async_runtime::block_on(
-            application.workspace_create("IPC lifecycle".into()),
-        )
-        .unwrap();
-        let listener = &mut workspace.listeners[0];
-        listener.port = unused_local_port();
-        listener.data_plane = ListenerDataPlane::Socket(SocketRelaySettings::relay(
-            SocketEndpoint {
-                host: "127.0.0.1".into(),
-                port: 9_999,
-            },
-            intercept_proxy_domain::SocketRelaySecurity::Transparent,
-            intercept_proxy_domain::DEFAULT_SOCKET_MAXIMUM_CONNECTIONS,
-            SocketPayloadProcessing::Scripted(ScriptedSocketProcessing {
-                package,
-            }),
-        ));
-        let workspace =
-            tauri::async_runtime::block_on(application.workspace_save(workspace)).unwrap();
-        let listener_id = workspace.listeners[0].id;
-
-        assert_eq!(
-            invoke_error(
-                &webview,
-                "protocol_package_delete",
-                json!({ "packageRef": package_json }),
-            )
-            .code,
-            "PROTOCOL_PACKAGE_REFERENCE_IN_USE"
-        );
-        let running = tauri::async_runtime::block_on(application.listener_start(
-            workspace.id,
-            workspace.revision.get(),
-            listener_id,
-        ))
-        .unwrap();
-        assert_eq!(
-            running.state,
-            intercept_proxy_application::ListenerRuntimeState::Running
-        );
-        assert_eq!(
-            invoke_error(
-                &webview,
-                "protocol_package_disable",
-                json!({ "packageRef": package_json }),
-            )
-            .code,
-            "PROTOCOL_PACKAGE_RUNTIME_IN_USE"
-        );
-        let running_workspace =
-            tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
-        tauri::async_runtime::block_on(application.listener_stop(
-            running_workspace.id,
-            running_workspace.revision.get(),
-            listener_id,
-        ))
-        .unwrap();
-        let disabled: Value = invoke_ok(
-            &webview,
-            "protocol_package_disable",
-            json!({ "packageRef": package_json }),
-        );
-        assert_eq!(disabled["enabled"], false);
-        let latest = tauri::async_runtime::block_on(application.workspace_get(workspace.id)).unwrap();
-        tauri::async_runtime::block_on(
-            application.workspace_delete(latest.id, latest.revision.get()),
-        )
-        .unwrap();
     }
 
     #[test]
@@ -460,7 +158,86 @@ fn display(document, context) { "<p>ok</p>" }
         }));
     }
 
-    #[path = "support.rs"]
-    mod support;
-    use support::*;
+    fn test_app(data_dir: &Path, dialog: Arc<dyn NativeFileDialog>) -> tauri::App<MockRuntime> {
+        let host = tauri::async_runtime::block_on(
+            ApplicationHostBuilder::new(
+                data_dir,
+                HostPlatformServices::new(Arc::new(TestSecretProtector), dialog),
+                Arc::new(InterceptProxyProfile),
+            )
+            .build(),
+        )
+        .unwrap();
+        tauri::test::mock_builder()
+            .manage(AppState::new(host))
+            .invoke_handler(tauri::generate_handler![
+                protocol_package_list,
+                listener_protocol_package_catalog,
+                protocol_package_detail,
+                protocol_package_import,
+                protocol_package_import_commit,
+                protocol_package_import_discard,
+                protocol_package_enable,
+                protocol_package_disable,
+                protocol_package_delete,
+                protocol_package_usage,
+            ])
+            .build(tauri::test::mock_context(tauri::test::noop_assets()))
+            .unwrap()
+    }
+
+    fn invoke_ok<T: DeserializeOwned>(
+        webview: &tauri::WebviewWindow<MockRuntime>,
+        command: &str,
+        body: Value,
+    ) -> T {
+        tauri::test::get_ipc_response(webview, request(command, body))
+            .unwrap()
+            .deserialize()
+            .unwrap()
+    }
+
+    fn invoke_error(
+        webview: &tauri::WebviewWindow<MockRuntime>,
+        command: &str,
+        body: Value,
+    ) -> AppErrorViewModel {
+        serde_json::from_value(
+            tauri::test::get_ipc_response(webview, request(command, body)).unwrap_err(),
+        )
+        .unwrap()
+    }
+
+    fn request(command: &str, body: Value) -> tauri::webview::InvokeRequest {
+        tauri::webview::InvokeRequest {
+            cmd: command.into(),
+            callback: tauri::ipc::CallbackFn(0),
+            error: tauri::ipc::CallbackFn(1),
+            url: if cfg!(any(windows, target_os = "android")) {
+                "http://tauri.localhost"
+            } else {
+                "tauri://localhost"
+            }
+            .parse()
+            .unwrap(),
+            body: InvokeBody::Json(body),
+            headers: HeaderMap::default(),
+            invoke_key: tauri::test::INVOKE_KEY.to_owned(),
+        }
+    }
+
+    fn javascript_package_zip() -> Vec<u8> {
+        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
+        for (path, contents) in [
+            ("manifest.json", MANIFEST.as_bytes()),
+            ("protocol.js", b"export {}".as_slice()),
+            ("display.js", b"export {}".as_slice()),
+        ] {
+            archive
+                .start_file(path, SimpleFileOptions::default())
+                .unwrap();
+            archive.write_all(contents).unwrap();
+        }
+        archive.finish().unwrap().into_inner()
+    }
 }

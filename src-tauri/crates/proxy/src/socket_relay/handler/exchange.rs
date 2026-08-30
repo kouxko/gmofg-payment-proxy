@@ -210,6 +210,7 @@ impl SocketConnectionHandler {
                     stage: SocketRelayStage::RelayRead,
                     direction: None,
                     code: ErrorCode::Internal.as_str(),
+                    external_package_call: None,
                 };
                 self.close(
                     run,
@@ -229,5 +230,6 @@ fn downstream_tls_failure() -> SocketRelayFailure {
         stage: SocketRelayStage::DownstreamTls,
         direction: Some(SocketRelayDirection::Downstream),
         code: ErrorCode::SocketDownstreamTlsFailed.as_str(),
+        external_package_call: None,
     }
 }

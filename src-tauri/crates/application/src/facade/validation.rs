@@ -140,20 +140,6 @@ fn validate_external_package_service(
             "外部软件包服务端口必须位于 1 到 65535 之间。",
         );
     }
-    if !(1..=300).contains(&external.rpc_timeout_seconds) {
-        push_error(
-            field_errors,
-            "external_package_service.rpc_timeout_seconds",
-            "外部软件包 RPC 超时必须位于 1 到 300 秒之间。",
-        );
-    }
-    if external.max_in_flight == 0 {
-        push_error(
-            field_errors,
-            "external_package_service.max_in_flight",
-            "单软件包最大并发数必须至少为 1。",
-        );
-    }
 }
 
 pub(super) fn push_error(errors: &mut BTreeMap<String, Vec<String>>, field: &str, message: &str) {

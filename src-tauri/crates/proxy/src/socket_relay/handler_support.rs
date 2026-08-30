@@ -80,6 +80,7 @@ pub(super) fn socket_failure(failure: &RelayFailure) -> SocketRelayFailure {
             stage: SocketRelayStage::Shutdown,
             direction: Some(direction),
             code: ErrorCode::SocketRelayCancelled.as_str(),
+            external_package_call: None,
         };
     }
     let (stage, code) = match failure.operation {
@@ -104,6 +105,7 @@ pub(super) fn socket_failure(failure: &RelayFailure) -> SocketRelayFailure {
         stage,
         direction: Some(direction),
         code,
+        external_package_call: None,
     }
 }
 
@@ -143,6 +145,7 @@ pub(super) fn processing_failure(failure: &SocketProcessingFailure) -> SocketRel
         } else {
             failure.stable_code()
         },
+        external_package_call: failure.external_package_call.clone(),
     }
 }
 

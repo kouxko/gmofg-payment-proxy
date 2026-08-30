@@ -40,6 +40,9 @@ mod rules;
 mod settings;
 mod workspaces;
 
+pub use crate::package_transport::{
+    PackageTransportClient, PackageTransportConfig, PackageTransportError,
+};
 pub use android_adb::AndroidAdbAdapter;
 pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
 pub use bundle::InfrastructureServiceBundle;
@@ -64,10 +67,7 @@ pub use external_package_registry::{
     external_package_registration_fingerprint,
 };
 pub use external_package_server::{ExternalPackageServer, ExternalPackageServerConfig};
-pub use external_packages::{
-    ExternalPackageClient, ExternalPackageConnectionConfig, ExternalPackageConnectionError,
-    accept_packages_websocket,
-};
+pub use external_packages::accept_packages_websocket;
 pub use faults::FaultServiceAdapter;
 pub use files::{FileSelection, NativeFileDialog};
 pub use listener_certificates::ManagedListenerCertificateAdapter;
@@ -76,10 +76,7 @@ pub use pipeline::{RuntimePipelineAdapter, RuntimePipelineProductHooks};
 pub use protected_secrets::ProtectedSecretAdapter;
 pub use protocol_package_import::ProtocolPackageImportAdapter;
 pub use protocol_package_usage::ProtocolPackageUsageQueryAdapter;
-use protocol_packages::PreparedProtocolPackage;
-pub use protocol_packages::{
-    ProtocolPackageInstallOutcome, ProtocolPackageRepositoryAdapter, ProtocolPackageStorageError,
-};
+pub use protocol_packages::ProtocolPackageRepositoryAdapter;
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
 pub use workspaces::WorkspaceRepositoryAdapter;

@@ -28,7 +28,7 @@ async fn record_connection_error_waits_for_the_exact_package_apply_gate() {
         ))
         .await;
 
-    let reason = ExternalPackageConnectionError::Disconnected;
+    let reason = PackageTransportError::Disconnected;
     let mut publication =
         Box::pin(registry.record_connection_error(&package, accepted.connection_id, &reason));
     assert!(poll_once(publication.as_mut()).is_pending());

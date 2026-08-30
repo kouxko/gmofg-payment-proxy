@@ -51,7 +51,7 @@ pub(crate) struct DiagnosticLogSnapshot {
 
 fn diagnostic_entry(payload: &UiEventPayload) -> Option<DiagnosticLogEntryViewModel> {
     match payload {
-        UiEventPayload::DiagnosticLogAdded(entry) => Some(entry.clone()),
+        UiEventPayload::DiagnosticLogAdded(entry) => Some(entry.as_ref().clone()),
         UiEventPayload::ListenerStatusChanged(status) => Some(DiagnosticLogEntryViewModel {
             level: if status.state == ListenerRuntimeState::Faulted {
                 DiagnosticLogLevel::Error
@@ -287,7 +287,7 @@ mod tests {
     }
 
     fn diagnostic_payload(summary: &str, detail: Option<String>) -> UiEventPayload {
-        UiEventPayload::DiagnosticLogAdded(DiagnosticLogEntryViewModel {
+        UiEventPayload::DiagnosticLogAdded(Box::new(DiagnosticLogEntryViewModel {
             level: DiagnosticLogLevel::Info,
             stage: DiagnosticLogStage::System,
             summary: summary.to_owned(),
@@ -296,7 +296,7 @@ mod tests {
             listener_id: None,
             profile_id: None,
             socket_context: None,
-        })
+        }))
     }
 
     #[test]

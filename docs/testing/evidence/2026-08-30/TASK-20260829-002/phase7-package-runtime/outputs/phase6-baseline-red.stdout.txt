@@ -1,0 +1,6 @@
+BASELINE_SHA=56becb38decb5fc836d8274f65cc0a10b0761260
+WORKTREE_SOURCE=temporary clean detached worktree
+COPIED_TEST=src-tauri/crates/infrastructure/tests/phase7_transport_contract.rs
+COPIED_CHECKER=scripts/check-task-20260829-002-phase7-package-runtime.mjs
+COPIED_INVENTORY=test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json
+TEMP_WORKTREE_REMOVED=yes

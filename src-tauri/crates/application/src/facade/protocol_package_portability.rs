@@ -122,8 +122,9 @@ fn validate_rule_binding(
     rule: &intercept_proxy_domain::ProtocolDocumentRuleDefinition,
     description: &ProtocolPackageDescriptionViewModel,
 ) -> AppResult<()> {
-    let schema = domain_schema(schema_for_direction(description, rule.direction()));
-    rule.validate_against_schema(&schema)?;
+    if let Some(schema) = schema_for_direction(description, rule.direction()) {
+        rule.validate_against_schema(&domain_schema(schema))?;
+    }
     if package != rule.package() {
         return Err(portability_error("规则与入口绑定的精确协议包不一致。"));
     }
@@ -163,10 +164,10 @@ fn ensure_kind(
 fn schema_for_direction(
     description: &ProtocolPackageDescriptionViewModel,
     direction: ProtocolDirection,
-) -> &ProtocolPackageSchemaViewModel {
+) -> Option<&ProtocolPackageSchemaViewModel> {
     match direction {
-        ProtocolDirection::Upstream => &description.upstream_schema,
-        ProtocolDirection::Downstream => &description.downstream_schema,
+        ProtocolDirection::Upstream => description.upstream_schema.as_ref(),
+        ProtocolDirection::Downstream => description.downstream_schema.as_ref(),
     }
 }
 

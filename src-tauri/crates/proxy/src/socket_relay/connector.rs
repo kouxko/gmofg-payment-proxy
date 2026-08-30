@@ -37,6 +37,7 @@ impl SocketPreparationFailure {
                 stage,
                 direction,
                 code: error.code,
+                external_package_call: None,
             },
             error,
         }

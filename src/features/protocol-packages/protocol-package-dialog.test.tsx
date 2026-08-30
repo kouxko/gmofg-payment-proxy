@@ -117,7 +117,6 @@ describe("ProtocolPackageDialog details", () => {
           first_connected_at: "2026-08-20T08:00:00Z",
           last_connected_at: "2026-08-20T09:00:00Z",
           registration_fingerprint_sha256: "ab".repeat(32),
-          rpc_timeout_seconds: 5,
           upstream_methods: {
             frame: "hooks.upstream.split",
             decode: "hooks.upstream.decode",

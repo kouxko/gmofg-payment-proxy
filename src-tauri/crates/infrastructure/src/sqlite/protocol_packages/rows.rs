@@ -43,6 +43,7 @@ pub(crate) enum StoredProtocolPackageFiles {
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[cfg(test)]
 pub(crate) enum StoredProtocolPackageInstallOutcome {
     Installed(Uuid),
     Reused(Uuid),
