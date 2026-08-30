@@ -1,6 +1,6 @@
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DropResponseMode, JitterScope, MatchCondition, MatchField,
-    MatchOperator, RuleAction, TerminalAction, TrafficDirection,
+    DropResponseMode, HttpAction, JitterScope, MatchField, MatchOperator,
+    ProtocolDocumentOperation, ProtocolDocumentPredicate, TerminalAction, TrafficDirection,
 };
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -22,7 +22,7 @@ pub(super) struct HttpRuleTemplate {
     priority: u32,
     listener_alias: String,
     stage: HttpRuleStage,
-    conditions: Vec<HttpMatchConditionTemplate>,
+    conditions: Vec<HttpHttpConditionTemplate>,
     actions: Vec<HttpRuleActionTemplate>,
     #[serde(skip_serializing_if = "Option::is_none")]
     document: Option<HttpDocumentRuleTemplate>,
@@ -39,22 +39,20 @@ impl HttpRuleTemplate {
 #[serde(deny_unknown_fields)]
 struct HttpDocumentRuleTemplate {
     package: ProtocolPackageExactRef,
-    conditions: Vec<DocumentCondition>,
-    actions: Vec<DocumentAction>,
+    conditions: Vec<ProtocolDocumentPredicate>,
+    actions: Vec<ProtocolDocumentOperation>,
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum HttpRuleStage {
-    AppToProxy,
     ProxyToUpstream,
-    UpstreamToProxy,
     ProxyToApp,
     TlsHandshake,
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
-enum HttpMatchConditionTemplate {
+enum HttpHttpConditionTemplate {
     Field(StrictFieldCondition),
     NthHit(u64),
 }
@@ -217,16 +215,14 @@ struct StrictAfterBytes {
     after_bytes: u64,
 }
 
-impl From<HttpMatchConditionTemplate> for intercept_proxy_domain::Condition {
-    fn from(value: HttpMatchConditionTemplate) -> Self {
+impl From<HttpHttpConditionTemplate> for intercept_proxy_domain::Condition {
+    fn from(value: HttpHttpConditionTemplate) -> Self {
         match value {
-            HttpMatchConditionTemplate::Field(condition) => Self::Http {
-                condition: MatchCondition::Field {
-                    field: condition.field.into(),
-                    operator: condition.operator.into(),
-                },
+            HttpHttpConditionTemplate::Field(condition) => Self::Http {
+                field: condition.field.into(),
+                operator: condition.operator.into(),
             },
-            HttpMatchConditionTemplate::NthHit(count) => Self::NthHit { count },
+            HttpHttpConditionTemplate::NthHit(count) => Self::NthHit { count },
         }
     }
 }
@@ -252,7 +248,7 @@ impl From<HttpMatchOperatorTemplate> for MatchOperator {
     }
 }
 
-impl From<HttpRuleActionTemplate> for RuleAction {
+impl From<HttpRuleActionTemplate> for HttpAction {
     fn from(value: HttpRuleActionTemplate) -> Self {
         match value {
             HttpRuleActionTemplate::SetJsonField(value) => Self::SetJsonField {
@@ -376,8 +372,8 @@ pub(super) struct ProtocolDocumentRuleTemplate {
     listener_alias: String,
     package: ProtocolPackageExactRef,
     stage: ProtocolRuleStage,
-    conditions: Vec<DocumentCondition>,
-    actions: Vec<DocumentAction>,
+    conditions: Vec<ProtocolDocumentPredicate>,
+    actions: Vec<ProtocolDocumentOperation>,
 }
 
 impl ProtocolDocumentRuleTemplate {
@@ -393,9 +389,7 @@ impl ProtocolDocumentRuleTemplate {
 #[derive(Clone, Copy, Debug, Deserialize, PartialEq, Serialize)]
 #[serde(rename_all = "snake_case")]
 enum ProtocolRuleStage {
-    AppToProxy,
     ProxyToUpstream,
-    UpstreamToProxy,
     ProxyToApp,
 }
 

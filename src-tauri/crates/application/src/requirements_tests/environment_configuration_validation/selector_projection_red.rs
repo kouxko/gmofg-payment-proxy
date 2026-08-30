@@ -347,34 +347,6 @@ async fn existing_protocol_rule_can_change_stage_without_changing_binding_or_con
 }
 
 #[tokio::test]
-async fn existing_protocol_rule_stage_change_still_rejects_invalid_listener_topology() {
-    let store = Arc::new(InMemoryWorkspaceStore::new_empty());
-    let (persisted, mut candidate) = persisted_full_shape(&store).await;
-    retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["listeners"][1]["data_plane"]["settings"]["topology"] = serde_json::json!({
-        "mode": "local_responder",
-        "settings": {"downstream_security": {"mode": "tcp"}}
-    });
-    candidate["materials"]["certificates"]
-        .as_array_mut()
-        .unwrap()
-        .retain(|material| {
-            !matches!(
-                material["alias"].as_str(),
-                Some("socket-listener-identity" | "socket-upstream-client")
-            )
-        });
-    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("app_to_proxy");
-
-    assert_existing_domain_code(
-        store,
-        candidate,
-        EnvironmentStatusCode::ProtocolDocumentRuleInvalid,
-    )
-    .await;
-}
-
-#[tokio::test]
 async fn existing_plain_http_rule_can_change_stage_without_changing_identity() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;

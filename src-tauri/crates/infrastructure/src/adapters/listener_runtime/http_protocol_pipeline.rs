@@ -324,8 +324,7 @@ impl HttpProtocolRuntimeSnapshot {
         &self,
         connection: &HttpConnectionIdentity,
         direction: ProtocolDirection,
-        first: ProtocolRuleStage,
-        second: ProtocolRuleStage,
+        stage: ProtocolRuleStage,
         response: bool,
     ) -> Result<HttpDirectionCapabilities<D>, Error> {
         if let Some(binding) = &self.external {
@@ -341,7 +340,7 @@ impl HttpProtocolRuntimeSnapshot {
                     self.request_codec
                 },
                 binding,
-                [programs.program(first), programs.program(second)],
+                [programs.program(stage)],
             ));
         }
         #[cfg(test)]
@@ -369,7 +368,7 @@ impl HttpProtocolRuntimeSnapshot {
                 connection,
                 response,
                 &executor,
-                [programs.program(first), programs.program(second)],
+                [programs.program(stage)],
             ))
         }
         #[cfg(not(test))]
@@ -393,7 +392,6 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         self.build(
             &connection,
             ProtocolDirection::Upstream,
-            ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
             false,
         )
@@ -406,7 +404,6 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         self.build(
             &connection,
             ProtocolDirection::Downstream,
-            ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
             true,
         )

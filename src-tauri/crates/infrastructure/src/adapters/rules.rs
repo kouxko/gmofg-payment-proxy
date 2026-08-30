@@ -21,9 +21,9 @@ use intercept_proxy_application::{
 };
 #[cfg(test)]
 use intercept_proxy_domain::{
-    ChannelId, DropResponseMode, JitterScope, ListenerDataPlane, MatchCondition, MatchField,
-    MatchOperator, MessageStage, RuleAction, RuleDraft, RuleEngine, RuleId, RuntimeEpoch,
-    TerminalAction, TrafficDirection, validate_rule_draft,
+    ChannelId, DropResponseMode, HttpAction, JitterScope, ListenerDataPlane, MatchField,
+    MatchOperator, MessageStage, RuleDraft, RuleEngine, RuleId, RuntimeEpoch, TerminalAction,
+    TrafficDirection, validate_rule_draft,
 };
 use intercept_proxy_domain::{
     Revision, Rule, RuleLifecycleDelta, RuleRuntimeSnapshot, RuleSetSignature,

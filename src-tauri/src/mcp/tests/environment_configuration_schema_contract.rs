@@ -76,13 +76,7 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
     assert_eq!(defs["rule"]["oneOf"].as_array().unwrap().len(), 2);
     assert_eq!(
         defs["httpRule"]["properties"]["stage"]["enum"],
-        json!([
-            "app_to_proxy",
-            "proxy_to_upstream",
-            "upstream_to_proxy",
-            "proxy_to_app",
-            "tls_handshake"
-        ])
+        json!(["proxy_to_upstream", "proxy_to_app", "tls_handshake"])
     );
     assert!(
         !defs["httpRule"]["required"]

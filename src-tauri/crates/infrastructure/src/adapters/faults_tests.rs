@@ -132,7 +132,7 @@ fn mock_and_invalid_json_use_injected_codec() {
         ),
     ]);
     let (_, mock) = mock_response(&mock_parameters, &codec).expect("mock");
-    let RuleAction::Terminal(TerminalAction::MockResponse { body_bytes, .. }) = mock else {
+    let HttpAction::Terminal(TerminalAction::MockResponse { body_bytes, .. }) = mock else {
         panic!("mock response action");
     };
     assert_eq!(
@@ -145,7 +145,7 @@ fn mock_and_invalid_json_use_injected_codec() {
         FaultParameterValue::Text("{\"結果\":".into()),
     )]);
     let (_, invalid) = invalid_json(&invalid_parameters, &codec).expect("invalid");
-    let RuleAction::Terminal(TerminalAction::InvalidJson { body_bytes }) = invalid else {
+    let HttpAction::Terminal(TerminalAction::InvalidJson { body_bytes }) = invalid else {
         panic!("invalid json action");
     };
     assert_eq!(codec.decode(&body_bytes).expect("decode"), "{\"結果\":");

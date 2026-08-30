@@ -14,7 +14,7 @@ use intercept_proxy_application::{
     WorkingHttpMessage,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentValue, NthCounterSnapshot, Revision, RuleAction,
+    Condition, ConditionTree, Document, DocumentValue, HttpAction, NthCounterSnapshot, Revision,
     RuleId, RuleLifecycle, RuleLifecycleSnapshot, RuleProgramEntry, TerminalIdentity,
     UnifiedAction,
 };
@@ -28,12 +28,13 @@ impl RuleChainHttpPort for HttpPort {
     fn matches(
         &self,
         _: &WorkingHttpMessage,
-        _: &intercept_proxy_domain::MatchCondition,
+        _: &intercept_proxy_domain::MatchField,
+        _: &intercept_proxy_domain::MatchOperator,
     ) -> AppResult<bool> {
         self.error.clone().map_or(Ok(false), Err)
     }
 
-    fn apply(&self, _: &mut WorkingHttpMessage, _: &RuleAction) -> AppResult<()> {
+    fn apply(&self, _: &mut WorkingHttpMessage, _: &HttpAction) -> AppResult<()> {
         Ok(())
     }
 
@@ -230,10 +231,8 @@ async fn condition_error_preserves_the_complete_application_error() {
         program(
             rule_id,
             ConditionTree::Leaf(Condition::Http {
-                condition: intercept_proxy_domain::MatchCondition::Field {
-                    field: intercept_proxy_domain::MatchField::PathOrRequestType,
-                    operator: intercept_proxy_domain::MatchOperator::Equals("/".into()),
-                },
+                field: intercept_proxy_domain::MatchField::PathOrRequestType,
+                operator: intercept_proxy_domain::MatchOperator::Equals("/".into()),
             }),
         ),
         lifecycle(rule_id),
@@ -267,12 +266,13 @@ impl RuleChainHttpPort for NoPortCalls {
     fn matches(
         &self,
         _: &WorkingHttpMessage,
-        _: &intercept_proxy_domain::MatchCondition,
+        _: &intercept_proxy_domain::MatchField,
+        _: &intercept_proxy_domain::MatchOperator,
     ) -> AppResult<bool> {
         panic!("terminal mismatch must fail before HTTP match")
     }
 
-    fn apply(&self, _: &mut WorkingHttpMessage, _: &RuleAction) -> AppResult<()> {
+    fn apply(&self, _: &mut WorkingHttpMessage, _: &HttpAction) -> AppResult<()> {
         panic!("terminal mismatch must fail before HTTP action")
     }
 

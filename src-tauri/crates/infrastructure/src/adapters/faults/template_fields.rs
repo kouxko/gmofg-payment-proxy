@@ -1,6 +1,6 @@
 use super::{
     AppResult, BTreeMap, BodyCodec, FaultParameterFieldViewModel, FaultParameterKind,
-    FaultParameterValue, FaultParameters, FaultTemplateViewModel, MessageStage, RuleAction,
+    FaultParameterValue, FaultParameters, FaultTemplateViewModel, HttpAction, MessageStage,
     TemplateAction, TemplateDefinition, UiTone,
 };
 
@@ -11,7 +11,7 @@ pub(super) fn template(
     behavior: &str,
     affected: &str,
     risk: &str,
-    action: fn(&FaultParameters) -> AppResult<(MessageStage, RuleAction)>,
+    action: fn(&FaultParameters) -> AppResult<(MessageStage, HttpAction)>,
 ) -> TemplateDefinition {
     let (default_parameters, parameter_schema) = parameter_definitions(id);
     TemplateDefinition {
@@ -46,7 +46,7 @@ pub(super) fn encoded_template(
     behavior: &str,
     affected: &str,
     risk: &str,
-    action: fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, RuleAction)>,
+    action: fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, HttpAction)>,
 ) -> TemplateDefinition {
     let (default_parameters, parameter_schema) = parameter_definitions(id);
     TemplateDefinition {

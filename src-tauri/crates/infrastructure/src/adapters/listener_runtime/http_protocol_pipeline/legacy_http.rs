@@ -18,7 +18,7 @@ pub(super) fn build_capabilities<D: Direction>(
     connection: &HttpConnectionIdentity,
     response: bool,
     executor: &SharedExecutor,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
 ) -> HttpDirectionCapabilities<D> {
     let observed = Arc::new(Mutex::new(None));
     let rules = HttpDocumentRules::new(
@@ -112,7 +112,7 @@ struct HttpDocumentRules {
     response: bool,
     executor: SharedExecutor,
     observed: Arc<Mutex<Option<HttpContext>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
 }
 
 impl HttpDocumentRules {
@@ -122,7 +122,7 @@ impl HttpDocumentRules {
         response: bool,
         executor: SharedExecutor,
         observed: Arc<Mutex<Option<HttpContext>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+        programs: [Arc<ProtocolDocumentRuleProgram>; 1],
     ) -> Self {
         Self {
             runtime,

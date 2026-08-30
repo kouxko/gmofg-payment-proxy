@@ -26,9 +26,7 @@ pub use lifecycle::{
 )]
 #[serde(rename_all = "snake_case")]
 pub enum RuleStage {
-    AppToProxy,
     ProxyToUpstream,
-    UpstreamToProxy,
     ProxyToApp,
     TlsHandshake,
 }
@@ -37,8 +35,8 @@ impl RuleStage {
     #[must_use]
     pub const fn direction(self) -> Option<ProtocolDirection> {
         match self {
-            Self::AppToProxy | Self::ProxyToUpstream => Some(ProtocolDirection::Upstream),
-            Self::UpstreamToProxy | Self::ProxyToApp => Some(ProtocolDirection::Downstream),
+            Self::ProxyToUpstream => Some(ProtocolDirection::Upstream),
+            Self::ProxyToApp => Some(ProtocolDirection::Downstream),
             Self::TlsHandshake => None,
         }
     }
@@ -328,9 +326,9 @@ impl RuleDefinition {
 
     /// Validates the persisted rule shape accepted by current create/update operations.
     ///
-    /// [`Self::restore`] intentionally accepts legacy message stages until Phase 12 so old
-    /// records remain readable. Callers projecting a new save from an existing identity must
-    /// invoke this stricter boundary before persistence.
+    /// [`Self::restore`] uses the same current stage enum, so removed legacy stages fail before
+    /// this save boundary. Callers projecting a new save from an existing identity still invoke
+    /// this validation before persistence.
     pub fn validate_for_save(&self) -> Result<(), DomainError> {
         self.validate()?;
         self.validate_new_save_stage()
@@ -343,13 +341,6 @@ impl RuleDefinition {
                 RuleContent::Http(_) | RuleContent::Socket(_),
                 RuleStage::ProxyToUpstream | RuleStage::ProxyToApp,
             ) => Ok(()),
-            (
-                RuleContent::Http(_) | RuleContent::Socket(_),
-                RuleStage::AppToProxy | RuleStage::UpstreamToProxy,
-            ) => Err(rule_binding_error(
-                "stage",
-                "新消息规则只允许 proxy_to_upstream 或 proxy_to_app；旧四阶段数据仅保留到 Phase 12 运行时删除",
-            )),
             (RuleContent::Socket(_), RuleStage::TlsHandshake) => Err(rule_binding_error(
                 "stage",
                 "Socket 消息规则不能使用 TLS 握手阶段",

@@ -5,13 +5,13 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use intercept_proxy_application::ExternalPackageCallStage;
 use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
+#[cfg(test)]
+use intercept_proxy_exchange::Encode;
 use intercept_proxy_exchange::{
     Decode, Direction, Display, Document, Error, ExternalPackageCallFailure,
     ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Socket,
     SocketContext,
 };
-#[cfg(test)]
-use intercept_proxy_exchange::{Encode, Rules};
 #[cfg(test)]
 use intercept_proxy_package_contract::EncodeParams;
 use intercept_proxy_package_contract::{
@@ -23,8 +23,6 @@ use parking_lot::Mutex;
 use super::joint_socket::ExternalSocketObserved;
 use super::{ExternalPackageRpc, trace_external_rpc_failure};
 use crate::adapters::PackageTransportError;
-#[cfg(test)]
-use crate::adapters::listener_runtime::ProtocolDocumentRuleConnection;
 
 macro_rules! capability {
     ($name:ident $(<$d:ident>)?) => {
@@ -176,43 +174,6 @@ impl Display for ExternalDisplay {
             .map_err(|error| {
                 rpc_error_untyped(ExternalCallStage::Display, self.method, &error, self)
             })
-    }
-}
-
-#[cfg(test)]
-pub(super) struct OrderedRules<D: Direction> {
-    first: ProtocolDocumentRuleConnection,
-    second: ProtocolDocumentRuleConnection,
-    marker: std::marker::PhantomData<fn() -> D>,
-}
-
-#[cfg(test)]
-impl<D: Direction> OrderedRules<D> {
-    pub(super) fn new(
-        first: ProtocolDocumentRuleConnection,
-        second: ProtocolDocumentRuleConnection,
-    ) -> Self {
-        Self {
-            first,
-            second,
-            marker: std::marker::PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-#[cfg(test)]
-impl<D: Direction> Rules for OrderedRules<D> {
-    async fn apply(&mut self, document: Document) -> Result<Document, Error> {
-        let first = self
-            .first
-            .execute(self.first.bind_document(document))
-            .map_err(|_| stage_error::<D>(SocketProcessingFailureKind::RuleFailed))?;
-        let second = self
-            .second
-            .execute(self.second.bind_document(first.into_parts().0))
-            .map_err(|_| stage_error::<D>(SocketProcessingFailureKind::RuleFailed))?;
-        Ok(second.into_parts().0)
     }
 }
 

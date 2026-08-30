@@ -3,11 +3,11 @@ use intercept_proxy_domain::{
     ConditionTree, HttpDocumentRuleContent, HttpRuleContent, SocketRuleContent, UnifiedAction,
 };
 
-fn document_tree(conditions: Vec<DocumentCondition>) -> ConditionTree {
+fn document_tree(conditions: Vec<ProtocolDocumentPredicate>) -> ConditionTree {
     ConditionTree::from_document_conditions(conditions)
 }
 
-fn document_actions(actions: Vec<DocumentAction>) -> Vec<UnifiedAction> {
+fn document_actions(actions: Vec<ProtocolDocumentOperation>) -> Vec<UnifiedAction> {
     actions.into_iter().map(UnifiedAction::from).collect()
 }
 
@@ -15,7 +15,7 @@ fn http_tree(conditions: Vec<intercept_proxy_domain::Condition>) -> ConditionTre
     ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
 }
 
-fn http_actions(actions: Vec<intercept_proxy_domain::RuleAction>) -> Vec<UnifiedAction> {
+fn http_actions(actions: Vec<intercept_proxy_domain::HttpAction>) -> Vec<UnifiedAction> {
     actions.into_iter().map(UnifiedAction::from).collect()
 }
 
@@ -48,7 +48,7 @@ fn unified_socket_input(
 
 #[tokio::test]
 async fn stopped_listener_rejects_invalid_unified_document_before_persistence() {
-    for invalid_case in ["package", "type", "stage"] {
+    for invalid_case in ["package", "type"] {
         let (application, services, workspaces, runtime) = fixture();
         let package = pkg("unified-validation", "1.0.0");
         let listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -65,9 +65,6 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
             "type" => {
                 content.actions =
                     document_actions(vec![set("amount", DocumentValue::String("wrong".into()))]);
-            }
-            "stage" => {
-                input.draft.stage = RuleStage::AppToProxy;
             }
             _ => unreachable!(),
         }
@@ -106,7 +103,12 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
 #[tokio::test]
 async fn unified_document_save_enforces_direction_decode_and_encode_capabilities() {
     for (case, decode, encode, actions) in [
-        ("decode", false, true, vec![DocumentAction::RecordMatch]),
+        (
+            "decode",
+            false,
+            true,
+            vec![ProtocolDocumentOperation::RecordMatch],
+        ),
         (
             "encode",
             true,
@@ -178,7 +180,7 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                             DocumentValue::String("abc".into()),
                         )]),
                     ]),
-                    actions: http_actions(vec![intercept_proxy_domain::RuleAction::Delay {
+                    actions: http_actions(vec![intercept_proxy_domain::HttpAction::Delay {
                         milliseconds: 1,
                     }])
                     .into_iter()
@@ -197,64 +199,6 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
         .unwrap();
     assert!(matches!(http.content(), RuleContent::Http(_)));
     assert!(runtime.statuses().await.unwrap().is_empty());
-}
-
-#[tokio::test]
-async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stages() {
-    for (stage, conditions, actions) in [
-        (
-            RuleStage::AppToProxy,
-            vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
-            Vec::new(),
-        ),
-        (
-            RuleStage::AppToProxy,
-            Vec::new(),
-            vec![intercept_proxy_domain::RuleAction::Delay { milliseconds: 1 }],
-        ),
-        (
-            RuleStage::UpstreamToProxy,
-            vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
-            Vec::new(),
-        ),
-        (
-            RuleStage::UpstreamToProxy,
-            Vec::new(),
-            vec![intercept_proxy_domain::RuleAction::Delay { milliseconds: 1 }],
-        ),
-    ] {
-        let (application, services, workspaces, runtime) = fixture();
-        let package = pkg("http-stage-gate", "1.0.0");
-        let listener_id = configure_http(&services, &workspaces, &package).await;
-        let selected = workspaces.list().await.unwrap().remove(0);
-        let before = workspaces.get(selected.id).await.unwrap();
-
-        let error = application
-            .rule_definition_save(RuleDefinitionSaveInput {
-                rule_id: None,
-                expected_revision: None,
-                draft: RuleDefinitionDraft {
-                    name: "非法普通 HTTP 阶段".into(),
-                    enabled: true,
-                    priority: 10,
-                    listener_id,
-                    stage,
-                    one_shot: false,
-                    content: RuleContent::Http(HttpRuleContent {
-                        description: String::new(),
-                        condition: http_tree(conditions),
-                        actions: http_actions(actions),
-                        document: Some(HttpDocumentRuleContent { package }),
-                    }),
-                },
-            })
-            .await
-            .unwrap_err();
-
-        assert_eq!(error_code(&error), "RULE_INVALID");
-        assert_eq!(workspaces.get(selected.id).await.unwrap(), before);
-        assert!(runtime.statuses().await.unwrap().is_empty());
-    }
 }
 
 #[tokio::test]
@@ -285,7 +229,7 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                         )]),
                         actions: http_actions(
                             joint
-                                .then_some(intercept_proxy_domain::RuleAction::Delay {
+                                .then_some(intercept_proxy_domain::HttpAction::Delay {
                                     milliseconds: 1,
                                 })
                                 .into_iter()

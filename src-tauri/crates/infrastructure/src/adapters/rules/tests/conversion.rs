@@ -5,27 +5,25 @@ use intercept_proxy_domain::Condition;
 fn typed_ipc_conditions_and_actions_round_trip_without_changing_domain_values() {
     let conditions = vec![
         Condition::Http {
-            condition: MatchCondition::Field {
-                field: MatchField::JsonPath("$.amount".into()),
-                operator: MatchOperator::Regex(r"^\d+$".into()),
-            },
+            field: MatchField::JsonPath("$.amount".into()),
+            operator: MatchOperator::Regex(r"^\d+$".into()),
         },
         Condition::NthHit { count: 3 },
     ];
     let actions = vec![
-        RuleAction::SetJsonField {
+        HttpAction::SetJsonField {
             path: "$.approved".into(),
             value: serde_json::json!({"ok": true, "code": 0}),
         },
-        RuleAction::ReplaceBodyText("本文".into()),
-        RuleAction::SetHeader {
+        HttpAction::ReplaceBodyText("本文".into()),
+        HttpAction::SetHeader {
             name: "x-test".into(),
             value: "yes".into(),
         },
-        RuleAction::Delay { milliseconds: 25 },
-        RuleAction::Pause,
-        RuleAction::CustomHttpStatus { status: 503 },
-        RuleAction::Terminal(TerminalAction::MockResponse {
+        HttpAction::Delay { milliseconds: 25 },
+        HttpAction::Pause,
+        HttpAction::CustomHttpStatus { status: 503 },
+        HttpAction::Terminal(TerminalAction::MockResponse {
             status: 200,
             headers: vec![("content-type".into(), "application/json".into())],
             body_bytes: vec![0x82, 0xa0],

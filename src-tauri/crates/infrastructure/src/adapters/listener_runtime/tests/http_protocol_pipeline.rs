@@ -16,13 +16,13 @@ use intercept_proxy_application::{
     AppError, AppResult, BreakpointCoordinator, EventHub, InMemorySessionStore,
 };
 use intercept_proxy_domain::{
-    ChannelId, DocumentAction, DocumentCondition, DocumentValue, HttpBodyProcessing,
-    HttpListenerSettings, HttpRuleContent, JsonPointer, ListenerDataPlane, MatchCondition,
-    MatchContext, MatchField, MatchOperator, MessageStage, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleEngine, RuleEvaluation, RuntimeEpoch, SocketRuleContent,
-    TerminalIdentity,
+    ChannelId, DocumentValue, HttpAction, HttpBodyProcessing, HttpListenerSettings,
+    HttpRuleContent, JsonPointer, ListenerDataPlane, MatchContext, MatchField, MatchOperator,
+    MessageStage, ProtocolDocumentOperation, ProtocolDocumentPredicate,
+    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleContent,
+    RuleDefinition, RuleDefinitionDraft, RuleEngine, RuleEvaluation, RuntimeEpoch,
+    SocketRuleContent, TerminalIdentity,
 };
 use intercept_proxy_exchange::HttpContext;
 use intercept_proxy_product_api::{
@@ -176,7 +176,7 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
             ProtocolRuleStage::ProxyToUpstream,
             1,
             "route",
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("route"),
                 value: DocumentValue::String("decoded".into()),
             }],
@@ -188,7 +188,7 @@ async fn upstream_capabilities_are_independent_and_rules_run_in_order() {
             ProtocolRuleStage::ProxyToUpstream,
             2,
             "route",
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("route"),
                 value: DocumentValue::String("after_app".into()),
             }],
@@ -238,7 +238,7 @@ async fn earlier_rule_document_actions_are_visible_to_later_rule_conditions() {
             ProtocolRuleStage::ProxyToUpstream,
             2,
             "route",
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("route"),
                 value: DocumentValue::String("stage-one".into()),
             }],
@@ -267,7 +267,7 @@ async fn earlier_rule_document_actions_are_visible_to_later_rule_conditions() {
     content
         .actions
         .push(intercept_proxy_domain::UnifiedAction::from(
-            RuleAction::SetHeader {
+            HttpAction::SetHeader {
                 name: "x-stage-two".into(),
                 value: "matched".into(),
             },
@@ -313,7 +313,7 @@ async fn downstream_uses_downstream_schema_and_rule_stages() {
             ProtocolRuleStage::ProxyToApp,
             2,
             "result",
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("result"),
                 value: DocumentValue::String("after_server".into()),
             }],
@@ -352,11 +352,11 @@ fn http_snapshot_rejects_rule_package_drift_below_application() {
             listener.id,
             package,
             ProtocolRuleStage::ProxyToUpstream,
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("route"),
                 value: DocumentValue::String("decoded".into()),
             }],
-            vec![DocumentAction::RecordMatch],
+            vec![ProtocolDocumentOperation::RecordMatch],
         )
         .unwrap();
 

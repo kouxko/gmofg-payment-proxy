@@ -176,7 +176,7 @@ fn nth_hit_is_a_common_leaf_and_a_miss_does_not_consume_lifecycle() {
     let matched = match baseline.content() {
         RuleContent::Http(content) => content
             .condition
-            .matches_with(&document, 2, &mut |_| {
+            .matches_with(&document, 2, &mut |_, _| {
                 Ok::<_, intercept_proxy_domain::DomainError>(false)
             })
             .expect("match"),

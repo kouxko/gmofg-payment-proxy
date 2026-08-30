@@ -15,8 +15,8 @@ use std::{
 use bytes::Bytes;
 use intercept_proxy_application::RuleSummaryViewModel;
 use intercept_proxy_domain::{
-    DropResponseMode, JitterScope as DomainJitterScope, JsonPath,
-    MessageStage as DomainMessageStage, RuleAction, TerminalAction, TerminalIdentity,
+    DropResponseMode, HttpAction, JitterScope as DomainJitterScope, JsonPath,
+    MessageStage as DomainMessageStage, TerminalAction, TerminalIdentity,
     TrafficDirection as DomainTrafficDirection,
 };
 use intercept_proxy_product_api::BodyCodec;
@@ -41,14 +41,14 @@ macro_rules! runtime_status {
 pub(super) fn apply_rule_actions(
     body_codec: &dyn BodyCodec,
     message: &mut Message,
-    actions: &[RuleAction],
+    actions: &[HttpAction],
     seed: u64,
 ) -> ProxyResult<(Vec<FaultAction>, bool)> {
     let mut faults = Vec::new();
     let mut pause = false;
     for action in actions {
         match action {
-            RuleAction::SetJsonField { path, value } => {
+            HttpAction::SetJsonField { path, value } => {
                 let mut json = decode_json(body_codec, &message.body)?;
                 JsonPath::parse(path)
                     .and_then(|path| path.set(&mut json, value.clone()))
@@ -65,20 +65,20 @@ pub(super) fn apply_rule_actions(
                 })?;
                 message.replace_body(Bytes::from(encode_body(body_codec, &text)?));
             }
-            RuleAction::ReplaceBodyText(text) => {
+            HttpAction::ReplaceBodyText(text) => {
                 message.replace_body(Bytes::from(encode_body(body_codec, text)?));
             }
-            RuleAction::SetHeader { name, value } => {
+            HttpAction::SetHeader { name, value } => {
                 message.remove_header(name);
                 message.headers.push(RawHeader::new(
                     name.as_bytes().to_vec(),
                     value.as_bytes().to_vec(),
                 ));
             }
-            RuleAction::Delay { milliseconds } => {
+            HttpAction::Delay { milliseconds } => {
                 faults.push(FaultAction::Delay(Duration::from_millis(*milliseconds)));
             }
-            RuleAction::Jitter {
+            HttpAction::Jitter {
                 minimum_milliseconds,
                 maximum_milliseconds,
                 scope,
@@ -91,7 +91,7 @@ pub(super) fn apply_rule_actions(
                 },
                 seed,
             }),
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second,
                 chunk_bytes,
                 direction,
@@ -102,7 +102,7 @@ pub(super) fn apply_rule_actions(
                 })?,
                 direction: traffic_direction(*direction),
             }),
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds,
                 blocked_milliseconds,
                 direction,
@@ -111,11 +111,11 @@ pub(super) fn apply_rule_actions(
                 blocked: Duration::from_millis(*blocked_milliseconds),
                 direction: traffic_direction(*direction),
             }),
-            RuleAction::Pause => pause = true,
-            RuleAction::CustomHttpStatus { status } => {
+            HttpAction::Pause => pause = true,
+            HttpAction::CustomHttpStatus { status } => {
                 faults.push(FaultAction::CustomStatus(runtime_status!(*status)?));
             }
-            RuleAction::Terminal(terminal) => faults.push(map_terminal_action(terminal)?),
+            HttpAction::Terminal(terminal) => faults.push(map_terminal_action(terminal)?),
         }
     }
     if message.body_modified {

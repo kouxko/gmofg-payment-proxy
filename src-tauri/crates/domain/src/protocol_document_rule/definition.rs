@@ -1,7 +1,8 @@
 use super::{
-    DocumentAction, DocumentCondition, DomainError, ListenerId, ProtocolDirection,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft, ProtocolDocumentRuleId,
-    ProtocolDocumentRuleWire, ProtocolPackageRef, ProtocolRuleStage, Revision,
+    DomainError, ListenerId, ProtocolDirection, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft,
+    ProtocolDocumentRuleId, ProtocolDocumentRuleWire, ProtocolPackageRef, ProtocolRuleStage,
+    Revision,
 };
 
 impl ProtocolDocumentRuleDefinition {
@@ -16,8 +17,8 @@ impl ProtocolDocumentRuleDefinition {
         listener_id: ListenerId,
         package: ProtocolPackageRef,
         stage: ProtocolRuleStage,
-        conditions: Vec<DocumentCondition>,
-        actions: Vec<DocumentAction>,
+        conditions: Vec<ProtocolDocumentPredicate>,
+        actions: Vec<ProtocolDocumentOperation>,
     ) -> Result<Self, DomainError> {
         Self::from_wire(ProtocolDocumentRuleWire {
             rule_id,
@@ -39,13 +40,13 @@ impl ProtocolRuleStage {
     #[must_use]
     pub const fn direction(self) -> ProtocolDirection {
         match self {
-            Self::AppToProxy | Self::ProxyToUpstream => ProtocolDirection::Upstream,
-            Self::UpstreamToProxy | Self::ProxyToApp => ProtocolDirection::Downstream,
+            Self::ProxyToUpstream => ProtocolDirection::Upstream,
+            Self::ProxyToApp => ProtocolDirection::Downstream,
         }
     }
 }
 
-impl DocumentAction {
+impl ProtocolDocumentOperation {
     /// 是否会修改 Document；Workspace 用它强制要求对应方向开启 Encode。
     #[must_use]
     pub const fn modifies_document(&self) -> bool {
@@ -111,18 +112,20 @@ impl ProtocolDocumentRuleDefinition {
     }
 
     #[must_use]
-    pub fn conditions(&self) -> &[DocumentCondition] {
+    pub fn conditions(&self) -> &[ProtocolDocumentPredicate] {
         &self.conditions
     }
 
     #[must_use]
-    pub fn actions(&self) -> &[DocumentAction] {
+    pub fn actions(&self) -> &[ProtocolDocumentOperation] {
         &self.actions
     }
 
     #[must_use]
     pub fn modifies_document(&self) -> bool {
-        self.actions.iter().any(DocumentAction::modifies_document)
+        self.actions
+            .iter()
+            .any(ProtocolDocumentOperation::modifies_document)
     }
 
     /// 返回不携带身份、revision 和创建顺序的可编辑 Draft。

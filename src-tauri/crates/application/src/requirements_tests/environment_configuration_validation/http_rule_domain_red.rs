@@ -9,21 +9,6 @@ fn protocol_document() -> serde_json::Value {
 }
 
 #[tokio::test]
-async fn application_boundary_stages_reject_ordinary_http_conditions_and_actions() {
-    for stage in ["app_to_proxy", "upstream_to_proxy"] {
-        let candidate = domain_contract_red::candidate_json_with(|candidate| {
-            candidate["workspace"]["rules"][0]["stage"] = serde_json::json!(stage);
-        });
-
-        domain_contract_red::assert_domain_code_before_preview(
-            &candidate,
-            EnvironmentStatusCode::HttpRuleInvalid,
-        )
-        .await;
-    }
-}
-
-#[tokio::test]
 async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
     for (stage, pure_document) in [
         ("proxy_to_upstream", true),

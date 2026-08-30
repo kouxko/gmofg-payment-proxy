@@ -136,7 +136,7 @@ async fn production_snapshot_uses_shared_provider_for_both_directions_and_joint_
         ProtocolRuleStage::ProxyToUpstream,
         1,
         "value",
-        vec![DocumentCondition::Equals {
+        vec![ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property("value"),
             value: DocumentValue::String("old".into()),
         }],

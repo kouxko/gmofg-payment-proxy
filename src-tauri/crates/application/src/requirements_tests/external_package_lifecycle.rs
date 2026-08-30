@@ -61,11 +61,11 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
             listener_id,
             package,
             stage: ProtocolRuleStage::ProxyToUpstream,
-            conditions: vec![DocumentCondition::Equals {
+            conditions: vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("amount"),
                 value: DocumentValue::integer(0).expect("fixture number"),
             }],
-            actions: vec![DocumentAction::RecordMatch],
+            actions: vec![ProtocolDocumentOperation::RecordMatch],
         })
         .await
         .unwrap();

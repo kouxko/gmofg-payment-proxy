@@ -1,9 +1,8 @@
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DropResponseMode,
+    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DropResponseMode, HttpAction,
     HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, ProtocolPackageId,
-    ProtocolPackageRef, ProxyWorkspace, RuleAction, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleStage, SocketRuleContent, StringOperator, StringPredicate,
-    TerminalAction, UnifiedAction,
+    ProtocolPackageRef, ProxyWorkspace, RuleContent, RuleDefinition, RuleDefinitionDraft,
+    RuleStage, SocketRuleContent, StringOperator, StringPredicate, TerminalAction, UnifiedAction,
 };
 
 fn package() -> ProtocolPackageRef {
@@ -47,7 +46,7 @@ fn unified_rule_serializes_one_tagged_content_variant() {
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
                 condition: http_condition(),
-                actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+                actions: vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
                 document: None,
             }),
         },
@@ -59,35 +58,6 @@ fn unified_rule_serializes_one_tagged_content_variant() {
     assert_eq!(json["stage"], "proxy_to_upstream");
     assert_eq!(json["content"]["type"], "http");
     assert!(json.get("protocol_rule").is_none());
-}
-
-#[test]
-fn old_message_stages_are_restore_only_and_rejected_for_new_saves() {
-    for stage in [RuleStage::AppToProxy, RuleStage::UpstreamToProxy] {
-        let draft = |actions| RuleDefinitionDraft {
-            name: "HTTP stage contract".into(),
-            enabled: true,
-            priority: 5,
-            listener_id: ListenerId::new(),
-            stage,
-            one_shot: false,
-            content: RuleContent::Http(HttpRuleContent {
-                description: String::new(),
-                condition: document_condition(),
-                actions,
-                document: Some(HttpDocumentRuleContent { package: package() }),
-            }),
-        };
-        let error = RuleDefinition::create(
-            draft(vec![UnifiedAction::Http(RuleAction::Delay {
-                milliseconds: 1,
-            })]),
-            1,
-        )
-        .expect_err("old message stages are restore-only until Phase 12 removes their runtime");
-        assert_eq!(error.code.as_str(), "RULE_INVALID");
-        assert!(RuleDefinition::create(draft(vec![document_action()]), 1).is_err());
-    }
 }
 
 #[test]
@@ -105,7 +75,7 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                     description: String::new(),
                     condition: ConditionTree::All(vec![http_condition(), document_condition()]),
                     actions: vec![
-                        UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 }),
+                        UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 }),
                         document_action(),
                     ],
                     document: Some(HttpDocumentRuleContent { package: package() }),
@@ -142,7 +112,7 @@ fn http_without_document_binding_rejects_recursive_document_conditions_and_actio
         RuleDefinition::create(
             draft(
                 nested_document_condition,
-                vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+                vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
             ),
             1,
         )
@@ -156,7 +126,7 @@ fn http_without_document_binding_rejects_recursive_document_conditions_and_actio
             listener_id,
             ..draft(
                 http_condition(),
-                vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+                vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
             )
         },
         1,
@@ -257,7 +227,7 @@ fn listener_and_content_kind_are_immutable_after_creation() {
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
                     condition: http_condition(),
-                    actions: vec![UnifiedAction::Http(RuleAction::Delay { milliseconds: 1 })],
+                    actions: vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
                     document: None,
                 }),
             },

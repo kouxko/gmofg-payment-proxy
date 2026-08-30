@@ -1,5 +1,5 @@
 use crate::{
-    Condition, ConditionTree, DomainError, MessageStage, RuleAction, RuleDraft, UnifiedAction,
+    Condition, ConditionTree, DomainError, HttpAction, MessageStage, RuleDraft, UnifiedAction,
     validate_rule_draft,
 };
 
@@ -16,7 +16,7 @@ pub(super) fn validate_http_runtime_content(
         .iter()
         .filter_map(|action| match action {
             UnifiedAction::Http(action) => Some(action.clone()),
-            UnifiedAction::Terminal(action) => Some(RuleAction::Terminal(action.clone())),
+            UnifiedAction::Terminal(action) => Some(HttpAction::Terminal(action.clone())),
             UnifiedAction::RecordMatch | UnifiedAction::Document(_) => None,
         })
         .collect::<Vec<_>>();
@@ -27,12 +27,6 @@ pub(super) fn validate_http_runtime_content(
         RuleStage::ProxyToUpstream => MessageStage::Request,
         RuleStage::ProxyToApp => MessageStage::Response,
         RuleStage::TlsHandshake => MessageStage::TlsHandshake,
-        RuleStage::AppToProxy | RuleStage::UpstreamToProxy => {
-            return Err(rule_binding_error(
-                "stage",
-                "该处理阶段只支持 Document 条件和动作，不支持普通 HTTP 条件或动作",
-            ));
-        }
     };
     let priority = u32::try_from(definition.priority)
         .map_err(|_| rule_binding_error("priority", "HTTP 规则优先级不能为负数"))?;
@@ -45,23 +39,20 @@ pub(super) fn validate_http_runtime_content(
         created_order: definition.created_order,
         channel: None,
         stage,
-        conditions: conditions
-            .into_iter()
-            .map(|condition| Condition::Http { condition })
-            .collect(),
+        conditions,
         actions,
         one_shot: definition.one_shot,
     })
 }
 
-fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<crate::MatchCondition>) {
+fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<Condition>) {
     match tree {
         ConditionTree::All(children) | ConditionTree::Any(children) => {
             for child in children {
                 collect_http_conditions(child, output);
             }
         }
-        ConditionTree::Leaf(Condition::Http { condition }) => output.push(condition.clone()),
+        ConditionTree::Leaf(condition @ Condition::Http { .. }) => output.push(condition.clone()),
         ConditionTree::Leaf(Condition::Document { .. } | Condition::NthHit { .. }) => {}
     }
 }

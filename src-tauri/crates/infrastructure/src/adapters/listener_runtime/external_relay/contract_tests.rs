@@ -1,8 +1,8 @@
 use super::*;
 use intercept_proxy_domain::{
-    Document, DocumentAction, DocumentCondition, DocumentValue, JsonPointer, ListenerId,
-    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolDocumentRuleProgram, ProtocolRuleStage, SocketLocalResponderTopology,
+    Document, DocumentValue, JsonPointer, ListenerId, ProtocolDirection, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolDocumentRuleProgram, ProtocolRuleStage,
 };
 use intercept_proxy_package_contract::{
     CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult,
@@ -157,11 +157,11 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
         listener.id,
         package,
         ProtocolRuleStage::ProxyToUpstream,
-        vec![DocumentCondition::Equals {
+        vec![ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("original".to_owned()),
         }],
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
         }],
@@ -192,58 +192,6 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
             .rules()
             .len(),
         1
-    );
-}
-
-#[tokio::test]
-async fn replace_document_rules_rejects_ingress_stage_for_local_responder() {
-    let registration = registration();
-    let listener = listener();
-    let package = registration.package().identity().clone();
-    let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
-        ProtocolDocumentRuleId::new(),
-        "invalid local stage".to_owned(),
-        true,
-        10,
-        1,
-        listener.id,
-        package,
-        ProtocolRuleStage::AppToProxy,
-        vec![DocumentCondition::Equals {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("original".to_owned()),
-        }],
-        vec![DocumentAction::SetField {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("updated".to_owned()),
-        }],
-    )
-    .unwrap();
-    let mut workspace = ProxyWorkspace::default();
-    workspace
-        .replace_document_runtime_rules(vec![rule])
-        .unwrap();
-    let snapshot = ExternalSocketRuntimeSnapshot::new(
-        ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
-        empty_rules(&registration, listener.id),
-        SocketTopology::LocalResponder(SocketLocalResponderTopology::default()),
-    );
-    let adapter = crate::adapters::listener_runtime::tests::test_listener_runtime(Arc::new(
-        crate::SqliteStore::in_memory().unwrap(),
-    ));
-
-    let error = snapshot
-        .replace_document_rules(&adapter, &workspace, &listener)
-        .await
-        .unwrap_err();
-
-    assert_eq!(error.view_model.code, "PROTOCOL_RULE_DIRECTION_INVALID");
-    assert!(
-        snapshot
-            .rules
-            .program(ProtocolRuleStage::AppToProxy)
-            .rules()
-            .is_empty()
     );
 }
 
@@ -332,11 +280,11 @@ fn relay_rule_workspace(
         listener.id,
         registration.package().identity().clone(),
         ProtocolRuleStage::ProxyToUpstream,
-        vec![DocumentCondition::Equals {
+        vec![ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("original".to_owned()),
         }],
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("updated".to_owned()),
         }],
@@ -381,9 +329,7 @@ fn empty_rules(
         )
     };
     ProtocolDocumentRuleConnectionFactory::new(
-        program(ProtocolRuleStage::AppToProxy, upstream.clone()),
         program(ProtocolRuleStage::ProxyToUpstream, upstream),
-        program(ProtocolRuleStage::UpstreamToProxy, downstream.clone()),
         program(ProtocolRuleStage::ProxyToApp, downstream),
     )
     .unwrap()

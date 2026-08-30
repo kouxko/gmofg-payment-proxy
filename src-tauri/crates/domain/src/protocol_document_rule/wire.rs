@@ -2,7 +2,10 @@
 
 use serde::{Deserialize, Serialize};
 
-use super::{DocumentAction, DocumentCondition, ProtocolDocumentRuleDefinition, ProtocolRuleStage};
+use super::{
+    ProtocolDocumentOperation, ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition,
+    ProtocolRuleStage,
+};
 use crate::{DocumentValue, ListenerId, ProtocolDocumentRuleId, ProtocolPackageRef, Revision};
 
 #[derive(Deserialize)]
@@ -27,8 +30,8 @@ pub(super) struct ProtocolDocumentRuleWire {
     pub(super) listener_id: ListenerId,
     pub(super) package: ProtocolPackageRef,
     pub(super) stage: ProtocolRuleStage,
-    pub(super) conditions: Vec<DocumentCondition>,
-    pub(super) actions: Vec<DocumentAction>,
+    pub(super) conditions: Vec<ProtocolDocumentPredicate>,
+    pub(super) actions: Vec<ProtocolDocumentOperation>,
 }
 
 impl TryFrom<ProtocolDocumentRuleWire> for ProtocolDocumentRuleDefinition {

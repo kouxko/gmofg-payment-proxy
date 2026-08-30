@@ -5,8 +5,9 @@
 
 use intercept_proxy_application::{ExternalPackageApplicationPort, ListenerRuntimePort};
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentAction, DocumentCondition, DocumentValue, JsonPointer,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage, RuleContent,
+    Condition, ConditionTree, DocumentValue, JsonPointer, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolRuleStage, RuleContent,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -308,7 +309,7 @@ fn two_stage_one_shot_rules(
             ProtocolRuleStage::ProxyToUpstream,
             10,
             1,
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::parse("/payload/1").unwrap(),
                 value: DocumentValue::integer(i64::from(b'a')).unwrap(),
             }],
@@ -319,7 +320,7 @@ fn two_stage_one_shot_rules(
             ProtocolRuleStage::ProxyToApp,
             20,
             2,
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::parse("/payload/1").unwrap(),
                 value: DocumentValue::integer(i64::from(b'x')).unwrap(),
             }],
@@ -339,7 +340,7 @@ fn two_stage_one_shot_rules(
             package.clone(),
             stage,
             conditions,
-            vec![DocumentAction::SetField {
+            vec![ProtocolDocumentOperation::SetField {
                 field,
                 value: DocumentValue::integer(i64::from(value)).unwrap(),
             }],

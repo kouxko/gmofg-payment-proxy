@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-31 05:23:13 +08:00`
+- 最后更新时间：`2026-08-31 06:43:40 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -399,7 +399,11 @@ result: "<HTML string>"
 - `2026-08-31 04:51:23 +08:00`：Phase11 review repair 真实复现 production fixture `LISTENER_RUNTIME_NOT_READY`、Workspace actor epoch错配、无变化reset仍写库，以及旧LocalResponder stage断言。最小修复将desktop bundle与真实E2E统一到`ListenerRuntimePipelineAssembly`，Socket handler使用Workspace runtime epoch；RuleRepository snapshot/order/signature/commit/reset统一投影HTTP+Socket，零变化reset不持久化。真实SQLite+真实actor+两阶段Socket Program证明typed Encode失败仅调用一次upstream Encode、0 lifecycle commit且revision/state不变，随后成功只提交一次并将两个one-shot各命中一次。fresh external runtime5/5、LocalResponder exact1/1、checker canonical+19 mutations 20/20、bindings/architecture/source-size/fmt、domain+proxy+infrastructure strict Clippy及diff均PASS。Infrastructure full为600/602：本轮相关stale断言已修并精确通过，另一个未改Android ADB outer-deadline并发测试记录为环境/时序阻塞，未重跑full；按要求未重跑workspace checkpoint，session24690仍为唯一完整checkpoint。状态继续`LOCAL GREEN / GLOBAL CHECKPOINT ENVIRONMENT BLOCKED / RECHECK_PENDING`、`checkpoint_ready=false`，等待独立Reviewer/Verifier。
 - `2026-08-31 05:12:41 +08:00`：第二轮review repair先以真实Relay RED证明Socket runtime projection丢失actor-owned NthHit；另一个review建议使用AppToProxy与权威合同冲突，TASK第58行与Phase5记录明确新消息规则只保留ProxyToUpstream/ProxyToApp，故未放开旧阶段。最小修复只从Socket ConditionTree投影NthHit给Phase6 actor，Document条件继续由joint Program gate。production E2E使用真实Relay：上行NthHit(2)首次miss提交advance，第二次匹配后Encode失败保持SQLite revision/lifecycle且不消费counter，重试仍匹配；上行修改`[a,b]→[x,b]`经真实upstream echo后，下行规则观察`x`再改`[x,b]→[x,y]`。暂停echo读取SQLite证明ProxyToUpstream只提交一次，最终ProxyToApp只追加一次提交。fresh exact1/1、Domain87/87、external runtime5/5、checker canonical+21 mutations22/22、architecture/source-size/fmt、Domain+Infrastructure strict Clippy与diff PASS；未重跑workspace，环境阻塞与人工NOT_RUN不变。状态继续`RECHECK_PENDING`、`checkpoint_ready=false`。
 - `2026-08-31 05:23:13 +08:00`：G052 / Phase 11 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0，`checkpoint_ready=true`。唯一 checkpoint session24690 的既有 non-loopback MCP HTTP 环境超时、Infrastructure full 中未修改 Android ADB outer-deadline 环境时序阻塞，以及真实 macOS bundle/permissions `NOT_RUN` 均继续作为执行事实保留，不影响最终代码与合同 verdict。Phase 11 可创建 rollback checkpoint；TASK 总体继续进行中。
-- 下一步：进入 Phase 12；真实macOS bundle/权限弹窗为人工 `NOT_RUN`。提交、推送、CI 与 Release 保持 `NOT_RUN`。
+- `2026-08-31 06:22:09 +08:00`：G053 / Phase 12 删除AppToProxy/UpstreamToProxy及四阶段runtime factory、generated/UI合同；旧stage wire在Domain Serde边界fail-closed，无alias、迁移或fallback。HTTP field/operator直接由统一Condition owner持有，Phase5 legacy owner allowlist清空。真实RED从Cargo 1/2失败与checker 45残留收敛到checker canonical+9 mutations 10/10、Cargo2/2、affected/static全绿。唯一完整checkpoint session91671在第1门因活动Phase1 current-state inventory仍要求已删除fragments而失败，后9门因&&为NOT_RUN；修复活动inventory及mutation后Phase1 4/4、Phase12 aggregate和静态门全绿，按指令未重跑full。正式证据：[phase12-legacy-stage-deletion](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase12-legacy-stage-deletion/README.md)。当前为`LOCAL GREEN / GLOBAL CHECKPOINT INCOMPLETE / RECHECK PENDING`、`checkpoint_ready=false`。
+- `2026-08-31 06:33:43 +08:00`：Phase12 cross-phase repair fresh复现Phase5 checker Vitest expected4/actual5及generated golden仍引用RuleAction。仅更新活动Phase5 inventory/checker/mutations/golden和Phase12 aggregate：discovery改为真实5，allowlist必须空且legacy owner不可回加，golden精确锁定Condition direct HTTP与UnifiedAction HttpAction；Phase5历史evidence snapshot不改。fresh Phase5 15/15、Cargo discovery9/Vitest5，Phase12 combined25/25+Cargo2/2，Domain affected与全部integration、Phase1 4/4及静态门PASS；完整workspace/checkpoint未重跑，状态保持`RECHECK_PENDING`、`checkpoint_ready=false`。
+- `2026-08-31 06:36:46 +08:00`：Reviewer发现Phase12 mutation的数组索引漂移使protocol/UI/generated用例未修改其命名目标文件。测试fixture改为具名path，三项mutation现分别真实修改protocol enum、UI model与generated bindings并fail-closed；同时修正`restore`仍接受legacy stage直到Phase12的过时注释。fresh combined25/25、Cargo2/2、fmt/source-size/diff PASS；evidence SHA同步，状态不变。
+- `2026-08-31 06:43:40 +08:00`：G053 / Phase 12 最终 Reviewer `APPROVE`、Verifier `VERIFIED`，P0=P1=P2=0。`code_checkpoint_ready=true`；唯一完整checkpoint session91671仍保留gate1历史失败、focused修复PASS及gates2-10因`&&`为`NOT_RUN`，未重跑full，因此`global_checkpoint_complete=false`，不得写为全局PASS。Phase13+与人工/发布项继续`NOT_RUN`。
+- 下一步：进入 Phase 13；真实macOS bundle/权限弹窗为人工 `NOT_RUN`。提交、推送、CI 与 Release 保持 `NOT_RUN`。
 
 ## 修改文件
 
@@ -434,6 +438,8 @@ result: "<HTML string>"
 - `src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime{.rs,/support.rs,/support/peer.rs}`：真实SQLite、真实production pipeline、两阶段Socket Program与typed Encode rollback/single-commit回归。
 - `scripts/check-task-20260829-002-phase11-socket-pipeline.mjs`、对应mutation tests与`package.json`：Phase 11 fail-closed checker、Cargo discovery和focused入口。
 - `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase11-socket-shared-rpc-pipeline/`：Phase 11 RED/GREEN、checker14/14、focused/affected/static及唯一checkpoint session24690环境阻塞证据。
+- `scripts/check-task-20260829-002-phase12-legacy-deletion.mjs`、对应mutation tests、Cargo wire test与跨层消费者：Phase 12旧阶段/owner/factory删除、旧wire fail-closed及活动inventory两阶段门禁。
+- `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase12-legacy-stage-deletion/`：Phase 12 RED/GREEN、affected/static、唯一checkpoint gate1失败、focused repair及后9门NOT_RUN证据。
 
 ## 附加文件
 
@@ -459,6 +465,7 @@ result: "<HTML string>"
 - Phase 6 正式证据：[phase6-rule-chain-transaction](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase6-rule-chain-transaction/README.md)。
 - Phase 7 正式证据：[phase7-package-runtime](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/README.md)。
 - Phase 11 正式证据：[phase11-socket-shared-rpc-pipeline](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase11-socket-shared-rpc-pipeline/README.md)。
+- Phase 12 正式证据：[phase12-legacy-stage-deletion](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase12-legacy-stage-deletion/README.md)。
 
 ## 验收结果
 
@@ -473,7 +480,8 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G050 / Phase 9 的真实本地Sidecar process、统一主动注册、strict ZIP importer/commit/app-start、exact process ownership、local-vs-remote enable/manual restart、disabled local restart fail-closed、Supervisor唯一错误owner、10秒注册与无retry/replay、enabled+online gate均已通过；最终 Reviewer/Verifier P0/P1/P2=0、`checkpoint_ready=true`。既有non-loopback MCP环境deadline与真实bundle/permissions `NOT_RUN` 继续保留。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G051 / Phase 10 shared HTTP RPC、strict codec、authoritative wire bytes、unchanged/changed Encode、joint transaction与production单路径均已通过focused/affected/static；最终 Reviewer/Verifier P0/P1/P2=0、`checkpoint_ready=true`。唯一checkpoint session3469的既有环境阻塞与人工`NOT_RUN`继续保留。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G052 / Phase 11 shared Socket RPC、Frame consumedBytes gate、unchanged/changed Encode、joint actor lifecycle rollback/commit、typed failure与Socket/HTTP capability隔离，以及review repair后的统一production装配、HTTP+Socket RuleRepository projection/persistence、Socket NthHit actor ownership、真实Relay两权威写出阶段顺序和Encode失败counter rollback均已通过focused/static；checker22/22、Domain87/87、external runtime5/5。最终 Reviewer/Verifier P0/P1/P2=0、`checkpoint_ready=true`；Infrastructure full 600/602中的相关stale断言已修，剩余Android deadline、唯一checkpoint session24690的既有non-loopback环境阻塞与人工`NOT_RUN`继续保留。
-- `NOT_RUN`：Phase 12 至 Phase 18 产品合同替换、真实macOS bundle/权限弹窗、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT INCOMPLETE`：G053 / Phase 12最终Reviewer/Verifier P0/P1/P2=0，`code_checkpoint_ready=true`；session91671 gate1历史失败、修复focused PASS、gates2-10 `NOT_RUN`均保留，`global_checkpoint_complete=false`。
+- `NOT_RUN`：Phase 13 至 Phase 18 产品合同替换、真实macOS bundle/权限弹窗、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -488,6 +496,8 @@ result: "<HTML string>"
 - `PASS`：`pnpm check:task-20260829-002:checkpoint`；严格依次执行 Phase 1 tests、bindings、architecture、source-size、lint、typecheck、全量前端测试、Rust fmt、Rust clippy、workspace all-target/all-feature tests。
 - `OBSERVED THEN PASS`：独立 Verifier 首次完整 checkpoint 的 Rust workspace gate 中，既有 ADB deadline 测试 `cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial` 偶发失败一次，结果 647 passed / 1 failed / 0 ignored；该测试随后定向连续 3/3 PASS，完整十门禁复跑 exit 0。原始失败与复跑摘要已归档到正式证据。
 - `PASS`：`git diff --check`。
+- `PASS`：`pnpm test:task-20260829-002:phase12`，cross-phase Phase5+Phase12 Node 25/25、Phase5 Cargo/Vitest discovery 9/5、Cargo旧stage fail-closed 2/2。
+- `FAILED THEN FOCUSED REPAIRED / NOT RERUN`：唯一完整checkpoint session91671在第1门Phase1 baseline因活动inventory仍要求已删除四阶段fragments失败；后9门NOT_RUN。活动inventory与mutation修复后Phase1 4/4、Phase12和静态门PASS，但完整checkpoint按指令未重跑。
 - `PASS`：`pnpm test:task-20260829-002:phase6`；checker mutation/正控 28/28，Cargo 实际发现 Domain9/Application11/Infrastructure8，focused 9/9 + 11/11 + Infrastructure exact 8/8。
 - `PASS`：Phase 6 repair 受影响全量 Domain128/128、Application508/508、Infrastructure695/695、Host33/33、Tauri133/133；generated bindings fresh/deterministic、TS focused21/21。
 - `PASS`：Phase 6 完整十门单进程 checkpoint exit0；前端63 files/543 tests，Rust workspace all-target/all-feature 0 failed、0 ignored。
@@ -525,10 +535,11 @@ result: "<HTML string>"
 - `ENVIRONMENT BLOCKED`：唯一完整 checkpoint session3469 前九项及前端64 files/545 tests PASS；最终workspace tests在Tauri129/130后既有non-loopback MCP HTTP exchange deadline超时，剩余targets因`&&`未运行。未重跑完整checkpoint。
 - `PASS`：Phase11 checker mutation/正控22/22、production focused3/3、actor lifecycle1/1、真实Socket transaction exact1/1、Domain87/87、external runtime5/5及静态门均通过。
 - `ENVIRONMENT BLOCKED`：Phase11唯一完整checkpoint session24690前九项及前端64 files/545 tests PASS；workspace tests在Tauri129/130后既有non-loopback MCP HTTP超时，剩余targets因`&&`未运行。Infrastructure full 600/602中的相关LocalResponder断言已修并精确PASS，剩余Android deadline为环境时序阻塞。
+- `LOCAL GREEN / RECHECK PENDING`：Phase12 cross-phase aggregate25/25、Cargo2/2、Domain/前端 affected与静态门PASS；唯一checkpoint session91671 gate1因stale活动inventory失败，修复focused通过但完整checkpoint未重跑，后9门NOT_RUN。
 
 - `NOT_RUN`：未推送、未触发远程 CI。
 
 ## 完成总结
 
 - `N/A`：TASK 总体状态仍为进行中。
-- 阶段总结：G052 / Phase 11 为 `VERIFIED / APPROVED / CHECKPOINT READY`、`checkpoint_ready=true`；唯一checkpoint与Android deadline环境阻塞、人工`NOT_RUN`均保留，TASK 总体仍为进行中。
+- 阶段总结：G053 / Phase 12 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT INCOMPLETE`；`code_checkpoint_ready=true`、`global_checkpoint_complete=false`。唯一checkpoint gate1历史失败、focused修复PASS、后9门`NOT_RUN`和人工环境项均保留，TASK 总体仍为进行中。

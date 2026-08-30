@@ -1,0 +1,68 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase12-legacy-stage-deletion",
+  "executed_at": "2026-08-31 05:23:13 +08:00",
+  "completed_at": "2026-08-31 06:43:40 +08:00",
+  "result": "VERIFIED_APPROVED_CODE_CHECKPOINT_READY_GLOBAL_CHECKPOINT_INCOMPLETE",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase11-socket-shared-rpc-pipeline",
+    "evidence_path": "docs/testing/evidence/2026-08-31/TASK-20260829-002/phase11-socket-shared-rpc-pipeline/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "7e8ad70",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase12 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "checker_sha256": "8dc03db0cff8141a80f0d6bcac3a85bb55823a767aceabd7c8d3640cacc144ad",
+    "checker_test_sha256": "8c09b1b734f348e8507d701ba51b9bf40964f1a409d7025b6a8efe8a87a1d87b",
+    "cargo_test_sha256": "8c362b7c58b6c1a9ce1e9e37787a401c4a9a64abbe866dbb5e2a6b686a79a702",
+    "unified_condition_sha256": "73fc828d152ddef4789beaa3d2c617d12c5e2833a2aedb3e2fba398807fdeb82",
+    "generated_bindings_sha256": "3e900693598df20e39a17e38e29947bc0679bde6f60a42f5c6dc3f357e33268c",
+    "phase1_current_inventory_sha256": "c9d0ec8cb5377e9e4b4303f2fc7667572532b74a07851b69821f308a427f0b09",
+    "phase5_contract_inventory_sha256": "887bbe0eb61bd1de024c528400c4ba16b679f42fe8aa1065b55c3c7d9e5bbd02",
+    "phase5_checker_sha256": "c76da1cc91f997e2c3c8eab5de19ac4bcdbd8970653837067f77fbefe0c83adb",
+    "phase5_checker_test_sha256": "620da12ffe4ee32050be98a9968d2ce498f1fb7b8eeace0e4d4738dca423d58a",
+    "phase5_generated_golden_sha256": "3f42d356980ceefbedb44b9808f8c0660ec8cb39b0f4e2eb06000796e2dc0a76",
+    "package_json_sha256": "9909d6c8030467d54051fbb8bf27eb56147e9e7982138c63fc6640efc5719c3a",
+    "unified_rule_sha256": "9be2c5610136cedc984a7a32545cf510f7c6def97b376fb88692a87b46dc1542"
+  },
+  "results": {
+    "phase12_checker_mutations_and_control": { "passed": 10, "failed": 0 },
+    "phase5_cross_phase_checker_mutations_and_control": { "passed": 15, "failed": 0, "cargo_discovered": 9, "vitest_discovered": 5 },
+    "phase12_aggregate_node": { "passed": 25, "failed": 0 },
+    "phase12_cargo_wire_contract": { "passed": 2, "failed": 0 },
+    "phase1_current_inventory_after_repair": { "passed": 4, "failed": 0 },
+    "external_package_runtime_affected": { "passed": 5, "failed": 0 },
+    "http_protocol_pipeline_affected": { "passed": 12, "failed": 0 },
+    "bindings": "PASS fresh and deterministic, 6/6 checker tests",
+    "architecture_source_size_lint_typecheck_fmt_clippy_diff": "PASS",
+    "global_checkpoint": "FAILED in unique session 91671 at gate 1 because the active Phase1 current-state inventory still required the four deleted stage fragments; gates 2 through 10 were NOT_RUN because the && chain stopped. The active inventory and mutation checker were repaired and focused/static validation passed; the full checkpoint was not rerun by instruction."
+  },
+  "not_run": [
+    "checkpoint gates 2 through 10 after gate 1 stopped unique session 91671",
+    "full checkpoint rerun after the active current-state inventory repair",
+    "human-assisted non-loopback network permission action",
+    "real signed macOS app bundle and firewall/system permission prompt E2E",
+    "Phase13 built-in/template ZIP replacement",
+    "Phase15 complete UI",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "blockers": [
+    "global checkpoint remains incomplete because the unique run stopped on a repaired active-inventory mismatch and was intentionally not rerun",
+    "existing non-loopback and Android environment-sensitive gates were not reached in session 91671",
+    "human-assisted macOS bundle and system permission validation is NOT_RUN"
+  ],
+  "code_checkpoint_ready": true,
+  "global_checkpoint_complete": false,
+  "review_status": "VERIFIED_APPROVED",
+  "final_verdict": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}

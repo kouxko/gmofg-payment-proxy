@@ -468,7 +468,7 @@ mod start;
 mod tls_material;
 
 use document_rule_compiler::DocumentRuleCompiler;
-pub use document_rules::{ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory};
+pub use document_rules::ProtocolDocumentRuleConnectionFactory;
 pub(crate) use external_relay::{
     ExternalSocketPackageProvider,
     RuntimeExternalSocketPackageBinding as ExternalSocketPackageBinding,

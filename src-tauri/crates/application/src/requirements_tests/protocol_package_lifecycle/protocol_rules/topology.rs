@@ -34,7 +34,10 @@ async fn editor_context_owns_relay_stages_capabilities_and_new_rule_drafts() {
         assert_eq!(stage.new_rule_draft.package, context.package);
         assert_eq!(stage.new_rule_draft.stage, stage.stage);
         assert!(stage.new_rule_draft.conditions.is_empty());
-        assert_eq!(stage.new_rule_draft.actions, [DocumentAction::RecordMatch]);
+        assert_eq!(
+            stage.new_rule_draft.actions,
+            [ProtocolDocumentOperation::RecordMatch]
+        );
     }
 
     let mut json = serde_json::to_value(&context).unwrap();
@@ -75,10 +78,9 @@ async fn editor_context_owns_local_responder_stages_and_record_match_default() {
         ]
     );
     assert!(
-        context
-            .stages
-            .iter()
-            .all(|stage| { stage.new_rule_draft.actions == [DocumentAction::RecordMatch] })
+        context.stages.iter().all(|stage| {
+            stage.new_rule_draft.actions == [ProtocolDocumentOperation::RecordMatch]
+        })
     );
 }
 
@@ -124,7 +126,7 @@ async fn editor_context_owns_all_http_protocol_stages_and_defaults() {
         stage.new_rule_draft.listener_id == listener_id
             && stage.new_rule_draft.package == package
             && stage.new_rule_draft.stage == stage.stage
-            && stage.new_rule_draft.actions == [DocumentAction::RecordMatch]
+            && stage.new_rule_draft.actions == [ProtocolDocumentOperation::RecordMatch]
     }));
 }
 
@@ -165,14 +167,12 @@ async fn editor_context_rejects_direct_socket_and_unknown_listener() {
 }
 
 #[tokio::test]
-async fn relay_exposes_all_stages_and_local_responder_limits_stages_only_by_topology() {
+async fn relay_exposes_the_two_authoritative_write_stages() {
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
     for stage in [
-        ProtocolRuleStage::AppToProxy,
         ProtocolRuleStage::ProxyToUpstream,
-        ProtocolRuleStage::UpstreamToProxy,
         ProtocolRuleStage::ProxyToApp,
     ] {
         let capabilities = application
@@ -202,13 +202,4 @@ async fn relay_exposes_all_stages_and_local_responder_limits_stages_only_by_topo
         .protocol_rule_save(static_response)
         .await
         .unwrap();
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_rule_capabilities(listener_id, ProtocolRuleStage::AppToProxy)
-                .await
-                .unwrap_err()
-        ),
-        "PROTOCOL_RULE_DIRECTION_INVALID"
-    );
 }

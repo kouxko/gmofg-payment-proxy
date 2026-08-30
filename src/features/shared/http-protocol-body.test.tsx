@@ -38,14 +38,8 @@ const message: MessageContentViewModel = {
     display: { kind: "hex_fallback", reason: "entry_point_failed" },
     stages: [
       {
-        stage: "app_to_proxy",
-        matched_rule_ids: ["rule-1"],
-        document: document("100"),
-        display: { kind: "hex_fallback", reason: "entry_point_failed" },
-      },
-      {
         stage: "proxy_to_upstream",
-        matched_rule_ids: ["rule-2"],
+        matched_rule_ids: ["rule-1", "rule-2"],
         document: document("200"),
         display: { kind: "hex_fallback", reason: "entry_point_failed" },
       },
@@ -54,12 +48,12 @@ const message: MessageContentViewModel = {
   protocol_failure: null,
 };
 
-describe("HTTP 协议 Body 四阶段证据", () => {
-  it("分别展示应用到代理与代理到上游服务的阶段快照", async () => {
+describe("HTTP 协议 Body 两个权威写出阶段证据", () => {
+  it("展示代理到上游服务的唯一请求阶段快照", async () => {
     const user = userEvent.setup();
     render(<HttpProtocolBodyViewer label="请求 Body" message={message} emptyText="无正文" />);
 
-    expect(screen.getByRole("tab", { name: "应用 → 代理" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "代理 → 上游服务" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "最终协议视图" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText(/"amount": "200"/)).toBeVisible();
     expect(screen.getByText("命中 2 条规则")).toBeVisible();
@@ -68,9 +62,6 @@ describe("HTTP 协议 Body 四阶段证据", () => {
 
     await user.click(screen.getByRole("tab", { name: "代理 → 上游服务" }));
     expect(screen.getByText(/"amount": "200"/)).toBeVisible();
-    await user.click(screen.getByRole("tab", { name: "应用 → 代理" }));
-    expect(screen.getByText(/"amount": "100"/)).toBeVisible();
-    expect(screen.queryByText(/"amount": "200"/)).not.toBeInTheDocument();
 
     await user.click(screen.getByRole("tab", { name: "原始 Body" }));
     expect(screen.getByText('{"amount":"0"}')).toBeVisible();
@@ -78,7 +69,7 @@ describe("HTTP 协议 Body 四阶段证据", () => {
     expect(screen.getByText('{"amount":"200"}')).toBeVisible();
   });
 
-  it("分别展示下行两个阶段并合计每个阶段的命中规则", async () => {
+  it("展示代理到应用的唯一下行阶段并合计命中规则", async () => {
     const user = userEvent.setup();
     const downstream: MessageContentViewModel = {
       ...message,
@@ -88,28 +79,20 @@ describe("HTTP 协议 Body 四阶段证据", () => {
         display: { kind: "untrusted_html", html: "<p>响应金额 220</p>" },
         stages: [
           {
-            stage: "upstream_to_proxy",
-            matched_rule_ids: ["response-1", "response-2"],
-            document: document("210"),
-            display: { kind: "hex_fallback", reason: "resource_limit_exceeded" },
-          },
-          {
             stage: "proxy_to_app",
-            matched_rule_ids: ["response-3"],
+            matched_rule_ids: ["response-1", "response-2", "response-3"],
             document: document("220"),
-            display: { kind: "untrusted_html", html: "<table><tr><td>220</td></tr></table>" },
+            display: { kind: "hex_fallback", reason: "resource_limit_exceeded" },
           },
         ],
       },
     };
 
     render(<HttpProtocolBodyViewer label="响应 Body" message={downstream} emptyText="无正文" />);
-    expect(screen.getByRole("tab", { name: "上游服务 → 代理" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "代理 → 应用" })).toBeVisible();
     expect(screen.getByRole("tab", { name: "最终协议视图" })).toHaveAttribute("aria-selected", "true");
     expect(screen.getByText("命中 3 条规则")).toBeVisible();
-    expect(await screen.findByTitle("协议包安全展示")).toBeVisible();
-
-    await user.click(screen.getByRole("tab", { name: "上游服务 → 代理" }));
+    await user.click(screen.getByRole("tab", { name: "代理 → 应用" }));
     expect(screen.getByText("协议视图超过处理限制，请查看原始或写出 Body。")).toBeVisible();
     expect(screen.queryByText("resource_limit_exceeded")).not.toBeInTheDocument();
   });

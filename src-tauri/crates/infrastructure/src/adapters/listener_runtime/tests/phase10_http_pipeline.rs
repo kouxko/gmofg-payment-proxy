@@ -11,10 +11,10 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use intercept_proxy_domain::{
-    BodyCodecKind, Document, DocumentCondition, DocumentValue, ErrorCode as PackageErrorCode,
-    HttpBodyProcessing, HttpListenerSettings, JsonPointer, ListenerDataPlane, ProtocolDirection,
-    ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleRuntimeSnapshot,
+    BodyCodecKind, Document, DocumentValue, ErrorCode as PackageErrorCode, HttpBodyProcessing,
+    HttpListenerSettings, JsonPointer, ListenerDataPlane, ProtocolDirection,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleRuntimeSnapshot,
 };
 use intercept_proxy_exchange::{ExternalPackageCallStage, HttpContext};
 use intercept_proxy_package_contract::{

@@ -2,8 +2,8 @@ use async_trait::async_trait;
 
 use super::{
     AppMessageStage, BodyCodec, BreakpointOutcome, BreakpointSummaryViewModel, CapturePublication,
-    ConnectionContext, ErrorCode, EvaluatedRules, FaultAction, HandshakePolicy, Message,
-    ProxyError, ProxyResult, RuleAction, RuntimePipelineAdapter, TerminalAction, TlsPeerIdentity,
+    ConnectionContext, ErrorCode, EvaluatedRules, FaultAction, HandshakePolicy, HttpAction,
+    Message, ProxyError, ProxyResult, RuntimePipelineAdapter, TerminalAction, TlsPeerIdentity,
     UiEventPayload, UiTone, Utc, Uuid, app_to_proxy, apply_breakpoint_decision, breakpoint_detail,
 };
 
@@ -173,7 +173,7 @@ impl HandshakePolicy for RuntimePipelineAdapter {
         Ok(evaluated.actions.into_iter().any(|action| {
             matches!(
                 action,
-                RuleAction::Terminal(TerminalAction::RejectTlsHandshake)
+                HttpAction::Terminal(TerminalAction::RejectTlsHandshake)
             )
         }))
     }

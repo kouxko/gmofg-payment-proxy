@@ -1,6 +1,6 @@
 use super::{
     AppError, AppResult, BTreeMap, BodyCodec, FaultParameterValue, FaultTemplateViewModel,
-    MessageStage, ProductFaultTemplate, RuleAction, UiTone, connect_timeout, custom_status,
+    HttpAction, MessageStage, ProductFaultTemplate, UiTone, connect_timeout, custom_status,
     disconnect, disconnect_downstream_mid_body, disconnect_upstream_mid_body, drop_response,
     encoded_template, intermittent_downstream, intermittent_upstream, invalid_json,
     jitter_downstream, jitter_upstream, mock_response, modify_json, read_timeout, reject_tls,
@@ -15,8 +15,8 @@ pub(super) struct TemplateDefinition {
 
 pub(super) type FaultParameters = BTreeMap<String, FaultParameterValue>;
 pub(super) enum TemplateAction {
-    Plain(fn(&FaultParameters) -> AppResult<(MessageStage, RuleAction)>),
-    Encoded(fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, RuleAction)>),
+    Plain(fn(&FaultParameters) -> AppResult<(MessageStage, HttpAction)>),
+    Encoded(fn(&FaultParameters, &dyn BodyCodec) -> AppResult<(MessageStage, HttpAction)>),
 }
 
 impl TemplateAction {
@@ -24,7 +24,7 @@ impl TemplateAction {
         &self,
         parameters: &FaultParameters,
         body_codec: &dyn BodyCodec,
-    ) -> AppResult<(MessageStage, RuleAction)> {
+    ) -> AppResult<(MessageStage, HttpAction)> {
         match self {
             Self::Plain(action) => action(parameters),
             Self::Encoded(action) => action(parameters, body_codec),

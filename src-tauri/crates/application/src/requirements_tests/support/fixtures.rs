@@ -311,7 +311,7 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                     document_equals("approved", DocumentValue::Boolean(true)),
                 ],
                 vec![
-                    DocumentAction::RecordMatch,
+                    ProtocolDocumentOperation::RecordMatch,
                     document_set("text", DocumentValue::String("reply".into())),
                     document_set("amount", DocumentValue::integer(4321).unwrap()),
                     document_set("approved", DocumentValue::Boolean(false)),
@@ -355,15 +355,15 @@ pub(in crate::requirements_tests) fn protocol_rule_definitions(
         .collect()
 }
 
-fn document_equals(name: &str, value: DocumentValue) -> DocumentCondition {
-    DocumentCondition::Equals {
+fn document_equals(name: &str, value: DocumentValue) -> ProtocolDocumentPredicate {
+    ProtocolDocumentPredicate::Equals {
         field: JsonPointer::property(name),
         value,
     }
 }
 
-fn document_set(name: &str, value: DocumentValue) -> DocumentAction {
-    DocumentAction::SetField {
+fn document_set(name: &str, value: DocumentValue) -> ProtocolDocumentOperation {
+    ProtocolDocumentOperation::SetField {
         field: JsonPointer::property(name),
         value,
     }

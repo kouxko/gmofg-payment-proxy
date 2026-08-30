@@ -120,7 +120,7 @@ async fn complete_server_response_creates_a_unified_unsaved_disabled_mock_draft(
         content.condition,
         intercept_proxy_domain::ConditionTree::All(ref children)
             if matches!(children.as_slice(), [intercept_proxy_domain::ConditionTree::Leaf(intercept_proxy_domain::Condition::Http {
-                condition: intercept_proxy_domain::MatchCondition::Field { field: intercept_proxy_domain::MatchField::PathOrRequestType, .. }
+                field: intercept_proxy_domain::MatchField::PathOrRequestType, ..
             })])
     ));
     assert!(matches!(
@@ -164,7 +164,7 @@ async fn server_content_length_is_not_copied_into_domain_valid_mock_headers() {
         channel: draft.channel.clone(),
         stage: intercept_proxy_domain::MessageStage::Request,
         conditions: Vec::new(),
-        actions: vec![intercept_proxy_domain::RuleAction::Terminal(
+        actions: vec![intercept_proxy_domain::HttpAction::Terminal(
             intercept_proxy_domain::TerminalAction::MockResponse {
                 status: *status,
                 headers: headers.clone(),

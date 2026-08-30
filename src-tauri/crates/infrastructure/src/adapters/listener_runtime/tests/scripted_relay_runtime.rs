@@ -4,9 +4,9 @@ use std::io::{Cursor, Write};
 use std::sync::Arc;
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentValue, JsonPointer, ListenerDataPlane,
-    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
+    DocumentValue, JsonPointer, ListenerDataPlane, ProtocolDirection, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
     ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketRelayTopology, SocketTopology,
 };
@@ -175,11 +175,11 @@ fn add_rule(
             listener.id,
             package(),
             direction,
-            vec![DocumentCondition::Equals {
+            vec![ProtocolDocumentPredicate::Equals {
                 field: JsonPointer::property("amount"),
                 value: DocumentValue::integer(expected_decoded_amount).unwrap(),
             }],
-            vec![DocumentAction::SetField {
+            vec![ProtocolDocumentOperation::SetField {
                 field: JsonPointer::property("amount"),
                 value: DocumentValue::integer(42).unwrap(),
             }],

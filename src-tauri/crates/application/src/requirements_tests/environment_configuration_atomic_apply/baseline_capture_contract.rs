@@ -3,8 +3,8 @@ use std::{collections::BTreeSet, sync::Mutex};
 use async_trait::async_trait;
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, CertificateReference, CertificateReferenceId,
-    CertificateReferenceKind, HttpBodyProcessing, ListenerDataPlane, MessageStage,
-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, Rule, RuleAction, RuleDraft,
+    CertificateReferenceKind, HttpAction, HttpBodyProcessing, ListenerDataPlane, MessageStage,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, Rule, RuleDraft,
     WeakNetworkProfile,
 };
 
@@ -71,7 +71,7 @@ fn changed_http_rule_body_lifts_its_listener_into_the_affected_runtime_scope() {
                 ),
                 stage: MessageStage::Request,
                 conditions: vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
-                actions: vec![RuleAction::ReplaceBodyText("before".into())],
+                actions: vec![HttpAction::ReplaceBodyText("before".into())],
                 one_shot: false,
             })
             .expect("valid HTTP rule"),
@@ -79,7 +79,7 @@ fn changed_http_rule_body_lifts_its_listener_into_the_affected_runtime_scope() {
         .expect("replace HTTP runtime rules");
     let mut candidate = persisted.clone();
     let mut candidate_rules = candidate.http_runtime_rules().expect("HTTP runtime rules");
-    candidate_rules[0].actions = vec![RuleAction::ReplaceBodyText("after".into())];
+    candidate_rules[0].actions = vec![HttpAction::ReplaceBodyText("after".into())];
     candidate
         .replace_http_runtime_rules(candidate_rules)
         .expect("replace changed HTTP runtime rules");

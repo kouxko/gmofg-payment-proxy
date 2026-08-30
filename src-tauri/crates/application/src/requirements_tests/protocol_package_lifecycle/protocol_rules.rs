@@ -13,15 +13,15 @@ fn field(name: &str) -> JsonPointer {
     JsonPointer::property(name)
 }
 
-fn equals(name: &str, value: DocumentValue) -> DocumentCondition {
-    DocumentCondition::Equals {
+fn equals(name: &str, value: DocumentValue) -> ProtocolDocumentPredicate {
+    ProtocolDocumentPredicate::Equals {
         field: field(name),
         value,
     }
 }
 
-fn set(name: &str, value: DocumentValue) -> DocumentAction {
-    DocumentAction::SetField {
+fn set(name: &str, value: DocumentValue) -> ProtocolDocumentOperation {
+    ProtocolDocumentOperation::SetField {
         field: field(name),
         value,
     }
@@ -46,7 +46,7 @@ fn input(
             ProtocolDirection::Downstream => ProtocolRuleStage::ProxyToApp,
         },
         conditions: vec![equals("trace_id", DocumentValue::String("phase5".into()))],
-        actions: vec![DocumentAction::RecordMatch],
+        actions: vec![ProtocolDocumentOperation::RecordMatch],
     }
 }
 
@@ -160,7 +160,7 @@ async fn http_and_socket_entries_reject_cross_kind_rule_capabilities_and_save() 
         services.set_description(package.clone(), wrong_description);
 
         let capabilities_error = application
-            .protocol_rule_capabilities(listener_id, ProtocolRuleStage::AppToProxy)
+            .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToUpstream)
             .await
             .unwrap_err();
         assert_eq!(
@@ -273,7 +273,7 @@ async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
         equals("approved", DocumentValue::Boolean(true)),
     ];
     valid.actions = vec![
-        DocumentAction::RecordMatch,
+        ProtocolDocumentOperation::RecordMatch,
         set("trace_id", DocumentValue::String("next".into())),
         set("amount", DocumentValue::integer(2).unwrap()),
         set("approved", DocumentValue::Boolean(false)),

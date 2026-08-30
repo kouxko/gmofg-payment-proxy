@@ -288,16 +288,16 @@ fn rule_mutations_use_injected_codec_and_preserve_action_order() {
     let body_codec = test_body_codec();
     let mut message = request_message(r#"{"payment":{"amount":100}}"#);
     let actions = vec![
-        RuleAction::SetJsonField {
+        HttpAction::SetJsonField {
             path: "$.payment.amount".into(),
             value: json!(200),
         },
-        RuleAction::SetHeader {
+        HttpAction::SetHeader {
             name: "x-test".into(),
             value: "yes".into(),
         },
-        RuleAction::Delay { milliseconds: 25 },
-        RuleAction::Pause,
+        HttpAction::Delay { milliseconds: 25 },
+        HttpAction::Pause,
     ];
     let (faults, pause) =
         apply_rule_actions(body_codec.as_ref(), &mut message, &actions, 42).expect("apply");
@@ -339,13 +339,13 @@ fn body_replacement_and_repeated_header_updates_preserve_action_order() {
         .headers
         .push(RawHeader::new(b"x-test".to_vec(), b"old".to_vec()));
     let actions = vec![
-        RuleAction::ReplaceBodyText("最初".into()),
-        RuleAction::ReplaceBodyText("最終".into()),
-        RuleAction::SetHeader {
+        HttpAction::ReplaceBodyText("最初".into()),
+        HttpAction::ReplaceBodyText("最終".into()),
+        HttpAction::SetHeader {
             name: "x-test".into(),
             value: "first".into(),
         },
-        RuleAction::SetHeader {
+        HttpAction::SetHeader {
             name: "x-test".into(),
             value: "last".into(),
         },

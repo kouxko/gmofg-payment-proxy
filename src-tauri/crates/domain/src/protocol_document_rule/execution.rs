@@ -4,8 +4,8 @@ use std::{collections::BTreeSet, fmt};
 
 use super::ProtocolRuleStage;
 use super::{
-    DocumentAction, DocumentCondition, MAX_PROTOCOL_DOCUMENT_RULES, ProtocolDirection,
-    ProtocolDocumentRuleDefinition, sort_protocol_document_rules,
+    MAX_PROTOCOL_DOCUMENT_RULES, ProtocolDirection, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, sort_protocol_document_rules,
 };
 use crate::{
     Document, DocumentSchemaNode, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleId,
@@ -274,7 +274,7 @@ fn matches_rule(
     for condition in rule.conditions() {
         ensure_not_cancelled(is_cancelled)?;
         match condition {
-            DocumentCondition::Equals { field, value } => match document.resolve(field) {
+            ProtocolDocumentPredicate::Equals { field, value } => match document.resolve(field) {
                 Ok(actual) if actual == value => {}
                 Ok(_)
                 | Err(DomainError {
@@ -291,7 +291,7 @@ fn matches_rule(
 }
 
 fn apply_actions(
-    actions: &[DocumentAction],
+    actions: &[ProtocolDocumentOperation],
     document: &mut Document,
     is_cancelled: &mut impl FnMut() -> bool,
 ) -> Result<(), DomainError> {
@@ -300,11 +300,11 @@ fn apply_actions(
         match action {
             // 所有命中规则都会在规则动作完整成功后记录一次 ID；RecordMatch 的领域意义是
             // 允许一条规则显式声明“只观察、不修改”，因此这里没有额外 Document 副作用。
-            DocumentAction::RecordMatch => {}
-            DocumentAction::SetField { field, value } => {
+            ProtocolDocumentOperation::RecordMatch => {}
+            ProtocolDocumentOperation::SetField { field, value } => {
                 document.set(field, value.clone())?;
             }
-            DocumentAction::ClearField { field } => {
+            ProtocolDocumentOperation::ClearField { field } => {
                 document.clear_path(field)?;
             }
         }

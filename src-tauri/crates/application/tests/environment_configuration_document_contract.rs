@@ -1,7 +1,9 @@
 use intercept_proxy_application::{
     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
 };
-use intercept_proxy_domain::{DocumentAction, DocumentCondition, DocumentNumber, DocumentValue};
+use intercept_proxy_domain::{
+    DocumentNumber, DocumentValue, ProtocolDocumentOperation, ProtocolDocumentPredicate,
+};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -47,10 +49,10 @@ fn document_value_recursive_json_wire_round_trips_without_drift() {
 
 #[test]
 fn document_condition_and_action_preserve_rfc6901_and_native_value_wire() {
-    round_trip::<DocumentCondition>(&json!({
+    round_trip::<ProtocolDocumentPredicate>(&json!({
         "operator":"equals", "field":"/amount", "value":7.0
     }));
-    round_trip::<DocumentAction>(&json!({
+    round_trip::<ProtocolDocumentOperation>(&json!({
         "type":"set_field", "field":"/approval_code", "value":"abc"
     }));
 }
@@ -63,8 +65,8 @@ fn document_contract_rejects_variant_and_tag_drift() {
         json!({"type":"SetField","field":"/amount","value":7}),
         json!({"type":"set_field","field":"amount","value":7}),
     ] {
-        let accepted = serde_json::from_value::<DocumentCondition>(invalid.clone()).is_ok()
-            || serde_json::from_value::<DocumentAction>(invalid).is_ok();
+        let accepted = serde_json::from_value::<ProtocolDocumentPredicate>(invalid.clone()).is_ok()
+            || serde_json::from_value::<ProtocolDocumentOperation>(invalid).is_ok();
         assert!(!accepted);
     }
 }

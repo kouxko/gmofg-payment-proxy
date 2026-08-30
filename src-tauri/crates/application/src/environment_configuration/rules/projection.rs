@@ -1,5 +1,5 @@
 use intercept_proxy_domain::{
-    ConditionTree, HttpDocumentRuleContent, HttpRuleContent, ListenerId, Revision, RuleAction,
+    ConditionTree, HttpAction, HttpDocumentRuleContent, HttpRuleContent, ListenerId, Revision,
     RuleContent, RuleDefinition, RuleDefinitionDraft, RuleDefinitionRestoreSnapshot, RuleId,
     RuleLifecycle, RuleStage, SocketRuleContent, UnifiedAction,
 };
@@ -53,7 +53,7 @@ impl HttpRuleTemplate {
                         .actions
                         .clone()
                         .into_iter()
-                        .map(RuleAction::from)
+                        .map(HttpAction::from)
                         .map(UnifiedAction::from)
                         .chain(self.document.iter().flat_map(|document| {
                             document
@@ -141,9 +141,7 @@ impl HttpRuleTemplate {
 
     const fn unified_stage(&self) -> RuleStage {
         match self.stage {
-            HttpRuleStage::AppToProxy => RuleStage::AppToProxy,
             HttpRuleStage::ProxyToUpstream => RuleStage::ProxyToUpstream,
-            HttpRuleStage::UpstreamToProxy => RuleStage::UpstreamToProxy,
             HttpRuleStage::ProxyToApp => RuleStage::ProxyToApp,
             HttpRuleStage::TlsHandshake => RuleStage::TlsHandshake,
         }
@@ -267,9 +265,7 @@ impl ProtocolDocumentRuleTemplate {
 
     const fn unified_stage(&self) -> RuleStage {
         match self.stage {
-            ProtocolRuleStage::AppToProxy => RuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream => RuleStage::ProxyToUpstream,
-            ProtocolRuleStage::UpstreamToProxy => RuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp => RuleStage::ProxyToApp,
         }
     }

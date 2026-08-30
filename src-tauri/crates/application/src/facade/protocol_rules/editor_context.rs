@@ -24,7 +24,7 @@ impl Application {
         let workspace = self.selected_protocol_rule_workspace().await?;
         let listener = find_listener(&workspace, listener_id)?;
         let description_context = self.protocol_rule_description_context(listener).await?;
-        let default_action = intercept_proxy_domain::DocumentAction::RecordMatch;
+        let default_action = intercept_proxy_domain::ProtocolDocumentOperation::RecordMatch;
         let valid_stages = valid_protocol_rule_stages(description_context.local_responder);
         let mut stages = Vec::with_capacity(valid_stages.len());
         for &stage in valid_stages {

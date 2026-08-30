@@ -9,11 +9,11 @@ use std::collections::BTreeMap;
 
 use crate::{
     AndroidNetworkProfile, CertificateReferenceId, ChannelId, Condition, ConditionTree,
-    DocumentAction, DocumentCondition, DocumentMutation, DocumentPredicate, DomainError, ErrorCode,
-    HttpDocumentRuleContent, ListenerId, MessageStage, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolRuleStage, Revision, Rule, RuleAction, RuleContent,
-    RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent, UnifiedAction,
-    WorkspaceId,
+    DocumentMutation, DocumentPredicate, DomainError, ErrorCode, HttpAction,
+    HttpDocumentRuleContent, ListenerId, MessageStage, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolRuleStage, Revision, Rule, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId,
+    RuleStage, SocketRuleContent, UnifiedAction, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;

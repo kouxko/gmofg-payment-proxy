@@ -1,9 +1,9 @@
 //! 协议 Document 规则的结构与 Schema 校验。
 
 use super::{
-    DocumentAction, DocumentCondition, MAX_PROTOCOL_DOCUMENT_RULE_ACTIONS,
-    MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS, MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES,
-    MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES,
+    MAX_PROTOCOL_DOCUMENT_RULE_ACTIONS, MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS,
+    MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES, MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES,
+    ProtocolDocumentOperation, ProtocolDocumentPredicate,
 };
 use crate::{
     DocumentSchemaNode, DocumentValue, DomainError, ErrorCode, JsonPointer,
@@ -14,8 +14,8 @@ pub(super) fn validate_structure(
     name: &str,
     revision: Revision,
     created_order: u64,
-    conditions: &[DocumentCondition],
-    actions: &[DocumentAction],
+    conditions: &[ProtocolDocumentPredicate],
+    actions: &[ProtocolDocumentOperation],
 ) -> Result<(), DomainError> {
     let mut error = rule_error("协议 Document 规则结构无效");
     if name.trim().is_empty() || name.len() > MAX_PROTOCOL_DOCUMENT_RULE_NAME_BYTES {
@@ -40,8 +40,8 @@ pub(super) fn validate_structure(
 }
 
 pub(super) fn validate_content_structure(
-    conditions: &[DocumentCondition],
-    actions: &[DocumentAction],
+    conditions: &[ProtocolDocumentPredicate],
+    actions: &[ProtocolDocumentOperation],
 ) -> Result<(), DomainError> {
     let mut error = rule_error("协议 Document 规则结构无效");
     add_content_structure_errors(conditions, actions, &mut error);
@@ -49,8 +49,8 @@ pub(super) fn validate_content_structure(
 }
 
 fn add_content_structure_errors(
-    conditions: &[DocumentCondition],
-    actions: &[DocumentAction],
+    conditions: &[ProtocolDocumentPredicate],
+    actions: &[ProtocolDocumentOperation],
     error: &mut DomainError,
 ) {
     if conditions.len() > MAX_PROTOCOL_DOCUMENT_RULE_CONDITIONS {

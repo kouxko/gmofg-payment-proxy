@@ -41,9 +41,9 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
 #[test]
 fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_binding() {
     use intercept_proxy_domain::{
-        DocumentAction, ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-        ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ScriptedSocketProcessing,
-        SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
+        ProtocolDirection, ProtocolDocumentOperation, ProtocolDocumentRuleDefinition,
+        ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+        ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
     };
 
     let package = ProtocolPackageRef {
@@ -72,11 +72,11 @@ fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_b
         old_listener_id,
         package,
         ProtocolDirection::Upstream,
-        vec![intercept_proxy_domain::DocumentCondition::Equals {
+        vec![intercept_proxy_domain::ProtocolDocumentPredicate::Equals {
             field: intercept_proxy_domain::JsonPointer::property("trace_id"),
             value: intercept_proxy_domain::DocumentValue::String("phase5".into()),
         }],
-        vec![DocumentAction::RecordMatch],
+        vec![ProtocolDocumentOperation::RecordMatch],
     )
     .unwrap();
     rule.toggle(rule.revision(), false).unwrap();

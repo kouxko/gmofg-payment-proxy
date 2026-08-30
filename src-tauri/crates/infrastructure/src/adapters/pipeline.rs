@@ -26,7 +26,7 @@ use intercept_proxy_application::{
 #[cfg(test)]
 use intercept_proxy_domain::Rule;
 use intercept_proxy_domain::{
-    ChannelId as DomainChannelId, MessageStage as DomainMessageStage, RuleAction,
+    ChannelId as DomainChannelId, HttpAction, MessageStage as DomainMessageStage,
     RuleLifecycleDelta, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
 };
 use intercept_proxy_product_api::{BodyCodec, RequestClassifier};

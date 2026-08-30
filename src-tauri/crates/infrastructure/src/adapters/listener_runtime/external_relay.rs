@@ -1,7 +1,7 @@
 //! 外部软件包驱动的 Socket Pipeline capability。
 //!
 //! 外部包 wire contract 保持 `frame/decode/display/encode` 四个 RPC 不变；每个 RPC 只实现
-//! 一个 Exchange trait。两段宿主 Rules 位于 Writer Pipeline，Display 位于 Reader Pipeline。
+//! 一个 Exchange trait。唯一写出阶段 Rules 位于 Writer Pipeline，Display 位于 Reader Pipeline。
 
 use std::sync::Arc;
 
@@ -17,9 +17,9 @@ use intercept_proxy_runtime::{
 };
 
 use super::ProtocolDocumentRuleConnectionFactory;
-use capabilities::{ExternalDecode, ExternalDisplay, ExternalFrame};
 #[cfg(test)]
-use capabilities::{ExternalEncode, OrderedRules};
+use capabilities::ExternalEncode;
+use capabilities::{ExternalDecode, ExternalDisplay, ExternalFrame};
 
 mod capabilities;
 pub(super) mod contract;
@@ -109,12 +109,10 @@ impl ExternalSocketCapabilityFactoryAdapter {
             #[cfg(test)]
             {
                 (
-                    Box::new(OrderedRules::<D>::new(
+                    Box::new(
                         self.rules
-                            .connection(connection.clone(), binding.first_rules),
-                        self.rules
-                            .connection(connection.clone(), binding.second_rules),
-                    )),
+                            .connection(connection.clone(), binding.rules_stage),
+                    ),
                     Box::new(ExternalEncode::<D>::new(
                         Arc::clone(&rpc),
                         methods.encode,
@@ -153,16 +151,12 @@ impl ExternalSocketCapabilityFactoryAdapter {
             ProtocolDirection::Upstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Upstream,
                 #[cfg(test)]
-                first_rules: ProtocolRuleStage::AppToProxy,
-                #[cfg(test)]
-                second_rules: ProtocolRuleStage::ProxyToUpstream,
+                rules_stage: ProtocolRuleStage::ProxyToUpstream,
             },
             ProtocolDirection::Downstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Downstream,
                 #[cfg(test)]
-                first_rules: ProtocolRuleStage::UpstreamToProxy,
-                #[cfg(test)]
-                second_rules: ProtocolRuleStage::ProxyToApp,
+                rules_stage: ProtocolRuleStage::ProxyToApp,
             },
         }
     }
@@ -192,9 +186,7 @@ impl SocketProtocolCapabilityFactory for ExternalSocketCapabilityFactoryAdapter 
 struct DirectionBinding {
     protocol_direction: ProtocolDirection,
     #[cfg(test)]
-    first_rules: ProtocolRuleStage,
-    #[cfg(test)]
-    second_rules: ProtocolRuleStage,
+    rules_stage: ProtocolRuleStage,
 }
 
 impl DirectionBinding {

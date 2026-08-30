@@ -4,11 +4,11 @@ use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
     BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    ChannelId, Condition, ConditionTree, Document, DocumentAction, DocumentCondition,
-    DocumentMutation, DocumentPredicate, DocumentValue, DownstreamClientAuthentication,
-    DownstreamTlsSettings, FixedServerSettings, ForwardProxyAuthentication, HttpBodyProcessing,
-    HttpListenerSettings, JsonPointer, ListenerDataPlane, ListenerId, MitmSettings,
-    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft,
+    ChannelId, Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate,
+    DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
+    ForwardProxyAuthentication, HttpBodyProcessing, HttpListenerSettings, JsonPointer,
+    ListenerDataPlane, ListenerId, MitmSettings, ProtocolDirection, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft,
     ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition,
     RuleDefinitionDraft, RuleStage, ScriptedSocketProcessing, SecretReference,

@@ -34,7 +34,7 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
 
 const httpListener = listener("http-listener", "HTTP Listener", "http");
 const socketListener = listener("socket-listener", "Socket Listener", "socket");
-const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/" } } } } };
+const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, field: "PathOrRequestType" as const, operator: { Equals: "/" } } };
 const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
 const lifecycle = { hit_count: 0, last_hit_at: null };
 
@@ -132,7 +132,7 @@ describe("unified rule workspace", () => {
         },
       },
     });
-    commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "" } } } });
+    commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ source: "http", field: "PathOrRequestType", operator: { Equals: "" } });
     commandMocks.ruleDefinitionActionDraft.mockResolvedValue({ SetHeader: { name: "x-proxy-test", value: "" } });
     commandMocks.ruleParseDocumentValue.mockResolvedValue(0);
   });
@@ -141,7 +141,7 @@ describe("unified rule workspace", () => {
     render(<RulesView />);
     expect(await screen.findByRole("heading", { name: "规则" })).toBeVisible();
     expect(screen.getAllByTestId("rule-stage-heading").map((item) => item.textContent)).toEqual([
-      "App → Proxy", "Proxy → Upstream", "Upstream → Proxy", "Proxy → App", "TLS 握手",
+      "Proxy → Upstream", "Proxy → App", "TLS 握手",
     ]);
     expect(screen.getByRole("button", { name: "新建规则" })).toBeVisible();
     expect(screen.queryByText("Body 报文规则")).not.toBeInTheDocument();
@@ -227,7 +227,7 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleDefinitionActionDraft).toHaveBeenCalledWith("set_header", "request");
     expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "" } } } } }] },
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "PathOrRequestType", operator: { Equals: "" } } }] },
         actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-proxy-test", value: "" } } }],
       }) } }),
     }));
@@ -248,7 +248,7 @@ describe("unified rule workspace", () => {
     expect(await screen.findByDisplayValue("HTTP second")).toBeVisible();
 
     await act(async () => {
-      finishOldRequest({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "old" } } } });
+      finishOldRequest({ source: "http", field: "PathOrRequestType", operator: { Equals: "old" } });
       await Promise.resolve();
     });
     expect(screen.getByDisplayValue("HTTP second")).toBeVisible();
@@ -275,14 +275,14 @@ describe("unified rule workspace", () => {
     await act(async () => {
       finishAction({ SetHeader: { name: "x-latest", value: "1" } });
       await Promise.resolve();
-      finishCondition({ source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } } });
+      finishCondition({ source: "http", field: "PathOrRequestType", operator: { Equals: "/pay" } });
       await Promise.resolve();
     });
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", condition: { Field: { field: "PathOrRequestType", operator: { Equals: "/pay" } } } } }] },
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "PathOrRequestType", operator: { Equals: "/pay" } } }] },
         actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-latest", value: "1" } } }],
       }) } }),
     }));
@@ -398,7 +398,7 @@ describe("unified rule workspace", () => {
 
   it("switches only to a compatible stage and preserves the complete HTTP payload", async () => {
     const retainedContent = {
-      description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, condition: { Field: { field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } } } },
+      description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } },
       actions: [{ source: "http" as const, value: { SetHeader: { name: "x-test", value: "1" } } }], document: null,
     };
     const retainedLifecycle = { one_shot: true, hit_count: 7, last_hit_at: "2026-08-28T00:00:00Z" };

@@ -2,9 +2,9 @@ use super::{AppError, AppResult, Rule, RuleRuntimeSnapshot};
 #[cfg(test)]
 use super::{
     AppMessageStage, AppRuleAction, AppRuleCondition, AppRuleDraft, AppRuleMatchField,
-    AppRuleMatchOperator, BTreeMap, ChannelId, FieldValidationViewModel, MatchCondition,
-    MatchField, MatchOperator, MessageStage, Revision, RuleDraft, RuleSummaryViewModel,
-    RuleValidationViewModel, RuleViewModel, UiTone, action_to_app, action_to_domain, json_error,
+    AppRuleMatchOperator, BTreeMap, ChannelId, FieldValidationViewModel, MatchField, MatchOperator,
+    MessageStage, Revision, RuleDraft, RuleSummaryViewModel, RuleValidationViewModel,
+    RuleViewModel, UiTone, action_to_app, action_to_domain, json_error,
 };
 #[cfg(test)]
 use intercept_proxy_domain::Condition;
@@ -285,22 +285,16 @@ pub(super) fn app_draft(rule: &Rule) -> AppResult<AppRuleDraft> {
 pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> Condition {
     match condition {
         AppRuleCondition::Field { field, operator } => Condition::Http {
-            condition: MatchCondition::Field {
-                field: match field {
-                    AppRuleMatchField::TerminalIp => MatchField::TerminalIp,
-                    AppRuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
-                    AppRuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
-                    AppRuleMatchField::JsonPath { path } => MatchField::JsonPath(path.clone()),
-                },
-                operator: match operator {
-                    AppRuleMatchOperator::Equals { value } => MatchOperator::Equals(value.clone()),
-                    AppRuleMatchOperator::Contains { value } => {
-                        MatchOperator::Contains(value.clone())
-                    }
-                    AppRuleMatchOperator::Regex { pattern } => {
-                        MatchOperator::Regex(pattern.clone())
-                    }
-                },
+            field: match field {
+                AppRuleMatchField::TerminalIp => MatchField::TerminalIp,
+                AppRuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
+                AppRuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
+                AppRuleMatchField::JsonPath { path } => MatchField::JsonPath(path.clone()),
+            },
+            operator: match operator {
+                AppRuleMatchOperator::Equals { value } => MatchOperator::Equals(value.clone()),
+                AppRuleMatchOperator::Contains { value } => MatchOperator::Contains(value.clone()),
+                AppRuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern.clone()),
             },
         },
         AppRuleCondition::NthHit { count } => Condition::NthHit { count: *count },
@@ -310,9 +304,7 @@ pub(crate) fn condition_to_domain(condition: &AppRuleCondition) -> Condition {
 #[cfg(test)]
 pub(crate) fn condition_to_app(condition: &Condition) -> AppRuleCondition {
     match condition {
-        Condition::Http {
-            condition: MatchCondition::Field { field, operator },
-        } => AppRuleCondition::Field {
+        Condition::Http { field, operator } => AppRuleCondition::Field {
             field: match field {
                 MatchField::TerminalIp => AppRuleMatchField::TerminalIp,
                 MatchField::CertificateFingerprint => AppRuleMatchField::CertificateFingerprint,

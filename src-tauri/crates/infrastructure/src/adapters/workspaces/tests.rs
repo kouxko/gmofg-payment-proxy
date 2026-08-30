@@ -4,9 +4,9 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId, Condition,
-    DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
+    DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings, HttpAction,
     HttpListenerSettings, ListenerDataPlane, ListenerId, MessageStage, ProxyListener,
-    Revision as DomainRevision, Rule, RuleAction, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
+    Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
 };
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -234,7 +234,7 @@ fn referenced_workspace() -> ProxyWorkspace {
             channel: Some(ChannelId::new(listener_id.to_string()).expect("channel")),
             stage: MessageStage::Request,
             conditions: vec![Condition::NthHit { count: 1 }],
-            actions: vec![RuleAction::Delay { milliseconds: 1 }],
+            actions: vec![HttpAction::Delay { milliseconds: 1 }],
             one_shot: false,
             hit_count: 0,
             last_hit_at: None,
