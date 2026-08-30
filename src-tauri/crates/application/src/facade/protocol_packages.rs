@@ -8,6 +8,7 @@ use std::collections::{BTreeMap, HashMap};
 
 mod catalog;
 mod imports;
+mod lifecycle;
 mod lookup;
 
 use super::Application;
@@ -185,8 +186,8 @@ impl Application {
 
     /// 校验当前执行来源的严格描述后，原子写入启用位。
     ///
-    /// 内置来源每次 fresh 编译；外部来源必须在线，并只使用注册边界已严格校验的描述，
-    /// 不进入 Rhai 编译器，也不发送业务 JSON-RPC。
+    /// 内置来源每次 fresh 编译；远端外部来源必须在线。本地 Sidecar 即使离线也允许启用，
+    /// 由外部包端口启动 exact process。两者只使用注册边界已严格校验的描述，不发送业务 RPC。
     pub async fn protocol_package_enable(
         &self,
         package: ProtocolPackageRef,
@@ -204,14 +205,14 @@ impl Application {
                     .set_enabled(&package, true)
                     .await?;
             }
-            ProtocolPackageSourceViewModel::External { online: false } => {
-                return Err(AppError::new(
-                    "EXTERNAL_PACKAGE_OFFLINE",
-                    "外部软件包当前离线，无法启用。",
-                )
-                .entity(package_entity(&package)));
-            }
-            ProtocolPackageSourceViewModel::External { online: true } => {
+            ProtocolPackageSourceViewModel::External { online } => {
+                if !online && !self.external_packages.detail(&package).await?.local_process {
+                    return Err(AppError::new(
+                        "EXTERNAL_PACKAGE_OFFLINE",
+                        "远端外部软件包当前离线，无法启用。",
+                    )
+                    .entity(package_entity(&package)));
+                }
                 let description = self.external_packages.describe(&package).await?;
                 ensure_description_identity(&package, &description)?;
                 ensure_external_description(&package, &description)?;

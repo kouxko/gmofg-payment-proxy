@@ -31,7 +31,7 @@ pub(super) fn application_summary(
     }
 }
 
-pub(super) fn application_description(
+pub(crate) fn application_description(
     registration: &PackageManifest,
 ) -> ProtocolPackageDescriptionViewModel {
     let capabilities = ProtocolPackageDirectionCapabilitiesViewModel {
@@ -66,6 +66,7 @@ pub(super) fn application_detail(
     online: bool,
 ) -> ExternalPackageDetailViewModel {
     ExternalPackageDetailViewModel {
+        local_process: stored.local_archive.is_some(),
         remote_address: connection
             .and_then(|detail| detail.remote_address)
             .or(stored.remote_address)

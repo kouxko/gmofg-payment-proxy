@@ -190,12 +190,16 @@ impl BuiltinProtocolPackagePort for ProtocolPackageRepositoryAdapter {
             version: application_summary(summary),
             kind: description.kind,
             capabilities: description.capabilities,
-            upstream_schema: description
-                .upstream_schema
-                .expect("compiled legacy package always has upstream schema"),
-            downstream_schema: description
-                .downstream_schema
-                .expect("compiled legacy package always has downstream schema"),
+            upstream_schema: Some(
+                description
+                    .upstream_schema
+                    .expect("compiled legacy package always has upstream schema"),
+            ),
+            downstream_schema: Some(
+                description
+                    .downstream_schema
+                    .expect("compiled legacy package always has downstream schema"),
+            ),
         })
     }
 }

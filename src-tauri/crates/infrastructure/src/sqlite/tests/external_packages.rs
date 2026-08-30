@@ -3,8 +3,10 @@ use intercept_proxy_package_contract::PackageManifest;
 use std::net::SocketAddr;
 
 use super::*;
-use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
 use crate::sqlite::external_packages::canonical_external_registration_fingerprint;
+use crate::sqlite::external_packages::{
+    StoredExternalPackageRegistrationOutcome, StoredLocalPackageInstallOutcome,
+};
 
 fn registration(name: &str) -> PackageManifest {
     serde_json::from_value(serde_json::json!({
@@ -35,7 +37,7 @@ fn registration(name: &str) -> PackageManifest {
 }
 
 #[test]
-fn first_registration_is_disabled_and_reconnect_preserves_enabled() {
+fn first_registration_is_enabled_and_reconnect_preserves_enabled() {
     let store = SqliteStore::in_memory().unwrap();
     let package = registration("Vendor ISO8583");
     let identity = package.package().identity().clone();
@@ -52,13 +54,12 @@ fn first_registration_is_disabled_and_reconnect_preserves_enabled() {
         .get_external_package(&identity)
         .unwrap()
         .expect("stored package");
-    assert!(!first.enabled);
+    assert!(first.enabled);
     assert_eq!(first.first_connected_at, first_connected_at);
     assert_eq!(first.last_connected_at, first_connected_at);
     assert_eq!(first.remote_address, None);
     assert_eq!(first.recent_error, None);
 
-    assert!(store.set_external_package_enabled(&identity, true).unwrap());
     let reconnected_at = first_connected_at + chrono::Duration::seconds(1);
     assert_eq!(
         store
@@ -73,6 +74,47 @@ fn first_registration_is_disabled_and_reconnect_preserves_enabled() {
     assert!(reconnected.enabled);
     assert_eq!(reconnected.first_connected_at, first_connected_at);
     assert_eq!(reconnected.last_connected_at, reconnected_at);
+}
+
+#[test]
+fn local_archive_install_is_enabled_reusable_and_strictly_conflict_checked() {
+    let store = SqliteStore::in_memory().unwrap();
+    let manifest = registration("Local package");
+    let identity = manifest.package().identity();
+    let installed_at = Utc::now();
+    let archive = b"validated-package-zip";
+
+    assert_eq!(
+        store
+            .install_local_external_package(&manifest, archive, installed_at)
+            .unwrap(),
+        StoredLocalPackageInstallOutcome::Installed
+    );
+    let stored = store.get_external_package(&identity).unwrap().unwrap();
+    assert!(stored.enabled);
+    assert_eq!(stored.local_archive.as_deref(), Some(archive.as_slice()));
+
+    assert_eq!(
+        store
+            .install_local_external_package(&manifest, archive, installed_at)
+            .unwrap(),
+        StoredLocalPackageInstallOutcome::Reused
+    );
+    assert_eq!(
+        store
+            .install_local_external_package(&manifest, b"different", installed_at)
+            .unwrap(),
+        StoredLocalPackageInstallOutcome::IdentityConflict
+    );
+    assert_eq!(
+        store
+            .get_external_package(&identity)
+            .unwrap()
+            .unwrap()
+            .local_archive
+            .as_deref(),
+        Some(archive.as_slice())
+    );
 }
 
 #[test]
@@ -271,6 +313,7 @@ fn schema_persists_only_registration_state_and_never_rpc_or_secret_payloads() {
             "version",
             "registration_json",
             "registration_fingerprint",
+            "local_archive",
             "enabled",
             "first_connected_at",
             "last_connected_at",

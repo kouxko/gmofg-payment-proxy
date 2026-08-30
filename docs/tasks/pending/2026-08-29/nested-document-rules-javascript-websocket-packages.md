@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-30 23:03:28 +08:00`
+- 最后更新时间：`2026-08-31 01:11:14 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -382,7 +382,13 @@ result: "<HTML string>"
 - `2026-08-30 22:49:48 +08:00`：repair checker18/18、Phase8 runtime9/9+review3/3、Phase7 ZIP6/6、fmt/diff/package-runtime strict Clippy 与全部静态门 fresh PASS。唯一最终十门 session47419 终态 exit0，前端63 files/543 tests、workspace all-target/all-feature零失败；旧 PID18568/26450 缺 exit 的观察不再作为当前验收。证据保持 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`，等待独立复验。
 - `2026-08-30 22:57:57 +08:00`：最终 P2 checker 先以 `register_global_*`、`NativeFunction`、custom `HostHooks` 三类 mutation 取得18/21 RED；加入去注释/字符串后的精确结构 token 扫描，禁止 Proxy 侧注入非 Boa Host binding，不恢复运行时 Host absence 测试、不扫描或限制 Boa 自身 globals/default features。fresh checker21/21、Phase8 aggregate（ZIP6+runtime9+review3）、lint、diff PASS；按要求未重跑 workspace/十门，session47419 exit0 仍为最近唯一全量。状态保持 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`。
 - `2026-08-30 23:03:28 +08:00`：G049 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0、`blockers=[]`、`checkpoint_ready=true`。全部需求变更、历史 findings、RED/GREEN 与 `NOT_RUN` 边界保留，Phase 8 可创建 rollback checkpoint；TASK 总体仍为进行中。
-- 下一步：Phase 8 当前状态为 `VERIFIED / APPROVED / CHECKPOINT READY`；进入 Phase 9 前保持 checkpoint 冻结。Phase9+、提交、推送、CI 与 Release 保持 `NOT_RUN`。
+- `2026-08-30 23:53:04 +08:00`：G050 / Phase 9 将 Phase8 Boa runtime 接入真实本地 Sidecar process；私有 launch spec 只有 ZIP path 与统一 `/packages` URL，package 主动注册并处理固定 typed RPC。strict ZIP commit 原子持久化 local archive、enabled 后启动；app-start 只后台启动 enabled exact versions。supervisor 对 exact identity 单一所有，manual restart/disable/disconnect/delete/shutdown 均 kill+wait，最长10秒注册，失败保留 enabled、记录 failed 且无retry/replay/recovery。Listener 保持 enabled+online gate，duplicate exact identity 不接管。
+- `2026-08-30 23:53:04 +08:00`：真实 process RED 为 Tokio process feature 缺失 exit101 与 typed dispatch E0308；persistence RED 为 local install outcome 缺失 exit101。GREEN 后 checker canonical+9 mutations 10/10、package-runtime20/20、supervisor2/2、Infrastructure588/588、Application458/458；bindings deterministic、typecheck、architecture、source-size、fmt、affected strict Clippy、diff均PASS。source-size曾拒绝registry596行，拆出local archive职责后不放宽500行门禁并PASS。正式证据：[phase9-local-sidecar-lifecycle](../../../testing/evidence/2026-08-30/TASK-20260829-002/phase9-local-sidecar-lifecycle/README.md)。当前为 `LOCAL GREEN / RECHECK PENDING`、`checkpoint_ready=false`。
+- `2026-08-30 23:59:07 +08:00`：最终diff审查修正首次合法注册持久化`enabled=1`但接纳结果仍返回false的不一致；测试显式disable后证明reconnect保留false，delete后新首次注册恢复true。完整名exact 1/1、external affected76/76、strict Clippy与Phase9 checker10/10均PASS；更早短名`--exact`发现0项不作为成功证据。证据哈希与计数已单次同步，Phase9冻结为`LOCAL GREEN / RECHECK PENDING`。
+- `2026-08-31 00:49:18 +08:00`：G050 review repair 按 RED→GREEN 关闭 importer Boa ownership、local-vs-remote enable/manual restart、exact identity 串行 gate、Supervisor 唯一 process error owner 与两条 stale IPC 断言。fresh checker14/14、importer3/3、supervisor4/4、Application lifecycle8/8、两条完整名 IPC 各1/1、package-runtime20/20、Infrastructure591/591、Application460/460、协议包前端84/84及全部静态门 PASS。唯一完整 checkpoint 前九门与前端64 files/545 tests PASS，最终 workspace 在 Tauri129/130 后仅既有 non-loopback MCP HTTP 10秒 exchange deadline 超时；同一项 affected full 已复现，按用户指示标记 `GLOBAL CHECKPOINT ENVIRONMENT BLOCKED / RECHECK PENDING`，不修改 timeout/retry、不重跑 checkpoint，等待独立 review/verifier。
+- `2026-08-31 01:04:27 +08:00`：最终 review 新 P1 以 Application、UI、真实 Tauri IPC 三层 RED 证明 disabled local package 仍可进入 restart port/UI；最小修复在 Application mutation gate 内先拒绝 `enabled=false` 并返回 `PROTOCOL_PACKAGE_DISABLED`，UI 只对 enabled local process 展示 restart，dialog 同步防御。fresh 完整名 Application1/1、Tauri IPC1/1、UI2/2、checker15/15、Application460/460、Tauri protocol-package3/3、前端84/84、typecheck/lint/source-size/fmt/affected strict Clippy/diff 均 PASS；按要求未重跑 workspace/checkpoint，nonloopback 历史阻塞不变，状态继续 `RECHECK PENDING`。
+- `2026-08-31 01:11:14 +08:00`：G050 最终独立 Reviewer 结论为 `APPROVE`，Verifier 结论为 `VERIFIED / APPROVED / CHECKPOINT READY`；P0=0、P1=0、P2=0，`checkpoint_ready=true`。全部 review findings 已闭合；唯一 workspace gate 的既有 nonloopback MCP HTTP 环境超时继续作为历史阻塞保留，真实 macOS bundle/permissions 保持 `NOT_RUN`，不影响该独立代码与合同 verdict。Phase 9 可创建 rollback checkpoint；TASK 总体继续进行中。
+- 下一步：Phase 9 已获 `CHECKPOINT READY`，进入 Phase 10 前创建 rollback checkpoint；真实macOS bundle/权限弹窗为人工 `NOT_RUN`。Phase10+、提交、推送、CI 与 Release 保持 `NOT_RUN`。
 
 ## 修改文件
 
@@ -407,6 +413,7 @@ result: "<HTML string>"
 - `src-tauri/crates/package-runtime/src/sidecar.rs`、`src/bin/intercept-proxy-package-sidecar.rs`、Phase8 tests 与 Cargo manifests/lock：Phase 8 单 Boa Context、严格 ESM/exports/HTTP/Socket 转换及 compile-only generic Sidecar marker。
 - `scripts/check-task-20260829-002-phase8-sidecar.mjs`、对应 mutation tests 与 `package.json`：Phase 8 fail-closed checker、真实 Cargo discovery 和 focused 入口。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase8-boa-sidecar-runtime/`：Phase 8 baseline compile、ordinary Array、dynamic Promise、Host-binding checker 四组真实 RED，focused/affected/static、唯一十门 exit0、SHA 与复测入口。
+- `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase9-local-sidecar-lifecycle/`：Phase 9 真实Sidecar process、strict ZIP持久化、enabled/online/failed生命周期、exact process ownership、checker mutations、affected full与静态门证据。
 
 ## 附加文件
 
@@ -442,7 +449,8 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G047 / Phase 6 的 terminal-scoped Nth lifecycle、validated Application 唯一事务、save/runtime stats 分离、Infrastructure fail-closed delta no-retry、完整 AppError、即时 generated/TS 消费者与完整十门均 fresh PASS；初版 Reviewer `REQUEST CHANGES`（P1=4/P2=1）、Verifier `FAILED`（P1=2）及第二轮独立复审 `REQUEST CHANGES`（P1=2）均已按 RED→GREEN 修复，最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`，可创建 Phase 6 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G048 / Phase 7 两轮 review finding 已按 RED→GREEN 关闭；strict ZIP/shared Manifest 与 actual-byte accounting、唯一 typed transport、package-initiated registration、canonical Base64/FrameResult、stable Domain code 贯穿真实 Socket diagnostic、production WebSocket ceiling、取消/顺序 RPC/raw-vs-wire 边界、活动 runtime 接入及旧 dynamic path 删除均 fresh PASS。完整十门 exit0；最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`、`checkpoint_ready=true`，可创建 Phase 7 rollback checkpoint。
 - `VERIFIED / APPROVED / CHECKPOINT READY`：G049 / Phase 8 的单 Boa Context 串行、package-relative ESM、dynamic import Promise、固定八 exports、HTTP string、Socket Uint8Array/canonical Base64、generic sidecar marker 与 Proxy Host-binding checker 均已通过；最终 Reviewer/Verifier P0/P1/P2=0、`blockers=[]`、`checkpoint_ready=true`，可创建 Phase 8 rollback checkpoint。需求变更与历史 findings 保留。
-- `NOT_RUN`：Phase 9 至 Phase 18 产品合同替换、完整 Phase10/11 真实链路、打包与最终任务验收尚未执行。
+- `VERIFIED / APPROVED / CHECKPOINT READY`：G050 / Phase 9 的真实本地Sidecar process、统一主动注册、strict ZIP importer/commit/app-start、exact process ownership、local-vs-remote enable/manual restart、disabled local restart fail-closed、Supervisor唯一错误owner、10秒注册与无retry/replay、enabled+online gate均已通过；最终 Reviewer/Verifier P0/P1/P2=0、`checkpoint_ready=true`。既有non-loopback MCP环境deadline与真实bundle/permissions `NOT_RUN` 继续保留。
+- `NOT_RUN`：Phase 10 至 Phase 18 产品合同替换、真实macOS bundle/权限弹窗、打包与最终任务验收尚未执行。
 
 ## 测试结果
 
@@ -492,4 +500,5 @@ result: "<HTML string>"
 
 ## 完成总结
 
-- `N/A`：任务状态为待实现。
+- `N/A`：TASK 总体状态仍为进行中。
+- 阶段总结：G050 / Phase 9 已 `VERIFIED / APPROVED / CHECKPOINT READY`；TASK 总体仍为进行中。

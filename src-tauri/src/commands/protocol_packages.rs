@@ -212,6 +212,20 @@ pub async fn protocol_package_disable(
 
 #[tauri::command]
 #[specta::specta]
+pub async fn protocol_package_restart(
+    state: State<'_, AppState>,
+    package_ref: ProtocolPackageIdentityInput,
+) -> CommandResult<ProtocolPackageVersionViewModel> {
+    let package_ref = package_ref.try_into().map_err(command_error)?;
+    state
+        .application
+        .protocol_package_restart(package_ref)
+        .await
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
 pub async fn protocol_package_delete(
     state: State<'_, AppState>,
     package_ref: ProtocolPackageIdentityInput,

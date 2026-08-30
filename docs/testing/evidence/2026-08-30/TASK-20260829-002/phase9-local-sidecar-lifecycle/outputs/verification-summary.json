@@ -1,0 +1,37 @@
+{
+  "phase9_checker_mutations_and_control": { "passed": 15, "failed": 0 },
+  "package_runtime_all_targets": { "passed": 20, "failed": 0 },
+  "local_supervisor": { "passed": 4, "failed": 0 },
+  "strict_importer_no_evaluation": { "passed": 3, "failed": 0 },
+  "application_local_remote_lifecycle": { "passed": 8, "failed": 0 },
+  "real_tauri_ipc_migrations": { "passed": 2, "failed": 0 },
+  "disabled_local_restart_guard": {
+    "application": "PASS 1/1",
+    "ui": "PASS 2/2",
+    "tauri_ipc": "PASS 1/1"
+  },
+  "infrastructure_full": { "passed": 591, "failed": 0 },
+  "application_full": { "passed": 460, "failed": 0 },
+  "protocol_package_frontend_affected": { "passed": 84, "failed": 0 },
+  "frontend_checkpoint": { "files": 64, "passed": 545, "failed": 0 },
+  "bindings_and_static_gates": "PASS",
+  "workspace_checkpoint": "ENVIRONMENT_BLOCKED at existing non-loopback MCP HTTP exchange deadline after Tauri 129/130",
+  "environment_blockers": [
+    "existing non-loopback MCP HTTP exchange environment test timed out",
+    "human-assisted macOS bundle and system permission validation is NOT_RUN"
+  ],
+  "not_run": [
+    "real signed macOS app bundle Sidecar location and launch",
+    "macOS firewall or system permission prompt E2E requiring human interaction",
+    "Phase10+ product work",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "review": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED / APPROVED / CHECKPOINT READY",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "checkpoint_ready": true
+  }
+}

@@ -97,10 +97,12 @@ impl CrossLayerFixture {
                 listener_save,
                 listener_start,
                 listener_stop,
+                protocol_package_list,
                 protocol_package_import,
                 protocol_package_import_commit,
                 protocol_package_detail,
                 protocol_package_enable,
+                protocol_package_restart,
                 rule_definition_save,
                 exchange_observation_query,
                 exchange_observation_get,
@@ -136,19 +138,6 @@ impl CrossLayerFixture {
             })
             .deserialize()
             .unwrap()
-    }
-
-    pub(super) fn invoke_error(
-        &self,
-        webview: &tauri::WebviewWindow<MockRuntime>,
-        command: &str,
-        body: Value,
-    ) -> AppErrorViewModel {
-        assert!(self.app.get_webview_window(webview.label()).is_some());
-        serde_json::from_value(
-            tauri::test::get_ipc_response(webview, request(command, body)).unwrap_err(),
-        )
-        .unwrap()
     }
 
     pub(super) fn assert_dialog_boundaries(&self) {

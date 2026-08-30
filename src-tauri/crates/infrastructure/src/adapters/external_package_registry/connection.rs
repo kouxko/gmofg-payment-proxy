@@ -35,7 +35,7 @@ pub struct AcceptedExternalPackageConnection {
     pub package: ProtocolPackageRef,
     /// 此次连接的唯一标识。
     pub connection_id: ExternalPackageConnectionId,
-    /// 首次注册时为 `false`；重连保留之前的用户启用位。
+    /// 首次合法注册时为 `true`；重连保留之前的用户启用位。
     pub enabled: bool,
 }
 

@@ -42,6 +42,7 @@ export function ProtocolPackageDialog({
     : lifecycle;
   const writePending = visibleLifecycle.kind === "enabling"
     || visibleLifecycle.kind === "disabling"
+    || visibleLifecycle.kind === "restarting"
     || visibleLifecycle.kind === "deleting";
   const detail = useIpcQuery<ProtocolPackageDetailViewModel>(
     `protocol-package-detail:${packageRef?.id ?? ""}@${packageRef?.version ?? ""}`,
@@ -109,6 +110,30 @@ export function ProtocolPackageDialog({
     }
   }
 
+  async function restartVersion() {
+    if (!currentVersion || !currentVersion.enabled || currentVersion.package_source.type !== "external" || !detail.data?.external?.local_process || mutationLock.current) return;
+    mutationLock.current = true;
+    setLifecycle({ kind: "restarting", packageKey });
+    try {
+      const restarted = await callCommand(commands.protocolPackageRestart(currentVersion.package));
+      if (!isProtocolPackageVersion(restarted)
+        || restarted.package.id !== currentVersion.package.id
+        || restarted.package.version !== currentVersion.package.version
+        || restarted.package_source.type !== "external") {
+        setLifecycle({ kind: "restart-error", packageKey, message: "本地软件包重启结果不完整，请刷新列表后重试。" });
+        return;
+      }
+      if (detail.data) detail.setData({ ...detail.data, version: restarted });
+      onVersionUpdated(restarted);
+      await detail.refresh();
+      setLifecycle({ kind: "idle" });
+    } catch (reason) {
+      setLifecycle({ kind: "restart-error", packageKey, message: errorMessage(reason) });
+    } finally {
+      mutationLock.current = false;
+    }
+  }
+
   async function deleteVersion() {
     if (!currentVersion || currentVersion.package_source.type !== "external" || mutationLock.current || detail.data?.usages.length !== 0) return;
     mutationLock.current = true;
@@ -171,9 +196,12 @@ export function ProtocolPackageDialog({
                   enableError={visibleLifecycle.kind === "enable-error" ? visibleLifecycle.message : undefined}
                   disablePending={visibleLifecycle.kind === "disabling"}
                   disableError={visibleLifecycle.kind === "disable-error" ? visibleLifecycle.message : undefined}
+                  restartPending={visibleLifecycle.kind === "restarting"}
+                  restartError={visibleLifecycle.kind === "restart-error" ? visibleLifecycle.message : undefined}
                   deleteBlockedReason={deleteBlockedReason}
                   onEnable={() => void enableVersion()}
                   onDisable={() => void disableVersion()}
+                  onRestart={() => void restartVersion()}
                   onRequestDelete={() => setLifecycle({ kind: "delete-confirm", packageKey })}
                 />
               </div>
@@ -228,6 +256,8 @@ type LifecycleState =
   | { kind: "enable-error"; packageKey: string; message: string }
   | { kind: "disabling"; packageKey: string }
   | { kind: "disable-error"; packageKey: string; message: string }
+  | { kind: "restarting"; packageKey: string }
+  | { kind: "restart-error"; packageKey: string; message: string }
   | { kind: "delete-confirm"; packageKey: string }
   | { kind: "deleting"; packageKey: string }
   | { kind: "delete-error"; packageKey: string; message: string };

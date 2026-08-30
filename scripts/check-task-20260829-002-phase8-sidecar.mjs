@@ -1,5 +1,6 @@
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 import process from "node:process";
 
 const read = (file) => readFile(file, "utf8");
@@ -35,6 +36,7 @@ failIf(!source.workspaceCargo.includes('boa_engine = "=0.22.0"'), "Boa dependenc
 failIf(/boa_engine\s*=\s*\{[^}]*default-features\s*=\s*false/u.test(source.workspaceCargo), "Boa native default features must not be disabled");
 failIf(!source.runtimeCargo.includes("boa_engine.workspace = true"), "package-runtime must consume workspace Boa");
 failIf(!source.runtimeCargo.includes("[[bin]]") || !source.runtimeCargo.includes("intercept-proxy-package-sidecar"), "generic sidecar binary target is missing");
+const phase9Active = existsSync("scripts/check-task-20260829-002-phase9-lifecycle.mjs");
 failIf(!source.sidecarBin.includes("sidecar_executable_marker"), "sidecar executable must compile through package-runtime without inventing Phase9 launch policy");
 failIf(!source.runtimeRoot.includes("mod sidecar") || !source.runtimeRoot.includes("pub use sidecar::*"), "package-runtime must expose the sidecar runtime from one owner module");
 
@@ -59,7 +61,7 @@ failIf(
 failIf(/rpc_timeout|max_in_flight|Semaphore|retry_|replay_|Busy/.test(code.sidecar), "Sidecar runtime must not add hook timeout, queue, Busy, retry or replay policy");
 failIf(/rhai|manifest\.toml|protocol\.rhai|display\.rhai/.test(code.sidecar), "Phase8 Sidecar runtime must not reuse Rhai/TOML");
 failIf(/pub\s+fn\s+(?:test_export_json|call_export|invoke_export)/u.test(code.sidecar), "Sidecar runtime must not expose an arbitrary export invocation API");
-failIf(/std::env|args\(|listen|connect|spawn|Command|WebSocket|registration_deadline|heartbeat/u.test(code.sidecarBin), "generic Phase8 executable must not invent Phase9 process or transport lifecycle");
+failIf(!phase9Active && /std::env|args\(|listen|connect|spawn|Command|WebSocket|registration_deadline|heartbeat/u.test(code.sidecarBin), "generic Phase8 executable must not invent Phase9 process or transport lifecycle");
 failIf(source.tauriConfig.includes("intercept-proxy-package-sidecar"), "Phase8 must not add the generic Sidecar to Tauri externalBin before packaging lifecycle is implemented");
 
 failIf(!source.phase8Test.includes("required_exports_are_prechecked_without_calling_package_code"), "Phase8 tests must prove export precheck does not trial-call hooks");

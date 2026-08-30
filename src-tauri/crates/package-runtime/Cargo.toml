@@ -6,10 +6,13 @@ rust-version.workspace = true
 
 [dependencies]
 boa_engine.workspace = true
+futures-util.workspace = true
 intercept-proxy-domain = { path = "../domain" }
 intercept-proxy-package-contract = { path = "../package-contract" }
 serde.workspace = true
 serde_json.workspace = true
+tokio = { workspace = true, features = ["process"] }
+tokio-tungstenite = { workspace = true, features = ["connect"] }
 zip.workspace = true
 
 [[bin]]
@@ -18,6 +21,7 @@ path = "src/bin/intercept-proxy-package-sidecar.rs"
 
 [dev-dependencies]
 serde_json.workspace = true
+tempfile.workspace = true
 
 [lints]
 workspace = true

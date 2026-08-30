@@ -25,7 +25,7 @@ mod tests {
         listener_protocol_package_catalog, protocol_package_delete, protocol_package_detail,
         protocol_package_disable, protocol_package_enable, protocol_package_import,
         protocol_package_import_commit, protocol_package_import_discard, protocol_package_list,
-        protocol_package_usage,
+        protocol_package_restart, protocol_package_usage,
     };
     use crate::app_state::AppState;
 
@@ -97,9 +97,33 @@ mod tests {
         assert_eq!(invalid_archive.code, "PROTOCOL_PACKAGE_INVALID");
         assert!(!invalid_archive.field_errors.contains_key("runtime"));
 
-        let phase8_boundary = invoke_error(&webview, "protocol_package_import", json!({}));
-        assert_eq!(phase8_boundary.code, "PROTOCOL_PACKAGE_INVALID");
-        assert!(phase8_boundary.field_errors.contains_key("runtime"));
+        let preview: Value = invoke_ok(&webview, "protocol_package_import", json!({}));
+        assert_eq!(preview["disposition"], "new");
+        assert!(preview["token"].is_string());
+        let committed: Value = invoke_ok(
+            &webview,
+            "protocol_package_import_commit",
+            json!({ "token": preview["token"] }),
+        );
+        assert_eq!(committed["outcome"], "installed");
+        assert_eq!(committed["version"]["enabled"], true);
+        assert_eq!(committed["version"]["package_source"]["online"], false);
+        let package_ref = committed["version"]["package"].clone();
+        let disabled: Value = invoke_ok(
+            &webview,
+            "protocol_package_disable",
+            json!({ "packageRef": package_ref.clone() }),
+        );
+        assert_eq!(disabled["enabled"], false);
+        assert_eq!(
+            invoke_error(
+                &webview,
+                "protocol_package_restart",
+                json!({ "packageRef": package_ref }),
+            )
+            .code,
+            "PROTOCOL_PACKAGE_DISABLED"
+        );
 
         assert_eq!(
             invoke_error(
@@ -118,7 +142,7 @@ mod tests {
         assert_eq!(invalid_identity.code, "PROTOCOL_PACKAGE_INVALID");
         assert!(!invalid_identity.field_errors.is_empty());
         let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
-        assert_eq!(list, json!([]));
+        assert_eq!(list.as_array().unwrap().len(), 1);
     }
 
     #[test]
@@ -179,6 +203,7 @@ mod tests {
                 protocol_package_import_discard,
                 protocol_package_enable,
                 protocol_package_disable,
+                protocol_package_restart,
                 protocol_package_delete,
                 protocol_package_usage,
             ])

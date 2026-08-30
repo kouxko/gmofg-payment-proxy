@@ -95,8 +95,8 @@ export const commands = {
 	host_api: number,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
@@ -107,6 +107,7 @@ export const commands = {
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_export_builtin")),
 	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
 	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
+	protocolPackageRestart: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restart", { packageRef })),
 	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
 	protocolPackageUsage: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageUsageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_usage", { packageRef })),
 	listenerImportDownstreamServerIdentity: (label: string, password: string) => typedError<{
@@ -974,6 +975,8 @@ export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display"
 
 /**  外部协议包详情的严格连接投影。 */
 export type ExternalPackageDetailViewModel = {
+	/**  `true` 表示由 Proxy 持久化 ZIP 并拥有本地 Sidecar 进程生命周期。 */
+	local_process: boolean,
 	remote_address: string | null,
 	connection_id: string | null,
 	first_connected_at: string,
@@ -1865,8 +1868,8 @@ export type ProtocolPackageImportPreviewViewModel_Deserialize = {
 	host_api: number,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
 };
 
 /**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
@@ -1879,8 +1882,8 @@ export type ProtocolPackageImportPreviewViewModel_Serialize = {
 	host_api: number,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
 };
 
 /**  一次已验证但未安装的 pending import 随机令牌。 */
@@ -1903,8 +1906,8 @@ export type ProtocolPackageImportViewModel_Deserialize = {
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
 };
 
 /**
@@ -1917,8 +1920,8 @@ export type ProtocolPackageImportViewModel_Serialize = {
 	version: ProtocolPackageVersionViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
-	upstream_schema: ProtocolPackageSchemaViewModel_Serialize,
-	downstream_schema: ProtocolPackageSchemaViewModel_Serialize,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
 };
 
 /**  Manifest 结构推导出的协议包数据平面。 */

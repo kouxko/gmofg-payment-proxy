@@ -18,6 +18,8 @@ pub(crate) struct StoredExternalPackage {
     pub registration: PackageManifest,
     /// Proxy 对规范化注册合同计算的 SHA-256 指纹。
     pub fingerprint: [u8; 32],
+    /// Exact imported ZIP for a Proxy-managed local Sidecar; remote packages store `None`.
+    pub local_archive: Option<Vec<u8>>,
     /// 用户显式设置的启用位；与当前在线状态相互独立。
     pub enabled: bool,
     /// 该精确版本第一次注册成功的时间。
@@ -55,12 +57,20 @@ pub(crate) enum StoredExternalPackageRegistrationOutcome {
     IdentityConflict,
 }
 
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub(crate) enum StoredLocalPackageInstallOutcome {
+    Installed,
+    Reused,
+    IdentityConflict,
+}
+
 /// `external_protocol_packages` 查询的原始行形状。
 pub(super) type ExternalPackageRow = (
     String,
     String,
     String,
     Vec<u8>,
+    Option<Vec<u8>>,
     i64,
     String,
     String,
@@ -85,6 +95,7 @@ pub(super) fn read_external_package_row(
         row.get(8)?,
         row.get(9)?,
         row.get(10)?,
+        row.get(11)?,
     ))
 }
 
@@ -94,6 +105,7 @@ pub(super) fn parse_external_package_row(
         version,
         registration_json,
         fingerprint,
+        local_archive,
         enabled,
         first,
         last,
@@ -135,6 +147,7 @@ pub(super) fn parse_external_package_row(
     Ok(StoredExternalPackage {
         registration,
         fingerprint,
+        local_archive,
         enabled,
         first_connected_at: parse_timestamp("first_connected_at", &first)?,
         last_connected_at: parse_timestamp("last_connected_at", &last)?,
@@ -153,6 +166,7 @@ pub(super) fn validate_stable_error(code: &str, message: &str) -> Result<(), Inf
         "EXTERNAL_PACKAGE_INVALID_PAYLOAD" => Some("外部软件包 payload 无效。"),
         "EXTERNAL_PACKAGE_PROTOCOL_FATAL" => Some("外部软件包协议失效。"),
         "EXTERNAL_PACKAGE_TRANSPORT_ERROR" => Some("外部软件包传输失败。"),
+        "EXTERNAL_PACKAGE_PROCESS_FAILED" => Some("本地软件包进程启动失败。"),
         _ => None,
     };
     if stable_message != Some(message) {

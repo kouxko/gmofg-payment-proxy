@@ -1,5 +1,5 @@
 use std::{
-    collections::HashMap,
+    collections::{HashMap, HashSet},
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -16,9 +16,11 @@ pub(super) struct FakeExternalPackages {
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageVersionViewModel>>,
     pub(super) descriptions:
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
+    pub(super) local_packages: parking_lot::Mutex<HashSet<ProtocolPackageRef>>,
     pub(super) disconnect_calls: AtomicUsize,
     pub(super) delete_calls: AtomicUsize,
     pub(super) set_enabled_calls: AtomicUsize,
+    pub(super) restart_calls: AtomicUsize,
 }
 
 #[async_trait]
@@ -70,7 +72,9 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
                 "外部软件包不存在。",
             ));
         }
-        Ok(external_detail())
+        Ok(external_detail(
+            self.local_packages.lock().contains(package),
+        ))
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
@@ -88,6 +92,16 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
         Ok(())
     }
 
+    async fn restart(&self, package: &ProtocolPackageRef) -> AppResult<()> {
+        self.restart_calls.fetch_add(1, Ordering::SeqCst);
+        let mut records = self.records.lock();
+        let record = records
+            .get_mut(package)
+            .ok_or_else(|| AppError::new("EXTERNAL_PACKAGE_NOT_FOUND", "外部软件包不存在。"))?;
+        record.source = ProtocolPackageSourceViewModel::External { online: true };
+        Ok(())
+    }
+
     async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()> {
         self.delete_calls.fetch_add(1, Ordering::SeqCst);
         self.records.lock().remove(package);
@@ -95,7 +109,7 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
     }
 }
 
-fn external_detail() -> ExternalPackageDetailViewModel {
+fn external_detail(local_process: bool) -> ExternalPackageDetailViewModel {
     let methods = ExternalPackageDirectionMethodsViewModel {
         frame: "hooks.upstream.frame".into(),
         decode: "hooks.upstream.decode".into(),
@@ -103,6 +117,7 @@ fn external_detail() -> ExternalPackageDetailViewModel {
         display: "document.upstream.display".into(),
     };
     ExternalPackageDetailViewModel {
+        local_process,
         remote_address: Some("127.0.0.1:9000".into()),
         connection_id: None,
         first_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),

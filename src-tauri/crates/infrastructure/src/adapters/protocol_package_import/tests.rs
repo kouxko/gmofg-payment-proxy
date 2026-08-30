@@ -39,7 +39,13 @@ fn zip(entries: &[(&str, &[u8])]) -> Vec<u8> {
     output.into_inner()
 }
 
-fn importer(bytes: &[u8]) -> (TempDir, ProtocolPackageImportAdapter) {
+fn importer(
+    bytes: &[u8],
+) -> (
+    TempDir,
+    ProtocolPackageImportAdapter,
+    Arc<ExternalPackageRegistryAdapter>,
+) {
     let temp = TempDir::new().unwrap();
     let path = temp.path().join("package.zip");
     std::fs::write(&path, bytes).unwrap();
@@ -47,20 +53,66 @@ fn importer(bytes: &[u8]) -> (TempDir, ProtocolPackageImportAdapter) {
     let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
         Arc::new(SqliteStore::in_memory().unwrap()),
     ));
-    (temp, ProtocolPackageImportAdapter::new(repository, dialog))
+    let registry = Arc::new(ExternalPackageRegistryAdapter::new(Arc::new(
+        SqliteStore::in_memory().unwrap(),
+    )));
+    (
+        temp,
+        ProtocolPackageImportAdapter::new(repository, Arc::clone(&registry), dialog),
+        registry,
+    )
 }
 
 #[tokio::test]
-async fn strict_javascript_zip_reaches_the_phase8_fail_closed_boundary() {
+async fn strict_javascript_resources_preview_without_evaluating_top_level_code() {
     let bytes = zip(&[
         ("manifest.json", MANIFEST.as_bytes()),
-        ("protocol.js", b"export {}"),
-        ("display.js", b"export {}"),
+        (
+            "protocol.js",
+            b"throw new Error('preview must not evaluate');",
+        ),
+        (
+            "display.js",
+            b"throw new Error('preview must not evaluate');",
+        ),
     ]);
-    let (_temp, importer) = importer(&bytes);
-    let error = importer.prepare_zip().await.unwrap_err();
-    assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_INVALID");
-    assert!(error.view_model.field_errors.contains_key("runtime"));
+    let (_temp, importer, _registry) = importer(&bytes);
+    let preview = importer.prepare_zip().await.unwrap().unwrap();
+    assert_eq!(
+        preview.disposition,
+        ProtocolPackageImportDispositionViewModel::New
+    );
+    assert!(preview.token.is_some());
+    assert_eq!(preview.host_api, 1);
+}
+
+#[tokio::test]
+async fn commit_persists_enabled_archive_without_evaluating_top_level_code_in_importer() {
+    let bytes = zip(&[
+        ("manifest.json", MANIFEST.as_bytes()),
+        (
+            "protocol.js",
+            b"throw new Error('commit importer must not evaluate');",
+        ),
+        (
+            "display.js",
+            b"throw new Error('commit importer must not evaluate');",
+        ),
+    ]);
+    let (_temp, importer, registry) = importer(&bytes);
+    let preview = importer.prepare_zip().await.unwrap().unwrap();
+    let package = preview.package.clone();
+    let error = importer
+        .commit_zip(preview.token.unwrap())
+        .await
+        .unwrap_err();
+    assert_eq!(error.view_model.code, "EXTERNAL_PACKAGE_PROCESS_FAILED");
+    let stored = registry
+        .get(&package)
+        .await
+        .unwrap()
+        .expect("commit persisted exact local package before process launch");
+    assert!(stored.enabled);
 }
 
 #[tokio::test]
@@ -77,7 +129,7 @@ async fn legacy_toml_rhai_and_wrapper_archives_never_reach_legacy_prepare() {
         ],
     ] {
         let bytes = zip(&entries);
-        let (_temp, importer) = importer(&bytes);
+        let (_temp, importer, _registry) = importer(&bytes);
         let error = importer.prepare_zip().await.unwrap_err();
         assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_INVALID");
         assert!(!error.view_model.field_errors.contains_key("runtime"));
