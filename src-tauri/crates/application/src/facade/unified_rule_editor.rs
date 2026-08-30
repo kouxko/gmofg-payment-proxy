@@ -19,10 +19,9 @@ use crate::{
     RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent,
-    HttpRuleContent, JitterScope, MatchCondition, MatchField, MatchOperator,
-    RuleAction as DomainRuleAction, SocketRuleContent, TerminalAction as DomainTerminalAction,
-    TrafficDirection, UnifiedAction,
+    Condition, ConditionTree, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
+    HttpDocumentRuleContent, HttpRuleContent, JitterScope, MatchField, MatchOperator,
+    SocketRuleContent, TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
 };
 
 impl Application {
@@ -138,18 +137,16 @@ impl Application {
 pub(super) fn domain_condition(condition: AppRuleCondition) -> Condition {
     match condition {
         AppRuleCondition::Field { field, operator } => Condition::Http {
-            condition: MatchCondition::Field {
-                field: match field {
-                    RuleMatchField::TerminalIp => MatchField::TerminalIp,
-                    RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
-                    RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
-                    RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
-                },
-                operator: match operator {
-                    RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
-                    RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
-                    RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
-                },
+            field: match field {
+                RuleMatchField::TerminalIp => MatchField::TerminalIp,
+                RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
+                RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
+                RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
+            },
+            operator: match operator {
+                RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
+                RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
+                RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
             },
         },
         AppRuleCondition::NthHit { count } => Condition::NthHit { count },
@@ -277,7 +274,7 @@ fn http_stages(
     ]
     .into_iter()
     .filter_map(|stage| {
-        let http = http_capability(stage);
+        let http = Some(http_capability(stage));
         let document = description.and_then(|value| document_capability(value, stage));
         if http.is_none() && document.is_none() {
             return None;
@@ -365,12 +362,11 @@ fn socket_stages(
         .collect()
 }
 
-fn http_capability(stage: RuleStage) -> Option<crate::RuleStageCapabilityViewModel> {
+fn http_capability(stage: RuleStage) -> crate::RuleStageCapabilityViewModel {
     match stage {
-        RuleStage::TlsHandshake => Some(stage_capability(MessageStage::TlsHandshake)),
-        RuleStage::ProxyToUpstream => Some(stage_capability(MessageStage::Request)),
-        RuleStage::ProxyToApp => Some(stage_capability(MessageStage::Response)),
-        RuleStage::AppToProxy | RuleStage::UpstreamToProxy => None,
+        RuleStage::TlsHandshake => stage_capability(MessageStage::TlsHandshake),
+        RuleStage::ProxyToUpstream => stage_capability(MessageStage::Request),
+        RuleStage::ProxyToApp => stage_capability(MessageStage::Response),
     }
 }
 
@@ -387,7 +383,7 @@ fn document_capability(
     let protocol_stage = match stage {
         RuleStage::ProxyToUpstream => ProtocolRuleStage::ProxyToUpstream,
         RuleStage::ProxyToApp => ProtocolRuleStage::ProxyToApp,
-        RuleStage::AppToProxy | RuleStage::UpstreamToProxy | RuleStage::TlsHandshake => {
+        RuleStage::TlsHandshake => {
             return None;
         }
     };

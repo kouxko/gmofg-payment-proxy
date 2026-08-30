@@ -146,7 +146,7 @@ export const commands = {
 	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
 	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
-	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
+	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
 	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
 	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
 	ruleDefinitionSave: (input: RuleDefinitionSaveInput) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_save", { input })),
@@ -662,8 +662,10 @@ path: JsonPointer;
 predicate: DocumentPredicate } |
 /**  Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree. */
 { source: "http";
-/**  Typed HTTP condition. */
-condition: MatchCondition } |
+/**  Typed HTTP field. */
+field: MatchField;
+/**  Typed HTTP comparison. */
+operator: MatchOperator } |
 /**  Shared lifecycle predicate, independent from HTTP capabilities. */
 { source: "nth_hit";
 /**  Exact next successful hit number. */
@@ -1128,6 +1130,30 @@ consumedBytes: ConsumedBytes }) & { reason?: never; requiredBytes?: never } |
 /**  Package-supplied rejection reason. */
 reason: string }) & { consumedBytes?: never; requiredBytes?: never };
 
+export type HttpAction = ({ SetJsonField: {
+	path: string,
+	value: unknown,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; Terminal?: never; Throttle?: never } | ({ ReplaceBodyText: string }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ SetHeader: {
+	name: string,
+	value: string,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Delay: {
+	milliseconds: number,
+} }) & { CustomHttpStatus?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Jitter: {
+	minimum_milliseconds: number,
+	maximum_milliseconds: number,
+	scope: JitterScope,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Throttle: {
+	bytes_per_second: number,
+	chunk_bytes: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never } | ({ Intermittent: {
+	available_milliseconds: number,
+	blocked_milliseconds: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | "Pause" | ({ CustomHttpStatus: {
+	status: number,
+} }) & { Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Terminal: TerminalAction }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Throttle?: never };
+
 /**
  *  HTTP Body 的处理方式。
  *
@@ -1446,11 +1472,6 @@ export type ListenerUpstreamTlsTestViewModel = {
 	message: string,
 	ui_tone: UiTone,
 };
-
-export type MatchCondition = { Field: {
-	field: MatchField,
-	operator: MatchOperator,
-} };
 
 export type MatchField = "TerminalIp" | "CertificateFingerprint" | "PathOrRequestType" | { JsonPath: string };
 
@@ -2025,12 +2046,8 @@ export type ProtocolRuleFieldOperatorCapability = "equals";
  *  阶段只表达处理位置，不表示连接、传输协议或可共享的运行时状态。
  */
 export type ProtocolRuleStage =
-/**  应用发出的报文刚进入代理。 */
-"app_to_proxy" |
 /**  代理即将把报文发送给上游服务。 */
 "proxy_to_upstream" |
-/**  上游服务返回的报文刚进入代理。 */
-"upstream_to_proxy" |
 /**  代理即将把报文返回给应用。 */
 "proxy_to_app";
 
@@ -2076,30 +2093,6 @@ export type RawHttpHeaderViewModel = {
 };
 
 export type Revision = number;
-
-export type RuleAction = ({ SetJsonField: {
-	path: string,
-	value: unknown,
-} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; Terminal?: never; Throttle?: never } | ({ ReplaceBodyText: string }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ SetHeader: {
-	name: string,
-	value: string,
-} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Delay: {
-	milliseconds: number,
-} }) & { CustomHttpStatus?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Jitter: {
-	minimum_milliseconds: number,
-	maximum_milliseconds: number,
-	scope: JitterScope,
-} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Throttle: {
-	bytes_per_second: number,
-	chunk_bytes: number,
-	direction: TrafficDirection,
-} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never } | ({ Intermittent: {
-	available_milliseconds: number,
-	blocked_milliseconds: number,
-	direction: TrafficDirection,
-} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | "Pause" | ({ CustomHttpStatus: {
-	status: number,
-} }) & { Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Terminal: TerminalAction }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Throttle?: never };
 
 /**
  *  单个动作在指定 HTTP 阶段中的可用能力。
@@ -2189,7 +2182,7 @@ export type RuleLifecycle = {
 
 export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
 
-export type RuleStage = "app_to_proxy" | "proxy_to_upstream" | "upstream_to_proxy" | "proxy_to_app" | "tls_handshake";
+export type RuleStage = "proxy_to_upstream" | "proxy_to_app" | "tls_handshake";
 
 /**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
 export type RuleStageCapabilityViewModel = {
@@ -2512,7 +2505,7 @@ export type UnifiedAction =
 /**  Document mutation. */
 { source: "document"; value: DocumentMutation } |
 /**  Existing typed non-terminal HTTP/runtime action. */
-{ source: "http"; value: RuleAction } |
+{ source: "http"; value: HttpAction } |
 /**  Terminal effect; at most one is allowed and it must be last. */
 { source: "terminal"; value: TerminalAction };
 

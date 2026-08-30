@@ -8,7 +8,7 @@ import type {
   ProtocolRuleCommonActionCapability,
   ProtocolRuleFieldCapability,
   ProxyListener,
-  RuleAction,
+  HttpAction,
   RuleActionKind,
   RuleConditionKind,
   RuleDefinitionSaveInput,
@@ -144,7 +144,7 @@ function HttpFactoryControls(props: {
   editorScope: string;
   stage: import("@/generated/rust-types").MessageStage;
   onChange: (condition: ConditionTree, actions: UnifiedAction[]) => void;
-  onCreateAction: (action: RuleAction) => void;
+  onCreateAction: (action: HttpAction) => void;
   onCreateCondition: (condition: Condition) => void;
 }) {
   const [error, setError] = useState<string>();
@@ -173,7 +173,7 @@ function HttpFactoryControls(props: {
       <Button isDisabled={pending} size="sm" variant="outline" onPress={() => void addCondition("nth_hit")}>添加条件：第 N 次命中</Button>
       {props.actionKinds.map((kind) => <Button isDisabled={pending} key={kind} size="sm" variant="outline" onPress={() => void addAction(kind)}>添加动作：{httpActionLabel(kind)}</Button>)}
     </div>
-    {conditionLeaves(props.condition).filter((leaf) => leaf.source === "http").map((leaf, index) => <div className="flex items-center rounded-md border p-2 text-xs" key={index}><span>{httpConditionLabel(leaf.condition)}</span></div>)}
+    {conditionLeaves(props.condition).filter((leaf): leaf is Extract<Condition, { source: "http" }> => leaf.source === "http").map((_, index) => <div className="flex items-center rounded-md border p-2 text-xs" key={index}><span>{httpConditionLabel()}</span></div>)}
     {props.actions.map((action, index) => <div className="flex items-center rounded-md border p-2 text-xs" key={index}><span>{unifiedActionLabel(action)}</span><Button className="ml-auto" size="sm" variant="ghost" onPress={() => props.onChange(props.condition, props.actions.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}
     {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
   </div>;
@@ -240,13 +240,13 @@ function appendHttpFactoryResult(
   input: RuleDefinitionSaveInput,
   expectedScope: string,
   kind: "condition" | "action",
-  value: Condition | RuleAction,
+  value: Condition | HttpAction,
 ) {
   if (editorScope(input) !== expectedScope || input.draft.content.type !== "http") return input;
   const content = input.draft.content.value;
   const next = kind === "condition"
     ? { ...content, condition: appendCondition(content.condition, value as Condition) }
-    : { ...content, actions: [...content.actions, wrapRuleAction(value as RuleAction)] };
+    : { ...content, actions: [...content.actions, wrapRuleAction(value as HttpAction)] };
   return { ...input, draft: { ...input.draft, content: { type: "http" as const, value: next } } };
 }
 
@@ -278,7 +278,7 @@ function httpActionLabel(kind: string) {
   return ({ set_header: "Set Header", set_json_field: "Set JSON Field", replace_body_text: "Replace Body", mock_response: "Mock Response", delay: "Delay" } as Record<string, string>)[kind] ?? kind;
 }
 
-function httpRuleActionLabel(action: RuleAction) {
+function httpRuleActionLabel(action: HttpAction) {
   if (typeof action === "string") return action === "Pause" ? "Pause" : action;
   if ("SetHeader" in action) return "Set Header";
   if ("SetJsonField" in action) return "Set JSON Field";
@@ -292,8 +292,8 @@ function httpRuleActionLabel(action: RuleAction) {
   return "Terminal";
 }
 
-function httpConditionLabel(condition: import("@/generated/rust-types").MatchCondition) {
-  return "NthHit" in condition ? `第 ${condition.NthHit} 次命中` : "字段条件";
+function httpConditionLabel() {
+  return "字段条件";
 }
 
 function appendCondition(tree: ConditionTree, condition: Condition): ConditionTree {
@@ -311,7 +311,7 @@ function conditionLeafCount(tree: ConditionTree) {
   return conditionLeaves(tree).length;
 }
 
-function wrapRuleAction(action: RuleAction): UnifiedAction {
+function wrapRuleAction(action: HttpAction): UnifiedAction {
   return typeof action === "object" && "Terminal" in action
     ? { source: "terminal", value: action.Terminal! }
     : { source: "http", value: action };

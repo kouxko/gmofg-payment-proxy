@@ -54,13 +54,13 @@
       ]
     },
     {
-      "id": "frontend-four-stage-model-tests",
+      "id": "frontend-two-stage-model-tests",
       "kind": "vitest",
       "path": "src/features/rules/rule-definition-model.test.ts",
       "owner_phase": 12,
       "required_fragments": [
         "RULE_STAGE_ORDER",
-        "\"app_to_proxy\"",
+        "\"proxy_to_upstream\"",
         "\"proxy_to_app\""
       ]
     },
@@ -104,14 +104,12 @@
       ]
     },
     {
-      "id": "four-stage-document-rules",
+      "id": "two-stage-document-rules",
       "path": "src-tauri/crates/domain/src/protocol_document_rule.rs",
       "owner_phase": 12,
       "required_fragments": [
         "pub enum ProtocolRuleStage",
-        "AppToProxy",
         "ProxyToUpstream",
-        "UpstreamToProxy",
         "ProxyToApp"
       ]
     },
@@ -148,13 +146,13 @@
       ]
     },
     {
-      "id": "generated-four-stage-types",
+      "id": "generated-two-stage-types",
       "path": "src/generated/rust-types.ts",
       "owner_phase": 12,
       "required_fragments": [
         "export type ProtocolRuleStage =",
-        "\"app_to_proxy\"",
-        "\"upstream_to_proxy\""
+        "\"proxy_to_upstream\"",
+        "\"proxy_to_app\""
       ]
     },
     {

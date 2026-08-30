@@ -8,7 +8,7 @@ use chrono::Utc;
 use intercept_proxy_application::{
     AppError, EventHub, RuleSummaryViewModel, UiEventPayload, UiTone,
 };
-use intercept_proxy_domain::{MessageStage, Rule, RuleAction};
+use intercept_proxy_domain::{HttpAction, MessageStage, Rule};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
@@ -44,7 +44,7 @@ struct ActorRegistry {
 
 #[derive(Debug)]
 pub(super) struct EvaluatedRules {
-    pub(super) actions: Vec<RuleAction>,
+    pub(super) actions: Vec<HttpAction>,
     pub(super) traces: Vec<String>,
     pub(super) matched_ids: Vec<Uuid>,
     pub(super) hit_rules: Vec<RuleSummaryViewModel>,

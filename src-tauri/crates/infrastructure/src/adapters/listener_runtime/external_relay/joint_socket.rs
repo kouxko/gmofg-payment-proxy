@@ -30,7 +30,7 @@ pub(super) struct JointSocketRules {
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     prepared: Arc<Mutex<Option<SocketContext>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
     package: ProtocolPackageRef,
 }
 
@@ -44,7 +44,7 @@ impl JointSocketRules {
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
         prepared: Arc<Mutex<Option<SocketContext>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+        programs: [Arc<ProtocolDocumentRuleProgram>; 1],
         package: ProtocolPackageRef,
     ) -> Self {
         Self {

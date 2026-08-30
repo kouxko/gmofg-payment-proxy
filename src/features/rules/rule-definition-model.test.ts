@@ -19,14 +19,14 @@ function rule(stage: RuleDefinition_Serialize["stage"], priority: number, create
 describe("groupRulesByStage", () => {
   it("keeps display groups fixed and sorts runtime/read order by priority then rule id", () => {
     const grouped = groupRulesByStage([
-      rule("proxy_to_app", 999, 1), rule("app_to_proxy", 10, 2),
-      rule("app_to_proxy", 20, 4), rule("app_to_proxy", 20, 3),
+      rule("proxy_to_app", 999, 1), rule("proxy_to_upstream", 10, 2),
+      rule("proxy_to_upstream", 20, 4), rule("proxy_to_upstream", 20, 3),
     ]);
     expect(grouped.map((group) => group.stage)).toEqual(RULE_STAGE_ORDER);
     expect(grouped[0].rules.map((item) => [item.priority, item.rule_id])).toEqual([
-      [10, "app_to_proxy-2"], [20, "app_to_proxy-3"], [20, "app_to_proxy-4"],
+      [10, "proxy_to_upstream-2"], [20, "proxy_to_upstream-3"], [20, "proxy_to_upstream-4"],
     ]);
-    expect(grouped[3].rules[0].priority).toBe(999);
+    expect(grouped[1].rules[0].priority).toBe(999);
   });
 });
 

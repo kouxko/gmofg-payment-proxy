@@ -46,7 +46,7 @@ async fn deleting_an_imported_high_order_rule_never_reuses_its_created_order() {
         package.clone(),
         ProtocolDirection::Upstream,
         vec![equals("trace_id", DocumentValue::String("phase5".into()))],
-        vec![DocumentAction::RecordMatch],
+        vec![ProtocolDocumentOperation::RecordMatch],
     )
     .unwrap();
     workspace.rule_created_order_high_water = imported.created_order();

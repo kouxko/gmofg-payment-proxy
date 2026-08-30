@@ -6,7 +6,7 @@
 use async_trait::async_trait;
 use intercept_proxy_domain::{Document, ProtocolRuleStage};
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Downstream, Encode, Error, Frame, FrameResult, Rules, Socket,
+    Decode, Direction, Display, Downstream, Encode, Error, Frame, FrameResult, Socket,
     SocketContext, Upstream,
 };
 use intercept_proxy_protocol_scripting::{
@@ -22,8 +22,7 @@ use intercept_proxy_runtime::{
 use tokio::sync::{mpsc, oneshot};
 
 use super::{
-    ProtocolDocumentRuleConnection, ProtocolDocumentRuleConnectionFactory,
-    scripted_snapshot::ScriptedSocketRuntimeSnapshot,
+    ProtocolDocumentRuleConnectionFactory, scripted_snapshot::ScriptedSocketRuntimeSnapshot,
 };
 use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
@@ -109,11 +108,7 @@ impl ScriptedSocketCapabilityFactoryAdapter {
             Box::new(ScriptedFrame::<D>::new(client.clone())),
             Box::new(ScriptedDecode::<D>::new(client.clone())),
             Box::new(ScriptedDisplay::new(client.clone())),
-            Box::new(OrderedRules::<D>::new(
-                self.rules
-                    .connection(connection.clone(), binding.first_rules),
-                self.rules.connection(connection, binding.second_rules),
-            )),
+            Box::new(self.rules.connection(connection, binding.rules_stage)),
             Box::new(ScriptedEncode::<D>::new(client)),
         ))
     }
@@ -132,8 +127,7 @@ impl SocketProtocolCapabilityFactory for ScriptedSocketCapabilityFactoryAdapter 
             connection,
             DirectionBinding {
                 protocol_direction: ProtocolDirection::Upstream,
-                first_rules: ProtocolRuleStage::AppToProxy,
-                second_rules: ProtocolRuleStage::ProxyToUpstream,
+                rules_stage: ProtocolRuleStage::ProxyToUpstream,
                 plan: self.upstream,
             },
         )
@@ -147,8 +141,7 @@ impl SocketProtocolCapabilityFactory for ScriptedSocketCapabilityFactoryAdapter 
             connection,
             DirectionBinding {
                 protocol_direction: ProtocolDirection::Downstream,
-                first_rules: ProtocolRuleStage::UpstreamToProxy,
-                second_rules: ProtocolRuleStage::ProxyToApp,
+                rules_stage: ProtocolRuleStage::ProxyToApp,
                 plan: self.downstream,
             },
         )
@@ -158,8 +151,7 @@ impl SocketProtocolCapabilityFactory for ScriptedSocketCapabilityFactoryAdapter 
 #[derive(Clone, Copy)]
 struct DirectionBinding {
     protocol_direction: ProtocolDirection,
-    first_rules: ProtocolRuleStage,
-    second_rules: ProtocolRuleStage,
+    rules_stage: ProtocolRuleStage,
     plan: DirectionExecutionPlan,
 }
 
@@ -400,46 +392,6 @@ impl Display for ScriptedDisplay {
             })
             .await
             .map_err(|error| Error::new(format!("{}: Rhai Display failed", error.stable_code())))
-    }
-}
-
-struct OrderedRules<D: Direction> {
-    first: ProtocolDocumentRuleConnection,
-    second: ProtocolDocumentRuleConnection,
-    marker: std::marker::PhantomData<fn() -> D>,
-}
-impl<D: Direction> OrderedRules<D> {
-    fn new(first: ProtocolDocumentRuleConnection, second: ProtocolDocumentRuleConnection) -> Self {
-        Self {
-            first,
-            second,
-            marker: std::marker::PhantomData,
-        }
-    }
-}
-
-#[async_trait]
-impl<D: Direction> Rules for OrderedRules<D> {
-    async fn apply(&mut self, document: Document) -> Result<Document, Error> {
-        let first = self
-            .first
-            .execute(self.first.bind_document(document))
-            .map_err(|_| {
-                Error::new(format!(
-                    "{:?}|RULE_FAILED: first Rules stage failed",
-                    D::KIND
-                ))
-            })?;
-        let second = self
-            .second
-            .execute(self.second.bind_document(first.into_parts().0))
-            .map_err(|_| {
-                Error::new(format!(
-                    "{:?}|RULE_FAILED: second Rules stage failed",
-                    D::KIND
-                ))
-            })?;
-        Ok(second.into_parts().0)
     }
 }
 

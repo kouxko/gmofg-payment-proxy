@@ -58,9 +58,7 @@ function ProtocolBodyText({ label, text }: { label: string; text: string }) {
 }
 
 const STAGE_LABELS: Record<ProtocolRuleStage, string> = {
-  app_to_proxy: "应用 → 代理",
   proxy_to_upstream: "代理 → 上游服务",
-  upstream_to_proxy: "上游服务 → 代理",
   proxy_to_app: "代理 → 应用",
 };
 

@@ -7,7 +7,7 @@ use crate::{
 };
 
 use super::{
-    MatchContext, Rule, RuleAction, RuleConflictWarning, RuleDraft, RuleEvaluation, RuleTrace,
+    HttpAction, MatchContext, Rule, RuleConflictWarning, RuleDraft, RuleEvaluation, RuleTrace,
     matching::matches_condition, validate_rule_draft,
 };
 
@@ -196,7 +196,7 @@ impl RuleEngine {
                         for action in &rule.actions {
                             executed.push(action.clone());
                             evaluation.composed_actions.push(action.clone());
-                            if let RuleAction::Terminal(terminal) = action {
+                            if let HttpAction::Terminal(terminal) = action {
                                 evaluation.terminal_action = Some(terminal.clone());
                                 break;
                             }
@@ -249,7 +249,7 @@ impl RuleEngine {
         sorted.sort_by_key(|rule| (rule.priority, rule.id));
         let mut warnings = Vec::new();
         for (index, higher) in sorted.iter().enumerate() {
-            if !higher.actions.iter().any(RuleAction::is_terminal) {
+            if !higher.actions.iter().any(HttpAction::is_terminal) {
                 continue;
             }
             for lower in sorted.iter().skip(index + 1) {
@@ -299,10 +299,10 @@ impl RuleEngine {
             .iter()
             .filter(|condition| !matches!(condition, crate::Condition::NthHit { .. }))
         {
-            let crate::Condition::Http { condition } = condition else {
+            let crate::Condition::Http { field, operator } = condition else {
                 return Err("旧 HTTP runtime 不支持 Document 条件".into());
             };
-            if !matches_condition(condition, context)? {
+            if !matches_condition(field, operator, context)? {
                 return Ok(false);
             }
         }

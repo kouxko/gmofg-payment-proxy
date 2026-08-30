@@ -26,9 +26,7 @@ pub struct ProtocolDocumentRuleConnectionFactory {
 
 #[derive(Clone)]
 struct ProtocolDocumentRulePrograms {
-    app_to_proxy: Arc<ProtocolDocumentRuleProgram>,
     proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
-    upstream_to_proxy: Arc<ProtocolDocumentRuleProgram>,
     proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
 }
 
@@ -59,17 +57,12 @@ impl fmt::Debug for ProtocolDocumentRuleConnectionFactory {
         let programs = self.programs.read();
         formatter
             .debug_struct("ProtocolDocumentRuleConnectionFactory")
-            .field("listener_id", &programs.app_to_proxy.listener_id())
-            .field("package", programs.app_to_proxy.package())
-            .field("schema", &programs.app_to_proxy.schema())
-            .field("app_to_proxy", &programs.app_to_proxy.rules().len())
+            .field("listener_id", &programs.proxy_to_upstream.listener_id())
+            .field("package", programs.proxy_to_upstream.package())
+            .field("schema", &programs.proxy_to_upstream.schema())
             .field(
                 "proxy_to_upstream",
                 &programs.proxy_to_upstream.rules().len(),
-            )
-            .field(
-                "upstream_to_proxy",
-                &programs.upstream_to_proxy.rules().len(),
             )
             .field("proxy_to_app", &programs.proxy_to_app.rules().len())
             .finish_non_exhaustive()
@@ -120,9 +113,7 @@ impl ProtocolDocumentRuleConnection {
     fn program(&self) -> Arc<ProtocolDocumentRuleProgram> {
         let programs = self.programs.read();
         match self.stage {
-            ProtocolRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
             ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            ProtocolRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
             ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
         }
     }
@@ -137,17 +128,6 @@ impl ProtocolDocumentRuleConnection {
             stage: program.stage(),
             document,
         }
-    }
-
-    /// 为没有下行输入 Frame 的 `LocalResponder` response 创建 Schema-bound 空 Document。
-    ///
-    /// 每次调用都创建新的值槽，Always + `SetField` 可以生成静态响应，而带字段条件的规则会因
-    /// 未赋值稳定 non-match；上一 request 的值不会被复用。
-    #[cfg(test)]
-    pub fn empty_document(&self) -> BoundSocketDocument {
-        self.bind_document(Document::new(
-            intercept_proxy_domain::DocumentValue::Object(std::collections::BTreeMap::default()),
-        ))
     }
 
     /// 复核运行时归属后执行整组规则，并只返回一个聚合结果。
@@ -207,23 +187,14 @@ impl Rules for ProtocolDocumentRuleConnection {
 }
 
 impl ProtocolDocumentRuleConnectionFactory {
-    /// 组合同一入口和协议包的四阶段 Program。每个方向各自绑定一个 Schema。
+    /// 组合同一入口和协议包的两个权威写出阶段 Program。
     pub(crate) fn new(
-        app_to_proxy: Arc<ProtocolDocumentRuleProgram>,
         proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
-        upstream_to_proxy: Arc<ProtocolDocumentRuleProgram>,
         proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
     ) -> Result<Self, DomainError> {
-        let programs = [
-            &app_to_proxy,
-            &proxy_to_upstream,
-            &upstream_to_proxy,
-            &proxy_to_app,
-        ];
+        let programs = [&proxy_to_upstream, &proxy_to_app];
         let expected = [
-            ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
-            ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
         ];
         for (program, stage) in programs.iter().zip(expected) {
@@ -233,28 +204,18 @@ impl ProtocolDocumentRuleConnectionFactory {
                     "规则 Program 处理阶段不正确",
                 ));
             }
-            if program.listener_id() != app_to_proxy.listener_id()
-                || program.package() != app_to_proxy.package()
+            if program.listener_id() != proxy_to_upstream.listener_id()
+                || program.package() != proxy_to_upstream.package()
             {
                 return Err(binding_error(
                     "factory.binding",
-                    "四个处理阶段必须绑定同一入口和协议包",
+                    "两个处理阶段必须绑定同一入口和协议包",
                 ));
             }
         }
-        if app_to_proxy.schema() != proxy_to_upstream.schema()
-            || upstream_to_proxy.schema() != proxy_to_app.schema()
-        {
-            return Err(binding_error(
-                "factory.schema",
-                "同一数据方向的两个处理阶段必须绑定同一 Schema",
-            ));
-        }
         Ok(Self {
             programs: Arc::new(RwLock::new(ProtocolDocumentRulePrograms {
-                app_to_proxy,
                 proxy_to_upstream,
-                upstream_to_proxy,
                 proxy_to_app,
             })),
         })
@@ -272,17 +233,15 @@ impl ProtocolDocumentRuleConnectionFactory {
     pub(crate) fn direction_programs(
         &self,
         direction: intercept_proxy_domain::ProtocolDirection,
-    ) -> [Arc<ProtocolDocumentRuleProgram>; 2] {
+    ) -> [Arc<ProtocolDocumentRuleProgram>; 1] {
         let programs = self.programs.read();
         match direction {
-            intercept_proxy_domain::ProtocolDirection::Upstream => [
-                Arc::clone(&programs.app_to_proxy),
-                Arc::clone(&programs.proxy_to_upstream),
-            ],
-            intercept_proxy_domain::ProtocolDirection::Downstream => [
-                Arc::clone(&programs.upstream_to_proxy),
-                Arc::clone(&programs.proxy_to_app),
-            ],
+            intercept_proxy_domain::ProtocolDirection::Upstream => {
+                [Arc::clone(&programs.proxy_to_upstream)]
+            }
+            intercept_proxy_domain::ProtocolDirection::Downstream => {
+                [Arc::clone(&programs.proxy_to_app)]
+            }
         }
     }
 
@@ -291,9 +250,7 @@ impl ProtocolDocumentRuleConnectionFactory {
     pub(crate) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {
         let programs = self.programs.read();
         match stage {
-            ProtocolRuleStage::AppToProxy => Arc::clone(&programs.app_to_proxy),
             ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            ProtocolRuleStage::UpstreamToProxy => Arc::clone(&programs.upstream_to_proxy),
             ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
         }
     }
@@ -309,6 +266,3 @@ fn binding_error(field: &str, message: &str) -> DomainError {
     DomainError::new(ErrorCode::RuleInvalid, "协议 Document 运行时绑定不一致")
         .with_field_error(field, message)
 }
-
-#[cfg(test)]
-mod tests;

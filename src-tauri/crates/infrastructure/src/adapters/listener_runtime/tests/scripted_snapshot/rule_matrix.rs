@@ -1,7 +1,7 @@
 //! Scripted 启动快照的方向能力矩阵与冻结规则执行回归。
 
 use intercept_proxy_domain::{
-    Document, DocumentCondition, DocumentValue, JsonPointer, ProtocolDocumentRuleDefinition,
+    Document, DocumentValue, JsonPointer, ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition,
 };
 use intercept_proxy_runtime::SocketConnectionIdentity;
 
@@ -167,12 +167,12 @@ fn direction_rule(
     modifies: bool,
 ) -> ProtocolDocumentRuleDefinition {
     let actions = if modifies {
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property("amount"),
             value: DocumentValue::integer(42).unwrap(),
         }]
     } else {
-        vec![DocumentAction::RecordMatch]
+        vec![ProtocolDocumentOperation::RecordMatch]
     };
     ProtocolDocumentRuleDefinition::new(
         ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(u128::from(10 - created_order))),
@@ -182,7 +182,7 @@ fn direction_rule(
         listener.id,
         snapshot_package(),
         direction,
-        vec![DocumentCondition::Equals {
+        vec![ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property("amount"),
             value: DocumentValue::integer(1).unwrap(),
         }],

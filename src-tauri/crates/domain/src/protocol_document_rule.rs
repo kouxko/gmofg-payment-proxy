@@ -52,12 +52,8 @@ pub enum ProtocolDirection {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Hash, PartialEq, Serialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum ProtocolRuleStage {
-    /// 应用发出的报文刚进入代理。
-    AppToProxy,
     /// 代理即将把报文发送给上游服务。
     ProxyToUpstream,
-    /// 上游服务返回的报文刚进入代理。
-    UpstreamToProxy,
     /// 代理即将把报文返回给应用。
     ProxyToApp,
 }
@@ -65,7 +61,7 @@ pub enum ProtocolRuleStage {
 /// v1 Document 条件。多个条件按声明顺序读取并执行 AND；空列表恒匹配。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "operator", rename_all = "snake_case")]
-pub enum DocumentCondition {
+pub enum ProtocolDocumentPredicate {
     /// 字段当前值必须与给定类型化值严格相等；不进行文本或数字转换。
     Equals {
         /// Document 中的目标路径。
@@ -75,7 +71,7 @@ pub enum DocumentCondition {
     },
 }
 
-impl<'de> Deserialize<'de> for DocumentCondition {
+impl<'de> Deserialize<'de> for ProtocolDocumentPredicate {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -97,7 +93,7 @@ impl<'de> Deserialize<'de> for DocumentCondition {
     }
 }
 
-impl DocumentCondition {
+impl ProtocolDocumentPredicate {
     #[must_use]
     /// 返回条件读取的字段。
     pub const fn field(&self) -> &JsonPointer {
@@ -116,7 +112,7 @@ impl DocumentCondition {
 /// v1 Document 动作。动作按声明顺序执行，不包含隐式终止或 first-match 语义。
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
-pub enum DocumentAction {
+pub enum ProtocolDocumentOperation {
     /// 只记录命中，不修改 Document。
     RecordMatch,
     /// 替换一个 Document 路径的值。
@@ -133,7 +129,7 @@ pub enum DocumentAction {
     },
 }
 
-impl<'de> Deserialize<'de> for DocumentAction {
+impl<'de> Deserialize<'de> for ProtocolDocumentOperation {
     fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
     where
         D: serde::Deserializer<'de>,
@@ -181,12 +177,12 @@ pub struct ProtocolDocumentRuleDraft {
     /// 冻结绑定的处理阶段。
     pub stage: ProtocolRuleStage,
     /// 按声明顺序执行 AND 的条件；允许为空。
-    pub conditions: Vec<DocumentCondition>,
+    pub conditions: Vec<ProtocolDocumentPredicate>,
     /// 按声明顺序执行的非空动作。
-    pub actions: Vec<DocumentAction>,
+    pub actions: Vec<ProtocolDocumentOperation>,
 }
 
-impl DocumentAction {
+impl ProtocolDocumentOperation {
     fn field_and_value(&self) -> Option<(&JsonPointer, &DocumentValue)> {
         match self {
             Self::SetField { field, value } => Some((field, value)),
@@ -210,8 +206,8 @@ pub struct ProtocolDocumentRuleDefinition {
     listener_id: ListenerId,
     package: ProtocolPackageRef,
     stage: ProtocolRuleStage,
-    conditions: Vec<DocumentCondition>,
-    actions: Vec<DocumentAction>,
+    conditions: Vec<ProtocolDocumentPredicate>,
+    actions: Vec<ProtocolDocumentOperation>,
 }
 
 impl ProtocolDocumentRuleDefinition {
@@ -244,8 +240,8 @@ impl ProtocolDocumentRuleDefinition {
         listener_id: ListenerId,
         package: ProtocolPackageRef,
         direction: ProtocolDirection,
-        conditions: Vec<DocumentCondition>,
-        actions: Vec<DocumentAction>,
+        conditions: Vec<ProtocolDocumentPredicate>,
+        actions: Vec<ProtocolDocumentOperation>,
     ) -> Result<Self, DomainError> {
         Self::new_named(
             rule_id,
@@ -272,8 +268,8 @@ impl ProtocolDocumentRuleDefinition {
         listener_id: ListenerId,
         package: ProtocolPackageRef,
         direction: ProtocolDirection,
-        conditions: Vec<DocumentCondition>,
-        actions: Vec<DocumentAction>,
+        conditions: Vec<ProtocolDocumentPredicate>,
+        actions: Vec<ProtocolDocumentOperation>,
     ) -> Result<Self, DomainError> {
         let stage = match direction {
             ProtocolDirection::Upstream => ProtocolRuleStage::ProxyToUpstream,
@@ -304,8 +300,8 @@ impl ProtocolDocumentRuleDefinition {
         listener_id: ListenerId,
         package: ProtocolPackageRef,
         stage: ProtocolRuleStage,
-        conditions: Vec<DocumentCondition>,
-        actions: Vec<DocumentAction>,
+        conditions: Vec<ProtocolDocumentPredicate>,
+        actions: Vec<ProtocolDocumentOperation>,
     ) -> Result<Self, DomainError> {
         Self::from_wire(ProtocolDocumentRuleWire {
             rule_id,

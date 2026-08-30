@@ -4,7 +4,7 @@ fn nth_hit_is_per_terminal_and_resets_on_restart_reenable_and_condition_change()
     let mut rule = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     rule.one_shot = true;
@@ -62,7 +62,7 @@ fn changing_match_conditions_resets_existing_hit_counters() {
     let rule = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     let id = rule.id;
@@ -80,7 +80,7 @@ fn changing_match_conditions_resets_existing_hit_counters() {
     let mut changed = draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 3 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     );
     changed.expected_revision = Some(Revision::INITIAL);
     engine.save(id, changed).unwrap();
@@ -105,13 +105,13 @@ fn reconcile_preserves_unrelated_rule_counters_and_resets_changed_rule() {
     let unchanged = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 3 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     let mut changed = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     changed.priority = 20;
@@ -175,7 +175,7 @@ fn displayed_hit_metadata_resets_on_restart_and_reenable() {
     let rule = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     let id = rule.id;

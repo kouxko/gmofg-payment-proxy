@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::{
-    DocumentAction, DocumentCondition, ListenerId, ProtocolDocumentRuleId, ProtocolPackageRef,
-    ProtocolPackageSchemaFieldTypeViewModel, ProtocolRuleStage,
+    ListenerId, ProtocolDocumentOperation, ProtocolDocumentPredicate, ProtocolDocumentRuleId,
+    ProtocolPackageRef, ProtocolPackageSchemaFieldTypeViewModel, ProtocolRuleStage,
 };
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -83,6 +83,6 @@ pub struct ProtocolRuleSaveInput {
     pub listener_id: ListenerId,
     pub package: ProtocolPackageRef,
     pub stage: ProtocolRuleStage,
-    pub conditions: Vec<DocumentCondition>,
-    pub actions: Vec<DocumentAction>,
+    pub conditions: Vec<ProtocolDocumentPredicate>,
+    pub actions: Vec<ProtocolDocumentOperation>,
 }

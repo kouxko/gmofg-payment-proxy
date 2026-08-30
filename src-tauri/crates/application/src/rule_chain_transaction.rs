@@ -6,7 +6,7 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use intercept_proxy_domain::{
-    Document, MatchCondition, NthCounterAdvance, NthCounterSnapshot, RuleAction, RuleId,
+    Document, HttpAction, MatchField, MatchOperator, NthCounterAdvance, NthCounterSnapshot, RuleId,
     RuleLifecycleDelta, RuleLifecycleSnapshot, RuleProgramEntry, TerminalAction, TerminalIdentity,
     UnifiedAction,
 };
@@ -37,8 +37,13 @@ impl WorkingHttpMessage {
 
 /// Typed HTTP behavior used inside the private transaction checkpoint.
 pub trait RuleChainHttpPort: std::fmt::Debug + Send + Sync {
-    fn matches(&self, message: &WorkingHttpMessage, condition: &MatchCondition) -> AppResult<bool>;
-    fn apply(&self, message: &mut WorkingHttpMessage, action: &RuleAction) -> AppResult<()>;
+    fn matches(
+        &self,
+        message: &WorkingHttpMessage,
+        field: &MatchField,
+        operator: &MatchOperator,
+    ) -> AppResult<bool>;
+    fn apply(&self, message: &mut WorkingHttpMessage, action: &HttpAction) -> AppResult<()>;
     fn encode_document(
         &self,
         document: &Document,
@@ -179,7 +184,7 @@ impl RuleChainTransaction {
             let evaluation = entry.condition().evaluate_with_nth(
                 &working_document,
                 nth_attempt,
-                &mut |condition| self.http.matches(&working_message, condition),
+                &mut |field, operator| self.http.matches(&working_message, field, operator),
             )?;
             let matched = evaluation.matched;
             let nth_counter_advance = (evaluation.contains_nth && evaluation.eligible_without_nth)

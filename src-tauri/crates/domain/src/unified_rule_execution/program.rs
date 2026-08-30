@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    ConditionTree, Document, DomainError, MatchCondition, RuleAction, RuleId, TerminalAction,
-    UnifiedAction, rule_error,
+    ConditionTree, Document, DomainError, HttpAction, MatchField, MatchOperator, RuleId,
+    TerminalAction, UnifiedAction, rule_error,
 };
 
 /// Immutable rule program input. `created_order` is history/UI metadata only.
@@ -73,7 +73,7 @@ fn validate_actions(actions: &[UnifiedAction]) -> Result<(), DomainError> {
     }
     let mut terminal = None;
     for (index, action) in actions.iter().enumerate() {
-        if matches!(action, UnifiedAction::Http(RuleAction::Terminal(_))) {
+        if matches!(action, UnifiedAction::Http(HttpAction::Terminal(_))) {
             return Err(rule_error(
                 &format!("actions.{index}"),
                 "终止动作必须使用统一 terminal 变体",
@@ -113,7 +113,7 @@ impl UnifiedRuleProgram {
     }
 
     pub fn execute(&self, document: Document) -> Result<UnifiedRuleExecution, DomainError> {
-        self.execute_with_http(document, |_| {
+        self.execute_with_http(document, |_, _| {
             Err(rule_error(
                 "condition",
                 "HTTP 条件需要应用层提供类型化 HTTP 上下文",
@@ -124,7 +124,7 @@ impl UnifiedRuleProgram {
     pub fn execute_with_http(
         &self,
         document: Document,
-        mut http_matches: impl FnMut(&MatchCondition) -> Result<bool, DomainError>,
+        mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<UnifiedRuleExecution, DomainError> {
         let mut working = document;
         let mut matched_rule_ids = Vec::new();
@@ -165,7 +165,7 @@ impl UnifiedRuleProgram {
 pub struct UnifiedRuleExecution {
     document: Document,
     matched_rule_ids: Vec<RuleId>,
-    http_actions: Vec<RuleAction>,
+    http_actions: Vec<HttpAction>,
     terminal_action: Option<TerminalAction>,
 }
 
@@ -181,7 +181,7 @@ impl UnifiedRuleExecution {
     }
 
     #[must_use]
-    pub fn http_actions(&self) -> &[RuleAction] {
+    pub fn http_actions(&self) -> &[HttpAction] {
         &self.http_actions
     }
 

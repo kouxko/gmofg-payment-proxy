@@ -70,7 +70,7 @@ pub(super) fn build_capabilities<D: Direction>(
     response: bool,
     codec: BodyCodecKind,
     binding: &RuntimeExternalSocketPackageBinding,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
 ) -> HttpDirectionCapabilities<D> {
     let observed = Arc::new(Mutex::new(None));
     let rpc = binding.rpc();
@@ -221,7 +221,7 @@ struct ExternalHttpDocumentRules {
     rpc: Arc<dyn ExternalPackageRpc>,
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
     package: intercept_proxy_domain::ProtocolPackageRef,
 }
 
@@ -234,7 +234,7 @@ impl ExternalHttpDocumentRules {
         rpc: Arc<dyn ExternalPackageRpc>,
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 2],
+        programs: [Arc<ProtocolDocumentRuleProgram>; 1],
         package: intercept_proxy_domain::ProtocolPackageRef,
     ) -> Self {
         Self {

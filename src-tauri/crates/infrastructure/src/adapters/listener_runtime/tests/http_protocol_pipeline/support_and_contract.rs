@@ -7,7 +7,7 @@ async fn http_and_document_conditions_gate_both_action_sets_as_one_rule() {
         ProtocolRuleStage::ProxyToUpstream,
         1,
         "route",
-        vec![DocumentCondition::Equals {
+        vec![ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property("route"),
             value: DocumentValue::String("decoded".into()),
         }],
@@ -19,11 +19,11 @@ async fn http_and_document_conditions_gate_both_action_sets_as_one_rule() {
     let RuleContent::Http(content) = &mut draft.content else {
         panic!("HTTP rule expected");
     };
-    content.condition = intercept_proxy_domain::ConditionTree::from_http_conditions(vec![MatchCondition::Field {
+    content.condition = intercept_proxy_domain::ConditionTree::from_http_conditions(vec![intercept_proxy_domain::Condition::Http {
         field: MatchField::PathOrRequestType,
         operator: MatchOperator::Equals("/allowed".into()),
     }]);
-    let expected_actions = vec![RuleAction::SetHeader {
+    let expected_actions = vec![HttpAction::SetHeader {
         name: "x-joint".into(),
         value: "matched".into(),
     }];
@@ -258,15 +258,15 @@ pub(super) fn set_string_rule(
     stage: ProtocolRuleStage,
     created_order: u64,
     field: &str,
-    mut conditions: Vec<DocumentCondition>,
+    mut conditions: Vec<ProtocolDocumentPredicate>,
     value: &str,
 ) -> ProtocolDocumentRuleDefinition {
     if conditions.is_empty() {
         let decoded_field = match stage {
-            ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToUpstream => "route",
-            ProtocolRuleStage::UpstreamToProxy | ProtocolRuleStage::ProxyToApp => "result",
+            ProtocolRuleStage::ProxyToUpstream => "route",
+            ProtocolRuleStage::ProxyToApp => "result",
         };
-        conditions.push(DocumentCondition::Equals {
+        conditions.push(ProtocolDocumentPredicate::Equals {
             field: JsonPointer::property(decoded_field),
             value: DocumentValue::String("decoded".into()),
         });
@@ -281,7 +281,7 @@ pub(super) fn set_string_rule(
         http_package(),
         stage,
         conditions,
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property(field),
             value: DocumentValue::String(value.into()),
         }],

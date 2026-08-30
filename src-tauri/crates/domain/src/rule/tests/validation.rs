@@ -2,16 +2,16 @@
 fn validates_regex_delay_terminal_order_phase_and_action_parameters() {
     let invalid = draft(
         MessageStage::Request,
-        vec![MatchCondition::Field {
+        vec![Condition::Http {
             field: MatchField::TerminalIp,
             operator: MatchOperator::Regex("(".into()),
-        }.into()],
+        }],
         vec![
-            RuleAction::Delay {
+            HttpAction::Delay {
                 milliseconds: MAX_TOTAL_DELAY_MS + 1,
             },
-            RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta: 0 }),
-            RuleAction::Pause,
+            HttpAction::Terminal(TerminalAction::IncorrectContentLength { delta: 0 }),
+            HttpAction::Pause,
         ],
     );
     let error = validate_rule_draft(&invalid).unwrap_err();
@@ -26,29 +26,29 @@ fn validates_regex_delay_terminal_order_phase_and_action_parameters() {
 fn validates_every_action_against_its_exact_stage_contract() {
     let cases = vec![
         (
-            RuleAction::SetJsonField {
+            HttpAction::SetJsonField {
                 path: "$.value".into(),
                 value: json!(1),
             },
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::ReplaceBodyText("本文".into()),
+            HttpAction::ReplaceBodyText("本文".into()),
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::SetHeader {
+            HttpAction::SetHeader {
                 name: "x-test".into(),
                 value: "enabled".into(),
             },
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::Delay { milliseconds: 1 },
+            HttpAction::Delay { milliseconds: 1 },
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::Jitter {
+            HttpAction::Jitter {
                 minimum_milliseconds: 1,
                 maximum_milliseconds: 2,
                 scope: JitterScope::PerChunk,
@@ -56,7 +56,7 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second: 1_024,
                 chunk_bytes: 256,
                 direction: TrafficDirection::Upstream,
@@ -64,7 +64,7 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second: 1_024,
                 chunk_bytes: 256,
                 direction: TrafficDirection::Downstream,
@@ -72,7 +72,7 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds: 10,
                 blocked_milliseconds: 10,
                 direction: TrafficDirection::Upstream,
@@ -80,7 +80,7 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds: 10,
                 blocked_milliseconds: 10,
                 direction: TrafficDirection::Downstream,
@@ -88,47 +88,47 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Pause,
+            HttpAction::Pause,
             vec![MessageStage::Request, MessageStage::Response],
         ),
         (
-            RuleAction::CustomHttpStatus { status: 503 },
+            HttpAction::CustomHttpStatus { status: 503 },
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Terminal(TerminalAction::RejectTlsHandshake),
+            HttpAction::Terminal(TerminalAction::RejectTlsHandshake),
             vec![MessageStage::TlsHandshake],
         ),
         (
-            RuleAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
+            HttpAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::UpstreamConnectTimeout { milliseconds: 1 }),
+            HttpAction::Terminal(TerminalAction::UpstreamConnectTimeout { milliseconds: 1 }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::UpstreamWriteTimeout { milliseconds: 1 }),
+            HttpAction::Terminal(TerminalAction::UpstreamWriteTimeout { milliseconds: 1 }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::UpstreamReadTimeout { milliseconds: 1 }),
+            HttpAction::Terminal(TerminalAction::UpstreamReadTimeout { milliseconds: 1 }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::DropUpstreamResponse {
+            HttpAction::Terminal(TerminalAction::DropUpstreamResponse {
                 mode: DropResponseMode::ReadCompleteResponse,
             }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::DropUpstreamResponse {
+            HttpAction::Terminal(TerminalAction::DropUpstreamResponse {
                 mode: DropResponseMode::CloseAfterRequestWrite,
             }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::MockResponse {
+            HttpAction::Terminal(TerminalAction::MockResponse {
                 status: 200,
                 headers: vec![("x-mock".into(), "true".into())],
                 body_bytes: b"{}".to_vec(),
@@ -136,27 +136,27 @@ fn validates_every_action_against_its_exact_stage_contract() {
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::InvalidJson {
+            HttpAction::Terminal(TerminalAction::InvalidJson {
                 body_bytes: b"{".to_vec(),
             }),
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta: 1 }),
+            HttpAction::Terminal(TerminalAction::IncorrectContentLength { delta: 1 }),
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Terminal(TerminalAction::TruncateResponse { bytes: 0 }),
+            HttpAction::Terminal(TerminalAction::TruncateResponse { bytes: 0 }),
             vec![MessageStage::Response],
         ),
         (
-            RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
+            HttpAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
                 after_bytes: 0,
             }),
             vec![MessageStage::Request],
         ),
         (
-            RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+            HttpAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
                 after_bytes: 0,
             }),
             vec![MessageStage::Response],
@@ -188,7 +188,7 @@ fn nth_hit_counter_is_scoped_by_both_terminal_identity_components() {
     let rule = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .expect("valid nth-hit rule");
     let base = TerminalIdentity {
@@ -230,7 +230,7 @@ fn tls_rejection_preserves_nth_hit_semantics() {
     let rule = Rule::create(draft(
         MessageStage::TlsHandshake,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Terminal(TerminalAction::RejectTlsHandshake)],
+        vec![HttpAction::Terminal(TerminalAction::RejectTlsHandshake)],
     ))
     .expect("TLS NthHit is a valid pre-HTTP condition");
     let identity = TerminalIdentity {
@@ -256,7 +256,7 @@ fn tls_rejection_preserves_nth_hit_semantics() {
     assert!(second.traces[0].matched);
     assert!(matches!(
         second.composed_actions.as_slice(),
-        [RuleAction::Terminal(TerminalAction::RejectTlsHandshake)]
+        [HttpAction::Terminal(TerminalAction::RejectTlsHandshake)]
     ));
     assert!(matches!(
         second.terminal_action,

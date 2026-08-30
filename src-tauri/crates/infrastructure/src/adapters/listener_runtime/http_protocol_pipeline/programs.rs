@@ -8,18 +8,14 @@ use intercept_proxy_domain::{
 
 #[derive(Clone)]
 pub(super) struct HttpDocumentRulePrograms {
-    app_to_proxy: Arc<ProtocolDocumentRuleProgram>,
     proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
-    upstream_to_proxy: Arc<ProtocolDocumentRuleProgram>,
     proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
 }
 
 impl HttpDocumentRulePrograms {
     pub(super) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {
         Arc::clone(match stage {
-            ProtocolRuleStage::AppToProxy => &self.app_to_proxy,
             ProtocolRuleStage::ProxyToUpstream => &self.proxy_to_upstream,
-            ProtocolRuleStage::UpstreamToProxy => &self.upstream_to_proxy,
             ProtocolRuleStage::ProxyToApp => &self.proxy_to_app,
         })
     }
@@ -60,9 +56,7 @@ pub(super) fn compile_programs(
         .map(Arc::new)
     };
     Ok(HttpDocumentRulePrograms {
-        app_to_proxy: program(ProtocolRuleStage::AppToProxy)?,
         proxy_to_upstream: program(ProtocolRuleStage::ProxyToUpstream)?,
-        upstream_to_proxy: program(ProtocolRuleStage::UpstreamToProxy)?,
         proxy_to_app: program(ProtocolRuleStage::ProxyToApp)?,
     })
 }
@@ -73,8 +67,8 @@ const fn schema_for_stage<'a>(
     downstream: &'a DocumentSchemaNode,
 ) -> &'a DocumentSchemaNode {
     match stage {
-        ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToUpstream => upstream,
-        ProtocolRuleStage::UpstreamToProxy | ProtocolRuleStage::ProxyToApp => downstream,
+        ProtocolRuleStage::ProxyToUpstream => upstream,
+        ProtocolRuleStage::ProxyToApp => downstream,
     }
 }
 

@@ -3,13 +3,13 @@ use serde_json::Value;
 
 use crate::JsonPath;
 
-use super::{MatchCondition, MatchContext, MatchField, MatchOperator};
+use super::{MatchContext, MatchField, MatchOperator};
 
 pub(super) fn matches_condition(
-    condition: &MatchCondition,
+    field: &MatchField,
+    operator: &MatchOperator,
     context: &MatchContext<'_>,
 ) -> Result<bool, String> {
-    let MatchCondition::Field { field, operator } = condition;
     let value = match field {
         MatchField::TerminalIp => context.terminal.source_ip.clone(),
         MatchField::CertificateFingerprint => context.terminal.certificate_sha256.clone(),

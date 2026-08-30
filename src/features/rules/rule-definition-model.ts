@@ -4,12 +4,11 @@ import type {
   DocumentMutation,
   DocumentValue,
   HttpRuleEditorStage,
-  MatchCondition,
   MatchField,
   ProtocolPackageRef,
   ProtocolRuleCommonActionCapability,
   ProtocolRuleFieldCapability,
-  RuleAction,
+  HttpAction,
   RuleActionKind,
   RuleDefinitionSaveInput,
   RuleDefinition_Serialize,
@@ -21,9 +20,7 @@ import type {
 } from "@/generated/rust-types";
 
 export const RULE_STAGE_ORDER = [
-  "app_to_proxy",
   "proxy_to_upstream",
-  "upstream_to_proxy",
   "proxy_to_app",
   "tls_handshake",
 ] as const satisfies readonly RuleStage[];
@@ -34,9 +31,7 @@ export const NEW_MESSAGE_RULE_STAGES = [
 ] as const satisfies readonly RuleStage[];
 
 const STAGE_LABELS: Record<RuleStage, string> = {
-  app_to_proxy: "App → Proxy",
   proxy_to_upstream: "Proxy → Upstream",
-  upstream_to_proxy: "Upstream → Proxy",
   proxy_to_app: "Proxy → App",
   tls_handshake: "TLS 握手",
 };
@@ -81,7 +76,7 @@ function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draf
   if (httpConditions.length > 0 || httpActions.length > 0) {
     if (!stage.http) return "目标阶段没有可编辑当前 HTTP 条件或动作的能力。";
     for (const leaf of httpConditions) {
-      const kind = matchFieldKind(leaf.condition);
+      const kind = matchFieldKind(leaf);
       if (kind && !stage.http.match_field_kinds.includes(kind)) return `目标阶段不支持 HTTP 条件 ${matchFieldLabel(kind)}。`;
     }
     const actionKinds = stage.http.actions.map((action) => action.kind);
@@ -155,16 +150,15 @@ function valueMatchesType(value: DocumentValue, type: ProtocolRuleFieldCapabilit
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function matchFieldKind(condition: MatchCondition): RuleMatchFieldKind | null {
-  if (!("Field" in condition) || !condition.Field) return null;
-  const field: MatchField = condition.Field.field;
+function matchFieldKind(condition: Extract<Condition, { source: "http" }>): RuleMatchFieldKind | null {
+  const field: MatchField = condition.field;
   if (field === "TerminalIp") return "terminal_ip";
   if (field === "CertificateFingerprint") return "certificate_fingerprint";
   if (field === "PathOrRequestType") return "path_or_request_type";
   return "json_path";
 }
 
-function ruleActionKind(action: RuleAction): RuleActionKind {
+function ruleActionKind(action: HttpAction): RuleActionKind {
   if (action === "Pause") return "pause";
   if ("SetJsonField" in action) return "set_json_field";
   if ("ReplaceBodyText" in action) return "replace_body_text";

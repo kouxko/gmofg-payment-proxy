@@ -1,11 +1,12 @@
 use std::io::{Cursor, Write};
 
 use intercept_proxy_domain::{
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind, DocumentAction,
-    ProtocolDirection, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, ProtocolRuleStage, ScriptedSocketProcessing,
-    SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketRelayTopology, SocketTopology,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ProtocolDirection,
+    ProtocolDocumentOperation, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProtocolRuleStage,
+    ScriptedSocketProcessing, SocketEndpoint, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
+    SocketTopology,
 };
 use intercept_proxy_protocol_scripting::{
     ProtocolDirection as ScriptProtocolDirection, ProtocolRuntimeLimits,
@@ -277,11 +278,11 @@ async fn runtime_plan_rejects_rule_value_schema_mismatch_even_when_called_below_
         listener.id,
         snapshot_package(),
         ProtocolDirection::Upstream,
-        vec![intercept_proxy_domain::DocumentCondition::Equals {
+        vec![intercept_proxy_domain::ProtocolDocumentPredicate::Equals {
             field: intercept_proxy_domain::JsonPointer::property("amount"),
             value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
         }],
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: intercept_proxy_domain::JsonPointer::property("amount"),
             value: intercept_proxy_domain::DocumentValue::String("not-a-number".into()),
         }],
@@ -473,11 +474,11 @@ fn rule(
         listener.id,
         snapshot_package(),
         ProtocolDirection::Upstream,
-        vec![intercept_proxy_domain::DocumentCondition::Equals {
+        vec![intercept_proxy_domain::ProtocolDocumentPredicate::Equals {
             field: intercept_proxy_domain::JsonPointer::property("amount"),
             value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
         }],
-        vec![DocumentAction::RecordMatch],
+        vec![ProtocolDocumentOperation::RecordMatch],
     )
     .unwrap()
 }

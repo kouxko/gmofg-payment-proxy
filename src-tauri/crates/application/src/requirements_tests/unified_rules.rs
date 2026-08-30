@@ -1,7 +1,7 @@
 use super::*;
 use intercept_proxy_domain::{
-    ConditionTree, HttpRuleContent, MatchCondition, MatchField, MatchOperator,
-    RuleAction as DomainRuleAction, TerminalAction, UnifiedAction,
+    ConditionTree, HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator,
+    TerminalAction, UnifiedAction,
 };
 
 fn http_tree(conditions: Vec<Condition>) -> ConditionTree {
@@ -130,10 +130,8 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
     assert!(matches!(
         condition,
         Condition::Http {
-            condition: MatchCondition::Field {
-                field: MatchField::PathOrRequestType,
-                ..
-            }
+            field: MatchField::PathOrRequestType,
+            ..
         }
     ));
     assert_eq!(
@@ -213,13 +211,10 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
         ),
         (
             RuleStage::ProxyToUpstream,
-            vec![
-                MatchCondition::Field {
-                    field: MatchField::PathOrRequestType,
-                    operator: MatchOperator::Regex("[".into()),
-                }
-                .into(),
-            ],
+            vec![Condition::Http {
+                field: MatchField::PathOrRequestType,
+                operator: MatchOperator::Regex("[".into()),
+            }],
             vec![DomainRuleAction::Delay { milliseconds: 10 }],
         ),
         (

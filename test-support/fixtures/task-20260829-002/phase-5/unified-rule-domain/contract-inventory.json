@@ -25,32 +25,12 @@
       "groupRulesByStage > keeps display groups fixed and sorts runtime/read order by priority then rule id",
       "ruleStageIncompatibility > exposes only the two proxy write stages for new message rules",
       "ruleStageIncompatibility > rejects an HTTP Document payload when the target capability cannot edit its field action",
-      "ruleStageIncompatibility > treats the JSON string Null as a string and actual null as null"
+      "ruleStageIncompatibility > treats the JSON string Null as a string and actual null as null",
+      "unified lifecycle wire > keeps lifecycle at the rule definition and exposes nth-hit as a common condition leaf"
     ]
   },
   "generated_wire_golden": "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/generated-wire-golden.json",
-  "phase12_legacy_owner_allowlist": [
-    {
-      "file": "src-tauri/crates/domain/src/protocol_document_rule.rs",
-      "symbol": "DocumentCondition",
-      "reason": "Phase 12 removes the legacy protocol Document condition runtime owner"
-    },
-    {
-      "file": "src-tauri/crates/domain/src/protocol_document_rule.rs",
-      "symbol": "DocumentAction",
-      "reason": "Phase 12 removes the legacy protocol Document action runtime owner"
-    },
-    {
-      "file": "src-tauri/crates/domain/src/rule/types.rs",
-      "symbol": "MatchCondition",
-      "reason": "Phase 12 removes the legacy HTTP condition runtime owner"
-    },
-    {
-      "file": "src-tauri/crates/domain/src/rule/types.rs",
-      "symbol": "RuleAction",
-      "reason": "Phase 12 removes the legacy HTTP action runtime owner"
-    }
-  ],
+  "phase12_legacy_owner_allowlist": [],
   "contracts": [
     "nonempty recursive all/any condition tree without not",
     "typed predicates use RFC6901 and fail false on missing or runtime type mismatch",

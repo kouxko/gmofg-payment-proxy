@@ -13,9 +13,8 @@ use intercept_proxy_application::{
     RuleDefinitionSaveInput, UiTone,
 };
 use intercept_proxy_domain::{
-    Condition, DropResponseMode, HttpRuleContent, JitterScope, ListenerId, MatchCondition,
-    MatchField, MatchOperator, Revision, RuleAction, RuleContent, RuleId, RuleStage,
-    TerminalAction, TrafficDirection,
+    Condition, DropResponseMode, HttpAction, HttpRuleContent, JitterScope, ListenerId, MatchField,
+    MatchOperator, Revision, RuleContent, RuleId, RuleStage, TerminalAction, TrafficDirection,
 };
 use intercept_proxy_product_api::{BodyCodec, ProductFaultTemplate, ProductLabels, ProductProfile};
 use serde_json::Value;
@@ -184,26 +183,20 @@ fn configuration_conditions(
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        conditions.push(
-            MatchCondition::Field {
-                field: MatchField::TerminalIp,
-                operator: MatchOperator::Equals(terminal.clone()),
-            }
-            .into(),
-        );
+        conditions.push(Condition::Http {
+            field: MatchField::TerminalIp,
+            operator: MatchOperator::Equals(terminal.clone()),
+        });
     }
     if let Some(target) = configuration
         .target
         .as_ref()
         .filter(|value| !value.is_empty())
     {
-        conditions.push(
-            MatchCondition::Field {
-                field: MatchField::PathOrRequestType,
-                operator: MatchOperator::Contains(target.clone()),
-            }
-            .into(),
-        );
+        conditions.push(Condition::Http {
+            field: MatchField::PathOrRequestType,
+            operator: MatchOperator::Contains(target.clone()),
+        });
     }
     if let Some(nth) = configuration.nth_hit {
         conditions.push(Condition::NthHit {

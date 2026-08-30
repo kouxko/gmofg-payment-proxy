@@ -6,7 +6,7 @@ use serde_json::{Value, json};
 fn draft(
     stage: MessageStage,
     conditions: Vec<Condition>,
-    actions: Vec<RuleAction>,
+    actions: Vec<HttpAction>,
 ) -> RuleDraft {
     RuleDraft {
         expected_revision: None,
@@ -45,7 +45,7 @@ fn evaluates_priority_then_rule_id_and_stops_at_terminal_action() {
     let mut first = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Delay { milliseconds: 20 }],
+        vec![HttpAction::Delay { milliseconds: 20 }],
     ))
     .unwrap();
     first.priority = 1;
@@ -53,7 +53,7 @@ fn evaluates_priority_then_rule_id_and_stops_at_terminal_action() {
     let mut terminal = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Terminal(
+        vec![HttpAction::Terminal(
             TerminalAction::DisconnectBeforeUpstream,
         )],
     ))
@@ -63,7 +63,7 @@ fn evaluates_priority_then_rule_id_and_stops_at_terminal_action() {
     let mut unreachable = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Delay { milliseconds: 30 }],
+        vec![HttpAction::Delay { milliseconds: 30 }],
     ))
     .unwrap();
     unreachable.priority = 3;
@@ -85,7 +85,7 @@ fn equal_priority_ignores_reversed_created_order_and_uses_rule_id() {
     let mut first = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Terminal(
+        vec![HttpAction::Terminal(
             TerminalAction::DisconnectBeforeUpstream,
         )],
     ))
@@ -95,7 +95,7 @@ fn equal_priority_ignores_reversed_created_order_and_uses_rule_id() {
     let mut second = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Terminal(
+        vec![HttpAction::Terminal(
             TerminalAction::DisconnectBeforeUpstream,
         )],
     ))
@@ -121,7 +121,7 @@ fn failed_joint_gate_does_not_consume_nth_hit_or_one_shot_state() {
     let mut candidate = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 1 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .expect("joint rule");
     candidate.one_shot = true;
@@ -162,7 +162,7 @@ fn failed_joint_gate_commits_no_http_actions_or_hit_metadata() {
     let mut candidate = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .expect("joint rule");
     candidate.one_shot = true;
@@ -193,20 +193,20 @@ fn matches_json_path_equals_contains_and_regex_without_panicking() {
     let rule = Rule::create(draft(
         MessageStage::Request,
         vec![
-            MatchCondition::Field {
+            Condition::Http {
                 field: MatchField::JsonPath("$.payment.items[0].name".into()),
                 operator: MatchOperator::Equals("商品A".into()),
-            }.into(),
-            MatchCondition::Field {
+            },
+            Condition::Http {
                 field: MatchField::PathOrRequestType,
                 operator: MatchOperator::Contains("pay".into()),
-            }.into(),
-            MatchCondition::Field {
+            },
+            Condition::Http {
                 field: MatchField::TerminalIp,
                 operator: MatchOperator::Regex(r"^10\.0\.".into()),
-            }.into(),
+            },
         ],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     let terminal = TerminalIdentity {
@@ -230,17 +230,17 @@ fn invalid_persisted_json_path_is_a_non_match_instead_of_a_panic() {
     let epoch = RuntimeEpoch::new();
     let mut rule = Rule::create(draft(
         MessageStage::Request,
-        vec![MatchCondition::Field {
+        vec![Condition::Http {
             field: MatchField::JsonPath("$.valid".into()),
             operator: MatchOperator::Equals("value".into()),
-        }.into()],
-        vec![RuleAction::Pause],
+        }],
+        vec![HttpAction::Pause],
     ))
     .expect("initial valid rule");
-    rule.conditions = vec![MatchCondition::Field {
+    rule.conditions = vec![Condition::Http {
         field: MatchField::JsonPath("$.items[]".into()),
         operator: MatchOperator::Equals("value".into()),
-    }.into()];
+    }];
     let terminal = TerminalIdentity {
         source_ip: "10.0.0.8".into(),
         certificate_sha256: "cert".into(),

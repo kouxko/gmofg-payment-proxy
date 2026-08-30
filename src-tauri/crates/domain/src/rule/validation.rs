@@ -3,8 +3,8 @@ use regex::Regex;
 use crate::{Condition, DomainError, ErrorCode, JsonPath, MessageStage};
 
 use super::{
-    MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES, MatchCondition,
-    MatchField, MatchOperator, RuleAction, RuleDraft, TerminalAction, TrafficDirection,
+    HttpAction, MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES,
+    MatchField, MatchOperator, RuleDraft, TerminalAction, TrafficDirection,
 };
 
 /// 完整校验规则草稿，并一次返回所有可定位的字段错误。
@@ -32,22 +32,16 @@ fn validate_conditions(draft: &RuleDraft, error: &mut DomainError) {
     for (index, condition) in draft.conditions.iter().enumerate() {
         match condition {
             Condition::Http {
-                condition:
-                    MatchCondition::Field {
-                        field: MatchField::JsonPath(path),
-                        ..
-                    },
+                field: MatchField::JsonPath(path),
+                ..
             } if JsonPath::parse(path).is_err() => push_field_error(
                 error,
                 format!("conditions.{index}.path"),
                 "JSON 字段路径非法",
             ),
             Condition::Http {
-                condition:
-                    MatchCondition::Field {
-                        operator: MatchOperator::Regex(pattern),
-                        ..
-                    },
+                operator: MatchOperator::Regex(pattern),
+                ..
             } if Regex::new(pattern).is_err() => {
                 push_field_error(error, format!("conditions.{index}.regex"), "正则表达式非法");
             }
@@ -64,8 +58,8 @@ fn validate_conditions(draft: &RuleDraft, error: &mut DomainError) {
 fn validate_total_delay(draft: &RuleDraft, error: &mut DomainError) {
     let total_delay = draft.actions.iter().fold(0_u64, |total, action| {
         total.saturating_add(match action {
-            RuleAction::Delay { milliseconds } => *milliseconds,
-            RuleAction::Jitter {
+            HttpAction::Delay { milliseconds } => *milliseconds,
+            HttpAction::Jitter {
                 maximum_milliseconds,
                 ..
             } => *maximum_milliseconds,
@@ -83,10 +77,8 @@ fn validate_tls_conditions(draft: &RuleDraft, error: &mut DomainError) {
             !matches!(
                 condition,
                 Condition::Http {
-                    condition: MatchCondition::Field {
-                        field: MatchField::CertificateFingerprint,
-                        ..
-                    }
+                    field: MatchField::CertificateFingerprint,
+                    ..
                 } | Condition::NthHit { .. }
             )
         })
@@ -125,12 +117,12 @@ fn validate_action_compatibility(
     stage: MessageStage,
     error: &mut DomainError,
     index: usize,
-    action: &RuleAction,
+    action: &HttpAction,
 ) {
     if !action_compatible(stage, action) {
         push_field_error(error, format!("actions.{index}"), "动作与规则阶段不兼容");
     }
-    if let RuleAction::CustomHttpStatus { status } = action
+    if let HttpAction::CustomHttpStatus { status } = action
         && !(100..=599).contains(status)
     {
         push_field_error(
@@ -141,14 +133,14 @@ fn validate_action_compatibility(
     }
 }
 
-fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAction) {
+fn validate_action_limits(error: &mut DomainError, index: usize, action: &HttpAction) {
     match action {
-        RuleAction::Delay { milliseconds } if *milliseconds == 0 => push_field_error(
+        HttpAction::Delay { milliseconds } if *milliseconds == 0 => push_field_error(
             error,
             format!("actions.{index}.milliseconds"),
             "延迟必须大于 0 毫秒",
         ),
-        RuleAction::Jitter {
+        HttpAction::Jitter {
             minimum_milliseconds,
             maximum_milliseconds,
             ..
@@ -168,7 +160,7 @@ fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAc
                 );
             }
         }
-        RuleAction::Throttle {
+        HttpAction::Throttle {
             bytes_per_second,
             chunk_bytes,
             ..
@@ -188,7 +180,7 @@ fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAc
                 );
             }
         }
-        RuleAction::Intermittent {
+        HttpAction::Intermittent {
             available_milliseconds,
             blocked_milliseconds,
             ..
@@ -205,14 +197,14 @@ fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAc
     }
 
     match action {
-        RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta }) if *delta == 0 => {
+        HttpAction::Terminal(TerminalAction::IncorrectContentLength { delta }) if *delta == 0 => {
             push_field_error(
                 error,
                 format!("actions.{index}.delta"),
                 "错误长度差值不能为 0",
             );
         }
-        RuleAction::Terminal(
+        HttpAction::Terminal(
             TerminalAction::UpstreamConnectTimeout { milliseconds }
             | TerminalAction::UpstreamWriteTimeout { milliseconds }
             | TerminalAction::UpstreamReadTimeout { milliseconds },
@@ -221,7 +213,7 @@ fn validate_action_limits(error: &mut DomainError, index: usize, action: &RuleAc
             format!("actions.{index}.milliseconds"),
             "故障超时必须大于 0 毫秒",
         ),
-        RuleAction::Terminal(TerminalAction::MockResponse { status, .. })
+        HttpAction::Terminal(TerminalAction::MockResponse { status, .. })
             if !(100..=599).contains(status) =>
         {
             push_field_error(
@@ -245,15 +237,15 @@ fn validate_window(error: &mut DomainError, index: usize, field: &str, value: u6
     }
 }
 
-fn validate_action_content(error: &mut DomainError, index: usize, action: &RuleAction) {
+fn validate_action_content(error: &mut DomainError, index: usize, action: &HttpAction) {
     match action {
-        RuleAction::SetJsonField { path, .. } if JsonPath::parse(path).is_err() => {
+        HttpAction::SetJsonField { path, .. } if JsonPath::parse(path).is_err() => {
             push_field_error(error, format!("actions.{index}.path"), "JSON 字段路径非法");
         }
-        RuleAction::SetHeader { name, value } => {
+        HttpAction::SetHeader { name, value } => {
             validate_header(error, &format!("actions.{index}"), name, value);
         }
-        RuleAction::Terminal(TerminalAction::MockResponse { headers, .. }) => {
+        HttpAction::Terminal(TerminalAction::MockResponse { headers, .. }) => {
             for (header_index, (name, value)) in headers.iter().enumerate() {
                 validate_header(
                     error,
@@ -339,23 +331,23 @@ fn push_field_error(error: &mut DomainError, field: impl Into<String>, message: 
         .push(message.into());
 }
 
-fn action_compatible(stage: MessageStage, action: &RuleAction) -> bool {
+fn action_compatible(stage: MessageStage, action: &HttpAction) -> bool {
     match action {
-        RuleAction::SetJsonField { .. }
-        | RuleAction::ReplaceBodyText(_)
-        | RuleAction::SetHeader { .. }
-        | RuleAction::Delay { .. }
-        | RuleAction::Jitter { .. }
-        | RuleAction::Pause => stage != MessageStage::TlsHandshake,
-        RuleAction::Throttle { direction, .. } | RuleAction::Intermittent { direction, .. } => {
+        HttpAction::SetJsonField { .. }
+        | HttpAction::ReplaceBodyText(_)
+        | HttpAction::SetHeader { .. }
+        | HttpAction::Delay { .. }
+        | HttpAction::Jitter { .. }
+        | HttpAction::Pause => stage != MessageStage::TlsHandshake,
+        HttpAction::Throttle { direction, .. } | HttpAction::Intermittent { direction, .. } => {
             matches!(
                 (stage, direction),
                 (MessageStage::Request, TrafficDirection::Upstream)
                     | (MessageStage::Response, TrafficDirection::Downstream)
             )
         }
-        RuleAction::CustomHttpStatus { .. } => stage == MessageStage::Response,
-        RuleAction::Terminal(terminal) => terminal_compatible(stage, terminal),
+        HttpAction::CustomHttpStatus { .. } => stage == MessageStage::Response,
+        HttpAction::Terminal(terminal) => terminal_compatible(stage, terminal),
     }
 }
 

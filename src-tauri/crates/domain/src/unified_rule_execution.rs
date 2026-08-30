@@ -6,9 +6,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Document, DocumentAction, DocumentCondition, DocumentSchemaNode, DocumentValue,
-    DocumentValueType, DomainError, ErrorCode, JsonPointer, MatchCondition, RuleAction, RuleId,
-    TerminalAction,
+    Document, DocumentSchemaNode, DocumentValue, DocumentValueType, DomainError, ErrorCode,
+    HttpAction, JsonPointer, MatchField, MatchOperator, ProtocolDocumentOperation,
+    ProtocolDocumentPredicate, RuleId, TerminalAction,
 };
 
 mod condition_evaluation;
@@ -102,20 +102,16 @@ pub enum Condition {
     },
     /// Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree.
     Http {
-        /// Typed HTTP condition.
-        condition: MatchCondition,
+        /// Typed HTTP field.
+        field: MatchField,
+        /// Typed HTTP comparison.
+        operator: MatchOperator,
     },
     /// Shared lifecycle predicate, independent from HTTP capabilities.
     NthHit {
         /// Exact next successful hit number.
         count: u64,
     },
-}
-
-impl From<MatchCondition> for Condition {
-    fn from(condition: MatchCondition) -> Self {
-        Self::Http { condition }
-    }
 }
 
 /// Recursive non-empty AND/OR condition tree. NOT is intentionally not representable.
@@ -143,48 +139,45 @@ impl ConditionTree {
     }
     /// Builds one AND tree from the legacy HTTP runtime projection.
     #[must_use]
-    pub fn from_http_conditions(conditions: impl IntoIterator<Item = MatchCondition>) -> Self {
-        Self::All(
-            conditions
-                .into_iter()
-                .map(|condition| Self::Leaf(Condition::Http { condition }))
-                .collect(),
-        )
+    pub fn from_http_conditions(conditions: impl IntoIterator<Item = Condition>) -> Self {
+        Self::All(conditions.into_iter().map(Self::Leaf).collect())
     }
 
     /// Builds one AND tree from the Phase-12 legacy Document runtime projection.
     #[must_use]
     pub fn from_document_conditions(
-        conditions: impl IntoIterator<Item = DocumentCondition>,
+        conditions: impl IntoIterator<Item = ProtocolDocumentPredicate>,
     ) -> Self {
         Self::All(
             conditions
                 .into_iter()
                 .map(|condition| match condition {
-                    DocumentCondition::Equals { field, value } => Self::Leaf(Condition::Document {
-                        path: field,
-                        predicate: match value {
-                            DocumentValue::String(value) => {
-                                DocumentPredicate::String(StringPredicate {
-                                    operator: StringOperator::Equal,
-                                    value,
-                                })
-                            }
-                            DocumentValue::Number(value) => {
-                                DocumentPredicate::Number(NumberPredicate {
-                                    operator: NumberOperator::Equal,
-                                    value,
-                                })
-                            }
-                            DocumentValue::Boolean(value) => {
-                                DocumentPredicate::Boolean(BooleanPredicate::Equal(value))
-                            }
-                            DocumentValue::Null(()) => DocumentPredicate::NullEqual,
-                            DocumentValue::Object(_) | DocumentValue::Array(_) => {
-                                return Self::All(Vec::new());
-                            }
-                        },
-                    }),
+                    ProtocolDocumentPredicate::Equals { field, value } => {
+                        Self::Leaf(Condition::Document {
+                            path: field,
+                            predicate: match value {
+                                DocumentValue::String(value) => {
+                                    DocumentPredicate::String(StringPredicate {
+                                        operator: StringOperator::Equal,
+                                        value,
+                                    })
+                                }
+                                DocumentValue::Number(value) => {
+                                    DocumentPredicate::Number(NumberPredicate {
+                                        operator: NumberOperator::Equal,
+                                        value,
+                                    })
+                                }
+                                DocumentValue::Boolean(value) => {
+                                    DocumentPredicate::Boolean(BooleanPredicate::Equal(value))
+                                }
+                                DocumentValue::Null(()) => DocumentPredicate::NullEqual,
+                                DocumentValue::Object(_) | DocumentValue::Array(_) => {
+                                    return Self::All(Vec::new());
+                                }
+                            },
+                        })
+                    }
                 })
                 .collect(),
         )
@@ -240,7 +233,7 @@ impl ConditionTree {
     /// A typed HTTP leaf requires the Application-owned HTTP context evaluator and is rejected at
     /// this Document-only boundary. A missing path or runtime JSON type mismatch is a normal false.
     pub fn matches_document(&self, document: &Document) -> Result<bool, DomainError> {
-        self.matches_with(document, 1, &mut |_| {
+        self.matches_with(document, 1, &mut |_, _| {
             Err(rule_error(
                 "condition",
                 "HTTP 条件需要应用层提供类型化 HTTP 上下文",
@@ -253,7 +246,7 @@ impl ConditionTree {
         &self,
         document: &Document,
         nth_attempt: u64,
-        http_matches: &mut impl FnMut(&MatchCondition) -> Result<bool, E>,
+        http_matches: &mut impl FnMut(&MatchField, &MatchOperator) -> Result<bool, E>,
     ) -> Result<bool, E>
     where
         E: From<DomainError>,
@@ -267,7 +260,7 @@ impl ConditionTree {
         &self,
         document: &Document,
         nth_attempt: u64,
-        http_matches: &mut impl FnMut(&MatchCondition) -> Result<bool, E>,
+        http_matches: &mut impl FnMut(&MatchField, &MatchOperator) -> Result<bool, E>,
     ) -> Result<ConditionEvaluation, E>
     where
         E: From<DomainError>,
@@ -313,8 +306,8 @@ impl ConditionTree {
                 }) => Ok(ConditionEvaluation::ordinary(false)),
                 Err(error) => Err(error.into()),
             },
-            Self::Leaf(Condition::Http { condition }) => {
-                http_matches(condition).map(ConditionEvaluation::ordinary)
+            Self::Leaf(Condition::Http { field, operator }) => {
+                http_matches(field, operator).map(ConditionEvaluation::ordinary)
             }
             Self::Leaf(Condition::NthHit { count }) => Ok(ConditionEvaluation {
                 matched: *count > 0 && nth_attempt == *count,
@@ -408,7 +401,7 @@ pub enum UnifiedAction {
     /// Document mutation.
     Document(DocumentMutation),
     /// Existing typed non-terminal HTTP/runtime action.
-    Http(RuleAction),
+    Http(HttpAction),
     /// Terminal effect; at most one is allowed and it must be last.
     Terminal(TerminalAction),
 }
@@ -447,23 +440,25 @@ pub fn validate_unified_actions_schema(
     Ok(())
 }
 
-impl From<RuleAction> for UnifiedAction {
-    fn from(action: RuleAction) -> Self {
+impl From<HttpAction> for UnifiedAction {
+    fn from(action: HttpAction) -> Self {
         match action {
-            RuleAction::Terminal(action) => Self::Terminal(action),
+            HttpAction::Terminal(action) => Self::Terminal(action),
             action => Self::Http(action),
         }
     }
 }
 
-impl From<DocumentAction> for UnifiedAction {
-    fn from(action: DocumentAction) -> Self {
+impl From<ProtocolDocumentOperation> for UnifiedAction {
+    fn from(action: ProtocolDocumentOperation) -> Self {
         Self::Document(match action {
-            DocumentAction::SetField { field, value } => {
+            ProtocolDocumentOperation::SetField { field, value } => {
                 DocumentMutation::Set { path: field, value }
             }
-            DocumentAction::ClearField { field } => DocumentMutation::Clear { path: field },
-            DocumentAction::RecordMatch => return Self::RecordMatch,
+            ProtocolDocumentOperation::ClearField { field } => {
+                DocumentMutation::Clear { path: field }
+            }
+            ProtocolDocumentOperation::RecordMatch => return Self::RecordMatch,
         })
     }
 }

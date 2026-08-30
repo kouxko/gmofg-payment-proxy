@@ -30,14 +30,6 @@ pub enum MatchOperator {
     Regex(String),
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub enum MatchCondition {
-    Field {
-        field: MatchField,
-        operator: MatchOperator,
-    },
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum DropResponseMode {
     ReadCompleteResponse,
@@ -120,7 +112,7 @@ impl TerminalAction {
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub enum RuleAction {
+pub enum HttpAction {
     SetJsonField {
         path: String,
         #[specta(type = specta_typescript::Unknown<Value>)]
@@ -156,7 +148,7 @@ pub enum RuleAction {
     Terminal(TerminalAction),
 }
 
-impl RuleAction {
+impl HttpAction {
     #[must_use]
     pub const fn is_terminal(&self) -> bool {
         matches!(self, Self::Terminal(_))
@@ -174,7 +166,7 @@ pub struct RuleDraft {
     pub channel: Option<ChannelId>,
     pub stage: MessageStage,
     pub conditions: Vec<crate::Condition>,
-    pub actions: Vec<RuleAction>,
+    pub actions: Vec<HttpAction>,
     pub one_shot: bool,
 }
 
@@ -190,7 +182,7 @@ pub struct Rule {
     pub channel: Option<ChannelId>,
     pub stage: MessageStage,
     pub conditions: Vec<crate::Condition>,
-    pub actions: Vec<RuleAction>,
+    pub actions: Vec<HttpAction>,
     pub one_shot: bool,
     pub hit_count: u64,
     pub last_hit_at: Option<DateTime<Utc>>,
@@ -325,13 +317,13 @@ pub struct RuleTrace {
     pub rule_id: RuleId,
     pub matched: bool,
     pub reason: String,
-    pub actions: Vec<RuleAction>,
+    pub actions: Vec<HttpAction>,
 }
 
 #[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub struct RuleEvaluation {
     pub traces: Vec<RuleTrace>,
-    pub composed_actions: Vec<RuleAction>,
+    pub composed_actions: Vec<HttpAction>,
     pub terminal_action: Option<TerminalAction>,
 }
 

@@ -139,9 +139,7 @@ impl ScriptedSocketRuntimeSnapshot {
     #[cfg(test)]
     pub(super) fn rules(&self) -> Vec<ProtocolDocumentRuleDefinition> {
         let mut rules = [
-            ProtocolRuleStage::AppToProxy,
             ProtocolRuleStage::ProxyToUpstream,
-            ProtocolRuleStage::UpstreamToProxy,
             ProtocolRuleStage::ProxyToApp,
         ]
         .into_iter()
@@ -393,9 +391,7 @@ pub(super) fn compile_document_rules(
         compile_rule_program(listener, package, schema, stage, &rules).map(Arc::new)
     };
     ProtocolDocumentRuleConnectionFactory::new(
-        compile(ProtocolRuleStage::AppToProxy)?,
         compile(ProtocolRuleStage::ProxyToUpstream)?,
-        compile(ProtocolRuleStage::UpstreamToProxy)?,
         compile(ProtocolRuleStage::ProxyToApp)?,
     )
     .map_err(AppError::from)

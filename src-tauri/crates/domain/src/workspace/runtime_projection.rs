@@ -1,5 +1,5 @@
 use super::{
-    ChannelId, Condition, DomainError, ProxyWorkspace, Rule, RuleAction, RuleContent,
+    ChannelId, Condition, DomainError, HttpAction, ProxyWorkspace, Rule, RuleContent,
     RuleDefinition, RuleId, RuleStage, actor_owned_socket_conditions, legacy_http_parts,
     message_stage_from_rule, runtime_priority, unified_persistence_error,
 };
@@ -156,10 +156,8 @@ impl ProxyWorkspace {
 
 fn runtime_order_key(definition: &RuleDefinition) -> (u8, u8, i32, RuleId) {
     let (direction, phase) = match definition.stage() {
-        RuleStage::AppToProxy => (0, 0),
-        RuleStage::ProxyToUpstream => (0, 1),
-        RuleStage::UpstreamToProxy => (1, 0),
-        RuleStage::ProxyToApp => (1, 1),
+        RuleStage::ProxyToUpstream => (0, 0),
+        RuleStage::ProxyToApp => (1, 0),
         RuleStage::TlsHandshake => (2, 0),
     };
     (
@@ -188,7 +186,7 @@ fn project_runtime_rule(
     definition: &RuleDefinition,
     description: String,
     conditions: Vec<Condition>,
-    actions: Vec<RuleAction>,
+    actions: Vec<HttpAction>,
 ) -> Result<Rule, DomainError> {
     Ok(Rule {
         id: definition.rule_id(),

@@ -65,7 +65,7 @@ const wireShapes = new Map([
   }],
   ["UnifiedAction", {
     tag: /serde\s*\(\s*tag\s*=\s*"source"[\s\S]*content\s*=\s*"value"/u,
-    variants: [/\bRecordMatch\b/u, /\bDocument\s*\(\s*DocumentMutation\s*\)/u, /\bHttp\s*\(\s*RuleAction\s*\)/u, /\bTerminal\s*\(\s*TerminalAction\s*\)/u],
+    variants: [/\bRecordMatch\b/u, /\bDocument\s*\(\s*DocumentMutation\s*\)/u, /\bHttp\s*\(\s*HttpAction\s*\)/u, /\bTerminal\s*\(\s*TerminalAction\s*\)/u],
   }],
 ]);
 
@@ -189,24 +189,9 @@ for (const file of productionFiles) {
 
 const legacySymbols = new Set(["DocumentCondition", "DocumentAction", "MatchCondition", "RuleAction"]);
 const allowlist = fixture.phase12_legacy_owner_allowlist;
-if (!Array.isArray(allowlist) || allowlist.length !== legacySymbols.size) fail("Phase12 allowlist must contain exact file+symbol+reason entries");
-const allowed = new Map();
-for (const entry of allowlist) {
-  if (!entry || typeof entry.file !== "string" || !entry.file.endsWith(".rs")
-      || !legacySymbols.has(entry.symbol) || typeof entry.reason !== "string"
-      || !entry.reason.startsWith("Phase 12 removes ")) fail("Phase12 allowlist entry requires exact file+symbol+reason");
-  const key = `${entry.file}#${entry.symbol}`;
-  if (allowed.has(key)) fail(`duplicate Phase12 allowlist entry ${key}`);
-  allowed.set(key, false);
-}
+if (!Array.isArray(allowlist) || allowlist.length !== 0) fail("Phase12 legacy owner allowlist must be empty");
 for (const definition of allDefinitions.filter((item) => legacySymbols.has(item.symbol))) {
-  const key = `${definition.file}#${definition.symbol}`;
-  if (!allowed.has(key)) fail(`legacy owner escaped exact Phase12 allowlist: ${key}`);
-  if (allowed.get(key)) fail(`legacy owner count exceeds one in allowlisted file: ${key}`);
-  allowed.set(key, true);
-}
-for (const [key, used] of allowed) {
-  if (!used) fail(`stale Phase12 allowlist ${key}`);
+  fail(`legacy owner remains after Phase12: ${definition.file}#${definition.symbol}`);
 }
 
 console.log(`TASK-20260829-002 Phase5 contract PASS (Cargo=${discovered.rust.length}, Vitest=${discovered.typescript.length})`);

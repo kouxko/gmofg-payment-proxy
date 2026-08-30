@@ -2,11 +2,11 @@
 fn validates_tls_match_scope_and_truncation_boundary() {
     let tls_rule = draft(
         MessageStage::TlsHandshake,
-        vec![MatchCondition::Field {
+        vec![Condition::Http {
             field: MatchField::TerminalIp,
             operator: MatchOperator::Equals("10.0.0.8".into()),
-        }.into()],
-        vec![RuleAction::Terminal(TerminalAction::RejectTlsHandshake)],
+        }],
+        vec![HttpAction::Terminal(TerminalAction::RejectTlsHandshake)],
     );
     assert!(validate_rule_draft(&tls_rule).is_err());
 
@@ -29,21 +29,21 @@ fn validates_tls_match_scope_and_truncation_boundary() {
 fn validates_json_paths_and_headers_without_assuming_a_product_codec() {
     let invalid = draft(
         MessageStage::Response,
-        vec![MatchCondition::Field {
+        vec![Condition::Http {
             field: MatchField::JsonPath("$.items[]".into()),
             operator: MatchOperator::Equals("x".into()),
-        }.into()],
+        }],
         vec![
-            RuleAction::SetJsonField {
+            HttpAction::SetJsonField {
                 path: "missing_root.field".into(),
                 value: json!("🧪"),
             },
-            RuleAction::ReplaceBodyText("emoji 🧪".into()),
-            RuleAction::SetHeader {
+            HttpAction::ReplaceBodyText("emoji 🧪".into()),
+            HttpAction::SetHeader {
                 name: "content-length".into(),
                 value: "12\r\nx-injected: yes".into(),
             },
-            RuleAction::Terminal(TerminalAction::MockResponse {
+            HttpAction::Terminal(TerminalAction::MockResponse {
                 status: 200,
                 headers: vec![("bad header".into(), "value".into())],
                 body_bytes: vec![0x82],
@@ -69,7 +69,7 @@ fn validates_json_paths_and_headers_without_assuming_a_product_codec() {
         validate_rule_draft(&draft(
             MessageStage::Response,
             Vec::new(),
-            vec![RuleAction::Terminal(TerminalAction::InvalidJson {
+            vec![HttpAction::Terminal(TerminalAction::InvalidJson {
                 body_bytes: vec![0x00, 0xFF],
             })],
         ))
@@ -85,7 +85,7 @@ fn warns_when_higher_priority_terminal_rule_can_shadow_lower_rule() {
     let higher = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
-        vec![RuleAction::Terminal(
+        vec![HttpAction::Terminal(
             TerminalAction::DisconnectBeforeUpstream,
         )],
     ))
@@ -93,7 +93,7 @@ fn warns_when_higher_priority_terminal_rule_can_shadow_lower_rule() {
     let mut lower = Rule::create(draft(
         MessageStage::Request,
         vec![Condition::NthHit { count: 2 }],
-        vec![RuleAction::Pause],
+        vec![HttpAction::Pause],
     ))
     .unwrap();
     lower.priority = 20;
@@ -108,22 +108,22 @@ fn validates_weak_network_parameter_boundaries_and_stages() {
         MessageStage::Request,
         Vec::new(),
         vec![
-            RuleAction::Jitter {
+            HttpAction::Jitter {
                 minimum_milliseconds: 10,
                 maximum_milliseconds: 20,
                 scope: JitterScope::PerChunk,
             },
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second: 1,
                 chunk_bytes: MAX_TRAFFIC_CHUNK_BYTES,
                 direction: TrafficDirection::Upstream,
             },
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds: 1,
                 blocked_milliseconds: MAX_TOTAL_DELAY_MS,
                 direction: TrafficDirection::Upstream,
             },
-            RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 1 }),
+            HttpAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite { after_bytes: 1 }),
         ],
     );
     assert!(validate_rule_draft(&valid).is_ok());
@@ -132,22 +132,22 @@ fn validates_weak_network_parameter_boundaries_and_stages() {
         MessageStage::Request,
         Vec::new(),
         vec![
-            RuleAction::Jitter {
+            HttpAction::Jitter {
                 minimum_milliseconds: 2,
                 maximum_milliseconds: 1,
                 scope: JitterScope::BeforeMessage,
             },
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second: 0,
                 chunk_bytes: MAX_TRAFFIC_CHUNK_BYTES + 1,
                 direction: TrafficDirection::Upstream,
             },
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds: 0,
                 blocked_milliseconds: MAX_TOTAL_DELAY_MS + 1,
                 direction: TrafficDirection::Upstream,
             },
-            RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+            HttpAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
                 after_bytes: 1,
             }),
         ],

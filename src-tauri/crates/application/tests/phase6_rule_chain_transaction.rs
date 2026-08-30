@@ -10,9 +10,9 @@ use intercept_proxy_application::{
     RuleChainInput, RuleChainPlan, RuleChainPlanEntry, RuleChainTransaction, WorkingHttpMessage,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentMutation, DocumentValue, JsonPointer,
-    NthCounterSnapshot, Revision, RuleAction, RuleId, RuleLifecycle, RuleLifecycleSnapshot,
-    RuleProgramEntry, TerminalIdentity, UnifiedAction,
+    Condition, ConditionTree, Document, DocumentMutation, DocumentValue, HttpAction, JsonPointer,
+    NthCounterSnapshot, Revision, RuleId, RuleLifecycle, RuleLifecycleSnapshot, RuleProgramEntry,
+    TerminalIdentity, UnifiedAction,
 };
 
 #[derive(Debug, Default)]
@@ -26,26 +26,23 @@ impl RuleChainHttpPort for HttpPort {
     fn matches(
         &self,
         message: &WorkingHttpMessage,
-        condition: &intercept_proxy_domain::MatchCondition,
+        _: &intercept_proxy_domain::MatchField,
+        _: &intercept_proxy_domain::MatchOperator,
     ) -> AppResult<bool> {
-        match condition {
-            intercept_proxy_domain::MatchCondition::Field { .. } => {
-                if self.fail_match {
-                    return Err(AppError::new("RULE_INVALID", "condition failed"));
-                }
-                Ok(message
-                    .headers
-                    .get("x-phase")
-                    .is_some_and(|value| value == "6"))
-            }
+        if self.fail_match {
+            return Err(AppError::new("RULE_INVALID", "condition failed"));
         }
+        Ok(message
+            .headers
+            .get("x-phase")
+            .is_some_and(|value| value == "6"))
     }
 
-    fn apply(&self, message: &mut WorkingHttpMessage, action: &RuleAction) -> AppResult<()> {
+    fn apply(&self, message: &mut WorkingHttpMessage, action: &HttpAction) -> AppResult<()> {
         if self.fail_apply {
             return Err(AppError::new("RULE_INVALID", "action failed"));
         }
-        if let RuleAction::SetHeader { name, value } = action {
+        if let HttpAction::SetHeader { name, value } = action {
             message.headers.insert(name.clone(), value.clone());
         }
         Ok(())
@@ -101,7 +98,7 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
                 path: JsonPointer::parse("/state").unwrap(),
                 value: DocumentValue::String("after".into()),
             }),
-            UnifiedAction::Http(RuleAction::SetHeader {
+            UnifiedAction::Http(HttpAction::SetHeader {
                 name: "x-phase".into(),
                 value: "6".into(),
             }),
@@ -120,10 +117,8 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
                 ),
             }),
             ConditionTree::Leaf(Condition::Http {
-                condition: intercept_proxy_domain::MatchCondition::Field {
-                    field: intercept_proxy_domain::MatchField::PathOrRequestType,
-                    operator: intercept_proxy_domain::MatchOperator::Equals("ignored".into()),
-                },
+                field: intercept_proxy_domain::MatchField::PathOrRequestType,
+                operator: intercept_proxy_domain::MatchOperator::Equals("ignored".into()),
             }),
         ])
         .unwrap(),
@@ -217,14 +212,12 @@ async fn commit_validation_failure_returns_no_partial_output_and_is_not_retried(
 async fn condition_action_encode_and_cancel_fail_before_commit() {
     let http_condition = || {
         ConditionTree::Leaf(Condition::Http {
-            condition: intercept_proxy_domain::MatchCondition::Field {
-                field: intercept_proxy_domain::MatchField::PathOrRequestType,
-                operator: intercept_proxy_domain::MatchOperator::Equals("x".into()),
-            },
+            field: intercept_proxy_domain::MatchField::PathOrRequestType,
+            operator: intercept_proxy_domain::MatchOperator::Equals("x".into()),
         })
     };
     let http_action = || {
-        vec![UnifiedAction::Http(RuleAction::SetHeader {
+        vec![UnifiedAction::Http(HttpAction::SetHeader {
             name: "x".into(),
             value: "y".into(),
         })]

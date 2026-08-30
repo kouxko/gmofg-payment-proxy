@@ -1,54 +1,54 @@
 use super::{
     AppError, AppResult, BTreeMap, BodyCodec, DropResponseMode, FaultParameterValue,
-    FaultParameters, JitterScope, MessageStage, RuleAction, TerminalAction, TrafficDirection,
+    FaultParameters, HttpAction, JitterScope, MessageStage, TerminalAction, TrafficDirection,
     Value,
 };
 
 #[allow(clippy::unnecessary_wraps)]
-pub(super) fn reject_tls(_: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn reject_tls(_: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::TlsHandshake,
-        RuleAction::Terminal(TerminalAction::RejectTlsHandshake),
+        HttpAction::Terminal(TerminalAction::RejectTlsHandshake),
     ))
 }
 
 #[allow(clippy::unnecessary_wraps)]
-pub(super) fn disconnect(_: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn disconnect(_: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
+        HttpAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
     ))
 }
 
-pub(super) fn request_delay(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn request_delay(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((MessageStage::Request, delay(values)?))
 }
 
-pub(super) fn response_delay(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn response_delay(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((MessageStage::Response, delay(values)?))
 }
 
-pub(super) fn delay(values: &FaultParameters) -> AppResult<RuleAction> {
-    Ok(RuleAction::Delay {
+pub(super) fn delay(values: &FaultParameters) -> AppResult<HttpAction> {
+    Ok(HttpAction::Delay {
         milliseconds: u64_parameter(values, "milliseconds")?,
     })
 }
 
-pub(super) fn modify_json(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn modify_json(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     let value_text = json_parameter(values, "value")?;
     let value = serde_json::from_str(value_text).map_err(|error| {
         parameter_error("value", format!("参数 value 必须包含合法 JSON：{error}"))
     })?;
     Ok((
         MessageStage::Request,
-        RuleAction::SetJsonField {
+        HttpAction::SetJsonField {
             path: text_parameter(values, "path")?.to_owned(),
             value,
         },
     ))
 }
 
-pub(super) fn drop_response(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn drop_response(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     let mode = if boolean_parameter(values, "close_after_request_write")? {
         DropResponseMode::CloseAfterRequestWrite
     } else {
@@ -56,56 +56,56 @@ pub(super) fn drop_response(values: &FaultParameters) -> AppResult<(MessageStage
     };
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::DropUpstreamResponse { mode }),
+        HttpAction::Terminal(TerminalAction::DropUpstreamResponse { mode }),
     ))
 }
 
-pub(super) fn connect_timeout(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn connect_timeout(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::UpstreamConnectTimeout {
+        HttpAction::Terminal(TerminalAction::UpstreamConnectTimeout {
             milliseconds: u64_parameter(values, "milliseconds")?,
         }),
     ))
 }
 
-pub(super) fn write_timeout(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn write_timeout(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::UpstreamWriteTimeout {
+        HttpAction::Terminal(TerminalAction::UpstreamWriteTimeout {
             milliseconds: u64_parameter(values, "milliseconds")?,
         }),
     ))
 }
 
-pub(super) fn read_timeout(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn read_timeout(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::UpstreamReadTimeout {
+        HttpAction::Terminal(TerminalAction::UpstreamReadTimeout {
             milliseconds: u64_parameter(values, "milliseconds")?,
         }),
     ))
 }
 
-pub(super) fn custom_status(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn custom_status(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     let status = status_parameter(values)?;
     Ok((
         MessageStage::Response,
-        RuleAction::CustomHttpStatus { status },
+        HttpAction::CustomHttpStatus { status },
     ))
 }
 
 pub(super) fn mock_response(
     values: &FaultParameters,
     body_codec: &dyn BodyCodec,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     let status = status_parameter(values)?;
     let body = json_parameter(values, "body")?;
     serde_json::from_str::<Value>(body)
         .map_err(|error| parameter_error("body", format!("Mock Body 不是合法 JSON：{error}")))?;
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::MockResponse {
+        HttpAction::Terminal(TerminalAction::MockResponse {
             status,
             headers: Vec::new(),
             body_bytes: encode_body(body_codec, body)?,
@@ -116,7 +116,7 @@ pub(super) fn mock_response(
 pub(super) fn invalid_json(
     values: &FaultParameters,
     body_codec: &dyn BodyCodec,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     let body = text_parameter(values, "body")?;
     if serde_json::from_str::<Value>(body).is_ok() {
         return Err(parameter_error(
@@ -126,36 +126,36 @@ pub(super) fn invalid_json(
     }
     Ok((
         MessageStage::Response,
-        RuleAction::Terminal(TerminalAction::InvalidJson {
+        HttpAction::Terminal(TerminalAction::InvalidJson {
             body_bytes: encode_body(body_codec, body)?,
         }),
     ))
 }
 
-pub(super) fn wrong_length(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn wrong_length(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     let delta = integer_parameter(values, "delta")?;
     Ok((
         MessageStage::Response,
-        RuleAction::Terminal(TerminalAction::IncorrectContentLength { delta }),
+        HttpAction::Terminal(TerminalAction::IncorrectContentLength { delta }),
     ))
 }
 
-pub(super) fn truncate(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn truncate(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Response,
-        RuleAction::Terminal(TerminalAction::TruncateResponse {
+        HttpAction::Terminal(TerminalAction::TruncateResponse {
             bytes: u64_parameter(values, "bytes")?,
         }),
     ))
 }
 
-pub(super) fn throttle_upstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn throttle_upstream(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     throttle(values, MessageStage::Request, TrafficDirection::Upstream)
 }
 
 pub(super) fn throttle_downstream(
     values: &FaultParameters,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     throttle(values, MessageStage::Response, TrafficDirection::Downstream)
 }
 
@@ -163,10 +163,10 @@ pub(super) fn throttle(
     values: &FaultParameters,
     stage: MessageStage,
     direction: TrafficDirection,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         stage,
-        RuleAction::Throttle {
+        HttpAction::Throttle {
             bytes_per_second: u64_parameter(values, "bytes_per_second")?,
             chunk_bytes: u64_parameter(values, "chunk_bytes")?,
             direction,
@@ -174,21 +174,21 @@ pub(super) fn throttle(
     ))
 }
 
-pub(super) fn jitter_upstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn jitter_upstream(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     jitter(values, MessageStage::Request)
 }
 
-pub(super) fn jitter_downstream(values: &FaultParameters) -> AppResult<(MessageStage, RuleAction)> {
+pub(super) fn jitter_downstream(values: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     jitter(values, MessageStage::Response)
 }
 
 pub(super) fn jitter(
     values: &FaultParameters,
     stage: MessageStage,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         stage,
-        RuleAction::Jitter {
+        HttpAction::Jitter {
             minimum_milliseconds: u64_parameter(values, "minimum_milliseconds")?,
             maximum_milliseconds: u64_parameter(values, "maximum_milliseconds")?,
             scope: if boolean_parameter(values, "per_chunk")? {
@@ -202,13 +202,13 @@ pub(super) fn jitter(
 
 pub(super) fn intermittent_upstream(
     values: &FaultParameters,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     intermittent(values, MessageStage::Request, TrafficDirection::Upstream)
 }
 
 pub(super) fn intermittent_downstream(
     values: &FaultParameters,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     intermittent(values, MessageStage::Response, TrafficDirection::Downstream)
 }
 
@@ -216,10 +216,10 @@ pub(super) fn intermittent(
     values: &FaultParameters,
     stage: MessageStage,
     direction: TrafficDirection,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         stage,
-        RuleAction::Intermittent {
+        HttpAction::Intermittent {
             available_milliseconds: u64_parameter(values, "available_milliseconds")?,
             blocked_milliseconds: u64_parameter(values, "blocked_milliseconds")?,
             direction,
@@ -229,10 +229,10 @@ pub(super) fn intermittent(
 
 pub(super) fn disconnect_upstream_mid_body(
     values: &FaultParameters,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,
-        RuleAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
+        HttpAction::Terminal(TerminalAction::DisconnectDuringUpstreamWrite {
             after_bytes: u64_parameter(values, "after_bytes")?,
         }),
     ))
@@ -240,10 +240,10 @@ pub(super) fn disconnect_upstream_mid_body(
 
 pub(super) fn disconnect_downstream_mid_body(
     values: &FaultParameters,
-) -> AppResult<(MessageStage, RuleAction)> {
+) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Response,
-        RuleAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
+        HttpAction::Terminal(TerminalAction::DisconnectDuringDownstreamWrite {
             after_bytes: u64_parameter(values, "after_bytes")?,
         }),
     ))

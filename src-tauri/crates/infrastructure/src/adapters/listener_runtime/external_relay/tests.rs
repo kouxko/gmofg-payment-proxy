@@ -4,7 +4,7 @@ use std::sync::Arc;
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    Document, DocumentAction, DocumentValue, ErrorCode, JsonPointer, ListenerId,
+    Document, DocumentValue, ErrorCode, JsonPointer, ListenerId, ProtocolDocumentOperation,
     ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
     SocketTopology,
 };
@@ -308,7 +308,7 @@ fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactor
         package.clone(),
         ProtocolRuleStage::ProxyToUpstream,
         Vec::new(),
-        vec![DocumentAction::SetField {
+        vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property("amount"),
             value: DocumentValue::integer(42).unwrap(),
         }],
@@ -327,13 +327,7 @@ fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactor
         )
     };
     ProtocolDocumentRuleConnectionFactory::new(
-        program(ProtocolRuleStage::AppToProxy, upstream.clone(), Vec::new()),
         program(ProtocolRuleStage::ProxyToUpstream, upstream, vec![rule]),
-        program(
-            ProtocolRuleStage::UpstreamToProxy,
-            downstream.clone(),
-            Vec::new(),
-        ),
         program(ProtocolRuleStage::ProxyToApp, downstream, Vec::new()),
     )
     .unwrap()

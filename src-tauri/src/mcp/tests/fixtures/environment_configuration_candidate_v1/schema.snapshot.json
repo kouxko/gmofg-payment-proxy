@@ -1281,9 +1281,7 @@
               },
               "stage": {
                 "enum": [
-                  "app_to_proxy",
                   "proxy_to_upstream",
-                  "upstream_to_proxy",
                   "proxy_to_app",
                   "tls_handshake"
                 ]
@@ -2508,9 +2506,7 @@
               },
               "stage": {
                 "enum": [
-                  "app_to_proxy",
                   "proxy_to_upstream",
-                  "upstream_to_proxy",
                   "proxy_to_app"
                 ]
               },

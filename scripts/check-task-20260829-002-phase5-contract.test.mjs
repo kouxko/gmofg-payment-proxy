@@ -55,7 +55,7 @@ for (const [name, file, mutate, message] of [
   ["flat condition owner", "src-tauri/crates/domain/src/unified_rule.rs", (s) => `${s}\npub struct Bad { pub conditions: Vec<MatchCondition> }\n`, "flat condition owner"],
   ["parallel action owner", "src-tauri/crates/domain/src/unified_rule.rs", (s) => `${s}\npub struct Bad { pub actions: Vec<RuleAction> }\n`, "parallel action owner"],
   ["ignored test", "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs", (s) => s.replace("#[test]", "#[test]\n#[ignore]"), "ignored"],
-  ["stale allowlist", "src-tauri/crates/domain/src/rule/types.rs", () => "", "stale Phase12 allowlist"],
+  ["restored allowlist", "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/contract-inventory.json", (source) => source.replace('"phase12_legacy_owner_allowlist": []', '"phase12_legacy_owner_allowlist": [{"file":"x.rs","symbol":"RuleAction","reason":"legacy"}]'), "allowlist must be empty"],
 ]) {
   test(`fails closed for ${name}`, () => {
     const target = sandbox();
@@ -82,7 +82,7 @@ for (const [name, mutate, message] of [
   ), "created_order"],
   ["second serde wire owner", append(
     "src-tauri/crates/domain/src/unified_rule_execution.rs",
-    "\n#[derive(Serialize, Deserialize, Type)]\n#[serde(tag = \"source\", content = \"value\", rename_all = \"snake_case\")]\npub enum ShadowUnifiedAction { RecordMatch, Document(DocumentMutation), Http(RuleAction), Terminal(TerminalAction) }\n",
+    "\n#[derive(Serialize, Deserialize, Type)]\n#[serde(tag = \"source\", content = \"value\", rename_all = \"snake_case\")]\npub enum ShadowUnifiedAction { RecordMatch, Document(DocumentMutation), Http(HttpAction), Terminal(TerminalAction) }\n",
   ), "second unified wire owner"],
   ["generated extra variant", (target) => {
     const filePath = path.join(target, "src/generated/rust-types.ts");
@@ -91,10 +91,10 @@ for (const [name, mutate, message] of [
       '{ source: "terminal"; value: TerminalAction } |\n{ source: "legacy_extra" };',
     ));
   }, "generated semantic drift"],
-  ["extra legacy owner inside an allowlisted file", append(
+  ["restored legacy owner", append(
     "src-tauri/crates/domain/src/rule/types.rs",
     "\n#[derive(Clone)]\npub enum RuleAction { Shadow }\n",
-  ), "legacy owner count"],
+  ), "legacy owner remains"],
   ["comment-only Rust test count", (target) => {
     const filePath = path.join(target, "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs");
     fs.writeFileSync(filePath, `/*

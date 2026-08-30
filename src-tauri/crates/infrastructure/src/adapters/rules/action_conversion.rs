@@ -1,28 +1,28 @@
 use super::{
     AppRuleAction, AppRuleDropResponseMode, AppRuleJitterScope, AppRuleTerminalAction,
-    AppRuleTrafficDirection, DropResponseMode, JitterScope, RuleAction, TerminalAction,
+    AppRuleTrafficDirection, DropResponseMode, HttpAction, JitterScope, TerminalAction,
     TrafficDirection,
 };
 
-pub(crate) fn action_to_domain(action: &AppRuleAction) -> Result<RuleAction, serde_json::Error> {
+pub(crate) fn action_to_domain(action: &AppRuleAction) -> Result<HttpAction, serde_json::Error> {
     Ok(match action {
-        AppRuleAction::SetJsonField { path, value_json } => RuleAction::SetJsonField {
+        AppRuleAction::SetJsonField { path, value_json } => HttpAction::SetJsonField {
             path: path.clone(),
             value: serde_json::from_str(value_json)?,
         },
-        AppRuleAction::ReplaceBodyText { text } => RuleAction::ReplaceBodyText(text.clone()),
-        AppRuleAction::SetHeader { name, value } => RuleAction::SetHeader {
+        AppRuleAction::ReplaceBodyText { text } => HttpAction::ReplaceBodyText(text.clone()),
+        AppRuleAction::SetHeader { name, value } => HttpAction::SetHeader {
             name: name.clone(),
             value: value.clone(),
         },
-        AppRuleAction::Delay { milliseconds } => RuleAction::Delay {
+        AppRuleAction::Delay { milliseconds } => HttpAction::Delay {
             milliseconds: *milliseconds,
         },
         AppRuleAction::Jitter {
             minimum_milliseconds,
             maximum_milliseconds,
             scope,
-        } => RuleAction::Jitter {
+        } => HttpAction::Jitter {
             minimum_milliseconds: *minimum_milliseconds,
             maximum_milliseconds: *maximum_milliseconds,
             scope: match scope {
@@ -34,7 +34,7 @@ pub(crate) fn action_to_domain(action: &AppRuleAction) -> Result<RuleAction, ser
             bytes_per_second,
             chunk_bytes,
             direction,
-        } => RuleAction::Throttle {
+        } => HttpAction::Throttle {
             bytes_per_second: *bytes_per_second,
             chunk_bytes: *chunk_bytes,
             direction: traffic_direction_to_domain(*direction),
@@ -43,17 +43,17 @@ pub(crate) fn action_to_domain(action: &AppRuleAction) -> Result<RuleAction, ser
             available_milliseconds,
             blocked_milliseconds,
             direction,
-        } => RuleAction::Intermittent {
+        } => HttpAction::Intermittent {
             available_milliseconds: *available_milliseconds,
             blocked_milliseconds: *blocked_milliseconds,
             direction: traffic_direction_to_domain(*direction),
         },
-        AppRuleAction::Pause => RuleAction::Pause,
+        AppRuleAction::Pause => HttpAction::Pause,
         AppRuleAction::CustomHttpStatus { status } => {
-            RuleAction::CustomHttpStatus { status: *status }
+            HttpAction::CustomHttpStatus { status: *status }
         }
         AppRuleAction::Terminal { action } => {
-            RuleAction::Terminal(terminal_action_to_domain(action))
+            HttpAction::Terminal(terminal_action_to_domain(action))
         }
     })
 }
@@ -120,21 +120,21 @@ fn terminal_action_to_domain(action: &AppRuleTerminalAction) -> TerminalAction {
     }
 }
 
-pub(crate) fn action_to_app(action: &RuleAction) -> Result<AppRuleAction, serde_json::Error> {
+pub(crate) fn action_to_app(action: &HttpAction) -> Result<AppRuleAction, serde_json::Error> {
     Ok(match action {
-        RuleAction::SetJsonField { path, value } => AppRuleAction::SetJsonField {
+        HttpAction::SetJsonField { path, value } => AppRuleAction::SetJsonField {
             path: path.clone(),
             value_json: serde_json::to_string(value)?,
         },
-        RuleAction::ReplaceBodyText(text) => AppRuleAction::ReplaceBodyText { text: text.clone() },
-        RuleAction::SetHeader { name, value } => AppRuleAction::SetHeader {
+        HttpAction::ReplaceBodyText(text) => AppRuleAction::ReplaceBodyText { text: text.clone() },
+        HttpAction::SetHeader { name, value } => AppRuleAction::SetHeader {
             name: name.clone(),
             value: value.clone(),
         },
-        RuleAction::Delay { milliseconds } => AppRuleAction::Delay {
+        HttpAction::Delay { milliseconds } => AppRuleAction::Delay {
             milliseconds: *milliseconds,
         },
-        RuleAction::Jitter {
+        HttpAction::Jitter {
             minimum_milliseconds,
             maximum_milliseconds,
             scope,
@@ -146,7 +146,7 @@ pub(crate) fn action_to_app(action: &RuleAction) -> Result<AppRuleAction, serde_
                 JitterScope::PerChunk => AppRuleJitterScope::PerChunk,
             },
         },
-        RuleAction::Throttle {
+        HttpAction::Throttle {
             bytes_per_second,
             chunk_bytes,
             direction,
@@ -155,7 +155,7 @@ pub(crate) fn action_to_app(action: &RuleAction) -> Result<AppRuleAction, serde_
             chunk_bytes: *chunk_bytes,
             direction: traffic_direction_to_app(*direction),
         },
-        RuleAction::Intermittent {
+        HttpAction::Intermittent {
             available_milliseconds,
             blocked_milliseconds,
             direction,
@@ -164,11 +164,11 @@ pub(crate) fn action_to_app(action: &RuleAction) -> Result<AppRuleAction, serde_
             blocked_milliseconds: *blocked_milliseconds,
             direction: traffic_direction_to_app(*direction),
         },
-        RuleAction::Pause => AppRuleAction::Pause,
-        RuleAction::CustomHttpStatus { status } => {
+        HttpAction::Pause => AppRuleAction::Pause,
+        HttpAction::CustomHttpStatus { status } => {
             AppRuleAction::CustomHttpStatus { status: *status }
         }
-        RuleAction::Terminal(action) => AppRuleAction::Terminal {
+        HttpAction::Terminal(action) => AppRuleAction::Terminal {
             action: terminal_action_to_app(action),
         },
     })
