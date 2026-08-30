@@ -20,6 +20,7 @@ use specta::Type;
 use uuid::Uuid;
 
 mod listener_model;
+mod runtime_projection;
 mod socket_topology;
 mod unified_projection;
 mod validation;
@@ -27,9 +28,9 @@ mod validation;
 pub use listener_model::*;
 pub use socket_topology::*;
 use unified_projection::{
-    legacy_http_parts, message_stage_from_rule, restore_document_rule, rule_stage_from_protocol,
-    runtime_priority, unified_http_actions, unified_http_tree, unified_persistence_error,
-    unified_socket_content,
+    actor_owned_socket_conditions, legacy_http_parts, message_stage_from_rule,
+    restore_document_rule, rule_stage_from_protocol, runtime_priority, unified_http_actions,
+    unified_http_tree, unified_persistence_error, unified_socket_content,
 };
 pub use validation::{is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};
@@ -93,70 +94,6 @@ impl Default for ProxyWorkspace {
 }
 
 impl ProxyWorkspace {
-    pub fn http_runtime_rule_execution_order(&self) -> Vec<RuleId> {
-        let mut definitions = self
-            .rule_definitions
-            .iter()
-            .filter(|definition| matches!(definition.content(), RuleContent::Http(_)))
-            .collect::<Vec<_>>();
-        definitions.sort_by_key(|definition| {
-            let (direction, phase) = match definition.stage() {
-                RuleStage::AppToProxy => (0, 0),
-                RuleStage::ProxyToUpstream => (0, 1),
-                RuleStage::UpstreamToProxy => (1, 0),
-                RuleStage::ProxyToApp => (1, 1),
-                RuleStage::TlsHandshake => (2, 0),
-            };
-            (
-                direction,
-                phase,
-                definition.priority(),
-                definition.rule_id(),
-            )
-        });
-        definitions
-            .into_iter()
-            .map(RuleDefinition::rule_id)
-            .collect()
-    }
-
-    pub fn http_runtime_rules(&self) -> Result<Vec<Rule>, DomainError> {
-        let mut rules = Vec::new();
-        for definition in &self.rule_definitions {
-            let RuleContent::Http(content) = definition.content() else {
-                continue;
-            };
-            let (conditions, actions) = legacy_http_parts(content)?;
-            if conditions.is_empty()
-                && content.actions.is_empty()
-                && content.document.is_none()
-                && content.description.is_empty()
-                && !definition.one_shot()
-                && definition.lifecycle().hit_count == 0
-                && definition.lifecycle().last_hit_at.is_none()
-            {
-                continue;
-            }
-            rules.push(Rule {
-                id: definition.rule_id(),
-                revision: definition.revision(),
-                name: definition.name().to_owned(),
-                description: content.description.clone(),
-                enabled: definition.enabled(),
-                priority: runtime_priority(definition.priority())?,
-                created_order: definition.created_order(),
-                channel: Some(ChannelId::new(definition.listener_id().to_string())?),
-                stage: message_stage_from_rule(definition.stage()),
-                conditions,
-                actions,
-                one_shot: definition.one_shot(),
-                hit_count: definition.lifecycle().hit_count,
-                last_hit_at: definition.lifecycle().last_hit_at,
-            });
-        }
-        Ok(rules)
-    }
-
     pub fn replace_http_runtime_rules(&mut self, rules: Vec<Rule>) -> Result<(), DomainError> {
         let mut preserved = self
             .rule_definitions

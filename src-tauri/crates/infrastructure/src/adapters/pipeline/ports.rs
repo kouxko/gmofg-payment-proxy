@@ -281,6 +281,35 @@ impl PipelinePorts for RuntimePipelineAdapter {
         Ok(actions)
     }
 
+    async fn apply_socket_policy(
+        &self,
+        context: &ConnectionContext,
+        direction: intercept_proxy_runtime::SocketPayloadDirection,
+        evaluation: Box<dyn intercept_proxy_runtime::SocketJointEvaluation>,
+    ) -> ProxyResult<intercept_proxy_exchange::SocketContext> {
+        let stage = match direction {
+            intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream
+            | intercept_proxy_runtime::SocketPayloadDirection::LocalExchange => {
+                DomainMessageStage::Request
+            }
+            intercept_proxy_runtime::SocketPayloadDirection::UpstreamToApp => {
+                DomainMessageStage::Response
+            }
+        };
+        let evaluated = self
+            .rule_runtime
+            .evaluate_socket(context, stage, evaluation)
+            .await?;
+        self.rule_runtime
+            .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules);
+        evaluated.prepared_socket.ok_or_else(|| {
+            ProxyError::new(
+                intercept_proxy_runtime::ErrorCode::Internal,
+                "Socket rule transaction did not prepare encoded output",
+            )
+        })
+    }
+
     async fn connection_closed(&self, context: &ConnectionContext, result: &ProxyResult<()>) {
         for summary in self.terminate_connection_breakpoints(context) {
             self.events.publish(

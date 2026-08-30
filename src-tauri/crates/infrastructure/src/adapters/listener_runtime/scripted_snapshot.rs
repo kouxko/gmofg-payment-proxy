@@ -409,12 +409,12 @@ fn validate_rule_direction(
         SocketTopology::LocalResponder(_)
             if !matches!(
                 rule.stage(),
-                ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToApp
+                ProtocolRuleStage::ProxyToUpstream | ProtocolRuleStage::ProxyToApp
             ) =>
         {
             Err(AppError::new(
                 "PROTOCOL_RULE_DIRECTION_INVALID",
-                "本机应答运行快照只接受“应用 → 代理”和“代理 → 应用”规则。",
+                "本机应答运行快照只接受两个统一代理写出阶段。",
             )
             .entity(rule.rule_id().to_string()))
         }

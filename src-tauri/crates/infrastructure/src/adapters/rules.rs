@@ -335,8 +335,8 @@ impl RuleRepositoryAdapter {
                 Ok(RuleRuntimeSnapshot::with_collection_identity_and_order(
                     Some(workspace.id.as_uuid()),
                     workspace.revision.get(),
-                    workspace.http_runtime_rules()?,
-                    workspace.http_runtime_rule_execution_order(),
+                    workspace.runtime_rules()?,
+                    workspace.runtime_rule_execution_order(),
                 ))
             })
             .await
@@ -361,7 +361,7 @@ impl RuleRepositoryAdapter {
                     AppError::new("REVISION_CONFLICT", "规则运行快照缺少 Workspace 标识。")
                 })?;
                 let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
-                let current_rules = workspace.http_runtime_rules()?;
+                let current_rules = workspace.runtime_rules()?;
                 if snapshot.collection_id != Some(workspace.id.as_uuid())
                     || workspace.revision.get() != snapshot.collection_revision
                     || RuleSetSignature::from_rules(&current_rules) != snapshot.signature
@@ -371,7 +371,8 @@ impl RuleRepositoryAdapter {
                         "Workspace 或规则集合已在运行快照之后发生变化。",
                     ));
                 }
-                workspace.replace_http_runtime_rules(apply_runtime_deltas(&snapshot, &deltas)?)?;
+                workspace
+                    .replace_runtime_rule_lifecycle(apply_runtime_deltas(&snapshot, &deltas)?)?;
                 let expected_revision = workspace.revision.get();
                 Ok(
                     Self::save_workspace_to(store, workspace, expected_revision)?
@@ -387,13 +388,11 @@ impl RuleRepositoryAdapter {
             .execute(move |store| {
                 let mut workspace = Self::load_workspace_by_id_from(store, collection_id)?;
                 let expected_revision = workspace.revision.get();
-                let mut rules = workspace.http_runtime_rules()?;
-                for rule in &mut rules {
-                    rule.hit_count = 0;
-                    rule.last_hit_at = None;
+                if workspace.reset_runtime_rule_hit_metadata()? {
+                    Self::save_workspace_to(store, workspace, expected_revision).map(|_| ())
+                } else {
+                    Ok(())
                 }
-                workspace.replace_http_runtime_rules(rules)?;
-                Self::save_workspace_to(store, workspace, expected_revision).map(|_| ())
             })
             .await
     }

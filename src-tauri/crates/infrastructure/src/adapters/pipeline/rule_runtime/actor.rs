@@ -9,7 +9,8 @@ use intercept_proxy_domain::{
     MatchContext, MessageStage, NthCounterAdvance, NthCounterSnapshot, RuleEngine,
     RuleRuntimeSnapshot, RuntimeEpoch,
 };
-use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult};
+use intercept_proxy_exchange::SocketContext;
+use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult, SocketJointEvaluation};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -36,6 +37,7 @@ pub(super) struct EvaluationInput {
     pub(super) json: Option<serde_json::Value>,
     pub(super) target: Option<String>,
     pub(super) joint_document: Option<JointDocumentEvaluation>,
+    pub(super) socket_joint: Option<Box<dyn SocketJointEvaluation>>,
     pub(super) message: Option<intercept_proxy_runtime::Message>,
     pub(super) body_codec: Option<Arc<dyn intercept_proxy_product_api::BodyCodec>>,
 }
@@ -135,22 +137,15 @@ async fn evaluate_owned(
         json_body: input.json.as_ref(),
     };
     let execution_order = current.snapshot.execution_order.clone();
-    let evaluation = match input.joint_document.as_mut() {
-        Some(joint) => current
-            .engine
-            .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |rule| {
-                joint.gate(rule)
-            })
-            .map_err(|error| app_to_proxy(error.into()))?,
-        None => current
-            .engine
-            .evaluate_with_gate_in_order(&match_context, Utc::now(), &execution_order, |_| {
-                Ok::<_, std::convert::Infallible>(true)
-            })
-            .expect("an infallible rule gate cannot fail"),
-    };
+    let evaluation = evaluate_rules(
+        current,
+        &mut input.joint_document,
+        &mut input.socket_joint,
+        &match_context,
+        &execution_order,
+    )?;
     let hit_rules = matched_rule_summaries(&evaluation, current.engine.rules(), channel_labels);
-    let (prepared_message, fault_actions, pause) =
+    let (prepared_message, prepared_socket, fault_actions, pause) =
         match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -210,9 +205,41 @@ async fn evaluate_owned(
         matched_ids,
         hit_rules,
         prepared_message,
+        prepared_socket,
         fault_actions,
         pause,
     })
+}
+
+fn evaluate_rules(
+    current: &mut RuleRuntime,
+    joint_document: &mut Option<JointDocumentEvaluation>,
+    socket_joint: &mut Option<Box<dyn SocketJointEvaluation>>,
+    match_context: &MatchContext<'_>,
+    execution_order: &[intercept_proxy_domain::RuleId],
+) -> ProxyResult<intercept_proxy_domain::RuleEvaluation> {
+    let evaluation = match (joint_document.as_mut(), socket_joint.as_mut()) {
+        (Some(joint), None) => current
+            .engine
+            .evaluate_with_gate_in_order(match_context, Utc::now(), execution_order, |rule| {
+                joint.gate(rule)
+            })
+            .map_err(|error| app_to_proxy(error.into()))?,
+        (None, Some(joint)) => current.engine.evaluate_with_gate_in_order(
+            match_context,
+            Utc::now(),
+            execution_order,
+            |rule| joint.gate(rule.id.as_uuid()),
+        )?,
+        (None, None) => current
+            .engine
+            .evaluate_with_gate_in_order(match_context, Utc::now(), execution_order, |_| {
+                Ok::<_, std::convert::Infallible>(true)
+            })
+            .expect("an infallible rule gate cannot fail"),
+        (Some(_), Some(_)) => unreachable!("one evaluation cannot be both HTTP and Socket"),
+    };
+    Ok(evaluation)
 }
 
 fn nth_advances(
@@ -258,12 +285,24 @@ async fn prepare_evaluated_message(
     hit_rules: &[intercept_proxy_application::RuleSummaryViewModel],
 ) -> ProxyResult<(
     Option<intercept_proxy_runtime::Message>,
+    Option<SocketContext>,
     Vec<intercept_proxy_runtime::FaultAction>,
     bool,
 )> {
     let mut prepared_message = input.message.clone();
     let Some(message) = prepared_message.as_mut() else {
-        return Ok((prepared_message, Vec::new(), false));
+        let prepared_socket = match input.socket_joint.take() {
+            Some(joint) => Some(joint.encode().await.map_err(|error| {
+                let mut mapped = intercept_proxy_runtime::ProxyError::new(
+                    intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
+                    error.message,
+                );
+                mapped.external_package_call = error.external_package_call;
+                mapped
+            })?),
+            None => None,
+        };
+        return Ok((prepared_message, prepared_socket, Vec::new(), false));
     };
     if let Some(joint) = input.joint_document.take() {
         joint.encode_into(message).await.map_err(|error| {
@@ -289,7 +328,7 @@ async fn prepare_evaluated_message(
         &evaluation.composed_actions,
         seed,
     )?;
-    Ok((prepared_message, fault_actions, pause))
+    Ok((prepared_message, None, fault_actions, pause))
 }
 
 async fn prepare_runtime(

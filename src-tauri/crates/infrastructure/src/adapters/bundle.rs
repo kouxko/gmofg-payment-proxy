@@ -222,32 +222,18 @@ impl InfrastructureServiceBundle {
         breakpoints: Arc<BreakpointCoordinator>,
         events: Arc<EventHub>,
     ) {
-        let channel_labels = product
-            .channels()
-            .iter()
-            .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
-            .collect::<BTreeMap<_, _>>();
-        let pipeline = Arc::new(
-            RuntimePipelineAdapter::new(
-                RuntimePipelineProductHooks {
-                    body_codec: product.body_codec(),
-                    request_classifier: product.request_classifier(),
-                    channel_labels,
-                },
-                self.rules.clone(),
-                self.sessions.clone(),
+        configure_listener_runtime_pipeline(
+            &self.listener_runtime,
+            ListenerRuntimePipelineAssembly {
+                product,
+                rules: self.rules.clone(),
+                sessions: self.sessions.clone(),
                 breakpoints,
-                events.clone(),
-                self.capture.clone(),
-            )
-            .with_body_codec_resolver(self.workspace_body_codecs.clone())
-            .with_joint_http_rules(self.listener_runtime.joint_http_rules()),
+                events: events.clone(),
+                capture: self.capture.clone(),
+                workspace_body_codecs: self.workspace_body_codecs.clone(),
+            },
         );
-        self.listener_runtime
-            .set_body_codec_resolver(self.workspace_body_codecs.clone());
-        self.listener_runtime.set_pipeline_ports(pipeline);
-        self.listener_runtime
-            .set_socket_diagnostic_events(events.clone());
         self.external_packages.set_event_hub(events);
     }
 
@@ -420,6 +406,51 @@ impl InfrastructureServiceBundle {
             self.protected_secrets,
         ))
     }
+}
+
+/// Installs the single production pipeline used by HTTP and Socket listeners.
+///
+/// The desktop composition root and production-shape runtime fixtures share this boundary so an
+/// external package listener cannot be constructed with a different or incomplete pipeline.
+pub(crate) struct ListenerRuntimePipelineAssembly<'a> {
+    pub(crate) product: &'a dyn ProductProfile,
+    pub(crate) rules: Arc<RuleRepositoryAdapter>,
+    pub(crate) sessions: Arc<InMemorySessionStore>,
+    pub(crate) breakpoints: Arc<BreakpointCoordinator>,
+    pub(crate) events: Arc<EventHub>,
+    pub(crate) capture: Arc<CaptureRepositoryAdapter>,
+    pub(crate) workspace_body_codecs: Arc<WorkspaceBodyCodecResolver>,
+}
+
+pub(crate) fn configure_listener_runtime_pipeline(
+    listener_runtime: &ListenerRuntimeAdapter,
+    assembly: ListenerRuntimePipelineAssembly<'_>,
+) {
+    let channel_labels = assembly
+        .product
+        .channels()
+        .iter()
+        .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
+        .collect::<BTreeMap<_, _>>();
+    let pipeline = Arc::new(
+        RuntimePipelineAdapter::new(
+            RuntimePipelineProductHooks {
+                body_codec: assembly.product.body_codec(),
+                request_classifier: assembly.product.request_classifier(),
+                channel_labels,
+            },
+            assembly.rules,
+            assembly.sessions,
+            assembly.breakpoints,
+            assembly.events.clone(),
+            assembly.capture,
+        )
+        .with_body_codec_resolver(assembly.workspace_body_codecs.clone())
+        .with_joint_http_rules(listener_runtime.joint_http_rules()),
+    );
+    listener_runtime.set_body_codec_resolver(assembly.workspace_body_codecs);
+    listener_runtime.set_pipeline_ports(pipeline);
+    listener_runtime.set_socket_diagnostic_events(assembly.events);
 }
 
 fn recoverable_secret_store_error(error: &AppError) -> bool {

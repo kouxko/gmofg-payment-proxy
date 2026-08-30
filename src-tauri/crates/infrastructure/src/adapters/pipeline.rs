@@ -210,11 +210,12 @@ mod metrics;
 mod ports;
 mod session;
 
+pub(crate) use mapping::app_to_proxy;
 #[cfg(test)]
 use mapping::view_to_domain_rule;
 use mapping::{
-    app_channel, app_to_proxy, apply_breakpoint_decision, breakpoint_detail, domain_channel,
-    fingerprint, result_text, result_tone, tls_summary,
+    app_channel, apply_breakpoint_decision, breakpoint_detail, domain_channel, fingerprint,
+    result_text, result_tone, tls_summary,
 };
 
 #[cfg(test)]

@@ -179,7 +179,7 @@ pub(super) fn breakpoint_detail(
     })
 }
 
-pub(super) fn app_to_proxy(error: AppError) -> ProxyError {
+pub(crate) fn app_to_proxy(error: AppError) -> ProxyError {
     if matches!(
         error.view_model.code.as_str(),
         "RESOURCE_EXHAUSTED" | "REVISION_CONFLICT"

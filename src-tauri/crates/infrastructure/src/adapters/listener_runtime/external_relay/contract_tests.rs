@@ -196,7 +196,7 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
 }
 
 #[tokio::test]
-async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
+async fn replace_document_rules_rejects_ingress_stage_for_local_responder() {
     let registration = registration();
     let listener = listener();
     let package = registration.package().identity().clone();
@@ -208,7 +208,7 @@ async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
         1,
         listener.id,
         package,
-        ProtocolRuleStage::ProxyToUpstream,
+        ProtocolRuleStage::AppToProxy,
         vec![DocumentCondition::Equals {
             field: JsonPointer::property("request"),
             value: DocumentValue::String("original".to_owned()),
@@ -241,7 +241,7 @@ async fn replace_document_rules_rejects_relay_only_stage_for_local_responder() {
     assert!(
         snapshot
             .rules
-            .program(ProtocolRuleStage::ProxyToUpstream)
+            .program(ProtocolRuleStage::AppToProxy)
             .rules()
             .is_empty()
     );

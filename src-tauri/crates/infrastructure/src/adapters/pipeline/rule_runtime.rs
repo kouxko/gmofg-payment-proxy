@@ -49,6 +49,7 @@ pub(super) struct EvaluatedRules {
     pub(super) matched_ids: Vec<Uuid>,
     pub(super) hit_rules: Vec<RuleSummaryViewModel>,
     pub(super) prepared_message: Option<Message>,
+    pub(super) prepared_socket: Option<intercept_proxy_exchange::SocketContext>,
     pub(super) fault_actions: Vec<intercept_proxy_runtime::FaultAction>,
     pub(super) pause: bool,
 }
@@ -91,10 +92,33 @@ impl RuleRuntimeService {
             target: message
                 .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
             joint_document,
+            socket_joint: None,
             message: message.cloned(),
             body_codec: Some(body_codec),
         };
         self.submit(input, None).await
+    }
+
+    pub(super) async fn evaluate_socket(
+        &self,
+        context: &ConnectionContext,
+        stage: MessageStage,
+        joint: Box<dyn intercept_proxy_runtime::SocketJointEvaluation>,
+    ) -> ProxyResult<EvaluatedRules> {
+        self.submit(
+            EvaluationInput {
+                context: context.clone(),
+                stage,
+                json: None,
+                target: None,
+                joint_document: None,
+                socket_joint: Some(joint),
+                message: None,
+                body_codec: None,
+            },
+            None,
+        )
+        .await
     }
 
     #[cfg(test)]
@@ -113,6 +137,7 @@ impl RuleRuntimeService {
             target: message
                 .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
             joint_document: None,
+            socket_joint: None,
             message: None,
             body_codec: None,
         };
@@ -154,6 +179,7 @@ impl RuleRuntimeService {
                     json: None,
                     target: None,
                     joint_document: None,
+                    socket_joint: None,
                     message: None,
                     body_codec: None,
                 }),

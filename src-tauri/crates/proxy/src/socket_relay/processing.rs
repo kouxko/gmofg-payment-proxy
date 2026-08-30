@@ -1,9 +1,10 @@
 use std::fmt::{Debug, Formatter};
 use std::net::SocketAddr;
 
+use async_trait::async_trait;
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Downstream, Encode, ExternalPackageCallFailure, Frame, Rules,
-    Socket, Upstream,
+    Decode, Direction, Display, Downstream, Encode, Error, ExternalPackageCallFailure, Frame,
+    Rules, Socket, SocketContext, Upstream,
 };
 use uuid::Uuid;
 
@@ -20,6 +21,16 @@ pub enum SocketPayloadDirection {
     UpstreamToApp,
     /// App request 由本机处理并向同一连接写回 response。
     LocalExchange,
+}
+
+/// 一次 Socket Document 与 Encode 的联合事务输入。
+///
+/// 具体协议包、原始字节和规则 Program 由 Infrastructure 持有；Proxy/Application 边界只负责让
+/// 统一规则 actor 在持久化生命周期前完成 gate 与 Encode。
+#[async_trait]
+pub trait SocketJointEvaluation: Send + Sync {
+    fn gate(&mut self, rule_id: Uuid) -> crate::Result<bool>;
+    async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
 }
 
 /// Factory 创建连接级 processor 时收到的稳定、无 payload 身份信息。

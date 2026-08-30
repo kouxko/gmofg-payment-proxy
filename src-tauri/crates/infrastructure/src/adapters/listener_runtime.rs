@@ -42,7 +42,8 @@ use super::ProtocolPackageRepositoryAdapter;
 use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
-pub(super) use http_protocol_pipeline::{JointDocumentEvaluation, JointHttpRuleRuntime};
+mod joint_document;
+pub(super) use joint_document::{JointDocumentEvaluation, JointHttpRuleRuntime};
 
 /// 读取当前安装实例在证书管理页签发的服务端叶子证书。
 ///

@@ -11,7 +11,7 @@ use parking_lot::Mutex;
 
 use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
 
-pub(super) type SharedExecutor = Arc<Mutex<ProtocolDirectionExecutor>>;
+pub(crate) type SharedExecutor = Arc<Mutex<ProtocolDirectionExecutor>>;
 
 pub(super) fn build_capabilities<D: Direction>(
     runtime: Arc<JointHttpRuleRuntime>,
@@ -156,7 +156,7 @@ impl Rules for HttpDocumentRules {
     }
 }
 
-pub(super) async fn run_stage<T: Send + 'static>(
+pub(crate) async fn run_stage<T: Send + 'static>(
     stage: impl FnOnce() -> Result<T, ProtocolRuntimeError> + Send + 'static,
 ) -> Result<T, Error> {
     tokio::task::spawn_blocking(stage)

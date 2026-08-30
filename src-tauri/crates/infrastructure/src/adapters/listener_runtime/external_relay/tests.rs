@@ -156,10 +156,14 @@ async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
     );
 }
 
+#[path = "tests/production_joint.rs"]
+mod production_joint;
+
 #[derive(Debug, Default)]
 struct FakeExternalRpc {
     calls: Mutex<Vec<&'static str>>,
     encoded_document: Mutex<Option<Document>>,
+    fail_encode: bool,
 }
 
 impl FakeExternalRpc {
@@ -203,6 +207,17 @@ impl ExternalPackageRpc for FakeExternalRpc {
             ProtocolDirection::Upstream => "hooks.upstream.encode",
             ProtocolDirection::Downstream => "hooks.downstream.encode",
         });
+        if self.fail_encode {
+            return Err(PackageTransportError::Remote {
+                request_id: "phase11-encode-1".into(),
+                method: "hooks.upstream.encode",
+                error: PackageRpcError::new(
+                    -32_411,
+                    "encode rejected",
+                    ErrorCode::BodyEncodeFailed,
+                ),
+            });
+        }
         *self.encoded_document.lock() = Some(request.document.clone());
         Ok("ZW5jb2RlZA==".to_owned())
     }
@@ -284,7 +299,7 @@ fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactor
         .unwrap()
         .clone();
     let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
-        ProtocolDocumentRuleId::new(),
+        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(44)),
         "set amount".to_owned(),
         true,
         10,

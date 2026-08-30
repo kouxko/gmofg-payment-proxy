@@ -6,18 +6,25 @@ use async_trait::async_trait;
 use intercept_proxy_application::ExternalPackageCallStage;
 use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, Encode, Error, ExternalPackageCallFailure,
-    ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Rules,
-    Socket, SocketContext,
+    Decode, Direction, Display, Document, Error, ExternalPackageCallFailure,
+    ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Socket,
+    SocketContext,
 };
+#[cfg(test)]
+use intercept_proxy_exchange::{Encode, Rules};
+#[cfg(test)]
+use intercept_proxy_package_contract::EncodeParams;
 use intercept_proxy_package_contract::{
-    CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams,
-    FrameResult as PackageFrameResult,
+    CanonicalBase64, DecodeParams, DisplayParams, FrameParams, FrameResult as PackageFrameResult,
 };
 use intercept_proxy_runtime::{SocketConnectionIdentity, SocketProcessingFailureKind};
+use parking_lot::Mutex;
 
+use super::joint_socket::ExternalSocketObserved;
 use super::{ExternalPackageRpc, trace_external_rpc_failure};
-use crate::adapters::{PackageTransportError, listener_runtime::ProtocolDocumentRuleConnection};
+use crate::adapters::PackageTransportError;
+#[cfg(test)]
+use crate::adapters::listener_runtime::ProtocolDocumentRuleConnection;
 
 macro_rules! capability {
     ($name:ident $(<$d:ident>)?) => {
@@ -33,9 +40,19 @@ macro_rules! capability {
 }
 
 capability!(ExternalFrame<D>);
-capability!(ExternalDecode<D>);
 capability!(ExternalDisplay);
+#[cfg(test)]
 capability!(ExternalEncode<D>);
+
+pub(super) struct ExternalDecode<D: Direction> {
+    rpc: Arc<dyn ExternalPackageRpc>,
+    method: &'static str,
+    package: ProtocolPackageRef,
+    connection: SocketConnectionIdentity,
+    direction: ProtocolDirection,
+    observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
+    marker: std::marker::PhantomData<fn() -> D>,
+}
 
 impl<D: Direction> ExternalFrame<D> {
     pub(super) fn new(
@@ -88,6 +105,7 @@ impl<D: Direction> ExternalDecode<D> {
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
+        observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     ) -> Self {
         Self {
             rpc,
@@ -95,6 +113,7 @@ impl<D: Direction> ExternalDecode<D> {
             package,
             connection,
             direction,
+            observed,
             marker: std::marker::PhantomData,
         }
     }
@@ -117,6 +136,10 @@ impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
             .map_err(|error| {
                 rpc_error::<D>(ExternalCallStage::Decode, self.method, &error, self)
             })?;
+        *self.observed.lock() = Some(ExternalSocketObserved {
+            document: response.clone(),
+            input: context.data.clone(),
+        });
         Ok(response)
     }
 }
@@ -156,12 +179,14 @@ impl Display for ExternalDisplay {
     }
 }
 
+#[cfg(test)]
 pub(super) struct OrderedRules<D: Direction> {
     first: ProtocolDocumentRuleConnection,
     second: ProtocolDocumentRuleConnection,
     marker: std::marker::PhantomData<fn() -> D>,
 }
 
+#[cfg(test)]
 impl<D: Direction> OrderedRules<D> {
     pub(super) fn new(
         first: ProtocolDocumentRuleConnection,
@@ -176,6 +201,7 @@ impl<D: Direction> OrderedRules<D> {
 }
 
 #[async_trait]
+#[cfg(test)]
 impl<D: Direction> Rules for OrderedRules<D> {
     async fn apply(&mut self, document: Document) -> Result<Document, Error> {
         let first = self
@@ -190,6 +216,7 @@ impl<D: Direction> Rules for OrderedRules<D> {
     }
 }
 
+#[cfg(test)]
 impl<D: Direction> ExternalEncode<D> {
     pub(super) fn new(
         rpc: Arc<dyn ExternalPackageRpc>,
@@ -210,6 +237,7 @@ impl<D: Direction> ExternalEncode<D> {
 }
 
 #[async_trait]
+#[cfg(test)]
 impl<D: Direction> Encode<Socket, D> for ExternalEncode<D> {
     async fn encode(
         &mut self,
@@ -262,6 +290,7 @@ macro_rules! diagnostic {
 diagnostic!(ExternalFrame<D>);
 diagnostic!(ExternalDecode<D>);
 diagnostic!(ExternalDisplay);
+#[cfg(test)]
 diagnostic!(ExternalEncode<D>);
 
 #[derive(Clone, Copy)]
@@ -269,6 +298,7 @@ enum ExternalCallStage {
     Frame,
     Decode,
     Display,
+    #[cfg(test)]
     Encode,
 }
 
@@ -278,12 +308,14 @@ impl ExternalCallStage {
             Self::Frame => ExternalPackageCallStage::Frame,
             Self::Decode => ExternalPackageCallStage::Decode,
             Self::Display => ExternalPackageCallStage::Display,
+            #[cfg(test)]
             Self::Encode => ExternalPackageCallStage::Encode,
         }
     }
     const fn failure_kind(self) -> SocketProcessingFailureKind {
         match self {
             Self::Decode => SocketProcessingFailureKind::DecodeFailed,
+            #[cfg(test)]
             Self::Encode => SocketProcessingFailureKind::EncodeFailed,
             Self::Frame | Self::Display => SocketProcessingFailureKind::ProcessingFailed,
         }
@@ -354,6 +386,7 @@ fn rpc_error_inner(
     })
 }
 
+#[cfg(test)]
 fn stage_error<D: Direction>(kind: SocketProcessingFailureKind) -> Error {
     Error::new(format!(
         "{:?}|{}: external package stage failed",

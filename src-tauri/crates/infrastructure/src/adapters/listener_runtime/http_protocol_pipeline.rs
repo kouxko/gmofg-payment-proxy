@@ -39,13 +39,14 @@ use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackage
 use super::{ListenerRuntimeAdapter, external_relay::RuntimeExternalSocketPackageBinding};
 
 mod external_http;
-mod joint_rules;
 #[cfg(test)]
 mod legacy_http;
 mod programs;
+pub(super) use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
 #[cfg(test)]
 pub(super) use external_http::decode_http_body_for_package;
-pub(crate) use joint_rules::{JointDocumentEvaluation, JointHttpRuleRuntime};
+#[cfg(test)]
+pub(super) use legacy_http::{SharedExecutor, run_stage};
 use programs::{HttpDocumentRulePrograms, compile_programs};
 
 /// Listener 启动时冻结的协议包与规则集合。
