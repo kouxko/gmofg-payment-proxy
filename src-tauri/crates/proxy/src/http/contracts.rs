@@ -3,6 +3,8 @@ use super::{
     Method, ProxyError, Result, Uri, Uuid, async_trait,
 };
 use crate::transport::{ConnectionContext, HandshakePolicy, UpstreamSecurityEvidence};
+use crate::{SocketJointEvaluation, SocketPayloadDirection};
+use intercept_proxy_exchange::SocketContext;
 
 /// Application-facing HTTP wire policy and lifecycle hooks.
 ///
@@ -39,6 +41,19 @@ pub trait PipelinePorts: HandshakePolicy {
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(Vec::new())
+    }
+    async fn apply_socket_policy(
+        &self,
+        _context: &ConnectionContext,
+        _direction: SocketPayloadDirection,
+        evaluation: Box<dyn SocketJointEvaluation>,
+    ) -> Result<SocketContext> {
+        evaluation.encode().await.map_err(|error| {
+            let mut mapped =
+                ProxyError::new(crate::ErrorCode::ExternalPackageCallFailed, error.message);
+            mapped.external_package_call = error.external_package_call;
+            mapped
+        })
     }
     async fn connection_closed(&self, _context: &ConnectionContext, _result: &Result<()>) {}
     async fn runtime_fault(&self, _epoch: Uuid, _channel: ChannelId, _error: &ProxyError) {}

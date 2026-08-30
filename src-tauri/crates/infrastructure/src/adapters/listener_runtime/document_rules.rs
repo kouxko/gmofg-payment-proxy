@@ -269,6 +269,23 @@ impl ProtocolDocumentRuleConnectionFactory {
         ProtocolDocumentRuleConnection::new(connection, Arc::clone(&self.programs), stage)
     }
 
+    pub(crate) fn direction_programs(
+        &self,
+        direction: intercept_proxy_domain::ProtocolDirection,
+    ) -> [Arc<ProtocolDocumentRuleProgram>; 2] {
+        let programs = self.programs.read();
+        match direction {
+            intercept_proxy_domain::ProtocolDirection::Upstream => [
+                Arc::clone(&programs.app_to_proxy),
+                Arc::clone(&programs.proxy_to_upstream),
+            ],
+            intercept_proxy_domain::ProtocolDirection::Downstream => [
+                Arc::clone(&programs.upstream_to_proxy),
+                Arc::clone(&programs.proxy_to_app),
+            ],
+        }
+    }
+
     /// 返回当前指定方向 Program。
     #[cfg(test)]
     pub(crate) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {

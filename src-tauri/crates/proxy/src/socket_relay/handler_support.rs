@@ -60,7 +60,7 @@ pub(super) fn connection_identity(
     peer_addr: SocketAddr,
 ) -> SocketConnectionIdentity {
     SocketConnectionIdentity {
-        runtime_epoch: run.listener_run_epoch,
+        runtime_epoch: run.workspace_runtime_epoch,
         connection_id,
         peer_addr,
     }

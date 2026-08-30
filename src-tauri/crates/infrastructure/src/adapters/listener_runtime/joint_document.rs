@@ -1,19 +1,24 @@
+//! Protocol-neutral joint Document evaluation and lifecycle transaction state.
+
 use std::{collections::HashMap, sync::Arc};
 
+use async_trait::async_trait;
 use intercept_proxy_domain::{
     Document, ProtocolDirection, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
     ProtocolPackageRef, Rule, RuleId,
 };
-use intercept_proxy_exchange::{Error, ExternalPackageCallFailure, ExternalPackageCallStage};
-use intercept_proxy_package_contract::EncodeParams;
+use intercept_proxy_exchange::{
+    Error, ExternalPackageCallFailure, ExternalPackageCallStage, SocketContext,
+};
+use intercept_proxy_package_contract::{CanonicalBase64, EncodeParams};
 use intercept_proxy_product_api::BodyCodec;
-use intercept_proxy_runtime::{ConnectionContext, Message};
+use intercept_proxy_runtime::{ConnectionContext, Message, SocketJointEvaluation};
 use parking_lot::Mutex;
 use uuid::Uuid;
 
-use super::super::external_relay::ExternalPackageRpc;
+use super::external_relay::ExternalPackageRpc;
 #[cfg(test)]
-use super::legacy_http::{SharedExecutor, run_stage};
+use super::http_protocol_pipeline::{SharedExecutor, run_stage};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PendingKey {
@@ -93,6 +98,12 @@ enum JointDocumentEncoder {
         rpc: Arc<dyn ExternalPackageRpc>,
         direction: ProtocolDirection,
         codec: Arc<dyn BodyCodec>,
+        package: ProtocolPackageRef,
+    },
+    SocketExternal {
+        original_input: Vec<u8>,
+        rpc: Arc<dyn ExternalPackageRpc>,
+        direction: ProtocolDirection,
         package: ProtocolPackageRef,
     },
 }
@@ -178,6 +189,43 @@ impl JointDocumentEvaluation {
         }
     }
 
+    pub(crate) fn new_external_socket(
+        document: Document,
+        original_document: Document,
+        original_input: Vec<u8>,
+        rpc: Arc<dyn ExternalPackageRpc>,
+        direction: ProtocolDirection,
+        package: ProtocolPackageRef,
+        programs: impl IntoIterator<Item = Arc<ProtocolDocumentRuleProgram>>,
+    ) -> Self {
+        let programs = programs
+            .into_iter()
+            .flat_map(|program| {
+                program
+                    .rules()
+                    .iter()
+                    .map(|rule| {
+                        (
+                            RuleId::from_uuid(rule.rule_id().as_uuid()),
+                            Arc::clone(&program),
+                        )
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .collect();
+        Self {
+            document,
+            original_document,
+            encoder: JointDocumentEncoder::SocketExternal {
+                original_input,
+                rpc,
+                direction,
+                package,
+            },
+            programs,
+        }
+    }
+
     pub(crate) fn gate(
         &mut self,
         rule: &Rule,
@@ -238,9 +286,78 @@ impl JointDocumentEvaluation {
                     .encode(&encoded)
                     .map_err(|error| Error::new(format!("{}: {}", error.code, error.message)))?
             }
+            JointDocumentEncoder::SocketExternal { .. } => {
+                return Err(Error::new(
+                    "SOCKET_JOINT_OUTPUT_MISMATCH: Socket evaluation reached HTTP encoder",
+                ));
+            }
         };
         message.replace_body(written.into());
         Ok(())
+    }
+
+    async fn encode_socket(self) -> Result<SocketContext, Error> {
+        let JointDocumentEncoder::SocketExternal {
+            original_input,
+            rpc,
+            direction,
+            package,
+        } = self.encoder
+        else {
+            return Err(Error::new(
+                "HTTP_JOINT_OUTPUT_MISMATCH: HTTP evaluation reached Socket encoder",
+            ));
+        };
+        if self.document == self.original_document {
+            return Ok(SocketContext {
+                data: original_input,
+            });
+        }
+        let encoded = rpc
+            .encode(
+                direction,
+                EncodeParams {
+                    original_input: CanonicalBase64::from_bytes(&original_input)
+                        .as_str()
+                        .to_owned(),
+                    document: self.document,
+                },
+            )
+            .await
+            .map_err(|error| {
+                external_rpc_error(
+                    package,
+                    direction,
+                    ExternalPackageCallStage::Encode,
+                    "hooks.encode",
+                    &error,
+                )
+            })?;
+        let encoded = CanonicalBase64::try_from(encoded).map_err(|_| {
+            Error::new("ENCODE_FAILED: Socket package returned non-canonical Base64")
+        })?;
+        Ok(SocketContext {
+            data: encoded.bytes(),
+        })
+    }
+}
+
+#[async_trait]
+impl SocketJointEvaluation for JointDocumentEvaluation {
+    fn gate(&mut self, rule_id: Uuid) -> intercept_proxy_runtime::Result<bool> {
+        let Some(program) = self.programs.get(&RuleId::from_uuid(rule_id)) else {
+            return Ok(true);
+        };
+        program
+            .apply_rule_if_matches(
+                ProtocolDocumentRuleId::from_uuid(rule_id),
+                &mut self.document,
+            )
+            .map_err(|error| crate::adapters::pipeline::app_to_proxy(error.into()))
+    }
+
+    async fn encode(self: Box<Self>) -> Result<SocketContext, Error> {
+        (*self).encode_socket().await
     }
 }
 

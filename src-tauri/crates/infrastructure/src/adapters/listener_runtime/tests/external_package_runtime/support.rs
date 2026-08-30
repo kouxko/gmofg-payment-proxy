@@ -1,47 +1,59 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, AtomicUsize, Ordering},
-    },
+    path::PathBuf,
+    sync::Arc,
     time::Duration,
 };
 
 use async_trait::async_trait;
-use futures_util::{SinkExt, StreamExt};
+use chrono::Utc;
 use intercept_proxy_application::{
-    AppResult, ExternalPackageApplicationPort, ListenerRuntimePort, ListenerRuntimeState,
-    ProtocolPackageUsageCount, ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
+    AppResult, BreakpointCoordinator, EventHub, ExternalPackageApplicationPort,
+    InMemorySessionStore, ListenerRuntimePort, ListenerRuntimeState, ProtocolPackageUsageCount,
+    ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
 };
 use intercept_proxy_domain::{
     ListenerDataPlane, ListenerId, ProtocolDocumentRuleDefinition, ProtocolPackageRef,
     ProxyListener, ProxyWorkspace, ScriptedSocketProcessing, SocketDownstreamSecurity,
     SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketRelayTopology, SocketTopology,
+    SocketRelaySettings, SocketRelayTopology, SocketTopology, WorkspaceId,
 };
-use intercept_proxy_package_contract::{
-    CanonicalBase64, DecodeParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
-    PackageRegisterNotification,
-};
+use intercept_proxy_package_contract::PackageManifest;
+use intercept_proxy_product_api::{InterceptProxyProfile, ProductProfile};
 use parking_lot::Mutex;
-use serde_json::{Value, json};
-use tokio::{
-    net::TcpListener,
-    sync::{mpsc, oneshot},
-    task::JoinHandle,
-    time::timeout,
-};
-use tokio_tungstenite::{connect_async, tungstenite::Message};
+use serde_json::json;
+use tokio::{net::TcpListener, time::timeout};
 
 use super::super::{test_listener_runtime, *};
 use crate::{
-    ExternalPackageServer, SqliteStore,
+    ExternalPackageServer, SqliteStore, WorkspaceRecord,
     adapters::{
-        ExternalPackageRegistryAdapter, ExternalPackageServerConfig, PackageTransportConfig,
+        CaptureRepositoryAdapter, ExternalPackageRegistryAdapter, ExternalPackageServerConfig,
+        FileSelection, NativeFileDialog, PackageTransportConfig, RuleRepositoryAdapter,
+        WorkspaceBodyCodecResolver,
+        bundle::{ListenerRuntimePipelineAssembly, configure_listener_runtime_pipeline},
+        common::decode_workspace_record,
     },
 };
 
 pub(super) const TEST_TIMEOUT: Duration = Duration::from_secs(5);
+
+#[path = "support/peer.rs"]
+mod peer;
+use peer::TestExternalPeer;
+
+#[derive(Debug)]
+struct RuntimeNoDialog;
+
+impl NativeFileDialog for RuntimeNoDialog {
+    fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
+        Ok(None)
+    }
+
+    fn choose_save_file(&self, _: &str, _: &str) -> AppResult<Option<FileSelection>> {
+        Ok(None)
+    }
+}
 
 #[derive(Debug)]
 struct ListenerUsage {
@@ -88,6 +100,7 @@ pub(super) struct ExternalRuntimeHarness {
     pub(super) runtime: Arc<ListenerRuntimeAdapter>,
     pub(super) registry: Arc<ExternalPackageRegistryAdapter>,
     pub(super) package: ProtocolPackageRef,
+    store: Arc<SqliteStore>,
     server: ExternalPackageServer,
     peer: Option<TestExternalPeer>,
     usage: Arc<ListenerUsage>,
@@ -98,7 +111,25 @@ impl ExternalRuntimeHarness {
         let server_address = reserve_address().await;
         let store = Arc::new(SqliteStore::in_memory().unwrap());
         let runtime = Arc::new(test_listener_runtime(Arc::clone(&store)));
-        let registry = Arc::new(ExternalPackageRegistryAdapter::new(store));
+        let product = InterceptProxyProfile;
+        let sessions = Arc::new(InMemorySessionStore::default());
+        configure_listener_runtime_pipeline(
+            &runtime,
+            ListenerRuntimePipelineAssembly {
+                product: &product,
+                rules: Arc::new(RuleRepositoryAdapter::new(
+                    Arc::clone(&store),
+                    Arc::new(RuntimeNoDialog),
+                    product.channels(),
+                )),
+                sessions: Arc::clone(&sessions),
+                breakpoints: Arc::new(BreakpointCoordinator::default()),
+                events: Arc::new(EventHub::new(16)),
+                capture: Arc::new(CaptureRepositoryAdapter::new(sessions)),
+                workspace_body_codecs: Arc::new(WorkspaceBodyCodecResolver::new()),
+            },
+        );
+        let registry = Arc::new(ExternalPackageRegistryAdapter::new(Arc::clone(&store)));
         runtime.set_external_package_provider(registry.clone());
         let registration = registration();
         let package = registration.package().identity().clone();
@@ -130,6 +161,7 @@ impl ExternalRuntimeHarness {
             runtime,
             registry,
             package,
+            store,
             server,
             peer: Some(peer),
             usage,
@@ -147,11 +179,29 @@ impl ExternalRuntimeHarness {
             package: self.package.clone(),
         });
         workspace.listeners = vec![listener.clone()];
+        self.store
+            .insert_workspace(&WorkspaceRecord {
+                id: workspace.id.as_uuid(),
+                revision: workspace.revision.get(),
+                value: encode_workspace_record(&workspace).unwrap(),
+                updated_at: Utc::now(),
+            })
+            .unwrap();
         self.runtime.start(workspace, listener).await.unwrap();
     }
 
     pub(super) async fn stop_listener(&self, listener_id: ListenerId) {
         self.runtime.stop(listener_id).await.unwrap();
+    }
+
+    pub(super) fn workspace(&self, workspace_id: WorkspaceId) -> ProxyWorkspace {
+        decode_workspace_record(
+            self.store
+                .load_workspace(workspace_id.as_uuid())
+                .unwrap()
+                .expect("persisted external runtime workspace"),
+        )
+        .unwrap()
     }
 
     pub(super) async fn disconnect_peer(&mut self) {
@@ -207,164 +257,6 @@ impl ExternalRuntimeHarness {
     pub(super) fn peer(&self) -> &TestExternalPeer {
         self.peer.as_ref().unwrap()
     }
-}
-
-pub(super) struct TestExternalPeer {
-    registrations: Arc<AtomicUsize>,
-    invalid_boundary_once: Arc<AtomicBool>,
-    need_more: tokio::sync::Mutex<mpsc::UnboundedReceiver<()>>,
-    close: Option<oneshot::Sender<()>>,
-    task: JoinHandle<()>,
-}
-
-impl TestExternalPeer {
-    fn spawn(address: SocketAddr, registration: PackageManifest) -> Self {
-        let registrations = Arc::new(AtomicUsize::new(0));
-        let invalid_boundary_once = Arc::new(AtomicBool::new(false));
-        let (need_more_tx, need_more_rx) = mpsc::unbounded_channel();
-        let (close_tx, mut close_rx) = oneshot::channel();
-        let task_registrations = Arc::clone(&registrations);
-        let task_invalid_boundary_once = Arc::clone(&invalid_boundary_once);
-        let task = tokio::spawn(async move {
-            let (mut socket, _) = timeout(
-                TEST_TIMEOUT,
-                connect_async(format!("ws://{address}/packages")),
-            )
-            .await
-            .expect("external peer connection deadline")
-            .expect("external peer WebSocket connection");
-            socket
-                .send(Message::Text(
-                    serde_json::to_string(&PackageRegisterNotification::new(registration))
-                        .unwrap()
-                        .into(),
-                ))
-                .await
-                .unwrap();
-            task_registrations.fetch_add(1, Ordering::AcqRel);
-            loop {
-                tokio::select! {
-                    _ = &mut close_rx => {
-                        socket.close(None).await.unwrap();
-                        break;
-                    }
-                    incoming = socket.next() => {
-                        let Some(incoming) = incoming else { break };
-                        match incoming.unwrap() {
-                            Message::Text(text) => respond(
-                                &mut socket,
-                                &task_invalid_boundary_once,
-                                &need_more_tx,
-                                &text,
-                            ).await,
-                            Message::Ping(payload) => socket.send(Message::Pong(payload)).await.unwrap(),
-                            Message::Close(_) => break,
-                            Message::Pong(_) => {}
-                            other => panic!("unexpected WebSocket message: {other:?}"),
-                        }
-                    }
-                }
-            }
-        });
-        Self {
-            registrations,
-            invalid_boundary_once,
-            need_more: tokio::sync::Mutex::new(need_more_rx),
-            close: Some(close_tx),
-            task,
-        }
-    }
-
-    pub(super) fn registration_count(&self) -> usize {
-        self.registrations.load(Ordering::Acquire)
-    }
-
-    pub(super) fn return_oversized_frame_boundary_once(&self) {
-        self.invalid_boundary_once.store(true, Ordering::Release);
-    }
-
-    pub(super) async fn wait_for_need_more(&self) {
-        timeout(TEST_TIMEOUT, self.need_more.lock().await.recv())
-            .await
-            .expect("frame NeedMore observation deadline")
-            .expect("frame NeedMore observation");
-    }
-
-    async fn close(mut self) {
-        if let Some(close) = self.close.take() {
-            let _ = close.send(());
-        }
-        timeout(TEST_TIMEOUT, self.task)
-            .await
-            .expect("external peer close deadline")
-            .expect("external peer task");
-    }
-}
-
-async fn respond<S>(
-    socket: &mut tokio_tungstenite::WebSocketStream<S>,
-    invalid_boundary_once: &AtomicBool,
-    need_more: &mpsc::UnboundedSender<()>,
-    text: &str,
-) where
-    S: tokio::io::AsyncRead + tokio::io::AsyncWrite + Unpin,
-{
-    let request: Value = serde_json::from_str(text).unwrap();
-    let method = request["method"].as_str().unwrap();
-    let result = match method {
-        "hooks.upstream.frame" | "hooks.downstream.frame" => {
-            let frame: FrameParams = serde_json::from_value(request["params"].clone()).unwrap();
-            let bytes = frame.buffer.bytes();
-            let boundary = if invalid_boundary_once.swap(false, Ordering::AcqRel) {
-                FrameResult::complete(bytes.len() + 1).unwrap()
-            } else if bytes
-                .first()
-                .is_some_and(|length| bytes.len() >= usize::from(*length))
-            {
-                FrameResult::complete(usize::from(bytes[0])).unwrap()
-            } else {
-                let _ = need_more.send(());
-                FrameResult::NeedMore {
-                    required_bytes: bytes.first().copied().map(usize::from),
-                }
-            };
-            serde_json::to_value(boundary).unwrap()
-        }
-        "hooks.upstream.decode" | "hooks.downstream.decode" => {
-            let decoded: DecodeParams = serde_json::from_value(request["params"].clone()).unwrap();
-            let buffer: CanonicalBase64 = decoded.input.try_into().unwrap();
-            json!({"payload": buffer.bytes()})
-        }
-        "hooks.upstream.encode" | "hooks.downstream.encode" => {
-            let encoded: EncodeParams = serde_json::from_value(request["params"].clone()).unwrap();
-            let document = serde_json::to_value(encoded.document).unwrap();
-            let bytes = document["payload"]
-                .as_array()
-                .and_then(|values| {
-                    values
-                        .iter()
-                        .map(|value| {
-                            let value = value.as_f64()?;
-                            #[allow(clippy::cast_possible_truncation, clippy::cast_sign_loss)]
-                            (value.fract() == 0.0 && (0.0..=255.0).contains(&value))
-                                .then_some(value as u8)
-                        })
-                        .collect::<Option<Vec<_>>>()
-                })
-                .unwrap_or_else(|| vec![3, b'O', b'K']);
-            json!(CanonicalBase64::from_bytes(&bytes).as_str())
-        }
-        "document.upstream.display" | "document.downstream.display" => json!("<p>external e2e</p>"),
-        other => panic!("unexpected external method: {other}"),
-    };
-    socket
-        .send(Message::Text(
-            json!({"jsonrpc": "2.0", "id": request["id"], "result": result})
-                .to_string()
-                .into(),
-        ))
-        .await
-        .unwrap();
 }
 
 pub(super) async fn reserve_address() -> SocketAddr {

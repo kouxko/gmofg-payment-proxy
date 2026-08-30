@@ -183,11 +183,13 @@ impl ListenerRuntimePlanBuilder<'_> {
             )
         })?;
         let observer = self.socket_observer(listener, socket)?;
+        let pipeline = self.pipeline(listener)?.ports;
         let service = match &socket.topology {
             SocketTopology::Relay(relay) => {
-                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new(
+                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
                     &snapshot,
                     Self::observation_metadata(workspace, listener),
+                    Arc::clone(&pipeline),
                 ));
                 SocketRelayService::build_scripted_with_observer(
                     SocketRelayConfig {
@@ -219,9 +221,10 @@ impl ListenerRuntimePlanBuilder<'_> {
                     )
                     .entity(listener.id.to_string()));
                 };
-                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new(
+                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
                     &snapshot,
                     Self::observation_metadata(workspace, listener),
+                    Arc::clone(&pipeline),
                 ));
                 SocketRelayService::build_local_responder_with_observer(
                     SocketLocalResponderConfig {

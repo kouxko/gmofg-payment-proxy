@@ -1,0 +1,75 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase11-socket-shared-rpc-pipeline",
+  "executed_at": "2026-08-31 03:20:00 +08:00",
+  "completed_at": "2026-08-31 05:23:13 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase10-http-shared-rpc-pipeline",
+    "evidence_path": "docs/testing/evidence/2026-08-31/TASK-20260829-002/phase10-http-shared-rpc-pipeline/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "2ed1b6a",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase11 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "checker_sha256": "80440ad9a925c786575071b7f59f23e8e9071bd492b469600a96ab8b48aa664e",
+    "checker_test_sha256": "1660d41c40b04269357506e1aa02ac1a82112aa855459bbc358750b2fc1cbbca",
+    "joint_socket_sha256": "16dc6095509a41ec9e072d909aa4f9c98fcf21c43d6c03e26e6e9df347a84f80",
+    "joint_document_sha256": "7cbc18f4cadb5e82a2171e221b5d07120f527c11eff0c7960e978081d5c1e051",
+    "joint_actor_sha256": "4705cf3d229647201eaa5d6a2c124ef7964cf3636a8a60570c21d6c9c4c499a5",
+    "actor_test_sha256": "c3cd003d3baf64c7ab2650d973cf2abe9c692522a17a7cbccfcffd51954511b6",
+    "generated_bindings_sha256": "f619221b47387b0aa53a5dbf4c939df2e24a6e8297c6e10c75badf98957eaa07",
+    "runtime_projection_sha256": "9dfd167a38f551d3a63a96970268215155da960124b3121c070e4e43954b562e",
+    "unified_projection_sha256": "980cd47ed536fda142f467694a688ee543d707abe1f9b2102e237765cd7f4200",
+    "rule_repository_sha256": "6de49bd8492b2683c33cdf04e9142383f5dadea94f654b892255aad9a05cd225",
+    "production_bundle_sha256": "6264e8aa7451862e9f0815e874562049e6be8e76c4f9f7df50f3673e77faae6d",
+    "socket_handler_sha256": "13b5ce3a3cb717788bdbd85924ee3c95ae43bfd3dcd7a9a1d788eab1f484020e",
+    "production_runtime_test_sha256": "d3bf19546d4eb4564cb42f631e839657d3f844c2ea34834832cbaa760843c1e5",
+    "production_runtime_support_sha256": "b5a663a22cabfce2813b977e48e9ccdea432ea8233f4dfe27c93e71e810574d2",
+    "production_runtime_peer_sha256": "d16e0f105088e617a1c40a1c510c87c4a54e3ab5e2b2ceed83711388e4f46694"
+  },
+  "results": {
+    "phase11_checker_mutations_and_control": { "passed": 22, "failed": 0 },
+    "production_joint_focused": { "passed": 3, "failed": 0 },
+    "actor_lifecycle_transaction": { "passed": 1, "failed": 0 },
+    "external_relay_affected": { "passed": 8, "failed": 0 },
+    "exchange_socket_affected": { "passed": 3, "failed": 0 },
+    "production_socket_sqlite_transaction": { "passed": 1, "failed": 0 },
+    "socket_nth_distinct_write_stage_transaction": { "passed": 1, "failed": 0, "stages": ["proxy_to_upstream", "proxy_to_app"] },
+    "domain_affected": { "passed": 87, "failed": 0 },
+    "external_package_runtime_affected": { "passed": 5, "failed": 0 },
+    "local_responder_direction_contract": { "passed": 1, "failed": 0 },
+    "infrastructure_full_repair_run": { "passed": 600, "failed": 2, "repaired_failure": "LocalResponder stale direction assertion; exact rerun PASS", "remaining_failure": "unchanged Android ADB outer-deadline concurrency test; environment/timing blocked" },
+    "frontend_checkpoint": { "passed": 545, "failed": 0, "files": 64 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_lint_typecheck_fmt_clippy_diff": "PASS",
+    "global_checkpoint": "ENVIRONMENT_BLOCKED in unique session 24690 after all preceding gates passed; Tauri lib 129/130 then existing non-loopback MCP HTTP exchange deadline elapsed; later workspace targets NOT_RUN because the && chain stopped"
+  },
+  "not_run": [
+    "workspace targets after the failing Tauri lib target in session 24690",
+    "Infrastructure full rerun after the exact LocalResponder repair",
+    "human-assisted non-loopback network permission action",
+    "real signed macOS app bundle and firewall/system permission prompt E2E",
+    "Phase12 full legacy deletion",
+    "Phase15 complete UI",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "blockers": [
+    "existing non-loopback MCP HTTP exchange environment test timed out in the single final workspace checkpoint",
+    "unchanged Android ADB outer-deadline concurrency test failed in the repair Infrastructure full run",
+    "human-assisted macOS bundle and system permission validation is NOT_RUN"
+  ],
+  "checkpoint_ready": true,
+  "review_status": "VERIFIED_APPROVED",
+  "final_verdict": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED / APPROVED / CHECKPOINT READY",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}

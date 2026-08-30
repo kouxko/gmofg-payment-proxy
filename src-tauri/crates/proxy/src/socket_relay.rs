@@ -29,7 +29,7 @@ pub use observer::{
     SocketRelayRunContext, SocketRelayStage, SocketTlsEvidence, SocketTransportMode,
 };
 pub use processing::{
-    FrameBoundary, SocketConnectionIdentity, SocketDirectionCapabilities,
+    FrameBoundary, SocketConnectionIdentity, SocketDirectionCapabilities, SocketJointEvaluation,
     SocketObservationMetadata, SocketPayloadDirection, SocketPipelineLimits,
     SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,
 };
