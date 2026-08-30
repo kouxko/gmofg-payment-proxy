@@ -161,7 +161,7 @@ async fn scripted_relay_freezes_exact_package_plans_rules_and_limits_then_starts
             .iter()
             .map(|item| (item.priority(), item.created_order()))
             .collect::<Vec<_>>(),
-        vec![(10, 1), (10, 3), (20, 2)]
+        vec![(10, 3), (10, 1), (20, 2)]
     );
     assert_eq!(
         snapshot
@@ -277,7 +277,10 @@ async fn runtime_plan_rejects_rule_value_schema_mismatch_even_when_called_below_
         listener.id,
         snapshot_package(),
         ProtocolDirection::Upstream,
-        Vec::new(),
+        vec![intercept_proxy_domain::DocumentCondition::Equals {
+            field: intercept_proxy_domain::JsonPointer::property("amount"),
+            value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
+        }],
         vec![DocumentAction::SetField {
             field: intercept_proxy_domain::JsonPointer::property("amount"),
             value: intercept_proxy_domain::DocumentValue::String("not-a-number".into()),
@@ -463,14 +466,17 @@ fn rule(
     created_order: u64,
 ) -> ProtocolDocumentRuleDefinition {
     ProtocolDocumentRuleDefinition::new(
-        ProtocolDocumentRuleId::new(),
+        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(u128::from(10 - created_order))),
         true,
         priority,
         created_order,
         listener.id,
         snapshot_package(),
         ProtocolDirection::Upstream,
-        Vec::new(),
+        vec![intercept_proxy_domain::DocumentCondition::Equals {
+            field: intercept_proxy_domain::JsonPointer::property("amount"),
+            value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
+        }],
         vec![DocumentAction::RecordMatch],
     )
     .unwrap()

@@ -1,6 +1,7 @@
 use intercept_proxy_domain::{
-    HttpDocumentRuleContent, HttpRuleContent, ListenerId, Revision, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent,
+    ConditionTree, HttpDocumentRuleContent, HttpRuleContent, ListenerId, Revision, RuleAction,
+    RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent,
+    UnifiedAction,
 };
 
 use super::{
@@ -21,7 +22,7 @@ impl HttpRuleTemplate {
                 "HTTP rule priority is out of range",
             )
         })?;
-        RuleDefinition::restore(
+        let definition = RuleDefinition::restore(
             RuleId::from_uuid(id),
             Revision::INITIAL,
             RuleDefinitionDraft {
@@ -32,13 +33,40 @@ impl HttpRuleTemplate {
                 stage: self.unified_stage(),
                 content: RuleContent::Http(HttpRuleContent {
                     description: self.description.clone(),
-                    conditions: self
-                        .conditions
+                    condition: ConditionTree::All(
+                        self.conditions
+                            .clone()
+                            .into_iter()
+                            .map(Into::into)
+                            .map(|condition| {
+                                intercept_proxy_domain::ConditionTree::Leaf(
+                                    intercept_proxy_domain::Condition::Http { condition },
+                                )
+                            })
+                            .chain(self.document.iter().flat_map(|document| {
+                                match ConditionTree::from_document_conditions(
+                                    document.conditions.clone(),
+                                ) {
+                                    ConditionTree::All(children) => children,
+                                    tree => vec![tree],
+                                }
+                            }))
+                            .collect(),
+                    ),
+                    actions: self
+                        .actions
                         .clone()
                         .into_iter()
-                        .map(Into::into)
+                        .map(RuleAction::from)
+                        .map(UnifiedAction::from)
+                        .chain(self.document.iter().flat_map(|document| {
+                            document
+                                .actions
+                                .clone()
+                                .into_iter()
+                                .map(UnifiedAction::from)
+                        }))
                         .collect(),
-                    actions: self.actions.clone().into_iter().map(Into::into).collect(),
                     document: self
                         .document
                         .as_ref()
@@ -52,6 +80,12 @@ impl HttpRuleTemplate {
             created_order,
         )
         .map_err(AppError::from)
+        .map_err(http_rule_invalid)?;
+        definition
+            .validate_for_save()
+            .map_err(AppError::from)
+            .map_err(http_rule_invalid)?;
+        Ok(definition)
     }
 
     pub(crate) fn to_domain_existing(
@@ -96,13 +130,19 @@ impl HttpRuleTemplate {
         content.last_hit_at = existing_content.last_hit_at;
         let mut draft = projected.to_draft();
         draft.content = RuleContent::Http(content);
-        RuleDefinition::restore(
+        let definition = RuleDefinition::restore(
             existing.rule_id(),
             existing.revision(),
             draft,
             existing.created_order(),
         )
         .map_err(AppError::from)
+        .map_err(http_rule_invalid)?;
+        definition
+            .validate_for_save()
+            .map_err(AppError::from)
+            .map_err(http_rule_invalid)?;
+        Ok(definition)
     }
 
     const fn unified_stage(&self) -> RuleStage {
@@ -124,8 +164,6 @@ impl super::HttpDocumentRuleTemplate {
     fn to_domain(&self) -> AppResult<HttpDocumentRuleContent> {
         Ok(HttpDocumentRuleContent {
             package: self.binding()?,
-            conditions: self.conditions.clone(),
-            actions: self.actions.clone(),
         })
     }
 }
@@ -140,14 +178,19 @@ impl ProtocolDocumentRuleTemplate {
     ) -> AppResult<RuleDefinition> {
         let document = HttpDocumentRuleContent {
             package: self.package.to_domain()?,
-            conditions: self.conditions.clone(),
-            actions: self.actions.clone(),
         };
+        let condition = ConditionTree::from_document_conditions(self.conditions.clone());
+        let actions = self
+            .actions
+            .clone()
+            .into_iter()
+            .map(UnifiedAction::from)
+            .collect();
         let content = if http {
             RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions: Vec::new(),
-                actions: Vec::new(),
+                condition,
+                actions,
                 document: Some(document),
                 one_shot: false,
                 hit_count: 0,
@@ -156,11 +199,11 @@ impl ProtocolDocumentRuleTemplate {
         } else {
             RuleContent::Socket(SocketRuleContent {
                 package: document.package,
-                conditions: document.conditions,
-                actions: document.actions,
+                condition,
+                actions,
             })
         };
-        RuleDefinition::restore(
+        let definition = RuleDefinition::restore(
             id,
             Revision::INITIAL,
             RuleDefinitionDraft {
@@ -174,6 +217,12 @@ impl ProtocolDocumentRuleTemplate {
             created_order,
         )
         .map_err(AppError::from)
+        .map_err(protocol_document_rule_invalid)?;
+        definition
+            .validate_for_save()
+            .map_err(AppError::from)
+            .map_err(protocol_document_rule_invalid)?;
+        Ok(definition)
     }
 
     pub(crate) fn to_domain_existing(
@@ -203,13 +252,19 @@ impl ProtocolDocumentRuleTemplate {
             listener_id,
             http,
         )?;
-        RuleDefinition::restore(
+        let definition = RuleDefinition::restore(
             existing.rule_id(),
             existing.revision(),
             projected.to_draft(),
             existing.created_order(),
         )
         .map_err(AppError::from)
+        .map_err(protocol_document_rule_invalid)?;
+        definition
+            .validate_for_save()
+            .map_err(AppError::from)
+            .map_err(protocol_document_rule_invalid)?;
+        Ok(definition)
     }
 
     const fn unified_stage(&self) -> RuleStage {
@@ -224,4 +279,15 @@ impl ProtocolDocumentRuleTemplate {
 
 fn selector_error(code: &'static str) -> AppError {
     AppError::new(code, "existing rule selector validation failed")
+}
+
+fn http_rule_invalid(_: AppError) -> AppError {
+    AppError::new("HTTP_RULE_INVALID", "HTTP rule domain validation failed")
+}
+
+fn protocol_document_rule_invalid(_: AppError) -> AppError {
+    AppError::new(
+        "PROTOCOL_DOCUMENT_RULE_INVALID",
+        "protocol Document rule domain validation failed",
+    )
 }

@@ -127,7 +127,6 @@ fn project_rule_definitions(
         };
         rule_definitions.push(projected);
     }
-    intercept_proxy_domain::sort_rule_definitions(&mut rule_definitions);
     let rule_created_order_high_water = rule_definitions
         .iter()
         .map(intercept_proxy_domain::RuleDefinition::created_order)

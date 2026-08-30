@@ -1,5 +1,5 @@
 use super::*;
-use crate::{ChannelId, ErrorCode, MessageStage, Revision, RuntimeEpoch, TerminalIdentity};
+use crate::{ChannelId, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch, TerminalIdentity};
 use chrono::Utc;
 use serde_json::{Value, json};
 
@@ -40,7 +40,7 @@ fn context<'a>(
 
 // RULE-003, RULE-005, RULE-008, RULE-010, ENGINE-006
 #[test]
-fn evaluates_priority_then_creation_order_and_stops_at_terminal_action() {
+fn evaluates_priority_then_rule_id_and_stops_at_terminal_action() {
     let epoch = RuntimeEpoch::new();
     let mut first = Rule::create(draft(
         MessageStage::Request,
@@ -49,6 +49,7 @@ fn evaluates_priority_then_creation_order_and_stops_at_terminal_action() {
     ))
     .unwrap();
     first.priority = 1;
+    first.id = RuleId::from_uuid(uuid::Uuid::from_u128(1));
     let mut terminal = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
@@ -58,6 +59,7 @@ fn evaluates_priority_then_creation_order_and_stops_at_terminal_action() {
     ))
     .unwrap();
     terminal.priority = 2;
+    terminal.id = RuleId::from_uuid(uuid::Uuid::from_u128(2));
     let mut unreachable = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
@@ -65,6 +67,7 @@ fn evaluates_priority_then_creation_order_and_stops_at_terminal_action() {
     ))
     .unwrap();
     unreachable.priority = 3;
+    unreachable.id = RuleId::from_uuid(uuid::Uuid::from_u128(3));
     let terminal_identity = TerminalIdentity {
         source_ip: "10.0.0.1".into(),
         certificate_sha256: "cert".into(),
@@ -77,9 +80,9 @@ fn evaluates_priority_then_creation_order_and_stops_at_terminal_action() {
 }
 
 #[test]
-fn equal_priority_and_creation_order_use_rule_id_as_a_stable_tiebreaker() {
+fn equal_priority_ignores_reversed_created_order_and_uses_rule_id() {
     let epoch = RuntimeEpoch::new();
-    let first = Rule::create(draft(
+    let mut first = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
         vec![RuleAction::Terminal(
@@ -87,7 +90,9 @@ fn equal_priority_and_creation_order_use_rule_id_as_a_stable_tiebreaker() {
         )],
     ))
     .expect("first rule");
-    let second = Rule::create(draft(
+    first.id = RuleId::from_uuid(uuid::Uuid::from_u128(1));
+    first.created_order = 99;
+    let mut second = Rule::create(draft(
         MessageStage::Request,
         Vec::new(),
         vec![RuleAction::Terminal(
@@ -95,7 +100,9 @@ fn equal_priority_and_creation_order_use_rule_id_as_a_stable_tiebreaker() {
         )],
     ))
     .expect("second rule");
-    let expected = first.id.min(second.id);
+    second.id = RuleId::from_uuid(uuid::Uuid::from_u128(2));
+    second.created_order = 1;
+    let expected = first.id;
     let terminal = TerminalIdentity {
         source_ip: "10.0.0.1".into(),
         certificate_sha256: "cert".into(),

@@ -46,7 +46,10 @@ async fn local_server_echoes_upstream_payload_then_runs_downstream_pipeline() {
         listener.id,
         package_ref(id),
         ProtocolDirection::Downstream,
-        Vec::new(),
+        vec![intercept_proxy_domain::DocumentCondition::Equals {
+            field: JsonPointer::property("amount"),
+            value: DocumentValue::integer(11).unwrap(),
+        }],
         vec![DocumentAction::SetField {
             field: JsonPointer::property("amount"),
             value: DocumentValue::integer(42).unwrap(),

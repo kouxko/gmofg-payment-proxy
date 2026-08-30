@@ -45,7 +45,7 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
     );
 
     let capabilities = application
-        .protocol_rule_capabilities(listener_id, ProtocolRuleStage::AppToProxy)
+        .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToUpstream)
         .await
         .unwrap();
     assert_eq!(capabilities.package, package);
@@ -60,8 +60,11 @@ async fn external_socket_package_exposes_rule_capabilities_and_accepts_rules() {
             priority: 0,
             listener_id,
             package,
-            stage: ProtocolRuleStage::AppToProxy,
-            conditions: Vec::new(),
+            stage: ProtocolRuleStage::ProxyToUpstream,
+            conditions: vec![DocumentCondition::Equals {
+                field: JsonPointer::property("amount"),
+                value: DocumentValue::integer(0).expect("fixture number"),
+            }],
             actions: vec![DocumentAction::RecordMatch],
         })
         .await

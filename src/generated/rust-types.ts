@@ -449,6 +449,11 @@ export type BlackoutWindow = {
 
 export type BodyCodecKind = "auto" | "raw" | "utf8" | "shift_jis";
 
+/**  Boolean equality predicate. */
+export type BooleanPredicate =
+/**  Exact boolean equality. */
+{ equal: boolean };
+
 export type BreakpointActionOptionViewModel = {
 	kind: BreakpointDecisionKind,
 	label: string,
@@ -646,6 +651,28 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
+/**  One typed leaf in a unified condition tree. */
+export type Condition =
+/**  A typed RFC 6901 Document predicate. */
+{ source: "document";
+/**  Document path. */
+path: JsonPointer;
+/**  Strict predicate. */
+predicate: DocumentPredicate } |
+/**  Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree. */
+{ source: "http";
+/**  Typed HTTP condition. */
+condition: MatchCondition };
+
+/**  Recursive non-empty AND/OR condition tree. NOT is intentionally not representable. */
+export type ConditionTree =
+/**  All child nodes must match. */
+{ operator: "all"; children: ConditionTree[] } |
+/**  At least one child node must match. */
+{ operator: "any"; children: ConditionTree[] } |
+/**  Typed leaf condition. */
+{ operator: "leaf"; children: Condition };
+
 /**  Positive number of bytes consumed by one complete frame. */
 export type ConsumedBytes = number;
 
@@ -735,32 +762,30 @@ export type DisplayParams = {
 /**  Identity-free, owned recursive JSON document. */
 export type Document = DocumentValue;
 
-/**  v1 Document 动作。动作按声明顺序执行，不包含隐式终止或 first-match 语义。 */
-export type DocumentAction =
-/**  只记录命中，不修改 Document。 */
-{ type: "record_match" } |
-/**  替换一个 Document 路径的值。 */
-{ type: "set_field";
-/**  Document 中的目标路径。 */
-field: JsonPointer;
-/**  规则自身携带的严格类型化新值；Schema 已声明该路径时还须与其类型一致。 */
-value: DocumentValue } |
-/**  清除一个 Document 路径的值。 */
-{ type: "clear_field";
-/**  Document 中的目标路径。 */
-field: JsonPointer };
-
-/**  v1 Document 条件。多个条件按声明顺序读取并执行 AND；空列表恒匹配。 */
-export type DocumentCondition =
-/**  字段当前值必须与给定类型化值严格相等；不进行文本或数字转换。 */
-{ operator: "equals";
-/**  Document 中的目标路径。 */
-field: JsonPointer;
-/**  参与严格比较的值。 */
-value: DocumentValue };
+/**  Strict Document mutation primitives shared by HTTP and Socket rules. */
+export type DocumentMutation =
+/**  Strict Set using [`Document::set`]. */
+{ type: "set"; path: JsonPointer; value: DocumentValue } |
+/**  Strict Clear using [`Document::clear_path`]. */
+{ type: "clear"; path: JsonPointer } |
+/**  Strict array Insert using [`Document::insert`]. */
+{ type: "insert"; path: JsonPointer; index: number; value: DocumentValue } |
+/**  Strict array Append using [`Document::append`]. */
+{ type: "append"; path: JsonPointer; value: DocumentValue };
 
 /**  JavaScript `Number` compatible finite numeric value. */
 export type DocumentNumber = number;
+
+/**  Closed, typed Document predicate set. No implicit JSON value conversions are performed. */
+export type DocumentPredicate =
+/**  String predicate. */
+{ type: "string"; value: StringPredicate } |
+/**  Number predicate. */
+{ type: "number"; value: NumberPredicate } |
+/**  Boolean predicate. */
+{ type: "boolean"; value: BooleanPredicate } |
+/**  Exact JSON null equality. */
+{ type: "null_equal" };
 
 /**  Recursive, identity-free metadata describing a Document shape. */
 export type DocumentSchemaNode = DocumentSchemaNode_Serialize | DocumentSchemaNode_Deserialize;
@@ -1109,8 +1134,6 @@ export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package
 
 export type HttpDocumentRuleContent = {
 	package: ProtocolPackageRef,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
 };
 
 export type HttpListenerSettings = {
@@ -1169,8 +1192,8 @@ export type HttpProtocolRuleStageViewModel = {
 
 export type HttpRuleContent = {
 	description: string,
-	conditions: MatchCondition[],
-	actions: RuleAction[],
+	condition: ConditionTree,
+	actions: UnifiedAction[],
 	document: HttpDocumentRuleContent | null,
 	one_shot: boolean,
 	hit_count: number,
@@ -1495,6 +1518,27 @@ export type NthTcpFlagDrop = {
 	direction: PacketDirection,
 	flag: TcpFlag,
 	nth: number,
+};
+
+/**  Number comparison supported by a typed Document predicate. */
+export type NumberOperator =
+/**  Exact numeric equality. */
+"equal" |
+/**  Strictly less than. */
+"less" |
+/**  Less than or equal. */
+"less_equal" |
+/**  Strictly greater than. */
+"greater" |
+/**  Greater than or equal. */
+"greater_equal";
+
+/**  A number predicate whose expected value is a validated JavaScript Number. */
+export type NumberPredicate = {
+	/**  Comparison operator. */
+	operator: NumberOperator,
+	/**  Expected number. */
+	value: DocumentNumber,
 };
 
 export type OperationResultViewModel = {
@@ -2324,8 +2368,8 @@ export type SocketRelayTopology = {
 
 export type SocketRuleContent = {
 	package: ProtocolPackageRef,
-	conditions: DocumentCondition[],
-	actions: DocumentAction[],
+	condition: ConditionTree,
+	actions: UnifiedAction[],
 };
 
 export type SocketRuleEditorStage = {
@@ -2365,6 +2409,25 @@ export type SocketUpstreamTlsSettings = {
 };
 
 export type SortDirection = "asc" | "desc";
+
+/**  String comparison supported by a typed Document predicate. */
+export type StringOperator =
+/**  Exact string equality. */
+"equal" |
+/**  Substring containment. */
+"contains" |
+/**  Prefix match. */
+"starts_with" |
+/**  Suffix match. */
+"ends_with";
+
+/**  A string predicate whose expected value cannot be confused with another JSON type. */
+export type StringPredicate = {
+	/**  Comparison operator. */
+	operator: StringOperator,
+	/**  Expected string. */
+	value: string,
+};
 
 export type SubscriptionAckViewModel = {
 	subscription_id: number,
@@ -2429,6 +2492,17 @@ export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChanged
 
 /**  与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。 */
 export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
+
+/**  One item in the single ordered action list. */
+export type UnifiedAction =
+/**  Records a match without mutating protocol data. */
+{ source: "record_match" } |
+/**  Document mutation. */
+{ source: "document"; value: DocumentMutation } |
+/**  Existing typed non-terminal HTTP/runtime action. */
+{ source: "http"; value: RuleAction } |
+/**  Terminal effect; at most one is allowed and it must be last. */
+{ source: "terminal"; value: TerminalAction };
 
 export type UpstreamTlsSettings = {
 	verify_hostname: boolean,

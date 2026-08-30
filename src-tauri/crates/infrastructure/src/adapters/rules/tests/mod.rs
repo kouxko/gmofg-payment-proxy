@@ -77,7 +77,7 @@ fn request_delay_draft(name: &str, one_shot: bool) -> AppRuleDraft {
         priority: 10,
         channel: Some(test_channel()),
         stage: Some(AppMessageStage::Request),
-        conditions: Vec::new(),
+        conditions: vec![AppRuleCondition::NthHit { count: 1 }],
         actions: vec![AppRuleAction::Delay { milliseconds: 10 }],
         one_shot,
     }

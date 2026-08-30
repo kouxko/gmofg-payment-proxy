@@ -234,7 +234,7 @@ fn referenced_workspace() -> ProxyWorkspace {
             created_order: 1,
             channel: Some(ChannelId::new(listener_id.to_string()).expect("channel")),
             stage: MessageStage::Request,
-            conditions: Vec::<MatchCondition>::new(),
+            conditions: vec![MatchCondition::NthHit(1)],
             actions: vec![RuleAction::Delay { milliseconds: 1 }],
             one_shot: false,
             hit_count: 0,

@@ -145,12 +145,12 @@ fn protocol_rule_context_from_description(
     if description_context.local_responder
         && !matches!(
             stage,
-            ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToApp
+            ProtocolRuleStage::ProxyToUpstream | ProtocolRuleStage::ProxyToApp
         )
     {
         return Err(AppError::new(
             "PROTOCOL_RULE_DIRECTION_INVALID",
-            "本机应答只允许配置“应用 → 代理”和“代理 → 应用”阶段。",
+            "本机应答只允许配置两个统一代理写出阶段。",
         ));
     }
     let schema = domain_schema(schema_for_stage(&description_context.description, stage));
@@ -161,20 +161,12 @@ fn protocol_rule_context_from_description(
     })
 }
 
-fn valid_protocol_rule_stages(local_responder: bool) -> &'static [ProtocolRuleStage] {
-    const ALL: &[ProtocolRuleStage] = &[
-        ProtocolRuleStage::AppToProxy,
+fn valid_protocol_rule_stages(_local_responder: bool) -> &'static [ProtocolRuleStage] {
+    const MESSAGE_STAGES: &[ProtocolRuleStage] = &[
         ProtocolRuleStage::ProxyToUpstream,
-        ProtocolRuleStage::UpstreamToProxy,
         ProtocolRuleStage::ProxyToApp,
     ];
-    const LOCAL_RESPONDER: &[ProtocolRuleStage] =
-        &[ProtocolRuleStage::AppToProxy, ProtocolRuleStage::ProxyToApp];
-    if local_responder {
-        LOCAL_RESPONDER
-    } else {
-        ALL
-    }
+    MESSAGE_STAGES
 }
 
 fn schema_for_stage(

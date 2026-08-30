@@ -1,7 +1,9 @@
 use std::collections::BTreeSet;
 
 use http::{HeaderName, HeaderValue};
-use intercept_proxy_domain::{ChannelId, HttpRuleContent, ProtocolDirection};
+use intercept_proxy_domain::{
+    ChannelId, Condition, ConditionTree, HttpRuleContent, ProtocolDirection, UnifiedAction,
+};
 
 use super::Application;
 use crate::facade::unified_rule_editor::{domain_action, domain_condition};
@@ -72,12 +74,15 @@ fn unified_input(
             stage,
             content: RuleContent::Http(HttpRuleContent {
                 description: source.description,
-                conditions: source
-                    .conditions
-                    .into_iter()
-                    .map(domain_condition)
-                    .collect(),
-                actions,
+                condition: ConditionTree::All(
+                    source
+                        .conditions
+                        .into_iter()
+                        .map(domain_condition)
+                        .map(|condition| ConditionTree::Leaf(Condition::Http { condition }))
+                        .collect(),
+                ),
+                actions: actions.into_iter().map(UnifiedAction::from).collect(),
                 document: None,
                 one_shot: source.one_shot,
                 hit_count: 0,

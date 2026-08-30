@@ -72,7 +72,10 @@ fn unified_rule_remap_changes_rule_identity_preserves_revision_and_order_and_reb
         old_listener_id,
         package,
         ProtocolDirection::Upstream,
-        Vec::new(),
+        vec![intercept_proxy_domain::DocumentCondition::Equals {
+            field: intercept_proxy_domain::JsonPointer::property("trace_id"),
+            value: intercept_proxy_domain::DocumentValue::String("phase5".into()),
+        }],
         vec![DocumentAction::RecordMatch],
     )
     .unwrap();

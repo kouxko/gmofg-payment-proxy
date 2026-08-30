@@ -2,8 +2,8 @@ use std::{path::PathBuf, sync::Arc};
 
 use chrono::{TimeZone, Utc};
 use intercept_proxy_application::{
-    AppResult, MessageStage, ProtocolPackageRef, RuleActionKind, RuleContent,
-    RuleEditorContentContext, RuleStage, WorkspaceId,
+    AppResult, ConditionTree, MessageStage, ProtocolPackageRef, RuleActionKind, RuleConditionKind,
+    RuleContent, RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
 };
 use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use intercept_proxy_product_api::InterceptProxyProfile;
@@ -158,14 +158,19 @@ async fn seed_two_start_fixture(host: &ApplicationHost) -> TwoStartFixture {
         panic!("HTTP rule draft expected");
     };
     content.description = "phase2 lifecycle fixture".into();
+    content.condition = ConditionTree::from_http_conditions(vec![
+        application
+            .rule_definition_condition_draft(RuleConditionKind::NthHit, MessageStage::Request)
+            .expect("current NthHit condition"),
+    ]);
     content.one_shot = true;
     content.hit_count = 7;
     content.last_hit_at = Some(last_hit_at);
-    content.actions = vec![
+    content.actions = vec![UnifiedAction::from(
         application
             .rule_definition_action_draft(RuleActionKind::Delay, MessageStage::Request)
             .expect("current delay action"),
-    ];
+    )];
     let created = application
         .rule_definition_save(input)
         .await

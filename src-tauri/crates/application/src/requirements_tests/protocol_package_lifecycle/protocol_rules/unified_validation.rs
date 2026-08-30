@@ -1,5 +1,23 @@
 use super::*;
-use intercept_proxy_domain::{HttpDocumentRuleContent, HttpRuleContent, SocketRuleContent};
+use intercept_proxy_domain::{
+    ConditionTree, HttpDocumentRuleContent, HttpRuleContent, SocketRuleContent, UnifiedAction,
+};
+
+fn document_tree(conditions: Vec<DocumentCondition>) -> ConditionTree {
+    ConditionTree::from_document_conditions(conditions)
+}
+
+fn document_actions(actions: Vec<DocumentAction>) -> Vec<UnifiedAction> {
+    actions.into_iter().map(UnifiedAction::from).collect()
+}
+
+fn http_tree(conditions: Vec<intercept_proxy_domain::MatchCondition>) -> ConditionTree {
+    ConditionTree::from_http_conditions(conditions)
+}
+
+fn http_actions(actions: Vec<intercept_proxy_domain::RuleAction>) -> Vec<UnifiedAction> {
+    actions.into_iter().map(UnifiedAction::from).collect()
+}
 
 fn unified_socket_input(
     listener_id: ListenerId,
@@ -17,8 +35,11 @@ fn unified_socket_input(
             stage,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                actions: vec![set("amount", DocumentValue::integer(2).unwrap())],
+                condition: document_tree(vec![equals(
+                    "trace_id",
+                    DocumentValue::String("abc".into()),
+                )]),
+                actions: document_actions(vec![set("amount", DocumentValue::integer(2).unwrap())]),
             }),
         },
     }
@@ -31,7 +52,6 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
         let package = pkg("unified-validation", "1.0.0");
         let listener_id = configure_relay(&services, &workspaces, &package).await;
         let selected = workspaces.list().await.unwrap().remove(0);
-        let mut before = workspaces.get(selected.id).await.unwrap();
         assert!(runtime.statuses().await.unwrap().is_empty());
 
         let mut input =
@@ -42,16 +62,11 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
         match invalid_case {
             "package" => content.package = pkg("forged-package", "1.0.0"),
             "type" => {
-                content.actions = vec![set("amount", DocumentValue::String("wrong".into()))];
+                content.actions =
+                    document_actions(vec![set("amount", DocumentValue::String("wrong".into()))]);
             }
             "stage" => {
-                let ListenerDataPlane::Socket(settings) = &mut before.listeners[0].data_plane
-                else {
-                    unreachable!()
-                };
-                settings.topology =
-                    SocketTopology::LocalResponder(SocketLocalResponderTopology::default());
-                workspaces.save(before.clone()).await.unwrap();
+                input.draft.stage = RuleStage::AppToProxy;
             }
             _ => unreachable!(),
         }
@@ -74,8 +89,11 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
     let RuleContent::Socket(content) = &mut input.draft.content else {
         unreachable!()
     };
-    content.conditions = vec![equals("missing_field", DocumentValue::String("abc".into()))];
-    content.actions = vec![set("extension_value", DocumentValue::Boolean(true))];
+    content.condition = document_tree(vec![equals(
+        "missing_field",
+        DocumentValue::String("abc".into()),
+    )]);
+    content.actions = document_actions(vec![set("extension_value", DocumentValue::Boolean(true))]);
 
     application
         .rule_definition_save(input)
@@ -108,7 +126,7 @@ async fn unified_document_save_enforces_direction_decode_and_encode_capabilities
         let RuleContent::Socket(content) = &mut input.draft.content else {
             unreachable!()
         };
-        content.actions = actions;
+        content.actions = document_actions(actions);
 
         let error = application.rule_definition_save(input).await.unwrap_err();
 
@@ -151,12 +169,24 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                 stage: RuleStage::ProxyToUpstream,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "header + document".into(),
-                    conditions: Vec::new(),
-                    actions: vec![intercept_proxy_domain::RuleAction::Delay { milliseconds: 1 }],
+                    condition: ConditionTree::All(vec![
+                        http_tree(vec![intercept_proxy_domain::MatchCondition::NthHit(1)]),
+                        document_tree(vec![equals(
+                            "trace_id",
+                            DocumentValue::String("abc".into()),
+                        )]),
+                    ]),
+                    actions: http_actions(vec![intercept_proxy_domain::RuleAction::Delay {
+                        milliseconds: 1,
+                    }])
+                    .into_iter()
+                    .chain(document_actions(vec![set(
+                        "amount",
+                        DocumentValue::integer(2).unwrap(),
+                    )]))
+                    .collect(),
                     document: Some(HttpDocumentRuleContent {
                         package: http_package,
-                        conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                        actions: vec![set("amount", DocumentValue::integer(2).unwrap())],
                     }),
                     one_shot: false,
                     hit_count: 0,
@@ -212,13 +242,9 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
                     stage,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions,
-                        actions,
-                        document: Some(HttpDocumentRuleContent {
-                            package,
-                            conditions: Vec::new(),
-                            actions: vec![DocumentAction::RecordMatch],
-                        }),
+                        condition: http_tree(conditions),
+                        actions: http_actions(actions),
+                        document: Some(HttpDocumentRuleContent { package }),
                         one_shot: false,
                         hit_count: 0,
                         last_hit_at: None,
@@ -237,8 +263,6 @@ async fn stopped_http_listener_rejects_ordinary_http_work_at_document_only_stage
 #[tokio::test]
 async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
     for (stage, joint) in [
-        (RuleStage::AppToProxy, false),
-        (RuleStage::UpstreamToProxy, false),
         (RuleStage::ProxyToUpstream, true),
         (RuleStage::ProxyToApp, true),
     ] {
@@ -257,18 +281,22 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                     stage,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions: Vec::new(),
-                        actions: joint
-                            .then_some(intercept_proxy_domain::RuleAction::Delay {
-                                milliseconds: 1,
-                            })
-                            .into_iter()
-                            .collect(),
-                        document: Some(HttpDocumentRuleContent {
-                            package,
-                            conditions: Vec::new(),
-                            actions: vec![DocumentAction::RecordMatch],
-                        }),
+                        condition: document_tree(vec![equals(
+                            "trace_id",
+                            DocumentValue::String("abc".into()),
+                        )]),
+                        actions: http_actions(
+                            joint
+                                .then_some(intercept_proxy_domain::RuleAction::Delay {
+                                    milliseconds: 1,
+                                })
+                                .into_iter()
+                                .collect(),
+                        )
+                        .into_iter()
+                        .chain([UnifiedAction::RecordMatch])
+                        .collect(),
+                        document: Some(HttpDocumentRuleContent { package }),
                         one_shot: false,
                         hit_count: 0,
                         last_hit_at: None,

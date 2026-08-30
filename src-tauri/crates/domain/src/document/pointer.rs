@@ -3,7 +3,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 /// Parsed RFC 6901 JSON Pointer. The document root is the empty string.
-#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(transparent)]
 pub struct JsonPointer {
     source: String,

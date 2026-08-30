@@ -1,8 +1,16 @@
 use super::*;
 use intercept_proxy_domain::{
-    HttpRuleContent, MatchCondition, MatchField, MatchOperator, RuleAction as DomainRuleAction,
-    TerminalAction,
+    ConditionTree, HttpRuleContent, MatchCondition, MatchField, MatchOperator,
+    RuleAction as DomainRuleAction, TerminalAction, UnifiedAction,
 };
+
+fn http_tree(conditions: Vec<MatchCondition>) -> ConditionTree {
+    ConditionTree::from_http_conditions(conditions)
+}
+
+fn http_actions(actions: Vec<DomainRuleAction>) -> Vec<UnifiedAction> {
+    actions.into_iter().map(UnifiedAction::from).collect()
+}
 
 #[derive(Debug, Default)]
 struct FailFirstUnifiedReplacementRuntime {
@@ -91,8 +99,8 @@ async fn unified_copy_persists_an_independent_rule_with_monotonic_order() {
                 stage: RuleStage::ProxyToUpstream,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "source".into(),
-                    conditions: Vec::new(),
-                    actions: vec![DomainRuleAction::Delay { milliseconds: 10 }],
+                    condition: http_tree(vec![MatchCondition::NthHit(1)]),
+                    actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
                     document: None,
                     one_shot: false,
                     hit_count: 0,
@@ -171,8 +179,8 @@ async fn unified_runtime_failure_restores_business_state_with_rebased_revision()
                 stage: RuleStage::ProxyToUpstream,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: Vec::new(),
-                    actions: vec![DomainRuleAction::Delay { milliseconds: 10 }],
+                    condition: http_tree(vec![MatchCondition::NthHit(1)]),
+                    actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
                     document: None,
                     one_shot: false,
                     hit_count: 0,
@@ -245,8 +253,8 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
                     stage,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions,
-                        actions,
+                        condition: http_tree(conditions),
+                        actions: http_actions(actions),
                         document: None,
                         one_shot: false,
                         hit_count: 0,

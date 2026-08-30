@@ -323,7 +323,7 @@ async fn existing_protocol_rule_can_change_stage_without_changing_binding_or_con
     let original_created_order = original.created_order();
     let original_listener_id = original.listener_id();
     let original_content = original.content().clone();
-    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_upstream");
+    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_app");
     let capture = Arc::new(CapturingBaseline::default());
     let report = validate_existing(store, capture.clone(), candidate).await;
 
@@ -339,7 +339,7 @@ async fn existing_protocol_rule_can_change_stage_without_changing_binding_or_con
     assert_eq!(updated.content(), &original_content);
     assert_eq!(
         updated.stage(),
-        intercept_proxy_domain::RuleStage::ProxyToUpstream
+        intercept_proxy_domain::RuleStage::ProxyToApp
     );
 }
 
@@ -361,12 +361,12 @@ async fn existing_protocol_rule_stage_change_still_rejects_invalid_listener_topo
                 Some("socket-listener-identity" | "socket-upstream-client")
             )
         });
-    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_upstream");
+    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("app_to_proxy");
 
     assert_existing_domain_code(
         store,
         candidate,
-        EnvironmentStatusCode::ValidationLayerFailed,
+        EnvironmentStatusCode::ProtocolDocumentRuleInvalid,
     )
     .await;
 }

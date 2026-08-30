@@ -52,11 +52,10 @@ fn preview_resources(
 ) -> AppResult<Value> {
     let projected_workspace_json =
         serde_json::to_value(projected_workspace).map_err(|_| preview_failure())?;
-    let mut definitions = projected_workspace
+    let definitions = projected_workspace
         .rule_definitions
         .iter()
         .collect::<Vec<_>>();
-    definitions.sort_by_key(|definition| definition.created_order());
 
     let listeners = candidate
         .workspace

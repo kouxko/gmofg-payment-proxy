@@ -8,10 +8,12 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    AndroidNetworkProfile, CertificateReferenceId, ChannelId, DomainError, ErrorCode,
-    HttpDocumentRuleContent, ListenerId, MessageStage, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolRuleStage, Revision, Rule, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleId, RuleStage, SocketRuleContent, WorkspaceId,
+    AndroidNetworkProfile, CertificateReferenceId, ChannelId, Condition, ConditionTree,
+    DocumentAction, DocumentCondition, DocumentMutation, DocumentPredicate, DomainError, ErrorCode,
+    HttpDocumentRuleContent, ListenerId, MatchCondition, MessageStage,
+    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolRuleStage, Revision, Rule,
+    RuleAction, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleStage,
+    SocketRuleContent, UnifiedAction, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -19,10 +21,16 @@ use uuid::Uuid;
 
 mod listener_model;
 mod socket_topology;
+mod unified_projection;
 mod validation;
 
 pub use listener_model::*;
 pub use socket_topology::*;
+use unified_projection::{
+    legacy_http_parts, message_stage_from_rule, restore_document_rule, rule_stage_from_protocol,
+    runtime_priority, unified_http_actions, unified_http_tree, unified_persistence_error,
+    unified_socket_content,
+};
 pub use validation::{is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};
 
@@ -69,65 +77,6 @@ pub struct ProxyWorkspace {
     pub android_network_profiles: Vec<AndroidNetworkProfile>,
 }
 
-fn restore_document_rule(
-    definition: &RuleDefinition,
-    content: HttpDocumentRuleContent,
-) -> Result<ProtocolDocumentRuleDefinition, DomainError> {
-    ProtocolDocumentRuleDefinition::restore_from_unified(
-        ProtocolDocumentRuleId::from_uuid(definition.rule_id().as_uuid()),
-        definition.revision(),
-        definition.name().to_owned(),
-        definition.enabled(),
-        definition.priority(),
-        definition.created_order(),
-        definition.listener_id(),
-        content.package,
-        protocol_stage_from_rule(definition.stage())?,
-        content.conditions,
-        content.actions,
-    )
-}
-
-const fn message_stage_from_rule(stage: RuleStage) -> MessageStage {
-    match stage {
-        RuleStage::AppToProxy | RuleStage::ProxyToUpstream => MessageStage::Request,
-        RuleStage::UpstreamToProxy | RuleStage::ProxyToApp => MessageStage::Response,
-        RuleStage::TlsHandshake => MessageStage::TlsHandshake,
-    }
-}
-
-fn runtime_priority(priority: i32) -> Result<u32, DomainError> {
-    u32::try_from(priority)
-        .map_err(|_| unified_persistence_error("priority", "HTTP 规则 priority 必须是非负整数"))
-}
-
-fn protocol_stage_from_rule(stage: RuleStage) -> Result<ProtocolRuleStage, DomainError> {
-    match stage {
-        RuleStage::AppToProxy => Ok(ProtocolRuleStage::AppToProxy),
-        RuleStage::ProxyToUpstream => Ok(ProtocolRuleStage::ProxyToUpstream),
-        RuleStage::UpstreamToProxy => Ok(ProtocolRuleStage::UpstreamToProxy),
-        RuleStage::ProxyToApp => Ok(ProtocolRuleStage::ProxyToApp),
-        RuleStage::TlsHandshake => Err(DomainError::new(
-            ErrorCode::RuleInvalid,
-            "Document 规则不能使用 TLS 握手阶段",
-        )),
-    }
-}
-
-const fn rule_stage_from_protocol(stage: ProtocolRuleStage) -> RuleStage {
-    match stage {
-        ProtocolRuleStage::AppToProxy => RuleStage::AppToProxy,
-        ProtocolRuleStage::ProxyToUpstream => RuleStage::ProxyToUpstream,
-        ProtocolRuleStage::UpstreamToProxy => RuleStage::UpstreamToProxy,
-        ProtocolRuleStage::ProxyToApp => RuleStage::ProxyToApp,
-    }
-}
-
-fn unified_persistence_error(field: &str, message: &str) -> DomainError {
-    DomainError::new(ErrorCode::RuleInvalid, "统一规则持久化数据无效")
-        .with_field_error(field, message)
-}
-
 impl Default for ProxyWorkspace {
     fn default() -> Self {
         Self {
@@ -162,7 +111,6 @@ impl ProxyWorkspace {
                 direction,
                 phase,
                 definition.priority(),
-                definition.created_order(),
                 definition.rule_id(),
             )
         });
@@ -178,7 +126,8 @@ impl ProxyWorkspace {
             let RuleContent::Http(content) = definition.content() else {
                 continue;
             };
-            if content.conditions.is_empty()
+            let (conditions, actions) = legacy_http_parts(content)?;
+            if conditions.is_empty()
                 && content.actions.is_empty()
                 && content.document.is_none()
                 && content.description.is_empty()
@@ -198,8 +147,8 @@ impl ProxyWorkspace {
                 created_order: definition.created_order(),
                 channel: Some(ChannelId::new(definition.listener_id().to_string())?),
                 stage: message_stage_from_rule(definition.stage()),
-                conditions: content.conditions.clone(),
-                actions: content.actions.clone(),
+                conditions,
+                actions,
                 one_shot: content.one_shot,
                 hit_count: content.hit_count,
                 last_hit_at: content.last_hit_at,
@@ -255,8 +204,8 @@ impl ProxyWorkspace {
                     stage,
                     content: RuleContent::Http(crate::HttpRuleContent {
                         description: rule.description,
-                        conditions: rule.conditions,
-                        actions: rule.actions,
+                        condition: unified_http_tree(rule.conditions),
+                        actions: unified_http_actions(rule.actions),
                         document,
                         one_shot: rule.one_shot,
                         hit_count: rule.hit_count,
@@ -287,8 +236,6 @@ impl ProxyWorkspace {
                 RuleContent::Http(content) => content.document.clone(),
                 RuleContent::Socket(content) => Some(HttpDocumentRuleContent {
                     package: content.package.clone(),
-                    conditions: content.conditions.clone(),
-                    actions: content.actions.clone(),
                 }),
             };
             if let Some(document) = document {
@@ -326,18 +273,12 @@ impl ProxyWorkspace {
             });
             let document = HttpDocumentRuleContent {
                 package: rule.package().clone(),
-                conditions: rule.conditions().to_vec(),
-                actions: rule.actions().to_vec(),
             };
             let content = if let Some(mut http) = existing_http {
                 http.document = Some(document);
                 RuleContent::Http(http)
             } else {
-                RuleContent::Socket(SocketRuleContent {
-                    package: document.package,
-                    conditions: document.conditions,
-                    actions: document.actions,
-                })
+                unified_socket_content(&rule, document.package)
             };
             definitions.push(RuleDefinition::restore(
                 rule_id,

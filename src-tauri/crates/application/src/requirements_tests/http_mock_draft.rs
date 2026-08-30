@@ -117,15 +117,15 @@ async fn complete_server_response_creates_a_unified_unsaved_disabled_mock_draft(
         panic!("unified HTTP content expected");
     };
     assert!(matches!(
-        content.conditions.as_slice(),
-        [intercept_proxy_domain::MatchCondition::Field {
-            field: intercept_proxy_domain::MatchField::PathOrRequestType,
-            ..
-        }]
+        content.condition,
+        intercept_proxy_domain::ConditionTree::All(ref children)
+            if matches!(children.as_slice(), [intercept_proxy_domain::ConditionTree::Leaf(intercept_proxy_domain::Condition::Http {
+                condition: intercept_proxy_domain::MatchCondition::Field { field: intercept_proxy_domain::MatchField::PathOrRequestType, .. }
+            })])
     ));
     assert!(matches!(
         content.actions.as_slice(),
-        [intercept_proxy_domain::RuleAction::Terminal(
+        [intercept_proxy_domain::UnifiedAction::Terminal(
             intercept_proxy_domain::TerminalAction::MockResponse { status: 201, .. }
         )]
     ));

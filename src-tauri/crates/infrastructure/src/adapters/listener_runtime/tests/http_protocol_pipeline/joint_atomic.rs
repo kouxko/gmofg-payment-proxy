@@ -4,7 +4,7 @@ async fn non_utf8_encode_failure_keeps_one_shot_runtime_metadata_unchanged() {
     let rule = set_string_rule(
         &listener,
         ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(23)),
-        ProtocolRuleStage::AppToProxy,
+        ProtocolRuleStage::ProxyToUpstream,
         1,
         "route",
         Vec::new(),
@@ -93,7 +93,7 @@ async fn joint_document_state_is_isolated_by_connection_and_cleanup() {
     let rule = set_string_rule(
         &listener,
         ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(25)),
-        ProtocolRuleStage::AppToProxy,
+        ProtocolRuleStage::ProxyToUpstream,
         1,
         "route",
         Vec::new(),
@@ -160,7 +160,7 @@ async fn revision_conflict_retries_joint_document_from_checkpoint() {
     let rule = set_string_rule(
         &listener,
         ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(27)),
-        ProtocolRuleStage::AppToProxy,
+        ProtocolRuleStage::ProxyToUpstream,
         1,
         "route",
         Vec::new(),

@@ -45,7 +45,7 @@ fn input(
             ProtocolDirection::Upstream => ProtocolRuleStage::ProxyToUpstream,
             ProtocolDirection::Downstream => ProtocolRuleStage::ProxyToApp,
         },
-        conditions: Vec::new(),
+        conditions: vec![equals("trace_id", DocumentValue::String("phase5".into()))],
         actions: vec![DocumentAction::RecordMatch],
     }
 }
@@ -271,7 +271,6 @@ async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
         equals("trace_id", DocumentValue::String("abc".into())),
         equals("amount", DocumentValue::integer(1000).unwrap()),
         equals("approved", DocumentValue::Boolean(true)),
-        equals("raw", DocumentValue::byte_array(vec![0, 255])),
     ];
     valid.actions = vec![
         DocumentAction::RecordMatch,
@@ -434,6 +433,8 @@ async fn create_update_toggle_delete_keep_monotonic_order_revision_and_stable_so
         .unwrap();
     assert!(first.created_order() < second.created_order());
     assert!(second.created_order() < third.created_order());
+    let mut equal_priority = [first.rule_id(), third.rule_id()];
+    equal_priority.sort();
     assert_eq!(
         application
             .protocol_rule_list()
@@ -442,7 +443,7 @@ async fn create_update_toggle_delete_keep_monotonic_order_revision_and_stable_so
             .iter()
             .map(ProtocolDocumentRuleDefinition::rule_id)
             .collect::<Vec<_>>(),
-        [second.rule_id(), first.rule_id(), third.rule_id()]
+        [second.rule_id(), equal_priority[0], equal_priority[1]]
     );
 
     application

@@ -19,9 +19,9 @@ use crate::{
     RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
 };
 use intercept_proxy_domain::{
-    DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent, HttpRuleContent, JitterScope,
-    MatchCondition, MatchField, MatchOperator, RuleAction as DomainRuleAction, SocketRuleContent,
-    TerminalAction as DomainTerminalAction, TrafficDirection,
+    ConditionTree, DocumentSchemaNode, DropResponseMode, HttpDocumentRuleContent, HttpRuleContent,
+    JitterScope, MatchCondition, MatchField, MatchOperator, RuleAction as DomainRuleAction,
+    SocketRuleContent, TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
 };
 
 impl Application {
@@ -269,9 +269,7 @@ fn http_stages(
 ) -> Vec<HttpRuleEditorStage> {
     [
         RuleStage::TlsHandshake,
-        RuleStage::AppToProxy,
         RuleStage::ProxyToUpstream,
-        RuleStage::UpstreamToProxy,
         RuleStage::ProxyToApp,
     ]
     .into_iter()
@@ -297,8 +295,6 @@ fn http_stages(
             .unwrap_or_default();
         let embedded_document = document.as_ref().map(|_| HttpDocumentRuleContent {
             package: package.clone().expect("document stage has a package"),
-            conditions: Vec::new(),
-            actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
         });
         Some(HttpRuleEditorStage {
             stage,
@@ -317,8 +313,8 @@ fn http_stages(
                     stage,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions: Vec::new(),
-                        actions: Vec::new(),
+                        condition: ConditionTree::All(Vec::new()),
+                        actions: vec![UnifiedAction::RecordMatch],
                         document: embedded_document,
                         one_shot: false,
                         hit_count: 0,
@@ -336,16 +332,8 @@ fn socket_stages(
     description: &ProtocolPackageDescriptionViewModel,
     local_responder: bool,
 ) -> Vec<SocketRuleEditorStage> {
-    let stages: &[RuleStage] = if local_responder {
-        &[RuleStage::AppToProxy, RuleStage::ProxyToApp]
-    } else {
-        &[
-            RuleStage::AppToProxy,
-            RuleStage::ProxyToUpstream,
-            RuleStage::UpstreamToProxy,
-            RuleStage::ProxyToApp,
-        ]
-    };
+    let _ = local_responder;
+    let stages: &[RuleStage] = &[RuleStage::ProxyToUpstream, RuleStage::ProxyToApp];
     stages
         .iter()
         .filter_map(|&stage| {
@@ -366,8 +354,8 @@ fn socket_stages(
                     stage,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: description.package.clone(),
-                        conditions: Vec::new(),
-                        actions: vec![intercept_proxy_domain::DocumentAction::RecordMatch],
+                        condition: ConditionTree::All(Vec::new()),
+                        actions: vec![UnifiedAction::RecordMatch],
                     }),
                 },
             },
@@ -395,11 +383,11 @@ fn document_capability(
     stage: RuleStage,
 ) -> Option<DocumentCapability> {
     let protocol_stage = match stage {
-        RuleStage::AppToProxy => ProtocolRuleStage::AppToProxy,
         RuleStage::ProxyToUpstream => ProtocolRuleStage::ProxyToUpstream,
-        RuleStage::UpstreamToProxy => ProtocolRuleStage::UpstreamToProxy,
         RuleStage::ProxyToApp => ProtocolRuleStage::ProxyToApp,
-        RuleStage::TlsHandshake => return None,
+        RuleStage::AppToProxy | RuleStage::UpstreamToProxy | RuleStage::TlsHandshake => {
+            return None;
+        }
     };
     let schema = match protocol_stage.direction() {
         intercept_proxy_domain::ProtocolDirection::Upstream => &description.upstream_schema,

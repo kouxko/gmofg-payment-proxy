@@ -19,15 +19,15 @@ async fn http_and_document_conditions_gate_both_action_sets_as_one_rule() {
     let RuleContent::Http(content) = &mut draft.content else {
         panic!("HTTP rule expected");
     };
-    content.conditions = vec![MatchCondition::Field {
+    content.condition = intercept_proxy_domain::ConditionTree::from_http_conditions(vec![MatchCondition::Field {
         field: MatchField::PathOrRequestType,
         operator: MatchOperator::Equals("/allowed".into()),
-    }];
-    content.actions = vec![RuleAction::SetHeader {
+    }]);
+    let expected_actions = vec![RuleAction::SetHeader {
         name: "x-joint".into(),
         value: "matched".into(),
     }];
-    let expected_actions = content.actions.clone();
+    content.actions = expected_actions.clone().into_iter().map(intercept_proxy_domain::UnifiedAction::from).collect();
     definition.update(definition.revision(), draft).unwrap();
 
     let identity = identity();
@@ -182,7 +182,7 @@ fn prepare_snapshot(
         .map(|definition| {
             let RuleContent::Socket(SocketRuleContent {
                 package,
-                conditions,
+                condition,
                 actions,
             }) = definition.content()
             else {
@@ -199,12 +199,10 @@ fn prepare_snapshot(
                     stage: definition.stage(),
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions: Vec::new(),
-                        actions: Vec::new(),
+                        condition: condition.clone(),
+                        actions: actions.clone(),
                         document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
                             package: package.clone(),
-                            conditions: conditions.clone(),
-                            actions: actions.clone(),
                         }),
                         one_shot: false,
                         hit_count: 0,
@@ -255,9 +253,19 @@ fn set_string_rule(
     stage: ProtocolRuleStage,
     created_order: u64,
     field: &str,
-    conditions: Vec<DocumentCondition>,
+    mut conditions: Vec<DocumentCondition>,
     value: &str,
 ) -> ProtocolDocumentRuleDefinition {
+    if conditions.is_empty() {
+        let decoded_field = match stage {
+            ProtocolRuleStage::AppToProxy | ProtocolRuleStage::ProxyToUpstream => "route",
+            ProtocolRuleStage::UpstreamToProxy | ProtocolRuleStage::ProxyToApp => "result",
+        };
+        conditions.push(DocumentCondition::Equals {
+            field: JsonPointer::property(decoded_field),
+            value: DocumentValue::String("decoded".into()),
+        });
+    }
     ProtocolDocumentRuleDefinition::new_named_for_stage(
         id,
         format!("{stage:?}"),

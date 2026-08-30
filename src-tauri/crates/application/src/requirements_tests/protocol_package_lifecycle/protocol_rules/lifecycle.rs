@@ -45,7 +45,7 @@ async fn deleting_an_imported_high_order_rule_never_reuses_its_created_order() {
         listener_id,
         package.clone(),
         ProtocolDirection::Upstream,
-        Vec::new(),
+        vec![equals("trace_id", DocumentValue::String("phase5".into()))],
         vec![DocumentAction::RecordMatch],
     )
     .unwrap();

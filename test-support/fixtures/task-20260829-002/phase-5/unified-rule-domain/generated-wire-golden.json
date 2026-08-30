@@ -1,0 +1,10 @@
+{
+  "schema_version": 1,
+  "type_blocks": {
+    "ConditionTree": "{ operator: \"all\"; children: ConditionTree[] } | { operator: \"any\"; children: ConditionTree[] } | { operator: \"leaf\"; children: Condition }",
+    "DocumentMutation": "{ type: \"set\"; path: JsonPointer; value: DocumentValue } | { type: \"clear\"; path: JsonPointer } | { type: \"insert\"; path: JsonPointer; index: number; value: DocumentValue } | { type: \"append\"; path: JsonPointer; value: DocumentValue }",
+    "DocumentPredicate": "{ type: \"string\"; value: StringPredicate } | { type: \"number\"; value: NumberPredicate } | { type: \"boolean\"; value: BooleanPredicate } | { type: \"null_equal\" }",
+    "UnifiedAction": "{ source: \"record_match\" } | { source: \"document\"; value: DocumentMutation } | { source: \"http\"; value: RuleAction } | { source: \"terminal\"; value: TerminalAction }"
+  },
+  "semantic_sha256": "03c6f9893cda489714060f1ef4c8b8d42d9e5bcd1284940d52375c703b74c72b"
+}

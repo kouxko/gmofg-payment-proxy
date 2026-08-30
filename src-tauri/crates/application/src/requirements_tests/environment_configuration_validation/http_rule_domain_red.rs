@@ -3,7 +3,7 @@ use super::*;
 fn protocol_document() -> serde_json::Value {
     serde_json::json!({
         "package": {"id": "au-eftex", "version": "1.1.0"},
-        "conditions": [],
+        "conditions": [{"operator": "equals", "field": "/amount", "value": 1000}],
         "actions": [{"type": "record_match"}]
     })
 }
@@ -26,8 +26,8 @@ async fn application_boundary_stages_reject_ordinary_http_conditions_and_actions
 #[tokio::test]
 async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
     for (stage, pure_document) in [
-        ("app_to_proxy", true),
-        ("upstream_to_proxy", true),
+        ("proxy_to_upstream", true),
+        ("proxy_to_app", true),
         ("proxy_to_upstream", false),
         ("proxy_to_app", false),
     ] {

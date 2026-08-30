@@ -139,11 +139,14 @@ fn validate_rule_listener_binding(
             match &settings.topology {
                 SocketTopology::Relay(_) => {}
                 SocketTopology::LocalResponder(_) => {
-                    if !matches!(rule.stage(), RuleStage::AppToProxy | RuleStage::ProxyToApp) {
+                    if !matches!(
+                        rule.stage(),
+                        RuleStage::ProxyToUpstream | RuleStage::ProxyToApp
+                    ) {
                         push_field_error(
                             error,
                             format!("{prefix}.stage"),
-                            "本机应答只允许配置应用进入代理和代理返回应用两个阶段",
+                            "本机应答只允许配置两个统一代理写出阶段",
                         );
                     }
                 }

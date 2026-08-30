@@ -311,7 +311,7 @@ fn pause_rule() -> RuleViewModel {
             creation_order: 1,
             channel_text: "全部".into(),
             stage_text: "请求".into(),
-            match_summary: "0 个条件".into(),
+            match_summary: "请求路径等于 /payment".into(),
             action_summary: "1 个动作".into(),
             hit_count: 0,
             last_hit_at: None,
@@ -326,7 +326,12 @@ fn pause_rule() -> RuleViewModel {
             priority: 1,
             channel: None,
             stage: Some(AppMessageStage::Request),
-            conditions: Vec::new(),
+            conditions: vec![intercept_proxy_application::RuleCondition::Field {
+                field: intercept_proxy_application::RuleMatchField::PathOrRequestType,
+                operator: intercept_proxy_application::RuleMatchOperator::Equals {
+                    value: "/payment".into(),
+                },
+            }],
             actions: vec![intercept_proxy_application::RuleAction::Pause],
             one_shot: false,
         },
@@ -348,6 +353,12 @@ fn response_status_rule(status: u16) -> RuleViewModel {
     rule.summary.stage_text = "响应".into();
     rule.draft.name = "响应状态替换".into();
     rule.draft.stage = Some(AppMessageStage::Response);
+    rule.draft.conditions = vec![intercept_proxy_application::RuleCondition::Field {
+        field: intercept_proxy_application::RuleMatchField::PathOrRequestType,
+        operator: intercept_proxy_application::RuleMatchOperator::Equals {
+            value: "200".into(),
+        },
+    }];
     rule.draft.actions = vec![intercept_proxy_application::RuleAction::CustomHttpStatus { status }];
     rule
 }

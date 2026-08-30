@@ -1,8 +1,8 @@
 //! 持久化前基于 Listener 与协议包描述的统一 Document 规则校验。
 
 use intercept_proxy_domain::{
-    DocumentAction, DocumentCondition, DocumentSchemaNode, ProtocolPackageRef, RuleContent,
-    validate_document_rule_content_against_schema,
+    ConditionTree, DocumentSchemaNode, ProtocolPackageRef, RuleContent, UnifiedAction,
+    validate_unified_actions_schema,
 };
 
 use super::Application;
@@ -54,19 +54,16 @@ impl Application {
                 "协议包未声明该方向的 Document Encode 能力",
             ));
         }
-        validate_document_rule_content_against_schema(
-            candidate.conditions,
-            candidate.actions,
-            &schema,
-        )?;
+        candidate.condition.validate_document_schema(&schema)?;
+        validate_unified_actions_schema(candidate.actions, &schema)?;
         Ok(())
     }
 }
 
 struct DocumentCandidate<'a> {
     package: &'a ProtocolPackageRef,
-    conditions: &'a [DocumentCondition],
-    actions: &'a [DocumentAction],
+    condition: &'a ConditionTree,
+    actions: &'a [UnifiedAction],
 }
 
 fn document_candidate<'a>(
@@ -92,8 +89,8 @@ fn document_candidate<'a>(
             }
             Ok(Some(DocumentCandidate {
                 package,
-                conditions: &document.conditions,
-                actions: &document.actions,
+                condition: &content.condition,
+                actions: &content.actions,
             }))
         }
         (RuleContent::Socket(content), ListenerDataPlane::Socket(settings)) => {
@@ -110,16 +107,16 @@ fn document_candidate<'a>(
                 ));
             }
             if matches!(settings.topology, SocketTopology::LocalResponder(_))
-                && !matches!(rule.stage(), RuleStage::AppToProxy | RuleStage::ProxyToApp)
+                && !matches!(
+                    rule.stage(),
+                    RuleStage::ProxyToUpstream | RuleStage::ProxyToApp
+                )
             {
-                return Err(rule_invalid(
-                    "stage",
-                    "本机应答只支持应用到代理和代理到应用阶段",
-                ));
+                return Err(rule_invalid("stage", "本机应答只支持统一的代理写出阶段"));
             }
             Ok(Some(DocumentCandidate {
                 package: &scripted.package,
-                conditions: &content.conditions,
+                condition: &content.condition,
                 actions: &content.actions,
             }))
         }
@@ -131,8 +128,8 @@ fn document_candidate<'a>(
     }
 }
 
-fn document_action_modifies_value(action: &DocumentAction) -> bool {
-    !matches!(action, DocumentAction::RecordMatch)
+fn document_action_modifies_value(action: &UnifiedAction) -> bool {
+    matches!(action, UnifiedAction::Document(_))
 }
 
 fn rule_invalid(field: &str, message: &str) -> AppError {
