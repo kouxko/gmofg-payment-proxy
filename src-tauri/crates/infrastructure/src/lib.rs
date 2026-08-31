@@ -52,6 +52,6 @@ pub use package_transport::{
 pub use sqlite::{
     AndroidRuntimeOwnerRecord, CURRENT_APPLICATION_SCHEMA_VERSION, CertificateMaterialRecord,
     CertificateMaterialSnapshot, EnvironmentCommitFaultPoint, IntoSqlitePersistence,
-    ProtectedSecretRecord, SqliteExecutor, SqliteStartupPolicy, SqliteStore, StoredSettings,
+    ProtectedSecretRecord, SqliteExecutor, SqliteStore, StoredSettings,
     WorkspaceCollectionSnapshot, WorkspaceRecord, open_sqlite_persistence,
 };

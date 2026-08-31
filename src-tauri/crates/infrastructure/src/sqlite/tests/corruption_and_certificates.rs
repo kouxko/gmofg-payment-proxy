@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn schema_19_is_cleared_and_rebuilt_as_version_100() {
+fn schema_19_is_rejected_without_modifying_legacy_data() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).expect("open legacy database");
@@ -17,9 +17,14 @@ fn schema_19_is_cleared_and_rebuilt_as_version_100() {
         )
         .expect("seed schema 19");
     drop(connection);
+    let before = std::fs::read(&path).expect("read legacy database before rejection");
 
     assert_eq!(CURRENT_APPLICATION_SCHEMA_VERSION, 100);
-    drop(SqliteStore::open(&path).expect("reset pre-1.0 schema"));
+    SqliteStore::open(&path).expect_err("schema 19 must fail closed");
+    assert_eq!(
+        std::fs::read(&path).expect("read legacy database after rejection"),
+        before
+    );
     let connection = Connection::open(&path).expect("reopen legacy database");
     let version = connection
         .query_row(
@@ -27,7 +32,7 @@ fn schema_19_is_cleared_and_rebuilt_as_version_100() {
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("rebuilt schema marker");
+        .expect("legacy schema marker");
     let legacy_exists = connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_listener_policy')",
@@ -35,12 +40,12 @@ fn schema_19_is_cleared_and_rebuilt_as_version_100() {
             |row| row.get::<_, bool>(0),
         )
         .expect("legacy table probe");
-    assert_eq!(version, 100);
-    assert!(!legacy_exists, "pre-1.0 table must be removed");
+    assert_eq!(version, 19);
+    assert!(legacy_exists, "pre-1.0 table must remain after rejection");
 }
 
 #[test]
-fn committed_version_99_wal_data_is_cleared_and_foreign_keys_are_restored() {
+fn committed_version_99_wal_data_is_rejected_without_modification() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let seed = Connection::open(&path).expect("open version 99 database");
@@ -56,33 +61,34 @@ fn committed_version_99_wal_data_is_cleared_and_foreign_keys_are_restored() {
          INSERT INTO wal_sentinel(value) VALUES ('committed in WAL');",
     )
     .expect("commit version 99 WAL data");
-    assert!(path.with_extension("sqlite-wal").exists());
+    let wal_path = path.with_extension("sqlite-wal");
+    assert!(wal_path.exists());
+    let database_before = std::fs::read(&path).expect("read database before rejection");
+    let wal_before = std::fs::read(&wal_path).expect("read WAL before rejection");
 
-    let store = SqliteStore::open(&path).expect("reset committed WAL database");
-    let connection = store.connection.lock();
-    let version = connection
+    SqliteStore::open(&path).expect_err("version 99 WAL database must fail closed");
+    assert_eq!(
+        std::fs::read(&path).expect("read database after rejection"),
+        database_before
+    );
+    assert_eq!(
+        std::fs::read(&wal_path).expect("read WAL after rejection"),
+        wal_before
+    );
+    let version = seed
         .query_row(
             "SELECT version FROM application_schema WHERE singleton_id = 1",
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("version 100 marker");
-    let sentinel_exists = connection
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM sqlite_schema
-                WHERE type = 'table' AND name = 'wal_sentinel'
-            )",
-            [],
-            |row| row.get::<_, bool>(0),
-        )
-        .expect("sentinel probe");
-    let foreign_keys = connection
-        .query_row("PRAGMA foreign_keys", [], |row| row.get::<_, bool>(0))
-        .expect("foreign key state");
-    assert_eq!(version, 100);
-    assert!(!sentinel_exists);
-    assert!(foreign_keys);
+        .expect("version 99 marker");
+    let sentinel = seed
+        .query_row("SELECT value FROM wal_sentinel", [], |row| {
+            row.get::<_, String>(0)
+        })
+        .expect("WAL sentinel");
+    assert_eq!(version, 99);
+    assert_eq!(sentinel, "committed in WAL");
 }
 
 #[test]

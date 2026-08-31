@@ -70,15 +70,6 @@ pub struct SqliteStore {
     blocking_gate: std::sync::Arc<tokio::sync::Semaphore>,
 }
 
-#[derive(Clone, Copy, Debug, Default, Eq, PartialEq)]
-pub enum SqliteStartupPolicy {
-    /// Open the existing database under the product's strict compatibility rules.
-    #[default]
-    Preserve,
-    /// Atomically replace every non-SQLite object with the current Schema100 layout.
-    RecreateCurrent,
-}
-
 #[cfg(test)]
 impl SqliteStore {
     pub(crate) fn execute_test_batch(&self, sql: &str) -> Result<(), InfrastructureError> {
@@ -103,7 +94,8 @@ mod schema;
 
 /// 当前数据库格式版本。版本 100 是产品 1.00 的正式兼容基线。
 ///
-/// 启动时仅清空合法的发布前版本；从版本 100 开始的后续升级必须使用显式迁移。
+/// 启动时原样保留版本 100；任何非空且不等于 100 的版本均 fail-closed，不得修改数据库。
+/// 从版本 100 开始的后续升级必须使用显式迁移。
 pub const CURRENT_APPLICATION_SCHEMA_VERSION: i64 = schema::CURRENT_SCHEMA_VERSION;
 mod workspaces;
 

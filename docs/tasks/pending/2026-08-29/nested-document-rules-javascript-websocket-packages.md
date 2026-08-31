@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-08-31 11:26:30 +08:00`
+- 最后更新时间：`2026-08-31 16:56:17 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -246,7 +246,7 @@ result: "<HTML string>"
 | NDR-JS-07 | 将 HTTP/Socket Pipeline 切换到统一规则和唯一 WebSocket 包端口，删除旧执行路径 | NDR-JS-03、NDR-JS-06 | 否 | 待实现 | 两方向完整 Pipeline、codec、失败边界与原始字节保留通过 |
 | NDR-JS-08 | 将内置 JSON、ISO8583 和第三方本地包迁移为同一 ZIP/Sidecar；保留远程同协议接入 | NDR-JS-07 | 可按包并行 | 待实现 | 四类包共享同一注册/RPC/capability 链，测试向量一致 |
 | NDR-JS-09 | 实现统一规则 modal、元数据树、条件树、多动作、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 已完成 | G056 / Phase15 Reviewer APPROVE、Verifier VERIFIED，P0/P1/P2=0，code checkpoint ready；current full=false |
-| NDR-JS-10 | 删除开发期 DB 清空逻辑及所有旧 Rhai/TOML/flat/four-stage/API1 路径，固化正式 Schema100 | NDR-JS-07、NDR-JS-09 | 否 | 待实现 | Release 重启持久化、旧入口搜索为零、数据结构一致 |
+| NDR-JS-10 | 删除开发期 DB 清空逻辑及所有旧 Rhai/TOML/flat/four-stage/API1 路径，固化正式 Schema100 | NDR-JS-07、NDR-JS-09 | 否 | 已完成 | Phase17 Release optimized 双启动1/1、pre100 fail-closed/no-mutation、reset owner零残留；Reviewer/Verifier P0/P1/P2=0 |
 | NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 已完成 | Reviewer APPROVE、Verifier VERIFIED，P0/P1/P2=0，code checkpoint ready；full由NDR-JS-12负责 |
 | NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 待实现 | 本地门禁通过，无 P0/P1/P2；Windows 真实 CI 明确 NOT_RUN |
 
@@ -423,7 +423,8 @@ result: "<HTML string>"
 - `2026-08-31 15:59:32 +08:00`：Phase16需求变更：用户明确授权仅对`docs/README.md` ADR索引/current authority做精确最小修改并保留其他用户修改；已加入ADR-009、标记ADR-002/007为历史取代关系，并退出旧exchange template的current authority。用户同时取消Phase16 hash验收，要求删除完整scope hash声明且不生成替代hash；验收改为明确file scope、命令、exit、计数、链接和状态。fresh session90686串联命令exit0：Node15/15、6个MCP exact各1/1、architecture/source-size/lint/fmt/diff全PASS；full仍按NDR-JS-12为N/A，人工/外部项NOT_RUN。当前`SOURCE_DOCS_GREEN_REVIEW_PENDING`且`code_checkpoint_ready=false`，等待独立Reviewer/Verifier。
 - `2026-08-31 16:05:16 +08:00`：补强Phase16 mutation，明确证明Boa host被错误扩写为general sandbox时checker失败、current MCP read-tool count从36漂移到37时checker失败。fresh session80057串联命令exit0：Node17/17、6个MCP exact各1/1及architecture/source-size/lint/fmt/diff全PASS；无hash合同保持。
 - `2026-08-31 16:08:12 +08:00`：Phase16最终Reviewer `APPROVE`、Verifier `VERIFIED`，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。full checkpoint按NDR-JS-12职责为N/A；人工UI、真实App、外部网络、CI、push、Release继续`NOT_RUN`。用户取消hash合同保持，未生成或声明Phase16 worktree/source hash。
-- 下一步：创建 Phase16 本地代码检查点后进入 NDR-JS-12 全层验收。推送、远程 CI 与 Release 保持 `NOT_RUN`。
+- `2026-08-31 16:56:17 +08:00`：G058 / Phase17 物理删除development pre-100 recreate/reset policy、marker与启动分支，Schema100原样保留，其他版本/损坏标记fail-closed且不改写数据库bytes/data。真实Release optimized双启动完整名exact1/1、Phase17 aggregate Node10/10+Infra1/1+Host1/1+Release1/1、Infra501/501、Host10/10及static全绿；final mutation12/12。Application full session1189为`BLOCKED/PARTIAL` exit130，已见1个既有limits_red失败与2个validation hang，raw unavailable，后续completion`NOT_RUN`，不得替代为PASS。Phase17 full按NDR-JS-12职责为N/A。Reviewer `APPROVE`、Verifier `VERIFIED`，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。正式证据：[phase17-release-schema100-preservation](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/README.md)。
+- 下一步：创建 Phase17 本地代码检查点后继续 NDR-JS-12 剩余全层验收。推送、远程 CI 与 Release 保持 `NOT_RUN`。
 
 ## 修改文件
 
@@ -453,6 +454,7 @@ result: "<HTML string>"
 - `scripts/check-task-20260829-002-phase15-ui.mjs`、对应 mutation tests、`scripts/check-frontend-boundaries.mjs`与`package.json`：Phase15 focused/checker入口及边界门禁。
 - `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase15-complete-ui/`：Phase15 RED/GREEN、合同覆盖、复测命令和唯一 full checkpoint 证据。
 - `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase16-documentation-contract/`：Phase16文档RED/GREEN、checker mutations、embedded MCP resource、static门、full N/A职责边界及用户拥有文件阻塞证据。
+- `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/`：Phase17 pre100 fail-closed/no-mutation、真实Release双启动、affected/static、Application partial blocker与最终review证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/`：Phase 7 严格 ZIP、package-initiated registration、固定 typed transport、canonical Base64/FrameResult、旧 dynamic path 删除、checker mutation、活动 E2E、Phase6 真实 RED、affected full 与完整十门 PASS 证据。
 - `src-tauri/crates/package-runtime/src/sidecar.rs`、`src/bin/intercept-proxy-package-sidecar.rs`、Phase8 tests 与 Cargo manifests/lock：Phase 8 单 Boa Context、严格 ESM/exports/HTTP/Socket 转换及 compile-only generic Sidecar marker。
 - `scripts/check-task-20260829-002-phase8-sidecar.mjs`、对应 mutation tests 与 `package.json`：Phase 8 fail-closed checker、真实 Cargo discovery 和 focused 入口。
@@ -577,6 +579,7 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY / FULL CHECKPOINT ARTIFACT PARTIAL`：Phase14 targeted、affected、static与唯一full checkpoint全部PASS；Reviewer/Verifier P0/P1/P2=`0/0/0`，可创建代码检查点。session1649 raw stream 未落盘且明确标记 unavailable/not fabricated，artifact完整度为false。
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT INCOMPLETE / FULL CHECKPOINT ARTIFACT PARTIAL`：Phase15最终Reviewer/Verifier P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`；current full=false，历史session16797 exit0但早于repairs且raw缺失，人工/外部项`NOT_RUN`。
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY`：用户授权后已精确同步`docs/README.md` ADR-009 discoverability/current authority；session80057中Phase16 Node17/17、6个MCP exact各1/1及architecture/source-size/lint/fmt/diff全绿。mutation覆盖Boa host general-sandbox过度声明与MCP 36→37漂移。用户取消hash验收，证据按明确file scope、命令、exit、计数、链接和状态记录；Reviewer/Verifier P0/P1/P2=`0/0/0`，full checkpoint按NDR-JS-12职责为N/A。
+- `VERIFIED / APPROVED / CODE CHECKPOINT READY / APPLICATION FULL BLOCKED-PARTIAL`：Phase17真实Release optimized双启动exact1/1、Infra501/501、Host10/10、checker mutation12/12及static门PASS；Application full session1189 exit130/raw unavailable，后续completion NOT_RUN；Phase17 full按NDR-JS-12职责为N/A。
 
 - `NOT_RUN`：未推送、未触发远程 CI。
 
@@ -588,3 +591,4 @@ result: "<HTML string>"
 - 阶段总结：G055 / Phase14 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / FULL CHECKPOINT ARTIFACT PARTIAL`；代码失败0，Reviewer/Verifier P0/P1/P2=`0/0/0`，唯一full checkpoint exit0但raw artifact不完整；TASK总体仍为进行中。
 - 阶段总结：G056 / Phase15 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT INCOMPLETE / FULL CHECKPOINT ARTIFACT PARTIAL`；P0/P1/P2=`0/0/0`，current full=false，历史session16797 exit0但早于repairs且raw缺失，人工UI与外部环境项`NOT_RUN`；TASK总体仍为进行中。
 - 阶段总结：G057 / Phase16 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY`；授权范围包含`docs/README.md`精确ADR hunk，session80057 targeted/static全绿，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。full checkpoint属于NDR-JS-12而为N/A；TASK总体仍为进行中。
+- 阶段总结：G058 / Phase17 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / APPLICATION FULL BLOCKED-PARTIAL`；真实Release optimized exact1/1、P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。Application full session1189 exit130/raw unavailable，后续completion NOT_RUN；Phase17 full属于NDR-JS-12而为N/A，TASK总体仍为进行中。

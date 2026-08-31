@@ -1,0 +1,39 @@
+{
+  "red": {
+    "node_release_checker": { "passed": 6, "failed": 2 },
+    "infrastructure_fail_closed": { "passed": 0, "failed": 1 }
+  },
+  "green": {
+    "phase17_aggregate": {
+      "session": 81727,
+      "exit": 0,
+      "node": { "passed": 10, "failed": 0 },
+      "infrastructure_exact": { "passed": 1, "failed": 0 },
+      "host_pre100_exact": { "passed": 1, "failed": 0 },
+      "release_optimized_exact": { "passed": 1, "failed": 0 }
+    },
+    "affected": {
+      "infrastructure": { "passed": 501, "failed": 0 },
+      "host": { "passed": 10, "failed": 0 }
+    },
+    "final_repair": {
+      "checker_mutations": { "passed": 12, "failed": 0 },
+      "cargo_check": "PASS",
+      "architecture": "PASS",
+      "source_size": "PASS",
+      "lint": "PASS",
+      "typecheck": "PASS",
+      "rust_fmt": "PASS",
+      "strict_clippy": "PASS",
+      "diff_check": "PASS"
+    }
+  },
+  "application_full": {
+    "session": 1189,
+    "exit": 130,
+    "status": "BLOCKED/PARTIAL",
+    "raw_stdout": "unavailable",
+    "completion": "NOT_RUN"
+  },
+  "phase17_full": "N/A"
+}

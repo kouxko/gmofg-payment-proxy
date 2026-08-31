@@ -44,12 +44,6 @@ impl NativeFileDialog for StaticOpenDialog {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
-enum SecondStartExpectation {
-    Recreated,
-    Preserved,
-}
-
 #[derive(Debug)]
 struct TwoStartFixture {
     workspace_id: WorkspaceId,
@@ -74,45 +68,11 @@ struct StoredPackageSnapshot {
 }
 
 #[tokio::test]
-async fn explicit_recreate_policy_removes_current_schema_data_before_host_reads() {
-    assert_two_start_database_contract(
-        Some(DatabaseStartupPolicy::RecreateCurrent),
-        SecondStartExpectation::Recreated,
-    )
-    .await;
+async fn release_startup_preserves_schema100_state_across_two_real_host_starts() {
+    assert_two_start_database_contract().await;
 }
 
-#[tokio::test]
-async fn default_preserve_policy_keeps_current_schema_data_across_host_starts() {
-    assert_two_start_database_contract(None, SecondStartExpectation::Preserved).await;
-}
-
-#[tokio::test]
-async fn recreate_policy_propagates_database_open_failure_without_starting_host() {
-    let temp = tempfile::tempdir().expect("temporary host directory");
-    std::fs::write(
-        temp.path().join("intercept-proxy.sqlite3"),
-        b"not a sqlite database",
-    )
-    .expect("write invalid database bytes");
-
-    let error = ApplicationHostBuilder::new(
-        temp.path(),
-        HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
-        Arc::new(InterceptProxyProfile),
-    )
-    .with_database_startup_policy(DatabaseStartupPolicy::RecreateCurrent)
-    .build()
-    .await
-    .expect_err("database failure must prevent Host construction");
-
-    assert!(matches!(error, HostBuildError::Infrastructure(_)));
-}
-
-async fn assert_two_start_database_contract(
-    second_start_policy: Option<DatabaseStartupPolicy>,
-    expectation: SecondStartExpectation,
-) {
+async fn assert_two_start_database_contract() {
     let temp = tempfile::tempdir().expect("temporary two-start host directory");
     let package_zip = temp.path().join("strict-javascript-package.zip");
     let package_archive = javascript_package_zip();
@@ -134,57 +94,48 @@ async fn assert_two_start_database_contract(
     let first_package = load_package_snapshot(temp.path(), &fixture)
         .expect("local package row after first shutdown");
     assert_package_snapshot_contract(&first_package, &fixture);
+    assert_schema100_without_legacy_tables(temp.path());
 
-    let mut second_builder = ApplicationHostBuilder::new(
+    let second = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
         Arc::new(InterceptProxyProfile),
+    )
+    .build()
+    .await
+    .expect("second Release-equivalent Host startup");
+    assert_two_start_fixture_present(second.application().as_ref(), &fixture).await;
+    let second_package = load_package_snapshot(temp.path(), &fixture)
+        .expect("local package row after second startup");
+    assert_eq!(
+        second_package.registration_json,
+        first_package.registration_json
     );
-    if let Some(policy) = second_start_policy {
-        second_builder = second_builder.with_database_startup_policy(policy);
-    }
-    let second = second_builder.build().await.expect("second Host startup");
-    match expectation {
-        SecondStartExpectation::Recreated => {
-            assert_two_start_fixture_absent(second.application().as_ref(), &fixture).await;
-            assert_eq!(load_package_snapshot(temp.path(), &fixture), None);
-        }
-        SecondStartExpectation::Preserved => {
-            assert_two_start_fixture_present(second.application().as_ref(), &fixture).await;
-            let second_package = load_package_snapshot(temp.path(), &fixture)
-                .expect("local package row after second startup");
-            assert_eq!(
-                second_package.registration_json,
-                first_package.registration_json
-            );
-            assert_eq!(
-                second_package.registration_fingerprint,
-                first_package.registration_fingerprint
-            );
-            assert_eq!(second_package.local_archive, first_package.local_archive);
-            assert_eq!(second_package.enabled, first_package.enabled);
-            assert_eq!(
-                second_package.first_connected_at,
-                first_package.first_connected_at
-            );
-            assert_eq!(
-                second_package.last_connected_at,
-                first_package.last_connected_at
-            );
-            assert_eq!(second_package.last_remote_address, None);
-            assert_eq!(
-                second_package.recent_error_code,
-                first_package.recent_error_code
-            );
-            assert_eq!(
-                second_package.recent_error_message,
-                first_package.recent_error_message
-            );
-            assert!(
-                second_package.recent_error_occurred_at >= first_package.recent_error_occurred_at
-            );
-        }
-    }
+    assert_eq!(
+        second_package.registration_fingerprint,
+        first_package.registration_fingerprint
+    );
+    assert_eq!(second_package.local_archive, first_package.local_archive);
+    assert_eq!(second_package.enabled, first_package.enabled);
+    assert_eq!(
+        second_package.first_connected_at,
+        first_package.first_connected_at
+    );
+    assert_eq!(
+        second_package.last_connected_at,
+        first_package.last_connected_at
+    );
+    assert_eq!(second_package.last_remote_address, None);
+    assert_eq!(
+        second_package.recent_error_code,
+        first_package.recent_error_code
+    );
+    assert_eq!(
+        second_package.recent_error_message,
+        first_package.recent_error_message
+    );
+    assert!(second_package.recent_error_occurred_at >= first_package.recent_error_occurred_at);
+    assert_schema100_without_legacy_tables(temp.path());
     second.shutdown().await.expect("shutdown second Host");
 }
 
@@ -297,31 +248,6 @@ async fn assert_two_start_fixture_present(
     assert_package_persisted(application, &fixture.package).await;
 }
 
-async fn assert_two_start_fixture_absent(
-    application: &intercept_proxy_application::Application,
-    fixture: &TwoStartFixture,
-) {
-    let workspaces = application
-        .workspace_list()
-        .await
-        .expect("list Workspaces after recreate");
-    assert!(
-        workspaces
-            .iter()
-            .all(|workspace| workspace.id != fixture.workspace_id),
-        "the unique Workspace must be absent; its Listener and Rule are owned by that aggregate"
-    );
-
-    assert!(
-        application
-            .protocol_package_list()
-            .await
-            .expect("list Packages after recreate")
-            .is_empty(),
-        "RecreateCurrent must remove the unified external package registry"
-    );
-}
-
 async fn assert_package_persisted(
     application: &intercept_proxy_application::Application,
     package: &intercept_proxy_application::ProtocolPackageRef,
@@ -412,6 +338,35 @@ fn assert_package_snapshot_contract(snapshot: &StoredPackageSnapshot, fixture: &
         Some("本地软件包进程启动失败。")
     );
     assert!(snapshot.recent_error_occurred_at.is_some());
+}
+
+fn assert_schema100_without_legacy_tables(data_dir: &std::path::Path) {
+    let connection = rusqlite::Connection::open(data_dir.join("intercept-proxy.sqlite3"))
+        .expect("open Host database schema readback");
+    let version = connection
+        .query_row(
+            "SELECT version FROM application_schema WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("read Schema100 marker");
+    assert_eq!(version, 100);
+    for table in [
+        "protocol_packages",
+        "protocol_package_files",
+        "protocol_document_rules",
+        "pre_1_0_sentinel",
+        "pre_baseline_sentinel",
+    ] {
+        let exists = connection
+            .query_row(
+                "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = ?1)",
+                [table],
+                |row| row.get::<_, bool>(0),
+            )
+            .expect("probe legacy table");
+        assert!(!exists, "legacy table {table} must not exist");
+    }
 }
 
 fn javascript_package_zip() -> Vec<u8> {

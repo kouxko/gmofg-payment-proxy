@@ -5,8 +5,8 @@ use std::sync::Arc;
 use async_trait::async_trait;
 use intercept_proxy_domain::{
     Document, DocumentValue, ErrorCode, JsonPointer, ListenerId, ProtocolDocumentOperation,
-    ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
-    ProtocolRuleStage, SocketTopology,
+    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
+    ProtocolDocumentRuleProgram, ProtocolRuleStage, SocketTopology,
 };
 use intercept_proxy_exchange::SocketContext;
 use intercept_proxy_package_contract::{
@@ -259,7 +259,10 @@ fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactor
         listener_id(),
         package.clone(),
         ProtocolRuleStage::ProxyToUpstream,
-        Vec::new(),
+        vec![ProtocolDocumentPredicate::Equals {
+            field: JsonPointer::property("message_type"),
+            value: DocumentValue::String("0200".to_owned()),
+        }],
         vec![ProtocolDocumentOperation::SetField {
             field: JsonPointer::property("amount"),
             value: DocumentValue::integer(42).unwrap(),
