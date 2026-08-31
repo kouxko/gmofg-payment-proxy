@@ -342,7 +342,6 @@ impl SqliteStore {
                  UPDATE certificate_state SET revision = revision + 1 WHERE singleton_id = 1;
                  DELETE FROM android_runtime_owners;
                  DELETE FROM external_protocol_packages;
-                 DELETE FROM protocol_packages;
                  DELETE FROM workspaces;",
             )
             .map_err(|source| InfrastructureError::Database { source })?;

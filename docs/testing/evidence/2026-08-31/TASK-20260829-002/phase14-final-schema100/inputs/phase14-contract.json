@@ -1,0 +1,19 @@
+{
+  "schema_version": 100,
+  "required_persistence": [
+    "recursive Workspace aggregate JSON",
+    "unified RuleDefinition revision and lifecycle",
+    "external package registration JSON and fingerprint",
+    "local package ZIP archive",
+    "enabled and connection lifecycle metadata"
+  ],
+  "removed_tables": [
+    "protocol_packages",
+    "protocol_package_files"
+  ],
+  "preserved_for_phase17": [
+    "SqliteStartupPolicy::RecreateCurrent",
+    "DatabaseStartupPolicy::RecreateCurrent",
+    "Phase2 release blocker marker"
+  ]
+}

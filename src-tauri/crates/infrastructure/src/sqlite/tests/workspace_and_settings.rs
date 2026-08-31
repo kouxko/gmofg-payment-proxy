@@ -14,8 +14,6 @@ fn schema_keeps_all_runtime_payload_storage_absent() {
             "certificate_state",
             "external_protocol_packages",
             "protected_secrets",
-            "protocol_package_files",
-            "protocol_packages",
             "settings",
             "workspace_state",
             "workspaces"

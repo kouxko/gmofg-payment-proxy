@@ -59,7 +59,11 @@ async fn local_responder_plan_requires_exact_package_but_upstream_probe_is_not_a
         ..ProxyWorkspace::default()
     };
     workspace.validate().expect("valid LocalResponder fixture");
-    let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let runtime = test_listener_runtime(Arc::clone(&store));
+    runtime.set_external_package_provider(Arc::new(
+        crate::adapters::ExternalPackageRegistryAdapter::new(store),
+    ));
     let builder = ListenerRuntimePlanBuilder::new(&runtime);
 
     let start_error = builder
@@ -69,7 +73,7 @@ async fn local_responder_plan_requires_exact_package_but_upstream_probe_is_not_a
         .expect("T21 LocalResponder plan must fresh-load its exact package");
     assert_eq!(
         start_error.view_model.code,
-        "PROTOCOL_PACKAGE_NOT_FOUND"
+        "EXTERNAL_PACKAGE_NOT_FOUND"
     );
     let probe_error = builder
         .build_probe(&workspace, &listener, Uuid::new_v4())

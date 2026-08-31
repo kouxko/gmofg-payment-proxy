@@ -134,7 +134,7 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 - `sqlite/`：Workspace、规则、协议包、证书引用和设置持久化。
 - `adapters/listener_runtime/`：领域 Listener 到真实 runtime 的装配与校验。
 - `adapters/pipeline/`：HTTP 标准规则、抓包、会话、断点和故障动作桥接。
-- `adapters/protocol_packages/`：包导入、精确版本、编译缓存和运行快照。
+- `sqlite/external_packages.rs`：外部包注册、本地 ZIP、生命周期状态和精确版本持久化。
 - `adapters/external_packages/`：外部 WebSocket/RPC 协议能力。
 - `adapters/exchange_observation.rs`：有界内存中的连接事件记录，不写 SQLite。
 - `certificates/`、`dpapi`、`keychain`、Android ADB adapter：平台边界。

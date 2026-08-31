@@ -1,0 +1,62 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase14-final-schema100",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase13-builtin-zip-replacement",
+    "evidence_path": "docs/testing/evidence/2026-08-31/TASK-20260829-002/phase13-builtin-zip-replacement"
+  },
+  "executed_at": "2026-08-31 10:31:37 +08:00",
+  "timezone": "Asia/Shanghai",
+  "baseline_head": "453474854a169678b5d01191f824395eba9aebe8",
+  "baseline_tree": "d3b07cc116d9471aba766cce6b15ee5613e569ea",
+  "result": "VERIFIED_APPROVED_CODE_CHECKPOINT_READY_FULL_CHECKPOINT_ARTIFACT_PARTIAL",
+  "review": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "code_checkpoint_ready": true,
+    "full_checkpoint_artifact_complete": false
+  },
+  "red": {
+    "checker_exit": 1,
+    "checker_legacy_surfaces": 4,
+    "cargo_failed": 2
+  },
+  "green": {
+    "phase14_node": "3/3",
+    "phase14_cargo": "2/2",
+    "sqlite_affected": "78/78",
+    "host_dual_start": "3/3",
+    "host_all_targets": "33/33",
+    "infrastructure_unit": "502/502",
+    "frontend": "64 files / 545 tests",
+    "full_checkpoint_session": 1649,
+    "full_checkpoint_exit": 0,
+    "full_checkpoint_raw_stream": "UNAVAILABLE_NOT_FABRICATED",
+    "review_repair": "targeted/affected/static PASS; full checkpoint NOT_RERUN"
+  },
+  "resources": [
+    {
+      "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json",
+      "path": "resources/http-manifest.json",
+      "purpose": "Manifest embedded into the real in-memory ZIP used by the Phase2 dual-start fixture"
+    },
+    {
+      "path": "resources/protocol.js",
+      "purpose": "Exact protocol.js entry embedded into the dual-start fixture ZIP"
+    },
+    {
+      "path": "resources/display.js",
+      "purpose": "Exact display.js entry embedded into the dual-start fixture ZIP"
+    }
+  ],
+  "not_run": [
+    "macOS Release App and DMG restart",
+    "system permission dialogs",
+    "Windows runner and installers",
+    "push, remote CI, Release, deployment"
+  ]
+}

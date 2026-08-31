@@ -47,16 +47,20 @@ fn baseline_observer_reads_selected_workspace_and_structural_hash_from_sqlite() 
 fn baseline_observer_hashes_exact_package_and_material_content_not_row_counts() {
     let store = SqliteStore::in_memory().unwrap();
     let workspace_id = seed_workspace(&store);
-    let package_generation = Uuid::new_v4();
     store
-        .execute_test_batch(&format!(
-            "INSERT INTO protocol_packages(package_id,version,name,host_api,kind,enabled,validation_state,validation_error_code,installed_at,generation)
-             VALUES('pkg','1.0.0','Package',1,'http',1,'valid',NULL,'2026-08-26T00:00:00Z','{package_generation}');
+        .execute_test_batch(
+            "INSERT INTO external_protocol_packages(
+                package_id,version,registration_json,registration_fingerprint,local_archive,
+                enabled,first_connected_at,last_connected_at
+             ) VALUES(
+                'pkg','1.0.0','{}',zeroblob(32),X'01',1,
+                '2026-08-26T00:00:00Z','2026-08-26T00:00:00Z'
+             );
              INSERT INTO certificate_material(kind,protected_blob,metadata_json,updated_at)
-             VALUES('listener',X'01','{{}}','2026-08-26T00:00:00Z');
+             VALUES('listener',X'01','{}','2026-08-26T00:00:00Z');
              INSERT INTO protected_secrets(provider,secret_key,protected_blob,updated_at)
-             VALUES('basic_auth','alias',X'02','2026-08-26T00:00:00Z');"
-        ))
+             VALUES('basic_auth','alias',X'02','2026-08-26T00:00:00Z');",
+        )
         .unwrap();
     let before = store
         .observe_environment_apply_generations(workspace_id)
@@ -68,7 +72,7 @@ fn baseline_observer_hashes_exact_package_and_material_content_not_row_counts() 
     assert_ne!(before.protected_secret_inventory, 0);
     store
         .execute_test_batch(
-            "UPDATE protocol_packages SET generation='00000000-0000-0000-0000-000000000038', enabled=0;
+            "UPDATE external_protocol_packages SET local_archive=X'03', enabled=0;
              UPDATE certificate_material SET protected_blob=X'03';
              UPDATE protected_secrets SET protected_blob=X'04';",
         )
