@@ -145,8 +145,9 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 `src-tauri/crates/host/src/lib.rs` 先构造不依赖 UI 的 `ApplicationHost`：
 
 1. 校验 `ProductProfile`，再创建数据目录。
-2. 打开 SQLite；仅当前 development recreate branch 可把 `<100` 开发数据清理并重建为 Schema 100；
-   Schema 100 必须保留，未来/损坏 Schema fail-closed。该开发分支须在 Phase17 发布前删除。
+2. 打开 SQLite；Phase17 后仅保留 Schema 100 preserve/fail-closed 路径。`<100`、未来、缺失、重复或
+   损坏 Schema 均在不改写数据库 bytes 或数据的前提下拒绝启动；发布 checker 禁止 reset policy、
+   marker 或 recreate 分支重新进入生产组合根。
 3. 根据产品存储命名空间选择 Keychain 或 DPAPI secret protector。
 4. 创建 Infrastructure service bundle、容量账本、断点协调器和 EventHub。
 5. 构造 `RuntimePipelineAdapter` 并注入 Listener runtime。

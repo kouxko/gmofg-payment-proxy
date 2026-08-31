@@ -27,8 +27,9 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
    `package.register`；Frame/Decode/Encode 使用字节 wire，Document 与 Display 使用类型化 JSON/text。
 6. Exchange observation 记录 received Document、类型化 operation summary、final working Document、
    Encode/result 和稳定错误；达到共享观测预算时设置 `changes_truncated`，业务继续且最终输出不受影响。
-7. SQLite Schema 100 是产品 1.00 兼容基线。开发启动重建仅是 Phase17 删除前的当前开发边界，
-   不能写成发布兼容或数据迁移策略。
+7. SQLite Schema 100 是产品 1.00 兼容基线。Phase17 已删除 pre-100 recreate/reset policy、marker 和
+   启动分支；Schema 100 原样保留，其他版本或损坏标记 fail-closed 且不得改写数据库 bytes/data，
+   发布 checker 阻止临时 reset 合同重新进入生产路径。
 
 ## Why
 

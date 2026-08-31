@@ -234,7 +234,7 @@ async fn external_package_bind_failure_is_visible_without_blocking_host_startup(
 }
 
 #[tokio::test]
-async fn pre_1_0_schema_is_cleared_and_rebuilt_at_version_100() {
+async fn pre_1_0_schema_is_rejected_without_changing_any_sqlite_file() {
     let temp = tempfile::tempdir().expect("temporary host directory");
     let database = temp.path().join("intercept-proxy.sqlite3");
     let connection = Connection::open(&database).expect("create pre-1.0 database");
@@ -250,37 +250,21 @@ async fn pre_1_0_schema_is_cleared_and_rebuilt_at_version_100() {
         )
         .expect("write pre-1.0 schema");
     drop(connection);
+    let before = sqlite_files(&database);
     assert_eq!(CURRENT_APPLICATION_SCHEMA_VERSION, 100);
-    let host = ApplicationHostBuilder::new(
+    let error = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
         Arc::new(InterceptProxyProfile),
     )
     .build()
     .await
-    .expect("pre-1.0 schema must be reset to the formal baseline");
-    let connection = Connection::open(&database).expect("open rebuilt database");
-    let version = connection
-        .query_row(
-            "SELECT version FROM application_schema WHERE singleton_id = 1",
-            [],
-            |row| row.get::<_, i64>(0),
-        )
-        .expect("read rebuilt schema marker");
-    let legacy_table_exists = connection
-        .query_row(
-            "SELECT EXISTS(
-                SELECT 1 FROM sqlite_master
-                WHERE type = 'table' AND name = 'pre_1_0_sentinel'
-            )",
-            [],
-            |row| row.get::<_, bool>(0),
-        )
-        .expect("probe legacy sentinel");
-    assert_eq!(version, 100);
-    assert!(!legacy_table_exists, "pre-1.0 data must not survive reset");
-    drop(connection);
-    host.shutdown().await.expect("shutdown rebuilt host");
+    .expect_err("pre-1.0 schema must fail closed");
+    assert!(matches!(
+        error,
+        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid { .. })
+    ));
+    assert_sqlite_files_unchanged(&database, &before);
 }
 
 #[tokio::test]

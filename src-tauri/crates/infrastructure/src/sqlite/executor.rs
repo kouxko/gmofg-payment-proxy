@@ -6,7 +6,7 @@
 
 use std::{path::PathBuf, sync::Arc};
 
-use super::{SqliteStartupPolicy, SqliteStore};
+use super::SqliteStore;
 use crate::InfrastructureError;
 
 #[derive(Clone, Debug)]
@@ -51,12 +51,8 @@ impl SqliteExecutor {
 /// it. Successful callers receive an executor and the exact same shared store instance.
 pub async fn open_sqlite_persistence(
     path: PathBuf,
-    startup_policy: SqliteStartupPolicy,
 ) -> Result<(SqliteExecutor, Arc<SqliteStore>), InfrastructureError> {
-    open_sqlite_persistence_with(move || {
-        SqliteStore::open_with_startup_policy(&path, startup_policy)
-    })
-    .await
+    open_sqlite_persistence_with(move || SqliteStore::open(&path)).await
 }
 
 async fn open_sqlite_persistence_with<F>(

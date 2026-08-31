@@ -95,9 +95,9 @@ UI 直接展示 typed 事件，不用占位文案伪造缺失阶段。Display HT
 
 ## 7. 持久化和发布边界
 
-SQLite Schema 100 是产品 1.00 兼容基线。未来版本只能通过显式迁移前进；未来 Schema、损坏标记和
-不符合 Schema 100 的记录 fail-closed。当前开发启动仍存在重建路径，它属于 Phase17 删除前的开发
-边界，不代表发布允许清库，也不能作为兼容策略。
+SQLite Schema 100 是产品 1.00 兼容基线。Phase17 已删除 pre-100 recreate/reset policy、marker 和
+启动分支：Schema 100 数据原样保留；Schema `<100`、未来 Schema、缺失/重复/损坏标记均 fail-closed，
+且失败不得改写数据库 bytes 或数据。发布 checker 会阻止临时 reset 合同重新进入生产启动路径。
 
 ## 8. 验证重点
 
@@ -106,4 +106,4 @@ SQLite Schema 100 是产品 1.00 兼容基线。未来版本只能通过显式�
 - HTTP 与 Socket 两个写出阶段共用统一规则但保持 transport DTO 隔离；
 - ZIP/API 1、Boa sandbox、`package.register`、超时/额度/断线与精确版本生命周期；
 - received/process/final/encoded typed evidence、`changes_truncated` 和 stable error；
-- Schema 100 兼容门禁与开发重建路径的发布删除阻塞。
+- Schema 100 preserve、pre-100 fail-closed/no-mutation 与发布 checker 门禁。
