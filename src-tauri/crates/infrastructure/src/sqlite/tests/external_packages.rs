@@ -331,40 +331,4 @@ fn schema_persists_only_registration_state_and_never_rpc_or_secret_payloads() {
     }));
 }
 
-#[test]
-fn internal_exact_identity_blocks_external_registration_without_partial_write() {
-    let store = SqliteStore::in_memory().unwrap();
-    let external = registration("Vendor ISO8583");
-    let identity = external.package().identity();
-    store
-        .connection
-        .lock()
-        .execute(
-            "INSERT INTO protocol_packages(
-                package_id, version, name, host_api, kind, enabled,
-                validation_state, validation_error_code, installed_at, generation
-             ) VALUES (?1, ?2, 'Internal package', 1, 'socket', 0,
-                       'valid', NULL, ?3, ?4)",
-            rusqlite::params![
-                identity.id.as_str(),
-                identity.version.as_str(),
-                Utc::now().to_rfc3339(),
-                uuid::Uuid::new_v4().to_string(),
-            ],
-        )
-        .unwrap();
-
-    assert_eq!(
-        store
-            .accept_external_package_registration(
-                &external,
-                canonical_external_registration_fingerprint(&external).unwrap(),
-                Utc::now(),
-            )
-            .unwrap(),
-        StoredExternalPackageRegistrationOutcome::IdentityConflict
-    );
-    assert!(store.list_external_packages().unwrap().is_empty());
-}
-
 mod corruption;

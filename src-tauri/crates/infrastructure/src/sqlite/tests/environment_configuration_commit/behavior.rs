@@ -146,18 +146,25 @@ fn workspace_structural_aba_is_rejected_even_when_revision_is_unchanged() {
 }
 
 #[test]
-fn package_generation_aba_is_rejected_when_row_count_is_unchanged() {
+fn package_lifecycle_aba_is_rejected_when_row_count_is_unchanged() {
     let store = SqliteStore::in_memory().expect("store");
-    store.execute_test_batch(
-        "INSERT INTO protocol_packages(package_id,version,name,host_api,kind,enabled,validation_state,validation_error_code,installed_at,generation)
-         VALUES ('pkg','1.0.0','before',1,'socket',1,'valid',NULL,'2026-08-26T00:00:00Z','generation-a')",
-    ).expect("seed package");
+    store
+        .execute_test_batch(
+            "INSERT INTO external_protocol_packages(
+            package_id,version,registration_json,registration_fingerprint,local_archive,
+            enabled,first_connected_at,last_connected_at
+         ) VALUES(
+            'pkg','1.0.0','{}',zeroblob(32),X'01',1,
+            '2026-08-26T00:00:00Z','2026-08-26T00:00:00Z'
+         )",
+        )
+        .expect("seed package");
     let frozen = EnvironmentApplyGenerations {
         package_inventory: 1,
         ..baseline(None)
     };
     store.execute_test_batch(
-        "UPDATE protocol_packages SET name='after', enabled=0, generation='generation-b' WHERE package_id='pkg'",
+        "UPDATE external_protocol_packages SET local_archive=X'02', enabled=0 WHERE package_id='pkg'",
     ).expect("package ABA");
 
     let error = store

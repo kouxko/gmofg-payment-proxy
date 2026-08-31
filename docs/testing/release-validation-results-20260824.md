@@ -149,12 +149,11 @@ fixture 被篡改时在网络 I/O 前失败。测试先复现了 payload 泄漏�
 1. 先读取 `release-validation-matrix.md`，复制本文件为当天结果文件。
 2. 确认固定端口未占用；不得自动杀死未知进程。
 3. 依次执行静态门禁、Frontend、Rust、Deno、Python、覆盖率。
-4. 安装幂等核心 E2E Workspace，启动 release App，再运行 `python3 scripts/e2e_proxy_rules.py run`。
-5. 按 `release-validation-matrix.md` 的固定命令安装 External Packages E2E Workspace，启动 Deno 与
+4. 按 `release-validation-matrix.md` 的固定命令安装 External Packages E2E Workspace，启动 Deno 与
    AU EFTEX 后运行 `python3 scripts/e2e_external_packages.py run`；逐包断线/重连后执行
    `assert-stopped`。
-6. 核对成功与失败 Exchange 都能实时追加，并记录四方向字节/字段证据。
-7. 若有真实厂商环境，再追加远端 TLS/mTLS、真机和 MAC 验证，不覆盖本地结果。
-8. 关闭 Mock Server/外部包/App，验证所有端口可重新绑定。
-9. 使用 `install` 输出的 `previous_selected_id` 执行 `restore-selection`，恢复原选中 Workspace。
-10. 最后重新构建 `.app`；任何修复后都必须从受影响层开始重跑，不能沿用修复前结果。
+5. 核对成功与失败 Exchange 都能实时追加，并记录四方向字节/字段证据。
+6. 若有真实厂商环境，再追加远端 TLS/mTLS、真机和 MAC 验证，不覆盖本地结果。
+7. 关闭 Mock Server/外部包/App，验证所有端口可重新绑定。
+8. 使用 `install` 输出的 `previous_selected_id` 执行 `restore-selection`，恢复原选中 Workspace。
+9. 最后重新构建 `.app`；任何修复后都必须从受影响层开始重跑，不能沿用修复前结果。

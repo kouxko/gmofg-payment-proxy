@@ -102,8 +102,11 @@ pub(super) fn check_workspace_baseline(
 pub(super) fn exact_package_inventory(transaction: &Transaction<'_>) -> AppResult<u64> {
     let mut statement = transaction
         .prepare(
-            "SELECT package_id, version, name, generation, enabled
-             FROM protocol_packages ORDER BY package_id, version",
+            "SELECT package_id, version, registration_json, registration_fingerprint,
+                    local_archive, enabled, first_connected_at, last_connected_at,
+                    last_remote_address, recent_error_code, recent_error_message,
+                    recent_error_occurred_at
+             FROM external_protocol_packages ORDER BY package_id, version",
         )
         .map_err(|_| commit_failed())?;
     let rows = statement
@@ -112,23 +115,72 @@ pub(super) fn exact_package_inventory(transaction: &Transaction<'_>) -> AppResul
                 row.get::<_, String>(0)?,
                 row.get::<_, String>(1)?,
                 row.get::<_, String>(2)?,
-                row.get::<_, String>(3)?,
-                row.get::<_, i64>(4)?,
+                row.get::<_, Vec<u8>>(3)?,
+                row.get::<_, Option<Vec<u8>>>(4)?,
+                row.get::<_, i64>(5)?,
+                row.get::<_, String>(6)?,
+                row.get::<_, String>(7)?,
+                row.get::<_, Option<String>>(8)?,
+                row.get::<_, Option<String>>(9)?,
+                row.get::<_, Option<String>>(10)?,
+                row.get::<_, Option<String>>(11)?,
             ))
         })
         .map_err(|_| commit_failed())?;
     let mut context = ring::digest::Context::new(&ring::digest::SHA256);
     let mut count = 0_u64;
     for row in rows {
-        let (id, version, name, generation, enabled) = row.map_err(|_| commit_failed())?;
+        let (
+            id,
+            version,
+            registration_json,
+            registration_fingerprint,
+            local_archive,
+            enabled,
+            first_connected_at,
+            last_connected_at,
+            last_remote_address,
+            recent_error_code,
+            recent_error_message,
+            recent_error_occurred_at,
+        ) = row.map_err(|_| commit_failed())?;
         update_framed(&mut context, id.as_bytes());
         update_framed(&mut context, version.as_bytes());
-        update_framed(&mut context, name.as_bytes());
-        update_framed(&mut context, generation.as_bytes());
+        update_framed(&mut context, registration_json.as_bytes());
+        update_framed(&mut context, &registration_fingerprint);
+        update_optional(&mut context, local_archive.as_deref());
         update_framed(&mut context, &enabled.to_be_bytes());
+        update_framed(&mut context, first_connected_at.as_bytes());
+        update_framed(&mut context, last_connected_at.as_bytes());
+        update_optional(
+            &mut context,
+            last_remote_address.as_deref().map(str::as_bytes),
+        );
+        update_optional(
+            &mut context,
+            recent_error_code.as_deref().map(str::as_bytes),
+        );
+        update_optional(
+            &mut context,
+            recent_error_message.as_deref().map(str::as_bytes),
+        );
+        update_optional(
+            &mut context,
+            recent_error_occurred_at.as_deref().map(str::as_bytes),
+        );
         count += 1;
     }
     Ok(finish_inventory(context, count))
+}
+
+fn update_optional(context: &mut ring::digest::Context, value: Option<&[u8]>) {
+    match value {
+        Some(value) => {
+            context.update(&[1]);
+            update_framed(context, value);
+        }
+        None => context.update(&[0]),
+    }
 }
 
 pub(super) fn exact_certificate_inventory(

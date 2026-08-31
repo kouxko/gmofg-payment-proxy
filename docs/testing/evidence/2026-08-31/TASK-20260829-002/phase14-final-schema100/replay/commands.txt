@@ -1,0 +1,12 @@
+pnpm test:task-20260829-002:phase14
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host phase2_database_startup -- --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure sqlite::sqlite_tests -- --nocapture
+cmp test-support/fixtures/task-20260829-002/phase-4/package-contract/protocol.js docs/testing/evidence/2026-08-31/TASK-20260829-002/phase14-final-schema100/resources/protocol.js
+cmp test-support/fixtures/task-20260829-002/phase-4/package-contract/display.js docs/testing/evidence/2026-08-31/TASK-20260829-002/phase14-final-schema100/resources/display.js
+cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host --all-targets --all-features -- -D warnings
+pnpm typecheck
+pnpm lint
+pnpm scan:architecture
+pnpm scan:source-size
+pnpm check:task-20260829-002:checkpoint
+git diff --check

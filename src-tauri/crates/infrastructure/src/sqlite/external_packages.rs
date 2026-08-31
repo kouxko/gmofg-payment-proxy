@@ -56,21 +56,6 @@ impl SqliteStore {
         }
         let mut connection = self.connection.lock();
         let transaction = connection.transaction().map_err(database_error)?;
-        let internal_identity_exists = transaction
-            .query_row(
-                "SELECT EXISTS(
-                    SELECT 1 FROM protocol_packages
-                    WHERE package_id = ?1 AND version = ?2
-                 )",
-                params![identity.id.as_str(), identity.version.as_str()],
-                |row| row.get::<_, bool>(0),
-            )
-            .map_err(database_error)?;
-        if internal_identity_exists {
-            // 两种执行来源不能共享同一精确身份，否则统一目录、Listener 绑定和删除语义会
-            // 依赖查询顺序。冲突在任何外部表写入之前结束事务，保持 fail-closed。
-            return Ok(StoredExternalPackageRegistrationOutcome::IdentityConflict);
-        }
         let existing = transaction
             .query_row(
                 "SELECT registration_json, registration_fingerprint, enabled
@@ -141,16 +126,6 @@ impl SqliteStore {
         let fingerprint = sha256(registration_json.as_bytes());
         let mut connection = self.connection.lock();
         let transaction = connection.transaction().map_err(database_error)?;
-        let internal_identity_exists = transaction
-            .query_row(
-                "SELECT EXISTS(SELECT 1 FROM protocol_packages WHERE package_id = ?1 AND version = ?2)",
-                params![identity.id.as_str(), identity.version.as_str()],
-                |row| row.get::<_, bool>(0),
-            )
-            .map_err(database_error)?;
-        if internal_identity_exists {
-            return Ok(StoredLocalPackageInstallOutcome::IdentityConflict);
-        }
         let existing = transaction
             .query_row(
                 "SELECT registration_json, registration_fingerprint, local_archive

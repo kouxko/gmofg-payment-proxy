@@ -220,7 +220,7 @@ cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --workspace
 examples/external-packages/au_eftex/.venv/bin/python -m unittest \
-  scripts/test_e2e_proxy_rules.py scripts/test_verify_au_eftex_trace.py
+  scripts/test_verify_au_eftex_trace.py
 deno task --cwd examples/external-packages/iso8583-deno check
 examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
   -s examples/external-packages/au_eftex/tests -v
@@ -251,12 +251,6 @@ pnpm scan:architecture-docs
 真实 Exchange 完成或厂商业务响应；这些仍按 L2–L4 场景分别取证。
 
 ### 8.2 release App 真实 loopback
-
-```bash
-python3 scripts/e2e_proxy_rules.py install
-# 启动 release App，并启动测试 Workspace 的 Listener
-python3 scripts/e2e_proxy_rules.py run
-```
 
 外部软件包使用独立、固定的 E2E Workspace，避免把注册生命周期证据误当成数据面证据：
 
