@@ -13,12 +13,18 @@ import type {
   RuleConditionKind,
   RuleDefinitionSaveInput,
   RuleEditorContext,
+  RuleLocalDocumentActionKind,
+  RuleLocalDocumentPredicateKind,
+  RuleLocalDocumentTypeCapability,
+  RuleLocalDocumentValueType,
   SocketRuleEditorStage,
   UnifiedAction,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { ruleStageIncompatibility, ruleStageLabel } from "./rule-definition-model";
+import { documentEditorFields, ruleLocalFields, type DocumentEditorField } from "./rule-document-fields";
+import { ConditionTreeEditor, DocumentMetadataTree, OrderedActionList } from "./rule-tree-editors";
 import { useAsyncRequestSlots } from "./use-async-request-slots";
 
 type EditorStage = HttpRuleEditorStage | SocketRuleEditorStage;
@@ -76,10 +82,12 @@ export function RuleDefinitionEditor(props: {
       <p className="text-xs text-[var(--telemetry-muted)]">{ruleStageLabel(input.draft.stage)} · priority 只与此阶段及同一执行作用域中的规则比较。</p>
       {currentStageReason && <p role="alert" className="text-sm text-red-600">当前阶段不可保存：{currentStageReason}</p>}
       {input.draft.content.type === "http" ? (
-        <HttpContentEditor input={input} onChange={props.onChange} stage={stage && "http" in stage ? stage : undefined} />
+        <HttpContentEditor input={input} localTypes={props.context?.local_document_types ?? []} onChange={props.onChange} stage={stage && "http" in stage ? stage : undefined} />
       ) : (
-        <SocketContentEditor input={input} onChange={props.onChange} stage={stage && "fields" in stage ? stage : undefined} />
+        <SocketContentEditor input={input} localTypes={props.context?.local_document_types ?? []} onChange={props.onChange} stage={stage && "fields" in stage ? stage : undefined} />
       )}
+      <ConditionTreeEditor tree={ruleCondition(input)} onChange={(condition) => props.onChange(updateRuleCondition(input, condition))} />
+      <OrderedActionList actions={ruleActions(input)} label={unifiedActionLabel} onChange={(actions) => props.onChange(updateRuleActions(input, actions))} />
       {Object.values(props.fieldErrors).flat().length > 0 && <p role="alert" className="text-sm text-red-600">{Object.values(props.fieldErrors).flat().join("；")}</p>}
       <div className="flex gap-2">
         <Button isDisabled={props.pending || input.draft.name.trim() === "" || currentStageReason != null} variant="primary" onPress={props.onSave}>保存规则</Button>
@@ -91,7 +99,7 @@ export function RuleDefinitionEditor(props: {
   );
 }
 
-function HttpContentEditor(props: { input: RuleDefinitionSaveInput; stage?: HttpRuleEditorStage; onChange: (change: RuleDefinitionChange) => void }) {
+function HttpContentEditor(props: { input: RuleDefinitionSaveInput; stage?: HttpRuleEditorStage; localTypes: RuleLocalDocumentTypeCapability[]; onChange: (change: RuleDefinitionChange) => void }) {
   if (props.input.draft.content.type !== "http") return null;
   const value = props.input.draft.content.value;
   const scope = editorScope(props.input);
@@ -125,6 +133,7 @@ function HttpContentEditor(props: { input: RuleDefinitionSaveInput; stage?: Http
           condition={value.condition}
           editorScope={scope}
           fields={props.stage?.document_fields ?? []}
+          localTypes={props.localTypes}
           key={`${scope}:document`}
           packageLabel={`${value.document.package.id}@${value.document.package.version}`}
           onActionsChange={(actions) => update({ ...value, actions })}
@@ -173,17 +182,15 @@ function HttpFactoryControls(props: {
       <Button isDisabled={pending} size="sm" variant="outline" onPress={() => void addCondition("nth_hit")}>添加条件：第 N 次命中</Button>
       {props.actionKinds.map((kind) => <Button isDisabled={pending} key={kind} size="sm" variant="outline" onPress={() => void addAction(kind)}>添加动作：{httpActionLabel(kind)}</Button>)}
     </div>
-    {conditionLeaves(props.condition).filter((leaf): leaf is Extract<Condition, { source: "http" }> => leaf.source === "http").map((_, index) => <div className="flex items-center rounded-md border p-2 text-xs" key={index}><span>{httpConditionLabel()}</span></div>)}
-    {props.actions.map((action, index) => <div className="flex items-center rounded-md border p-2 text-xs" key={index}><span>{unifiedActionLabel(action)}</span><Button className="ml-auto" size="sm" variant="ghost" onPress={() => props.onChange(props.condition, props.actions.filter((_, itemIndex) => itemIndex !== index))}>删除</Button></div>)}
     {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
   </div>;
 }
 
-function SocketContentEditor(props: { input: RuleDefinitionSaveInput; stage?: SocketRuleEditorStage; onChange: (change: RuleDefinitionChange) => void }) {
+function SocketContentEditor(props: { input: RuleDefinitionSaveInput; stage?: SocketRuleEditorStage; localTypes: RuleLocalDocumentTypeCapability[]; onChange: (change: RuleDefinitionChange) => void }) {
   if (props.input.draft.content.type !== "socket") return null;
   const value = props.input.draft.content.value;
   return <section className="space-y-3"><h3 className="font-semibold">Socket Document 规则内容</h3>
-    <DocumentEditor actions={value.actions} commonActions={props.stage?.common_actions ?? []} condition={value.condition} editorScope={editorScope(props.input)} fields={props.stage?.fields ?? []} key={`${editorScope(props.input)}:document`} packageLabel={`${value.package.id}@${value.package.version}`} onActionsChange={(actions) => props.onChange({ ...props.input, draft: { ...props.input.draft, content: { type: "socket", value: { ...value, actions } } } })} onConditionChange={(condition) => props.onChange({ ...props.input, draft: { ...props.input.draft, content: { type: "socket", value: { ...value, condition } } } })} onCreateAction={(action) => props.onChange((current) => appendDocumentResult(current, editorScope(props.input), "action", action))} onCreateCondition={(condition) => props.onChange((current) => appendDocumentResult(current, editorScope(props.input), "condition", condition))} />
+    <DocumentEditor actions={value.actions} commonActions={props.stage?.common_actions ?? []} condition={value.condition} editorScope={editorScope(props.input)} fields={props.stage?.fields ?? []} localTypes={props.localTypes} key={`${editorScope(props.input)}:document`} packageLabel={`${value.package.id}@${value.package.version}`} onActionsChange={(actions) => props.onChange({ ...props.input, draft: { ...props.input.draft, content: { type: "socket", value: { ...value, actions } } } })} onConditionChange={(condition) => props.onChange({ ...props.input, draft: { ...props.input.draft, content: { type: "socket", value: { ...value, condition } } } })} onCreateAction={(action) => props.onChange((current) => appendDocumentResult(current, editorScope(props.input), "action", action))} onCreateCondition={(condition) => props.onChange((current) => appendDocumentResult(current, editorScope(props.input), "condition", condition))} />
   </section>;
 }
 
@@ -194,38 +201,70 @@ function OptionalHttpDocument(props: { stage?: HttpRuleEditorStage; onAdd: (docu
   return <div className="space-y-2"><p className="text-sm text-[var(--telemetry-muted)]">当前规则仅处理 HTTP Header；可按 Rust 草稿启用 Body Document。</p><Button size="sm" variant="outline" onPress={() => props.onAdd(document)}>添加 HTTP Body Document</Button></div>;
 }
 
-function DocumentEditor(props: { packageLabel: string; editorScope: string; fields: ProtocolRuleFieldCapability[]; commonActions: ProtocolRuleCommonActionCapability[]; condition: ConditionTree; actions: UnifiedAction[]; onCreateCondition: (condition: Condition) => void; onCreateAction: (action: UnifiedAction) => void; onConditionChange: (condition: ConditionTree) => void; onActionsChange: (actions: UnifiedAction[]) => void }) {
+function DocumentEditor(props: { packageLabel: string; editorScope: string; fields: ProtocolRuleFieldCapability[]; localTypes: RuleLocalDocumentTypeCapability[]; commonActions: ProtocolRuleCommonActionCapability[]; condition: ConditionTree; actions: UnifiedAction[]; onCreateCondition: (condition: Condition) => void; onCreateAction: (action: UnifiedAction) => void; onConditionChange: (condition: ConditionTree) => void; onActionsChange: (actions: UnifiedAction[]) => void }) {
   const [rawValues, setRawValues] = useState<Record<string, string>>({});
+  const [fieldIndices, setFieldIndices] = useState<Record<string, number>>({});
+  const [localPath, setLocalPath] = useState("");
+  const [localType, setLocalType] = useState<RuleLocalDocumentValueType | "">("");
+  const [localPredicate, setLocalPredicate] = useState<RuleLocalDocumentPredicateKind | "">("");
+  const [localAction, setLocalAction] = useState<RuleLocalDocumentActionKind | "">("");
+  const [localIndex, setLocalIndex] = useState<number>(0);
+  const [localValue, setLocalValue] = useState("");
   const [error, setError] = useState<string>();
   const { pending, runAsync } = useAsyncRequestSlots(`${props.editorScope}:document`);
-  const createWithValue = (field: ProtocolRuleFieldCapability, kind: "condition" | "set_field") => {
+  const requestCondition = (path: string, type: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string, key: string) => {
+    setError(undefined);
+    void runAsync(key, () => callCommand(commands.ruleDefinitionDocumentConditionDraft(path, type, predicate, raw)), props.onCreateCondition, (reason) => setError(errorMessage(reason)));
+  };
+  const requestAction = (path: string, type: RuleLocalDocumentValueType, action: RuleLocalDocumentActionKind, raw: string | null, index: number | null, key: string) => {
+    setError(undefined);
+    void runAsync(key, () => callCommand(commands.ruleDefinitionDocumentActionDraft(path, type, action, raw, index)), props.onCreateAction, (reason) => setError(errorMessage(reason)));
+  };
+  const createPredicate = (field: DocumentEditorField, predicate: RuleLocalDocumentPredicateKind) => {
     const raw = rawValues[field.name];
     if (raw == null) return;
-    setError(undefined);
-    void runAsync(`${kind}:${field.name}`, () => callCommand(commands.ruleParseDocumentValue(field.type, raw)), (value) => {
-      if (kind === "condition") props.onCreateCondition({ source: "document", path: field.name, predicate: predicateFor(field.type, value) });
-      else props.onCreateAction({ source: "document", value: { type: "set", path: field.name, value } });
-    }, (reason) => setError(errorMessage(reason)));
+    requestCondition(field.name, field.type, predicate, raw, `condition:${field.name}:${predicate}`);
+  };
+  const createFieldAction = (field: DocumentEditorField, action: RuleLocalDocumentActionKind) => {
+    const raw = rawValues[field.name];
+    if (action !== "clear" && raw == null) return;
+    requestAction(field.name, field.type, action, action === "clear" ? null : raw, action === "insert" ? fieldIndices[field.name] ?? 0 : null, `action:${field.name}:${action}`);
   };
   const documentConditions = conditionLeaves(props.condition).filter((condition) => condition.source === "document");
   const documentActions = props.actions.filter((action) => action.source === "document" || action.source === "record_match");
-  return <div className="space-y-2"><p className="text-sm font-medium">{props.packageLabel}</p><p className="text-xs text-[var(--telemetry-muted)]">字段 {props.fields.length} 个 · 条件 {documentConditions.length} 个 · Document 动作 {documentActions.length} 个</p>
-    {props.fields.map((field) => <div className="space-y-2 rounded-md border p-2" key={field.name}><TextField><Label>Document 值：{field.label}</Label><Input aria-label={`Document 值：${field.label}`} value={rawValues[field.name] ?? ""} onChange={(event) => setRawValues((current) => ({ ...current, [field.name]: event.target.value }))} /></TextField><div className="flex flex-wrap gap-2">
-      {field.operators.includes("equals") && <Button isDisabled={pending || rawValues[field.name] == null} size="sm" variant="outline" onPress={() => createWithValue(field, "condition")}>添加条件：{field.label} equals</Button>}
-      {field.actions.includes("set_field") && <Button isDisabled={pending || rawValues[field.name] == null} size="sm" variant="outline" onPress={() => createWithValue(field, "set_field")}>添加动作：Set {field.label}</Button>}
-      {field.actions.includes("clear_field") && <Button isDisabled={pending} size="sm" variant="outline" onPress={() => props.onCreateAction({ source: "document", value: { type: "clear", path: field.name } })}>添加动作：Clear {field.label}</Button>}
+  const editorFields = documentEditorFields(props.fields, documentConditions, props.actions, props.localTypes);
+  const localFields = ruleLocalFields(documentConditions, props.actions, props.fields, props.localTypes);
+  const selectedLocalType = props.localTypes.find((capability) => capability.value_type === localType);
+  return <div className="space-y-2"><p className="text-sm font-medium">{props.packageLabel}</p><p className="text-xs text-[var(--telemetry-muted)]">字段 {editorFields.length} 个 · 条件 {documentConditions.length} 个 · Document 动作 {documentActions.length} 个</p>
+    <DocumentMetadataTree condition={props.condition} fields={props.fields} localFields={localFields} />
+    <fieldset className="grid gap-2 rounded-md border border-[var(--telemetry-line)] p-2 sm:grid-cols-3">
+      <legend className="px-1 text-xs font-medium">规则本地 metadata</legend>
+      <TextField><Label>RFC 6901 path</Label><Input aria-label="规则本地 RFC 6901 路径" value={localPath} onChange={(event) => setLocalPath(event.target.value)} /></TextField>
+      <Select aria-label="规则本地类型" selectedKey={localType || null} onSelectionChange={(key) => setLocalType(String(key) as typeof localType)}>
+        <Label>类型</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger>
+        <Select.Popover><ListBox>{props.localTypes.map((capability) => <ListBox.Item id={capability.value_type} key={capability.value_type} textValue={capability.value_type}>{capability.value_type}</ListBox.Item>)}</ListBox></Select.Popover>
+      </Select>
+      <TextField><Label>JSON 值</Label><Input aria-label="规则本地值" value={localValue} onChange={(event) => setLocalValue(event.target.value)} /></TextField>
+      <Select aria-label="规则本地谓词" selectedKey={localPredicate || null} onSelectionChange={(key) => setLocalPredicate(String(key) as RuleLocalDocumentPredicateKind)}><Label>谓词</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{(selectedLocalType?.predicates ?? []).map((predicate) => <ListBox.Item id={predicate} key={predicate} textValue={predicate}>{predicate}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+      <Select aria-label="规则本地动作" selectedKey={localAction || null} onSelectionChange={(key) => setLocalAction(String(key) as RuleLocalDocumentActionKind)}><Label>动作</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{(selectedLocalType?.actions ?? []).map((action) => <ListBox.Item id={action} key={action} textValue={action}>{action}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+      {localAction === "insert" && <NumberField aria-label="规则本地 Insert index" minValue={0} value={localIndex} onChange={setLocalIndex}><Label>Index</Label><NumberField.Group><NumberField.Input /></NumberField.Group></NumberField>}
+      <Button isDisabled={pending || !localType || !localPredicate || localValue === "" || localPath === ""} size="sm" variant="outline" onPress={() => localType && localPredicate && requestCondition(localPath, localType, localPredicate, localValue, "local-condition")}>创建规则本地元数据条件</Button>
+      <Button isDisabled={pending || !localType || !localAction || localPath === "" || (localAction !== "clear" && localValue === "")} size="sm" variant="outline" onPress={() => localType && localAction && requestAction(localPath, localType, localAction, localAction === "clear" ? null : localValue, localAction === "insert" ? localIndex : null, "local-action")}>创建规则本地元数据动作</Button>
+      <p className="text-xs text-[var(--telemetry-muted)] sm:col-span-3">路径与类型先作为可编辑草稿；创建条件后才由 Document leaf 随规则保存。</p>
+    </fieldset>
+    {editorFields.map((field) => <div className="space-y-2 rounded-md border p-2" key={field.name}><TextField><Label>Document 值：{field.label}</Label><Input aria-label={`Document 值：${field.label}`} value={rawValues[field.name] ?? ""} onChange={(event) => setRawValues((current) => ({ ...current, [field.name]: event.target.value }))} /></TextField>{field.actions.includes("insert") && <NumberField aria-label={`Document Insert index：${field.label}`} minValue={0} value={fieldIndices[field.name] ?? 0} onChange={(value) => setFieldIndices((current) => ({ ...current, [field.name]: value }))}><Label>Insert index</Label><NumberField.Group><NumberField.Input /></NumberField.Group></NumberField>}<div className="flex flex-wrap gap-2">
+      {field.predicates.map((predicate) => <Button isDisabled={pending || rawValues[field.name] == null} key={predicate} size="sm" variant="outline" onPress={() => createPredicate(field, predicate)}>添加条件：{field.label} {predicate}</Button>)}
+      {field.actions.map((action) => <Button isDisabled={pending || (action !== "clear" && rawValues[field.name] == null)} key={action} size="sm" variant="outline" onPress={() => createFieldAction(field, action)}>添加动作：{actionLabel(action)} {field.label}</Button>)}
     </div></div>)}
     <div className="flex flex-wrap gap-2">
-      {props.commonActions.includes("record_match") && <Button size="sm" variant="outline" onPress={() => props.onCreateAction({ source: "record_match" })}>添加：记录命中</Button>}
+      {props.commonActions.map((action) => <Button key={action} size="sm" variant="outline" onPress={() => void runAsync(`common:${action}`, () => callCommand(commands.ruleDefinitionDocumentCommonActionDraft(action)), props.onCreateAction, (reason) => setError(errorMessage(reason)))}>添加：{action === "record_match" ? "记录命中" : action}</Button>)}
     </div>
-    {documentConditions.map((condition, index) => <div className="flex items-center rounded-md border p-2 text-sm" key={`${condition.path}-${index}`}><span>{condition.path}</span></div>)}
-    {documentActions.map((action, index) => <div className="flex items-center rounded-md border p-2 text-sm" key={`${action.source}-${index}`}><span>{unifiedActionLabel(action)}</span></div>)}
     {error && <p role="alert" className="text-xs text-red-600">{error}</p>}
   </div>;
 }
 
 function EditorShell({ children }: { children: React.ReactNode }) {
-  return <aside className="space-y-5 overflow-auto p-5">{children}</aside>;
+  return <div className="space-y-5 p-1">{children}</div>;
 }
 
 function editorStage(context: RuleEditorContext | undefined, stage: RuleDefinitionSaveInput["draft"]["stage"]): EditorStage | undefined {
@@ -292,10 +331,6 @@ function httpRuleActionLabel(action: HttpAction) {
   return "Terminal";
 }
 
-function httpConditionLabel() {
-  return "字段条件";
-}
-
 function appendCondition(tree: ConditionTree, condition: Condition): ConditionTree {
   const leaf: ConditionTree = { operator: "leaf", children: condition };
   return tree.operator === "all"
@@ -317,20 +352,42 @@ function wrapRuleAction(action: HttpAction): UnifiedAction {
     : { source: "http", value: action };
 }
 
-function predicateFor(type: ProtocolRuleFieldCapability["type"], value: import("@/generated/rust-types").DocumentValue): import("@/generated/rust-types").DocumentPredicate {
-  if (type === "string" && typeof value === "string") return { type: "string", value: { operator: "equal", value } };
-  if (type === "number" && typeof value === "number") return { type: "number", value: { operator: "equal", value } };
-  if (type === "boolean" && typeof value === "boolean") return { type: "boolean", value: { equal: value } };
-  throw new Error(`Rust returned a ${type} capability with a mismatched parsed value`);
-}
-
 function unifiedActionLabel(action: UnifiedAction) {
   if (action.source === "record_match") return "记录命中";
   if (action.source === "http") return httpRuleActionLabel(action.value);
-  if (action.source === "terminal") return httpRuleActionLabel({ Terminal: action.value });
+  if (action.source === "terminal") {
+    if (typeof action.value === "object" && "MockResponse" in action.value) return "Mock Response";
+    return httpRuleActionLabel({ Terminal: action.value });
+  }
   const mutation: DocumentMutation = action.value;
   if (mutation.type === "clear") return `清除字段 ${mutation.path}`;
   if (mutation.type === "insert") return `插入 ${mutation.path}[${mutation.index}]`;
   if (mutation.type === "append") return `追加到 ${mutation.path}`;
   return `设置字段 ${mutation.path}`;
+}
+
+function ruleCondition(input: RuleDefinitionSaveInput): ConditionTree {
+  return input.draft.content.value.condition;
+}
+
+function ruleActions(input: RuleDefinitionSaveInput): UnifiedAction[] {
+  return input.draft.content.value.actions;
+}
+
+function updateRuleCondition(input: RuleDefinitionSaveInput, condition: ConditionTree): RuleDefinitionSaveInput {
+  const content = input.draft.content;
+  return content.type === "http"
+    ? { ...input, draft: { ...input.draft, content: { type: "http", value: { ...content.value, condition } } } }
+    : { ...input, draft: { ...input.draft, content: { type: "socket", value: { ...content.value, condition } } } };
+}
+
+function updateRuleActions(input: RuleDefinitionSaveInput, actions: UnifiedAction[]): RuleDefinitionSaveInput {
+  const content = input.draft.content;
+  return content.type === "http"
+    ? { ...input, draft: { ...input.draft, content: { type: "http", value: { ...content.value, actions } } } }
+    : { ...input, draft: { ...input.draft, content: { type: "socket", value: { ...content.value, actions } } } };
+}
+
+function actionLabel(action: RuleLocalDocumentActionKind) {
+  return action.charAt(0).toUpperCase() + action.slice(1);
 }

@@ -43,41 +43,6 @@ pub(super) fn legacy_http_parts(
     Ok((conditions, actions))
 }
 
-pub(super) fn actor_owned_socket_conditions(
-    tree: &ConditionTree,
-) -> Result<Vec<Condition>, DomainError> {
-    let mut conditions = Vec::new();
-    collect_actor_owned_socket_conditions(tree, &mut conditions)?;
-    Ok(conditions)
-}
-
-fn collect_actor_owned_socket_conditions(
-    tree: &ConditionTree,
-    output: &mut Vec<Condition>,
-) -> Result<(), DomainError> {
-    match tree {
-        ConditionTree::All(children) => {
-            for child in children {
-                collect_actor_owned_socket_conditions(child, output)?;
-            }
-            Ok(())
-        }
-        ConditionTree::Any(_) => Err(unified_persistence_error(
-            "condition",
-            "Socket actor runtime 尚不支持跨 owner OR 条件",
-        )),
-        ConditionTree::Leaf(Condition::NthHit { count }) => {
-            output.push(Condition::NthHit { count: *count });
-            Ok(())
-        }
-        ConditionTree::Leaf(Condition::Document { .. }) => Ok(()),
-        ConditionTree::Leaf(Condition::Http { .. }) => Err(unified_persistence_error(
-            "condition",
-            "Socket actor runtime 不接受 HTTP 条件",
-        )),
-    }
-}
-
 fn collect_legacy_http_conditions(
     tree: &ConditionTree,
     output: &mut Vec<Condition>,
@@ -129,9 +94,10 @@ fn legacy_document_parts(
                     value: value.clone(),
                 }))
             }
-            UnifiedAction::Document(DocumentMutation::Clear { path }) => {
+            UnifiedAction::Document(DocumentMutation::Clear { path, value_type }) => {
                 Some(Ok(ProtocolDocumentOperation::ClearField {
                     field: path.clone(),
+                    value_type: *value_type,
                 }))
             }
             UnifiedAction::Document(
@@ -256,9 +222,10 @@ pub(super) fn unified_socket_content(
                     value: value.clone(),
                 })
             }
-            ProtocolDocumentOperation::ClearField { field } => {
+            ProtocolDocumentOperation::ClearField { field, value_type } => {
                 UnifiedAction::Document(DocumentMutation::Clear {
                     path: field.clone(),
+                    value_type: *value_type,
                 })
             }
             ProtocolDocumentOperation::RecordMatch => UnifiedAction::RecordMatch,

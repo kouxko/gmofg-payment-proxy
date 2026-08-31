@@ -3,7 +3,8 @@ use std::{collections::HashMap, convert::Infallible};
 use chrono::{DateTime, Utc};
 
 use crate::{
-    DomainError, ErrorCode, NthCounterSnapshot, Revision, RuleId, RuntimeEpoch, TerminalIdentity,
+    DomainError, ErrorCode, NthCounterSnapshot, Revision, RuleConditionEvaluation, RuleId,
+    RuntimeEpoch, TerminalIdentity,
 };
 
 use super::{
@@ -237,6 +238,120 @@ impl RuleEngine {
                     reason,
                     actions: Vec::new(),
                 }),
+            }
+        }
+        self.commit_hits(hit_ids, now);
+        Ok(evaluation)
+    }
+
+    /// Evaluates one authoritative unified condition tree while retaining counter ownership here.
+    ///
+    /// The caller receives the actor-owned next Nth attempt and returns the tree's typed
+    /// evaluation. Eligible Nth attempts remain tentative in this engine until the surrounding
+    /// actor transaction encodes and commits its lifecycle delta; restoring an engine checkpoint
+    /// therefore restores both hit metadata and Nth counters.
+    pub fn evaluate_with_condition_gate_in_order<E>(
+        &mut self,
+        context: &MatchContext<'_>,
+        now: DateTime<Utc>,
+        execution_order: &[RuleId],
+        mut gate: impl FnMut(&Rule, u64) -> Result<RuleConditionEvaluation, E>,
+    ) -> Result<RuleEvaluation, E> {
+        if self.runtime_epoch != Some(context.runtime_epoch) {
+            self.restart(context.runtime_epoch);
+        }
+        let mut snapshot = self.rules.clone();
+        let order = execution_order
+            .iter()
+            .enumerate()
+            .map(|(index, rule_id)| (*rule_id, index))
+            .collect::<HashMap<_, _>>();
+        snapshot.sort_by_key(|rule| {
+            (
+                order.get(&rule.id).copied().unwrap_or(usize::MAX),
+                rule.priority,
+                rule.id,
+            )
+        });
+        let mut evaluation = RuleEvaluation::default();
+        let mut hit_ids = Vec::new();
+        let counters_before_evaluation = self.counters.clone();
+
+        for rule in snapshot.iter().filter(|rule| rule.enabled) {
+            if rule
+                .channel
+                .as_ref()
+                .is_some_and(|channel| channel != &context.channel)
+                || rule.stage != context.stage
+            {
+                continue;
+            }
+            let key = CounterKey {
+                rule_id: rule.id,
+                source_ip: context.terminal.source_ip.clone(),
+                certificate_sha256: context.terminal.certificate_sha256.clone(),
+            };
+            let nth_attempt = self
+                .counters
+                .get(&key)
+                .copied()
+                .unwrap_or_default()
+                .saturating_add(1);
+            let condition = match gate(rule, nth_attempt) {
+                Ok(condition) => condition,
+                Err(error) => {
+                    self.counters = counters_before_evaluation;
+                    return Err(error);
+                }
+            };
+            let matched = match condition {
+                RuleConditionEvaluation::UnifiedOwned(condition) => {
+                    if condition.contains_nth && condition.eligible_without_nth {
+                        self.counters.insert(key, nth_attempt);
+                    }
+                    condition.matched
+                }
+                RuleConditionEvaluation::NotOwned => match self.matches_rule(rule, context) {
+                    Ok(matched) => matched,
+                    Err(reason) => {
+                        evaluation.traces.push(RuleTrace {
+                            rule_id: rule.id,
+                            matched: false,
+                            reason,
+                            actions: Vec::new(),
+                        });
+                        continue;
+                    }
+                },
+            };
+            if !matched {
+                evaluation.traces.push(RuleTrace {
+                    rule_id: rule.id,
+                    matched: false,
+                    reason: "匹配条件不满足".into(),
+                    actions: Vec::new(),
+                });
+                continue;
+            }
+
+            hit_ids.push(rule.id);
+            let mut executed = Vec::new();
+            for action in &rule.actions {
+                executed.push(action.clone());
+                evaluation.composed_actions.push(action.clone());
+                if let HttpAction::Terminal(terminal) = action {
+                    evaluation.terminal_action = Some(terminal.clone());
+                    break;
+                }
+            }
+            evaluation.traces.push(RuleTrace {
+                rule_id: rule.id,
+                matched: true,
+                reason: "统一条件树满足".into(),
+                actions: executed,
+            });
+            if evaluation.terminal_action.is_some() {
+                break;
             }
         }
         self.commit_hits(hit_ids, now);

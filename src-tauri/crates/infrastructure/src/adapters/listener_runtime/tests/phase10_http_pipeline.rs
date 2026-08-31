@@ -150,6 +150,8 @@ fn workspace_with_http_rules(
     workspace
 }
 
+#[path = "phase10_http_pipeline/mixed_rule_ownership.rs"]
+mod mixed_rule_ownership;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
 

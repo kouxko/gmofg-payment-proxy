@@ -279,8 +279,8 @@ fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactor
         )
     };
     ProtocolDocumentRuleConnectionFactory::new(
-        program(ProtocolRuleStage::ProxyToUpstream, upstream, vec![rule]),
-        program(ProtocolRuleStage::ProxyToApp, downstream, Vec::new()),
+        &program(ProtocolRuleStage::ProxyToUpstream, upstream, vec![rule]),
+        &program(ProtocolRuleStage::ProxyToApp, downstream, Vec::new()),
     )
     .unwrap()
 }

@@ -6,6 +6,13 @@ pub struct ConditionEvaluation {
     pub contains_nth: bool,
 }
 
+/// Declares whether one rule's condition tree is owned by the unified Document runtime.
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum RuleConditionEvaluation {
+    UnifiedOwned(ConditionEvaluation),
+    NotOwned,
+}
+
 impl ConditionEvaluation {
     pub(super) const fn ordinary(matched: bool) -> Self {
         Self {

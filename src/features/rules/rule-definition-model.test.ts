@@ -34,7 +34,7 @@ describe("ruleStageIncompatibility", () => {
   it("exposes only the two proxy write stages for new message rules", () => {
     expect(NEW_MESSAGE_RULE_STAGES).toEqual(["proxy_to_upstream", "proxy_to_app"]);
   });
-  it("rejects an HTTP Document payload when the target capability cannot edit its field action", () => {
+  it("keeps a Schema-undeclared Document action as rule-local metadata", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
@@ -47,6 +47,7 @@ describe("ruleStageIncompatibility", () => {
     };
     const context: RuleEditorContext = {
       listener_id: "listener",
+      local_document_types: [{ value_type: "number", predicates: [], actions: ["set"] }],
       content: { type: "http", value: { stages: [{
         stage: "proxy_to_app", http: null, package: { id: "pkg", version: "1" },
         document_fields: [{ name: "/value", label: "Value", type: "string", operators: ["equals"], actions: [] }], document_common_actions: [],
@@ -54,9 +55,7 @@ describe("ruleStageIncompatibility", () => {
       }] } },
     };
 
-    expect(ruleStageIncompatibility(input, context, "proxy_to_app")).toBe(
-      "目标阶段不能编辑 Document 动作字段 /amount。",
-    );
+    expect(ruleStageIncompatibility(input, context, "proxy_to_app")).toBeNull();
   });
 
   it("treats the JSON string Null as a string and actual null as null", () => {
@@ -72,6 +71,7 @@ describe("ruleStageIncompatibility", () => {
     };
     const context: RuleEditorContext = {
       listener_id: "listener",
+      local_document_types: [],
       content: { type: "socket", value: {
         package: { id: "pkg", version: "1" },
         stages: [{
@@ -90,6 +90,33 @@ describe("ruleStageIncompatibility", () => {
     expect(ruleStageIncompatibility(actualNull, context, "proxy_to_app")).toBe(
       "目标阶段不能编辑 Document 条件字段 /value。",
     );
+  });
+
+  it("accepts Rust-factory Insert and Append on an undeclared rule-local path", () => {
+    const input: RuleDefinitionSaveInput = {
+      rule_id: "rule", expected_revision: 1,
+      draft: {
+        name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
+        content: { type: "socket", value: {
+          package: { id: "pkg", version: "1" },
+          condition: { operator: "leaf", children: { source: "nth_hit", count: 1 } },
+          actions: [
+            { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } },
+            { source: "document", value: { type: "append", path: "/items", value: "last" } },
+          ],
+        } },
+      },
+    };
+    const context: RuleEditorContext = {
+      listener_id: "listener",
+      local_document_types: [{ value_type: "string", predicates: ["equals"], actions: ["insert", "append"] }],
+      content: { type: "socket", value: { package: { id: "pkg", version: "1" }, stages: [{
+        stage: "proxy_to_app", fields: [], common_actions: [],
+        new_rule_draft: { ...input, rule_id: null, expected_revision: null },
+      }] } },
+    };
+
+    expect(ruleStageIncompatibility(input, context, "proxy_to_app")).toBeNull();
   });
 });
 

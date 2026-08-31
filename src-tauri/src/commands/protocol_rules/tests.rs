@@ -19,6 +19,12 @@ fn editor_context_command_is_registered_and_exported_with_camel_case_arguments()
     assert!(bindings.contains("__TAURI_INVOKE(\"protocol_rule_editor_context\", { listenerId })"));
     assert!(bindings.contains("export type ProtocolRuleEditorContext = {"));
     assert!(bindings.contains("new_rule_draft: ProtocolRuleSaveInput"));
+    assert!(bindings.contains("local_document_types: Array<RuleLocalDocumentTypeCapability>"));
+    assert!(bindings.contains("ruleDefinitionDocumentConditionDraft:"));
+    assert!(bindings.contains("ruleDefinitionDocumentActionDraft:"));
+    assert!(bindings.contains("export type RuleLocalDocumentValueType = \"string\" | \"number\" | \"boolean\" | \"null\" | \"object\" | \"array\";"));
+    assert!(bindings.contains("event: \"processed\""));
+    assert!(bindings.contains("event: \"encoded\""));
 }
 
 #[test]

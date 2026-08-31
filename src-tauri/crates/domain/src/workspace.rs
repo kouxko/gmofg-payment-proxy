@@ -28,9 +28,9 @@ mod validation;
 pub use listener_model::*;
 pub use socket_topology::*;
 use unified_projection::{
-    actor_owned_socket_conditions, legacy_http_parts, message_stage_from_rule,
-    restore_document_rule, rule_stage_from_protocol, runtime_priority, unified_http_actions,
-    unified_http_tree, unified_persistence_error, unified_socket_content,
+    legacy_http_parts, message_stage_from_rule, restore_document_rule, rule_stage_from_protocol,
+    runtime_priority, unified_http_actions, unified_http_tree, unified_persistence_error,
+    unified_socket_content,
 };
 pub use validation::{is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};

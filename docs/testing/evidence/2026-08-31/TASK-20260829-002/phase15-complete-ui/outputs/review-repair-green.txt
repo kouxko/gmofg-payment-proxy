@@ -1,0 +1,61 @@
+First repair targeted affected command result:
+- rule-definition-model.test.ts: 5/5 PASS
+- rule-tree-editors.test.tsx: 5/5 PASS
+- exchange-observation-detail.test.tsx: 7/7 PASS
+- protocol-package-local-lifecycle.test.tsx: 2/2 PASS
+- rules-view.test.tsx: 18/18 PASS
+- total: 5 files / 37 tests PASS
+
+Static result:
+- pnpm typecheck: PASS
+- pnpm lint: PASS
+- pnpm scan:architecture: PASS
+- pnpm scan:source-size: PASS; rules-view.test.tsx 499 physical lines
+- git diff --check: PASS
+- Phase15 checker current/mutations: 3/3 PASS
+- full workspace checkpoint: NOT_RERUN; authoritative session16797 remains the unique full checkpoint
+
+Second cross-layer repair fresh result (2026-08-31 12:19:08 +08:00):
+- affected Vitest: 5 files / 41 tests PASS
+- TypeScript typecheck: PASS
+- ESLint: PASS
+- generated bindings contract: 6/6 PASS
+- Phase15 checker current source + mutations: 3/3 PASS
+- application schema-free capability test: 1/1 PASS
+- application typed null/object/array factory test: 1/1 PASS
+- Tauri typed process parser test: 1/1 PASS
+- affected Cargo check (intercept-proxy/application/exchange/infrastructure): PASS
+- affected strict Clippy, all targets/all features: PASS
+- source-size, architecture, frontend boundary, git diff --check: PASS
+- full workspace checkpoint: NOT_RERUN; session16797 remains the unique checkpoint
+
+Third repair fresh result (2026-08-31 12:54:01 +08:00):
+- existing null rule-local capability targeted: 1/1 PASS
+- process budget 1024 rules + 4MiB Document: 1/1 PASS; typed `changes_truncated=true`
+- Tauri process parser: 1/1 PASS
+- affected Vitest: 5 files / 42 tests PASS
+- typecheck, ESLint, generated bindings 6/6: PASS
+- affected Cargo check and strict Clippy: PASS
+- source-size, architecture, frontend boundary, diff-check, checker 3/3: PASS
+- full workspace checkpoint: NOT_RERUN; session16797 remains the unique checkpoint
+
+Fourth repair fresh result (2026-08-31 13:08:32 +08:00):
+- model exact Rust-factory Insert/Append compatibility: 1/1 PASS
+- UI factory/save persistence exact: 1/1 PASS; exact factory arguments and saved insert/append payloads verified
+- affected Vitest: 5 files / 44 tests PASS
+- typecheck, ESLint: PASS
+- Phase15 checker current source + mutations: 3/3 PASS; rejects restoration of the old set/clear action mapping
+- source-size, architecture, frontend boundary, diff-check: PASS
+- full workspace checkpoint: NOT_RERUN; session16797 remains the unique checkpoint
+
+Fifth repair fresh result (2026-08-31 13:31:30 +08:00):
+- Domain strict Clear serde round-trip: 1/1 PASS
+- Application Clear typed factory: 1/1 PASS
+- generated bindings: 6/6 PASS; fresh and deterministic
+- UI first schema-free Clear-only factory/save persistence: 1/1 PASS
+- affected Domain: 130/130 PASS
+- affected Vitest: 5 files / 45 tests PASS
+- cargo check and strict Clippy: Domain/Application/Infrastructure/Tauri PASS
+- fmt, typecheck, ESLint, checker 3/3, source-size, architecture, frontend boundary and diff-check: PASS
+- attempted orphan Tauri test filter selected 0 tests and is explicitly not used as evidence
+- full workspace checkpoint: NOT_RERUN; session16797 remains the unique checkpoint

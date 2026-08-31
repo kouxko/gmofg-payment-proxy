@@ -1,7 +1,7 @@
 use regex::Regex;
 use serde_json::Value;
 
-use crate::JsonPath;
+use crate::{DomainError, ErrorCode, JsonPath};
 
 use super::{MatchContext, MatchField, MatchOperator};
 
@@ -34,6 +34,17 @@ pub(super) fn matches_condition(
         MatchOperator::Regex(pattern) => Regex::new(pattern)
             .map_err(|_| "规则包含未通过保存校验的正则".to_owned())?
             .is_match(&value),
+    })
+}
+
+pub fn matches_http_condition(
+    field: &MatchField,
+    operator: &MatchOperator,
+    context: &MatchContext<'_>,
+) -> Result<bool, DomainError> {
+    matches_condition(field, operator, context).map_err(|message| {
+        DomainError::new(ErrorCode::RuleInvalid, "HTTP规则条件运行时匹配失败")
+            .with_field_error("condition", message)
     })
 }
 

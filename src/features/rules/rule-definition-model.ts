@@ -14,6 +14,8 @@ import type {
   RuleDefinition_Serialize,
   RuleEditorContext,
   RuleMatchFieldKind,
+  RuleLocalDocumentTypeCapability,
+  RuleLocalDocumentValueType,
   RuleStage,
   SocketRuleEditorStage,
   TerminalAction,
@@ -63,13 +65,13 @@ export function ruleStageIncompatibility(
   if (!candidate) return "Rust 未声明目标阶段的编辑能力。";
   if (input.draft.content.type === "http") {
     if (context.content.type !== "http" || !("http" in candidate)) return "目标阶段不支持 HTTP 规则内容。";
-    return httpStageIncompatibility(input.draft.content.value, candidate);
+    return httpStageIncompatibility(input.draft.content.value, candidate, context.local_document_types);
   }
   if (context.content.type !== "socket" || !("fields" in candidate)) return "目标阶段不支持 Socket Document 规则内容。";
-  return socketStageIncompatibility(input.draft.content.value, context.content.value.package, candidate);
+  return socketStageIncompatibility(input.draft.content.value, context.content.value.package, candidate, context.local_document_types);
 }
 
-function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "http" }>["value"], stage: HttpRuleEditorStage) {
+function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "http" }>["value"], stage: HttpRuleEditorStage, localTypes: RuleLocalDocumentTypeCapability[]) {
   const leaves = conditionLeaves(content.condition);
   const httpConditions = leaves.filter((leaf): leaf is Extract<Condition, { source: "http" }> => leaf.source === "http");
   const httpActions = content.actions.filter((action) => action.source === "http" || action.source === "terminal");
@@ -85,11 +87,11 @@ function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draf
       if (!actionKinds.includes(kind)) return `目标阶段不支持 HTTP 动作 ${ruleActionKindLabel(kind)}。`;
     }
   }
-  return content.document ? documentIncompatibility(content.condition, content.actions, content.document.package, stage.package, stage.document_fields, stage.document_common_actions) : null;
+  return content.document ? documentIncompatibility(content.condition, content.actions, content.document.package, stage.package, stage.document_fields, stage.document_common_actions, localTypes) : null;
 }
 
-function socketStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "socket" }>["value"], expectedPackage: ProtocolPackageRef, stage: SocketRuleEditorStage) {
-  return documentIncompatibility(content.condition, content.actions, content.package, expectedPackage, stage.fields, stage.common_actions);
+function socketStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "socket" }>["value"], expectedPackage: ProtocolPackageRef, stage: SocketRuleEditorStage, localTypes: RuleLocalDocumentTypeCapability[]) {
+  return documentIncompatibility(content.condition, content.actions, content.package, expectedPackage, stage.fields, stage.common_actions, localTypes);
 }
 
 function documentIncompatibility(
@@ -99,18 +101,19 @@ function documentIncompatibility(
   expectedPackage: ProtocolPackageRef | null,
   fields: ProtocolRuleFieldCapability[],
   commonActions: ProtocolRuleCommonActionCapability[],
+  localTypes: RuleLocalDocumentTypeCapability[],
 ) {
   if (!expectedPackage || packageRef.id !== expectedPackage.id || packageRef.version !== expectedPackage.version) {
     return "目标阶段的 Document 协议包与当前内容不一致。";
   }
   for (const leaf of conditionLeaves(condition).filter((item) => item.source === "document")) {
     const field = fields.find((item) => item.name === leaf.path);
-    if (!field || !predicateMatchesType(leaf.predicate, field.type)) {
+    if (field && !predicateMatchesType(leaf.predicate, field.type)) {
       return `目标阶段不能编辑 Document 条件字段 ${leaf.path}。`;
     }
   }
   for (const action of actions) {
-    const reason = documentActionIncompatibility(action, fields, commonActions);
+    const reason = documentActionIncompatibility(action, condition, actions, fields, commonActions, localTypes);
     if (reason) return reason;
   }
   return null;
@@ -118,20 +121,50 @@ function documentIncompatibility(
 
 function documentActionIncompatibility(
   action: import("@/generated/rust-types").UnifiedAction,
+  condition: ConditionTree,
+  actions: import("@/generated/rust-types").UnifiedAction[],
   fields: ProtocolRuleFieldCapability[],
   commonActions: ProtocolRuleCommonActionCapability[],
+  localTypes: RuleLocalDocumentTypeCapability[],
 ) {
   if (action.source === "record_match") {
     return commonActions.includes("record_match") ? null : "目标阶段不支持 Document 动作 record_match。";
   }
   if (action.source !== "document") return null;
   const mutation: DocumentMutation = action.value;
+  const valueType = documentPathValueType(mutation, condition, actions, fields);
+  const capability = localTypes.find((item) => item.value_type === valueType);
   const field = fields.find((item) => item.name === mutation.path);
-  const capability = mutation.type === "set" ? "set_field" : mutation.type === "clear" ? "clear_field" : null;
-  if (!field || !capability || !field.actions.includes(capability) || (mutation.type === "set" && !valueMatchesType(mutation.value, field.type))) {
+  if (!capability?.actions.includes(mutation.type) || (mutation.type === "set" && field && !valueMatchesType(mutation.value, field.type))) {
     return `目标阶段不能编辑 Document 动作字段 ${mutation.path}。`;
   }
   return null;
+}
+
+function documentPathValueType(
+  mutation: DocumentMutation,
+  condition: ConditionTree,
+  actions: import("@/generated/rust-types").UnifiedAction[],
+  fields: ProtocolRuleFieldCapability[],
+): RuleLocalDocumentValueType | null {
+  const field = fields.find((item) => item.name === mutation.path);
+  if (field) return field.type;
+  if (mutation.type === "clear") return mutation.value_type;
+  const leaf = conditionLeaves(condition).find((item) => item.source === "document" && item.path === mutation.path);
+  if (leaf?.source === "document") return leaf.predicate.type === "null_equal" ? "null" : leaf.predicate.type;
+  const typedMutation = actions
+    .filter((item) => item.source === "document")
+    .map((item) => item.value)
+    .find((item) => item.path === mutation.path && item.type !== "clear");
+  return typedMutation && typedMutation.type !== "clear" ? documentValueType(typedMutation.value) : null;
+}
+
+function documentValueType(value: DocumentValue): RuleLocalDocumentValueType {
+  if (typeof value === "string") return "string";
+  if (typeof value === "number") return "number";
+  if (typeof value === "boolean") return "boolean";
+  if (Array.isArray(value)) return "array";
+  return value === null ? "null" : "object";
 }
 
 function conditionLeaves(tree: ConditionTree): Condition[] {

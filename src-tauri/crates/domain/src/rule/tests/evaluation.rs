@@ -1,5 +1,8 @@
 use super::*;
-use crate::{ChannelId, Condition, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch, TerminalIdentity};
+use crate::{
+    ChannelId, Condition, ConditionEvaluation, ErrorCode, MessageStage, Revision,
+    RuleConditionEvaluation, RuleId, RuntimeEpoch, TerminalIdentity,
+};
 use chrono::Utc;
 use serde_json::{Value, json};
 
@@ -184,6 +187,48 @@ fn failed_joint_gate_commits_no_http_actions_or_hit_metadata() {
     assert_eq!(engine.rules()[0].hit_count, 0);
     assert!(engine.rules()[0].last_hit_at.is_none());
     assert!(engine.rules()[0].enabled);
+}
+
+#[test]
+fn unified_condition_gate_receives_actor_owned_nth_attempt() {
+    let epoch = RuntimeEpoch::new();
+    let mut candidate = Rule::create(draft(
+        MessageStage::Request,
+        Vec::new(),
+        vec![HttpAction::Pause],
+    ))
+    .expect("joint rule");
+    candidate.one_shot = true;
+    let terminal = TerminalIdentity {
+        source_ip: "10.0.0.1".into(),
+        certificate_sha256: "cert".into(),
+    };
+    let mut engine = RuleEngine::new(epoch, vec![candidate]);
+    let mut attempts = Vec::new();
+
+    for expected_match in [false, true] {
+        let evaluation = engine
+            .evaluate_with_condition_gate_in_order(
+                &context(epoch, &terminal, None),
+                Utc::now(),
+                &[],
+                |_, nth_attempt| {
+                    attempts.push(nth_attempt);
+                    Ok::<_, ()>(RuleConditionEvaluation::UnifiedOwned(ConditionEvaluation {
+                        matched: nth_attempt == 2,
+                        eligible_without_nth: true,
+                        contains_nth: true,
+                    }))
+                },
+            )
+            .expect("typed gate evaluation");
+        assert_eq!(evaluation.traces[0].matched, expected_match);
+    }
+
+    assert_eq!(attempts, [1, 2]);
+    assert_eq!(engine.nth_counter_snapshots()[0].attempts, 2);
+    assert_eq!(engine.rules()[0].hit_count, 1);
+    assert!(!engine.rules()[0].enabled);
 }
 
 // RULE-004, ENGINE-003, ENGINE-004, TEST-RULE

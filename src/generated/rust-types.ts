@@ -147,6 +147,9 @@ export const commands = {
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
 	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
 	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
+	ruleDefinitionDocumentConditionDraft: (path: string, valueType: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_condition_draft", { path, valueType, predicate, raw })),
+	ruleDefinitionDocumentActionDraft: (path: string, valueType: RuleLocalDocumentValueType, action: RuleLocalDocumentActionKind, raw: string | null, index: number | null) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_action_draft", { path, valueType, action, raw, index })),
+	ruleDefinitionDocumentCommonActionDraft: (action: ProtocolRuleCommonActionCapability) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_common_action_draft", { action })),
 	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
 	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
 	ruleDefinitionSave: (input: RuleDefinitionSaveInput) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_save", { input })),
@@ -774,7 +777,7 @@ export type DocumentMutation =
 /**  Strict Set using [`Document::set`]. */
 { type: "set"; path: JsonPointer; value: DocumentValue } |
 /**  Strict Clear using [`Document::clear_path`]. */
-{ type: "clear"; path: JsonPointer } |
+{ type: "clear"; path: JsonPointer; value_type: DocumentValueType } |
 /**  Strict array Insert using [`Document::insert`]. */
 { type: "insert"; path: JsonPointer; index: number; value: DocumentValue } |
 /**  Strict array Append using [`Document::append`]. */
@@ -866,6 +869,21 @@ null |
 /**  JSON array. */
 DocumentValue[];
 
+/**  Schema-visible kind of a document value. */
+export type DocumentValueType =
+/**  String. */
+"string" |
+/**  Number. */
+"number" |
+/**  Boolean. */
+"boolean" |
+/**  Null. */
+"null" |
+/**  Object. */
+"object" |
+/**  Array. */
+"array";
+
 export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
 
 export type DownstreamTlsSettings = {
@@ -918,7 +936,7 @@ export type ExchangeObservationEvent = { event: "opened"; observed_at: string } 
 /**  协议 Pipeline 提供 Document；透明 Socket chunk 没有 Document。 */
 document: unknown | null;
 /**  协议 Reader 固定 Display；透明 Socket 不调用 Display。 */
-display: string | null } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string; external_package_call: ExternalPackageCallDiagnosticViewModel | null } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
+display: string | null } | { event: "processed"; observed_at: string; direction: ProtocolDirection; changes: RuleDocumentChangeViewModel[]; changes_truncated: boolean; final_document: unknown } | { event: "encoded"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string; external_package_call: ExternalPackageCallDiagnosticViewModel | null } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
 
 export type ExchangeObservationPage = {
 	rows: ExchangeObservationRecord[],
@@ -2156,6 +2174,19 @@ export type RuleDefinition_Serialize = {
 	content: RuleContent,
 };
 
+export type RuleDocumentChangeViewModel = {
+	rule_id: RuleId,
+	matched: boolean,
+	operations: RuleDocumentOperationViewModel[],
+};
+
+export type RuleDocumentOperationKindViewModel = "record_match" | "set" | "clear" | "insert" | "append";
+
+export type RuleDocumentOperationViewModel = {
+	kind: RuleDocumentOperationKindViewModel,
+	path: string | null,
+};
+
 export type RuleEditorContentContext = { type: "http"; value: {
 	stages: HttpRuleEditorStage[],
 } } | { type: "socket"; value: {
@@ -2167,6 +2198,7 @@ export type RuleEditorContentContext = { type: "http"; value: {
 export type RuleEditorContext = {
 	listener_id: ListenerId,
 	content: RuleEditorContentContext,
+	local_document_types: RuleLocalDocumentTypeCapability[],
 };
 
 export type RuleId = string;
@@ -2176,6 +2208,18 @@ export type RuleLifecycle = {
 	hit_count: number,
 	last_hit_at: string | null,
 };
+
+export type RuleLocalDocumentActionKind = "set" | "clear" | "insert" | "append";
+
+export type RuleLocalDocumentPredicateKind = "equals" | "contains" | "starts_with" | "ends_with" | "less" | "less_equal" | "greater" | "greater_equal";
+
+export type RuleLocalDocumentTypeCapability = {
+	value_type: RuleLocalDocumentValueType,
+	predicates: RuleLocalDocumentPredicateKind[],
+	actions: RuleLocalDocumentActionKind[],
+};
+
+export type RuleLocalDocumentValueType = "string" | "number" | "boolean" | "null" | "object" | "array";
 
 export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
 

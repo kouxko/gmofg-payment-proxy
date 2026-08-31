@@ -225,6 +225,7 @@ const iconCloseTriggerFiles = new Set([
   "src/features/capture/exchange-observation-detail.tsx",
   "src/features/listeners/socket-protocol-package-dialog.tsx",
   "src/features/protocol-packages/protocol-package-dialog.tsx",
+  "src/features/rules/rules-view.tsx",
   "src/features/rules/rule-creation-dialogs.tsx",
 ]);
 

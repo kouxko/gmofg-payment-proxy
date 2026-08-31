@@ -304,7 +304,7 @@ fn apply_actions(
             ProtocolDocumentOperation::SetField { field, value } => {
                 document.set(field, value.clone())?;
             }
-            ProtocolDocumentOperation::ClearField { field } => {
+            ProtocolDocumentOperation::ClearField { field, .. } => {
                 document.clear_path(field)?;
             }
         }

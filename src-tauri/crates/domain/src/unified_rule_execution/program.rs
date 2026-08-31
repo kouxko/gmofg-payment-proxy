@@ -1,8 +1,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    ConditionTree, Document, DomainError, HttpAction, MatchField, MatchOperator, RuleId,
-    TerminalAction, UnifiedAction, rule_error,
+    ConditionEvaluation, ConditionTree, Document, DomainError, HttpAction, MatchField,
+    MatchOperator, RuleId, TerminalAction, UnifiedAction, rule_error,
 };
 
 /// Immutable rule program input. `created_order` is history/UI metadata only.
@@ -119,6 +119,38 @@ impl UnifiedRuleProgram {
                 "HTTP 条件需要应用层提供类型化 HTTP 上下文",
             ))
         })
+    }
+
+    #[must_use]
+    pub fn rules(&self) -> &[RuleProgramEntry] {
+        &self.rules
+    }
+
+    pub fn evaluate_and_apply_rule_with_http(
+        &self,
+        rule_id: RuleId,
+        document: &mut Document,
+        nth_attempt: u64,
+        mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
+    ) -> Result<ConditionEvaluation, DomainError> {
+        let Some(rule) = self.rules.iter().find(|rule| rule.rule_id == rule_id) else {
+            return Ok(ConditionEvaluation {
+                matched: true,
+                eligible_without_nth: true,
+                contains_nth: false,
+            });
+        };
+        let evaluation =
+            rule.condition
+                .evaluate_with_nth(document, nth_attempt, &mut http_matches)?;
+        if evaluation.matched {
+            for action in &rule.actions {
+                if let UnifiedAction::Document(mutation) = action {
+                    mutation.apply(document)?;
+                }
+            }
+        }
+        Ok(evaluation)
     }
 
     pub fn execute_with_http(

@@ -23,7 +23,7 @@ impl PipelinePorts for RecordingSocketPipeline {
     ) -> intercept_proxy_runtime::Result<SocketContext> {
         self.calls.fetch_add(1, Ordering::SeqCst);
         if let Some(rule) = &self.rule {
-            evaluation.gate(rule.id.as_uuid())?;
+            evaluation.gate(rule.id.as_uuid(), 1)?;
         }
         evaluation.encode().await.map_err(|error| {
             intercept_proxy_runtime::ProxyError::new(
@@ -39,14 +39,33 @@ fn factory(
     rule: Option<Rule>,
     fail_encode: bool,
 ) -> (ExternalSocketCapabilityFactoryAdapter, Arc<FakeExternalRpc>) {
+    factory_with_program(rule, fail_encode, None)
+}
+
+fn factory_with_program(
+    rule: Option<Rule>,
+    fail_encode: bool,
+    program: Option<Arc<intercept_proxy_domain::UnifiedRuleProgram>>,
+) -> (ExternalSocketCapabilityFactoryAdapter, Arc<FakeExternalRpc>) {
     let registration = registration();
     let rpc = Arc::new(FakeExternalRpc {
         fail_encode,
         ..FakeExternalRpc::default()
     });
+    let document_rules = program.map_or_else(
+        || rules(&registration),
+        |upstream| {
+            ProtocolDocumentRuleConnectionFactory::new_unified(
+                listener_id(),
+                registration.package().identity().clone(),
+                upstream,
+                Arc::new(intercept_proxy_domain::UnifiedRuleProgram::new(Vec::new()).unwrap()),
+            )
+        },
+    );
     let snapshot = ExternalSocketRuntimeSnapshot::new(
         ExternalSocketPackageBinding::new(registration.clone(), rpc.clone()),
-        rules(&registration),
+        document_rules,
         SocketTopology::default(),
     );
     let pipeline = Arc::new(RecordingSocketPipeline {
@@ -61,6 +80,61 @@ fn factory(
         ),
         rpc,
     )
+}
+
+#[tokio::test]
+async fn production_joint_pipeline_executes_recursive_or_insert_and_append() {
+    use intercept_proxy_domain::{
+        Condition, ConditionTree, DocumentMutation, DocumentPredicate, RuleProgramEntry,
+        StringOperator, StringPredicate, UnifiedAction, UnifiedRuleProgram,
+    };
+
+    let leaf = |expected: &str| {
+        ConditionTree::Leaf(Condition::Document {
+            path: JsonPointer::property("message_type"),
+            predicate: DocumentPredicate::String(StringPredicate {
+                operator: StringOperator::Equal,
+                value: expected.to_owned(),
+            }),
+        })
+    };
+    let program = UnifiedRuleProgram::new(vec![
+        RuleProgramEntry::new(
+            RuleId::from_uuid(Uuid::from_u128(44)),
+            10,
+            1,
+            ConditionTree::Any(vec![leaf("0200"), leaf("fallback")]),
+            vec![
+                UnifiedAction::Document(DocumentMutation::Set {
+                    path: JsonPointer::property("items"),
+                    value: DocumentValue::Array(Vec::new()),
+                }),
+                UnifiedAction::Document(DocumentMutation::Insert {
+                    path: JsonPointer::property("items"),
+                    index: 0,
+                    value: DocumentValue::String("first".into()),
+                }),
+                UnifiedAction::Document(DocumentMutation::Append {
+                    path: JsonPointer::property("items"),
+                    value: DocumentValue::String("last".into()),
+                }),
+            ],
+        )
+        .unwrap(),
+    ])
+    .unwrap();
+    let (factory, rpc) = factory_with_program(Some(runtime_rule()), false, Some(Arc::new(program)));
+    let mut capabilities = factory.create_upstream(connection()).unwrap();
+    let original = SocketContext {
+        data: b"abc".to_vec(),
+    };
+    let document = capabilities.decode.decode(&original).await.unwrap();
+    capabilities.rules.apply(document).await.unwrap();
+
+    assert_eq!(
+        serde_json::to_value(rpc.encoded_document.lock().clone().unwrap()).unwrap()["items"],
+        json!(["first", "last"])
+    );
 }
 
 #[tokio::test]

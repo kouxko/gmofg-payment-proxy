@@ -2760,6 +2760,7 @@ dependencies = [
  "async-trait",
  "intercept-proxy-domain",
  "parking_lot",
+ "serde",
  "serde_json",
  "thiserror 2.0.20",
  "tokio",

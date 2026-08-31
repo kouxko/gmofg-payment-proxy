@@ -10,6 +10,8 @@ use tracing_subscriber::prelude::*;
 use super::{ExchangeUiConsumer, ExchangeUiLayer};
 use crate::runtime_logs::nonblocking_queue::QueueByteBudget;
 
+#[path = "tests/process.rs"]
+mod process;
 #[path = "tests/queue.rs"]
 mod queue;
 
@@ -247,62 +249,6 @@ fn wait_for_record(
         std::thread::sleep(Duration::from_millis(2));
     }
     panic!("observation consumer did not persist {event_count} events")
-}
-
-#[test]
-fn captures_primitive_fields_in_connection_event_order() {
-    let store = Arc::new(ExchangeObservationStore::new(Arc::new(
-        CapacityLedger::new(64 * 1024),
-    )));
-    let (layer, consumer) = layer(&store);
-    let subscriber = tracing_subscriber::registry().with(layer);
-    let workspace = "10000000-0000-0000-0000-000000000001";
-    let listener = "20000000-0000-0000-0000-000000000002";
-    let epoch = "30000000-0000-0000-0000-000000000003";
-
-    with_default(subscriber, || {
-        let span = tracing::info_span!(
-            "exchange",
-            exchange_id = "ex-1",
-            workspace_id = workspace,
-            listener_id = listener,
-            runtime_epoch = epoch,
-            peer = "127.0.0.1:9000",
-            protocol = "socket"
-        );
-        let _entered = span.enter();
-        tracing::info!(target: "intercept_proxy::exchange::ui", event = "opened");
-        tracing::info!(
-            target: "intercept_proxy::exchange::ui",
-            event = "received",
-            direction = "upstream",
-            context_bytes_hex = "00FF10",
-            document_json = r#"{"mti":"0200"}"#,
-            display = "0200"
-        );
-        tracing::info!(
-            target: "intercept_proxy::exchange::ui",
-            event = "closed",
-            outcome = "completed"
-        );
-    });
-    consumer.shutdown().unwrap();
-
-    let record = wait_for_record(&store, "ex-1", 3);
-    assert_eq!(record.events.len(), 3);
-    let ExchangeObservationEvent::Received {
-        context, document, ..
-    } = &record.events[1]
-    else {
-        panic!("second event must be received");
-    };
-    assert_eq!(
-        context,
-        &ExchangeContext::Socket {
-            bytes: vec![0, 255, 16]
-        }
-    );
-    assert_eq!(document.as_ref().expect("protocol document")["mti"], "0200");
 }
 
 #[test]

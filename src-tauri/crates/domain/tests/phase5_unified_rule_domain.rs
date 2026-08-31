@@ -12,6 +12,16 @@ fn path(value: &str) -> JsonPointer {
     JsonPointer::parse(value).expect("valid JSON pointer")
 }
 
+#[test]
+fn clear_document_value_type_survives_strict_serde_round_trip() {
+    let wire = serde_json::json!({
+        "source": "document",
+        "value": { "type": "clear", "path": "/enabled", "value_type": "boolean" }
+    });
+    let action: UnifiedAction = serde_json::from_value(wire.clone()).expect("typed clear");
+    assert_eq!(serde_json::to_value(action).expect("serialize"), wire);
+}
+
 fn string_condition(path_value: &str, operator: StringOperator, value: &str) -> ConditionTree {
     ConditionTree::Leaf(Condition::Document {
         path: path(path_value),
@@ -255,6 +265,7 @@ fn document_actions_apply_in_order_with_strict_set_clear_insert_and_append() {
             }),
             UnifiedAction::Document(DocumentMutation::Clear {
                 path: path("/remove"),
+                value_type: DocumentValueType::Number,
             }),
         ],
     );

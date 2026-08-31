@@ -9,7 +9,7 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    DocumentSchemaNode, DocumentValue, DomainError, JsonPointer, ListenerId,
+    DocumentSchemaNode, DocumentValue, DocumentValueType, DomainError, JsonPointer, ListenerId,
     ProtocolDocumentRuleId, ProtocolPackageRef, Revision,
 };
 
@@ -126,6 +126,8 @@ pub enum ProtocolDocumentOperation {
     ClearField {
         /// Document 中的目标路径。
         field: JsonPointer,
+        /// 规则 leaf 自身携带的路径值类型。
+        value_type: DocumentValueType,
     },
 }
 
@@ -144,6 +146,7 @@ impl<'de> Deserialize<'de> for ProtocolDocumentOperation {
             },
             ClearField {
                 field: JsonPointer,
+                value_type: DocumentValueType,
             },
         }
         Ok(match Wire::deserialize(deserializer)? {
@@ -152,7 +155,7 @@ impl<'de> Deserialize<'de> for ProtocolDocumentOperation {
                 field,
                 value: value.into(),
             },
-            Wire::ClearField { field } => Self::ClearField { field },
+            Wire::ClearField { field, value_type } => Self::ClearField { field, value_type },
         })
     }
 }

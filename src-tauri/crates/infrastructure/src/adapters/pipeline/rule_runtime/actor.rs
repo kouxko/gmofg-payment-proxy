@@ -6,11 +6,13 @@ use std::{
 use chrono::Utc;
 use intercept_proxy_application::EventHub;
 use intercept_proxy_domain::{
-    MatchContext, MessageStage, NthCounterAdvance, NthCounterSnapshot, RuleEngine,
-    RuleRuntimeSnapshot, RuntimeEpoch,
+    MatchContext, MessageStage, NthCounterAdvance, NthCounterSnapshot, RuleConditionEvaluation,
+    RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch,
 };
 use intercept_proxy_exchange::SocketContext;
-use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult, SocketJointEvaluation};
+use intercept_proxy_runtime::{
+    ConnectionContext, JointRuleConditionEvaluation, Result as ProxyResult, SocketJointEvaluation,
+};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -221,15 +223,50 @@ fn evaluate_rules(
     let evaluation = match (joint_document.as_mut(), socket_joint.as_mut()) {
         (Some(joint), None) => current
             .engine
-            .evaluate_with_gate_in_order(match_context, Utc::now(), execution_order, |rule| {
-                joint.gate(rule)
-            })
+            .evaluate_with_condition_gate_in_order(
+                match_context,
+                Utc::now(),
+                execution_order,
+                |rule, nth_attempt| {
+                    joint
+                        .gate(rule, nth_attempt, match_context)
+                        .map(|evaluated| match evaluated {
+                            JointRuleConditionEvaluation::UnifiedOwned(condition) => {
+                                RuleConditionEvaluation::UnifiedOwned(
+                                    intercept_proxy_domain::ConditionEvaluation {
+                                        matched: condition.matched,
+                                        eligible_without_nth: condition.eligible_without_nth,
+                                        contains_nth: condition.contains_nth,
+                                    },
+                                )
+                            }
+                            JointRuleConditionEvaluation::NotOwned => {
+                                RuleConditionEvaluation::NotOwned
+                            }
+                        })
+                },
+            )
             .map_err(|error| app_to_proxy(error.into()))?,
-        (None, Some(joint)) => current.engine.evaluate_with_gate_in_order(
+        (None, Some(joint)) => current.engine.evaluate_with_condition_gate_in_order(
             match_context,
             Utc::now(),
             execution_order,
-            |rule| joint.gate(rule.id.as_uuid()),
+            |rule, nth_attempt| {
+                joint
+                    .gate(rule.id.as_uuid(), nth_attempt)
+                    .map(|evaluated| match evaluated {
+                        JointRuleConditionEvaluation::UnifiedOwned(condition) => {
+                            RuleConditionEvaluation::UnifiedOwned(
+                                intercept_proxy_domain::ConditionEvaluation {
+                                    matched: condition.matched,
+                                    eligible_without_nth: condition.eligible_without_nth,
+                                    contains_nth: condition.contains_nth,
+                                },
+                            )
+                        }
+                        JointRuleConditionEvaluation::NotOwned => RuleConditionEvaluation::NotOwned,
+                    })
+            },
         )?,
         (None, None) => current
             .engine

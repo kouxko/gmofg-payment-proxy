@@ -27,9 +27,26 @@ pub enum SocketPayloadDirection {
 ///
 /// 具体协议包、原始字节和规则 Program 由 Infrastructure 持有；Proxy/Application 边界只负责让
 /// 统一规则 actor 在持久化生命周期前完成 gate 与 Encode。
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub struct JointConditionEvaluation {
+    pub matched: bool,
+    pub eligible_without_nth: bool,
+    pub contains_nth: bool,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+pub enum JointRuleConditionEvaluation {
+    UnifiedOwned(JointConditionEvaluation),
+    NotOwned,
+}
+
 #[async_trait]
 pub trait SocketJointEvaluation: Send + Sync {
-    fn gate(&mut self, rule_id: Uuid) -> crate::Result<bool>;
+    fn gate(
+        &mut self,
+        rule_id: Uuid,
+        nth_attempt: u64,
+    ) -> crate::Result<JointRuleConditionEvaluation>;
     async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
 }
 

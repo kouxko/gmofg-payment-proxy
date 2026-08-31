@@ -27,6 +27,10 @@ pub use envelope::*;
 pub use error::*;
 pub use exchange::*;
 pub use local_server::*;
+pub use observation::{
+    MAX_OBSERVATION_TEXT_BYTES, RuleProcessingAccumulator, RuleProcessingChange,
+    RuleProcessingOperation, RuleProcessingOperationKind, rules_processed,
+};
 pub use pipeline::*;
 pub use protocol::*;
 pub use transparent::*;
