@@ -31,11 +31,6 @@ use crate::{
     SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceCollectionViewModel,
     WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
 };
-#[cfg(test)]
-use crate::{
-    ChannelId, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel, RuleViewModel,
-};
-
 /// Read-only access to the bounded in-process Exchange observation timeline.
 ///
 /// Storage, retention, producer counters, and UI mutation ownership remain in an outer adapter;
@@ -173,12 +168,13 @@ pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
         listener: ProxyListener,
     ) -> AppResult<ListenerStatusViewModel>;
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
-    /// 将已保存的统一规则快照替换到正在运行的入口；入口未运行时保持无操作。
+    /// 在 Listener 事务边界内持久化统一规则 CAS，并发布同一 revision 的运行快照。
     async fn replace_rule_definitions(
         &self,
+        workspaces: &dyn WorkspaceRepositoryPort,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
-    ) -> AppResult<()>;
+    ) -> AppResult<ProxyWorkspace>;
     /// 使用固定 Server 的 scheme 执行 DNS/TCP 或 DNS/TCP/TLS 连接测试。
     async fn test_upstream_connection(
         &self,
@@ -203,34 +199,6 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
         runtime_epoch: RuntimeEpoch,
     ) -> AppResult<CaptureDetailViewModel>;
     async fn clear_view(&self, current_cursor: u64) -> AppResult<u64>;
-}
-
-#[async_trait]
-/// 规则持久化端口。
-///
-/// 实现必须保留 revision 并发校验，不能因为换成 TUI/CLI 就绕过规则校验。
-#[cfg(test)]
-pub trait RuleRepositoryPort: Send + Sync + std::fmt::Debug {
-    async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>>;
-    async fn get(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
-    async fn new_http_draft(&self, channel: ChannelId) -> AppResult<RuleDraft>;
-    async fn create_from_session(&self, session_id: SessionId) -> AppResult<RuleDraft>;
-    async fn validate(&self, draft: &RuleDraft) -> AppResult<RuleValidationViewModel>;
-    async fn save(&self, draft: RuleDraft) -> AppResult<RuleViewModel>;
-    async fn copy(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
-    async fn delete(
-        &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-    ) -> AppResult<OperationResultViewModel>;
-    async fn toggle(
-        &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-        enabled: bool,
-    ) -> AppResult<RuleViewModel>;
-    async fn import(&self) -> AppResult<OperationResultViewModel>;
-    async fn export(&self) -> AppResult<OperationResultViewModel>;
 }
 
 #[async_trait]

@@ -67,10 +67,15 @@ impl ListenerRuntimePlanBuilder<'_> {
         let rules = self
             .compile_external_document_rules(workspace, listener, socket, registration)
             .await?;
-        let snapshot = Arc::new(ExternalSocketRuntimeSnapshot::new(
+        let snapshot = Arc::new(ExternalSocketRuntimeSnapshot::with_listener_transaction(
             binding,
             rules,
             socket.topology.clone(),
+            self.adapter.environment_apply_resource_gates.gate(
+                &crate::adapters::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener.id.as_uuid(),
+                ),
+            ),
         ));
         let pipeline_limits = SocketPipelineLimits::new(
             max_frame_bytes,
@@ -160,22 +165,12 @@ impl ListenerRuntimePlanBuilder<'_> {
         listener: &ProxyListener,
         socket: &SocketRelaySettings,
         registration: &intercept_proxy_package_contract::PackageManifest,
-    ) -> AppResult<crate::adapters::listener_runtime::ProtocolDocumentRuleConnectionFactory> {
+    ) -> AppResult<crate::adapters::listener_runtime::DocumentProgramFactory> {
         let workspace_for_compile = workspace.clone();
         let listener_for_compile = listener.clone();
         let package = registration.package().identity().clone();
-        let upstream_schema = registration
-            .document()
-            .upstream()
-            .schema()
-            .expect("validated Socket Manifest requires upstream schema")
-            .clone();
-        let downstream_schema = registration
-            .document()
-            .downstream()
-            .schema()
-            .expect("validated Socket Manifest requires downstream schema")
-            .clone();
+        let upstream_schema = registration.document().upstream().schema().cloned();
+        let downstream_schema = registration.document().downstream().schema().cloned();
         let topology = socket.topology.clone();
         self.adapter
             .compile_document_rules_on_blocking_owner(move || {
@@ -183,8 +178,8 @@ impl ListenerRuntimePlanBuilder<'_> {
                     &workspace_for_compile,
                     &listener_for_compile,
                     &package,
-                    &upstream_schema,
-                    &downstream_schema,
+                    upstream_schema.as_ref(),
+                    downstream_schema.as_ref(),
                     &topology,
                 )
             })

@@ -12,7 +12,7 @@ pub mod error;
 pub mod id;
 pub mod json_path;
 pub mod message;
-pub mod protocol_document_rule;
+pub mod protocol_direction;
 pub mod protocol_package;
 pub mod revision;
 pub mod rule;
@@ -25,6 +25,8 @@ pub mod workspace;
 
 #[cfg(test)]
 mod android_network_tests;
+#[cfg(test)]
+mod unified_matching_contract_tests;
 
 pub use android_network::*;
 pub use breakpoint::*;
@@ -34,7 +36,7 @@ pub use error::*;
 pub use id::*;
 pub use json_path::*;
 pub use message::*;
-pub use protocol_document_rule::*;
+pub use protocol_direction::*;
 pub use protocol_package::*;
 pub use revision::*;
 pub use rule::*;

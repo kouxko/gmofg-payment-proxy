@@ -2,7 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use intercept_proxy_domain::{BodyCodecKind, Document, ProtocolDirection, UnifiedRuleProgram};
+use intercept_proxy_domain::{BodyCodecKind, Document, ProtocolDirection};
 use intercept_proxy_exchange::{
     Decode, Direction, Display, Encode, Error, ExternalPackageCallFailure,
     ExternalPackageCallStage, Http, HttpContext, Rules,
@@ -15,7 +15,7 @@ use parking_lot::Mutex;
 use crate::adapters::{PackageTransportError, body_codecs::resolve_message_codec};
 
 use super::super::external_relay::{ExternalPackageRpc, RuntimeExternalSocketPackageBinding};
-use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
+use super::{HttpDocumentRulePrograms, JointDocumentEvaluation, JointHttpRuleRuntime};
 
 #[cfg(test)]
 pub(crate) fn decode_http_body_for_package(
@@ -68,7 +68,8 @@ pub(super) fn build_capabilities<D: Direction>(
     response: bool,
     codec: BodyCodecKind,
     binding: &RuntimeExternalSocketPackageBinding,
-    programs: [Arc<UnifiedRuleProgram>; 1],
+    programs: Arc<parking_lot::RwLock<HttpDocumentRulePrograms>>,
+    listener_transaction: Arc<tokio::sync::Mutex<()>>,
 ) -> HttpDirectionCapabilities<D> {
     let observed = Arc::new(Mutex::new(None));
     let rpc = binding.rpc();
@@ -81,6 +82,7 @@ pub(super) fn build_capabilities<D: Direction>(
         direction,
         Arc::clone(&observed),
         programs,
+        listener_transaction,
         package.clone(),
     );
     HttpDirectionCapabilities::new(
@@ -219,7 +221,8 @@ struct ExternalHttpDocumentRules {
     rpc: Arc<dyn ExternalPackageRpc>,
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-    programs: [Arc<UnifiedRuleProgram>; 1],
+    programs: Arc<parking_lot::RwLock<HttpDocumentRulePrograms>>,
+    listener_transaction: Arc<tokio::sync::Mutex<()>>,
     package: intercept_proxy_domain::ProtocolPackageRef,
 }
 
@@ -232,7 +235,8 @@ impl ExternalHttpDocumentRules {
         rpc: Arc<dyn ExternalPackageRpc>,
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-        programs: [Arc<UnifiedRuleProgram>; 1],
+        programs: Arc<parking_lot::RwLock<HttpDocumentRulePrograms>>,
+        listener_transaction: Arc<tokio::sync::Mutex<()>>,
         package: intercept_proxy_domain::ProtocolPackageRef,
     ) -> Self {
         Self {
@@ -243,6 +247,7 @@ impl ExternalHttpDocumentRules {
             direction,
             observed,
             programs,
+            listener_transaction,
             package,
         }
     }
@@ -254,6 +259,8 @@ impl Rules for ExternalHttpDocumentRules {
         let observed = self.observed.lock().take().ok_or_else(|| {
             Error::new("HTTP_PROTOCOL_CONTEXT_MISSING\nDocument 缺少对应 HTTP 上下文")
         })?;
+        let listener_transaction = Arc::clone(&self.listener_transaction).lock_owned().await;
+        let program = self.programs.read().program(self.direction);
         self.runtime.stage(
             self.connection.runtime_epoch,
             self.connection.connection_id,
@@ -266,8 +273,9 @@ impl Rules for ExternalHttpDocumentRules {
                 self.direction,
                 observed.codec,
                 self.package.clone(),
-                self.programs.iter().cloned(),
-            ),
+                [program],
+            )
+            .with_listener_transaction(listener_transaction),
         );
         Ok(document)
     }

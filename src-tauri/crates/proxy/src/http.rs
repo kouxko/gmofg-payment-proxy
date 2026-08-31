@@ -72,7 +72,8 @@ pub use capabilities::{
     HttpProtocolCapabilityFactory, PlainHttpCapabilityFactory, RulesChain,
 };
 pub use contracts::{
-    ForwardRequest, NoopPipelinePorts, PipelinePorts, UpstreamConnector, UpstreamExchange,
+    ForwardRequest, HttpRequestMetadata, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+    UpstreamExchange,
 };
 pub use service::{ConnectionAdmission, ConnectionService};
 pub use stream_io::InformationalResponseSink;

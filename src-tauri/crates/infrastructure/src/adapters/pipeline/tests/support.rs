@@ -1,16 +1,13 @@
 use std::{
     net::SocketAddr,
-    sync::atomic::{AtomicBool, AtomicUsize, Ordering as AtomicOrdering},
+    sync::{LazyLock, atomic::{AtomicUsize, Ordering as AtomicOrdering}},
     time::SystemTime,
 };
 
-use intercept_proxy_application::{
-    RawHttpHeaderViewModel, RuleDraft as AppRuleDraft, RuleSummaryViewModel, RuleViewModel,
-};
-use intercept_proxy_domain::DropResponseMode;
+use intercept_proxy_application::RawHttpHeaderViewModel;
+use intercept_proxy_domain::RuleDefinition;
 use intercept_proxy_product_api::ProductMessageContext;
 use intercept_proxy_runtime::{RawHeader, TlsPeerIdentity};
-use serde_json::json;
 
 use super::*;
 fn test_capture_repository() -> Arc<CaptureRepositoryAdapter> {
@@ -49,6 +46,14 @@ impl BodyCodec for Utf8BodyCodec {
 
 fn test_body_codec() -> Arc<dyn BodyCodec> {
     Arc::new(Utf8BodyCodec)
+}
+
+fn request_metadata() -> &'static HttpRequestMetadata {
+    static METADATA: LazyLock<HttpRequestMetadata> = LazyLock::new(|| HttpRequestMetadata {
+        method: "POST".into(),
+        request_target: "/payment".into(),
+    });
+    &METADATA
 }
 
 #[derive(Debug)]

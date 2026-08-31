@@ -30,6 +30,7 @@ __pycache__/
 
 # Generated desktop resources and local Rust test targets
 /src-tauri/resources/android-companion.apk
+/src-tauri/binaries/intercept-proxy-package-sidecar-*
 /src-tauri/target-listener-fix/
 
 # Local agent/runtime state and generated scratch assets

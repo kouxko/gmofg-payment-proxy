@@ -16,6 +16,9 @@ mod validation;
 
 use validation::{ensure_socket_only, validate_http_runtime_content};
 
+pub const MAX_RULE_DEFINITIONS: usize = 1_024;
+pub const MAX_DOCUMENT_RULE_STRING_BYTES: usize = 16 * 1_024;
+
 pub use lifecycle::{
     NthCounterAdvance, NthCounterSnapshot, RuleDefinitionRestoreSnapshot, RuleLifecycle,
     RuleLifecycleDelta, RuleLifecycleSnapshot,

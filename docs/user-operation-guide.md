@@ -27,9 +27,17 @@ App 断开或 Server 读写失败时，该 Exchange 结束。
 
 App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-- HTTP 内容可以组合 Method、Path、Header、JSONPath、证书指纹等 HTTP 条件与可选的协议
-  Document 条件，并执行 HTTP 修改、故障、Mock 或 Document 动作。
+- HTTP 内容可以组合 Method、request target、Header、终端/证书条件与可选的协议 Document 条件，
+  并执行 HTTP 修改、故障、Mock 或 Document 动作。request target 始终是原始 `/path?query`，请求与
+  对应响应阶段读取同一份请求元数据，不包含 scheme、host 或 port。Header 名称使用单层 `/name`
+  手动输入、ASCII 大小写不敏感，重复 Header 任一值命中即成立。
 - Socket 内容只处理协议包 Decode 后的类型化 Document 条件与动作，不提供 HTTP 能力。
+
+Method 只支持精确匹配；request target 与 Header 支持精确、包含、前缀、后缀和通配符。Document
+有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。Document
+条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
+Insert、Append 等动作始终使用精确路径，不接受通配符。旧 Path/JSONPath/Regex 匹配合同已删除，
+没有别名、兼容解析或第二执行路径。
 
 规则按固定阶段顺序执行；`priority` 只在同一阶段内排序。保存时由 Rust 使用当前 Listener、阶段、
 协议包和 Schema 能力校验整条规则，HTTP 与 Document 条件共同决定同一条 HTTP 规则是否命中。

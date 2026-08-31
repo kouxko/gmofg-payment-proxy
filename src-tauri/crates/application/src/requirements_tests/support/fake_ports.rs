@@ -42,8 +42,6 @@ pub(super) fn fake_certificate_overview() -> CertificateOverviewViewModel {
 
 #[derive(Debug)]
 pub(in crate::requirements_tests) struct FakePorts {
-    pub(in crate::requirements_tests) rule_validation_calls: AtomicUsize,
-    pub(in crate::requirements_tests) rule_save_calls: AtomicUsize,
     pub(in crate::requirements_tests) settings_validations: AtomicUsize,
     pub(in crate::requirements_tests) settings_validation_override:
         parking_lot::Mutex<Option<SettingsValidationViewModel>>,
@@ -70,8 +68,6 @@ pub(in crate::requirements_tests) struct FakePorts {
 impl Default for FakePorts {
     fn default() -> Self {
         Self {
-            rule_validation_calls: AtomicUsize::new(0),
-            rule_save_calls: AtomicUsize::new(0),
             settings_validations: AtomicUsize::new(0),
             settings_validation_override: parking_lot::Mutex::new(None),
             settings_save_calls: AtomicUsize::new(0),
@@ -272,61 +268,6 @@ impl BreakpointValidationPort for FakePorts {
         _: &BreakpointDetailViewModel,
         _: &BreakpointDecision,
     ) -> AppResult<BreakpointValidationViewModel> {
-        unused()
-    }
-}
-
-#[async_trait]
-impl RuleRepositoryPort for FakePorts {
-    async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>> {
-        unused()
-    }
-    async fn get(&self, _: RuleId) -> AppResult<RuleViewModel> {
-        unused()
-    }
-    async fn new_http_draft(&self, channel: ChannelId) -> AppResult<RuleDraft> {
-        Ok(RuleDraft {
-            rule_id: None,
-            expected_revision: None,
-            name: "新建规则".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 100,
-            channel: Some(channel),
-            stage: Some(MessageStage::Request),
-            conditions: Vec::new(),
-            actions: Vec::new(),
-            one_shot: false,
-        })
-    }
-    async fn create_from_session(&self, _: SessionId) -> AppResult<RuleDraft> {
-        unused()
-    }
-    async fn validate(&self, _: &RuleDraft) -> AppResult<RuleValidationViewModel> {
-        self.rule_validation_calls.fetch_add(1, Ordering::SeqCst);
-        Ok(FieldValidationViewModel {
-            valid: true,
-            field_errors: BTreeMap::new(),
-            warnings: Vec::new(),
-        })
-    }
-    async fn save(&self, _: RuleDraft) -> AppResult<RuleViewModel> {
-        self.rule_save_calls.fetch_add(1, Ordering::SeqCst);
-        unused()
-    }
-    async fn copy(&self, _: RuleId) -> AppResult<RuleViewModel> {
-        unused()
-    }
-    async fn delete(&self, _: RuleId, _: u64) -> AppResult<OperationResultViewModel> {
-        unused()
-    }
-    async fn toggle(&self, _: RuleId, _: u64, _: bool) -> AppResult<RuleViewModel> {
-        unused()
-    }
-    async fn import(&self) -> AppResult<OperationResultViewModel> {
-        unused()
-    }
-    async fn export(&self) -> AppResult<OperationResultViewModel> {
         unused()
     }
 }

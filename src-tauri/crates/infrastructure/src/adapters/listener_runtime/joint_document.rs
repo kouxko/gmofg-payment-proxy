@@ -4,13 +4,12 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    Document, DocumentMutation, MatchContext, ProtocolDirection, ProtocolPackageRef, Rule, RuleId,
+    Document, DocumentMutation, MatchContext, ProtocolDirection, ProtocolPackageRef, RuleId,
     UnifiedAction, UnifiedRuleProgram, matches_http_condition,
 };
 use intercept_proxy_exchange::{
-    Error, ExternalPackageCallFailure, ExternalPackageCallStage, RuleProcessingAccumulator,
-    RuleProcessingChange, RuleProcessingOperation, RuleProcessingOperationKind, SocketContext,
-    rules_processed,
+    Error, ExternalPackageCallStage, RuleProcessingAccumulator, RuleProcessingChange,
+    RuleProcessingOperation, RuleProcessingOperationKind, SocketContext, rules_processed,
 };
 use intercept_proxy_package_contract::{CanonicalBase64, EncodeParams};
 use intercept_proxy_product_api::BodyCodec;
@@ -21,6 +20,9 @@ use parking_lot::Mutex;
 use uuid::Uuid;
 
 use super::external_relay::ExternalPackageRpc;
+
+mod error;
+use error::external_rpc_error;
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PendingKey {
@@ -80,13 +82,13 @@ impl JointHttpRuleRuntime {
     }
 }
 
-#[derive(Clone)]
 pub(crate) struct JointDocumentEvaluation {
     document: Document,
     original_document: Document,
     encoder: JointDocumentEncoder,
     programs: HashMap<RuleId, Arc<UnifiedRuleProgram>>,
     changes: RuleProcessingAccumulator,
+    listener_transaction: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
 #[derive(Clone)]
@@ -150,6 +152,7 @@ impl JointDocumentEvaluation {
             },
             programs,
             changes: RuleProcessingAccumulator::default(),
+            listener_transaction: None,
         }
     }
 
@@ -183,26 +186,87 @@ impl JointDocumentEvaluation {
             },
             programs,
             changes: RuleProcessingAccumulator::default(),
+            listener_transaction: None,
         }
+    }
+
+    pub(crate) fn with_listener_transaction(
+        mut self,
+        transaction: tokio::sync::OwnedMutexGuard<()>,
+    ) -> Self {
+        self.listener_transaction = Some(transaction);
+        self
     }
 
     pub(crate) fn gate(
         &mut self,
-        rule: &Rule,
+        rule_id: RuleId,
         nth_attempt: u64,
         match_context: &MatchContext<'_>,
+        message: &mut Message,
+        body_codec: &dyn BodyCodec,
     ) -> Result<JointRuleConditionEvaluation, intercept_proxy_domain::DomainError> {
-        let Some(program) = self.programs.get(&rule.id) else {
+        let Some(program) = self.programs.get(&rule_id) else {
             return Ok(JointRuleConditionEvaluation::NotOwned);
         };
-        let evaluation = program.evaluate_and_apply_rule_with_http(
-            rule.id,
-            &mut self.document,
+        let header_values = message
+            .headers
+            .iter()
+            .map(|header| (header.name.clone(), header.value.clone()))
+            .collect::<Vec<_>>();
+        let headers = header_values
+            .iter()
+            .map(|(name, value)| intercept_proxy_domain::HttpHeader::new(name, value))
+            .collect::<Vec<_>>();
+        let working_context = MatchContext {
+            runtime_epoch: match_context.runtime_epoch,
+            channel: match_context.channel.clone(),
+            stage: match_context.stage,
+            terminal: match_context.terminal,
+            method: match_context.method,
+            request_target: match_context.request_target,
+            headers: &headers,
+        };
+        let evaluation = program.evaluate_rule_with_http(
+            rule_id,
+            &self.document,
             nth_attempt,
-            |field, operator| matches_http_condition(field, operator, match_context),
+            |field, operator| matches_http_condition(field, operator, &working_context),
         )?;
+        if evaluation.matched {
+            for action in program
+                .rule(rule_id)
+                .expect("owned rule remains in its immutable program")
+                .actions()
+            {
+                match action {
+                    UnifiedAction::Document(mutation) => mutation.apply(&mut self.document)?,
+                    UnifiedAction::Http(
+                        action @ (intercept_proxy_domain::HttpAction::SetJsonField { .. }
+                        | intercept_proxy_domain::HttpAction::ReplaceBodyText(_)
+                        | intercept_proxy_domain::HttpAction::SetHeader { .. }),
+                    ) => {
+                        crate::adapters::pipeline::rule_actions::apply_rule_actions(
+                            body_codec,
+                            message,
+                            std::slice::from_ref(action),
+                            0,
+                        )
+                        .map_err(|error| {
+                            intercept_proxy_domain::DomainError::new(
+                                intercept_proxy_domain::ErrorCode::RuleInvalid,
+                                error.message,
+                            )
+                        })?;
+                    }
+                    UnifiedAction::RecordMatch
+                    | UnifiedAction::Http(_)
+                    | UnifiedAction::Terminal(_) => {}
+                }
+            }
+        }
         self.changes
-            .record(processing_change(program, rule.id, evaluation.matched));
+            .record(processing_change(program, rule_id, evaluation.matched));
         Ok(JointRuleConditionEvaluation::UnifiedOwned(
             intercept_proxy_runtime::JointConditionEvaluation {
                 matched: evaluation.matched,
@@ -408,42 +472,4 @@ fn processing_change(
         matched,
         operations,
     }
-}
-
-fn external_rpc_error(
-    package: ProtocolPackageRef,
-    direction: ProtocolDirection,
-    stage: ExternalPackageCallStage,
-    default_method: &'static str,
-    error: &crate::adapters::PackageTransportError,
-) -> Error {
-    let (method, request_id, remote_code, stable_code, remote_message, remote_data_summary) =
-        match error {
-            crate::adapters::PackageTransportError::Remote {
-                request_id,
-                method,
-                error,
-            } => (
-                (*method).to_owned(),
-                Some(request_id.clone()),
-                Some(error.code()),
-                Some(error.data().code().as_str().to_owned()),
-                Some(error.message().to_owned()),
-                Some("object(fields=1)".to_owned()),
-            ),
-            _ => (default_method.to_owned(), None, None, None, None, None),
-        };
-    Error::new(format!("EXTERNAL_PACKAGE_CALL_FAILED\n{error}")).with_external_package_call(
-        ExternalPackageCallFailure {
-            package,
-            direction,
-            stage,
-            method,
-            request_id,
-            remote_code,
-            stable_code,
-            remote_message,
-            remote_data_summary,
-        },
-    )
 }

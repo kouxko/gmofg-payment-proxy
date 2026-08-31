@@ -2,9 +2,10 @@ use async_trait::async_trait;
 
 use super::{
     AppError, AppMessageStage, CapturePublication, ChannelId, ConnectionContext, ConnectionRuntime,
-    DomainMessageStage, FaultAction, Message, PipelinePorts, ProxyError, ProxyResult, RuntimeEpoch,
-    RuntimePipelineAdapter, SessionStore, UiEventPayload, UiTone, UpstreamSecurityEvidence, Utc,
-    Uuid, mock_response, project_response_for_observation, upstream_security,
+    DomainMessageStage, FaultAction, HttpRequestMetadata, Message, PipelinePorts, ProxyError,
+    ProxyResult, RuntimeEpoch, RuntimePipelineAdapter, SessionStore, UiEventPayload, UiTone,
+    UpstreamSecurityEvidence, Utc, Uuid, mock_response, project_response_for_observation,
+    upstream_security,
 };
 
 #[async_trait]
@@ -114,6 +115,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
     async fn apply_request_policy(
         &self,
         context: &ConnectionContext,
+        request: &HttpRequestMetadata,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
         let body_codec = self.codec_for(context, DomainMessageStage::Request, message)?;
@@ -123,6 +125,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .evaluate(
                 context,
                 DomainMessageStage::Request,
+                request,
                 Some(message),
                 body_codec.clone(),
             )
@@ -204,6 +207,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
     async fn apply_response_policy(
         &self,
         context: &ConnectionContext,
+        request: &HttpRequestMetadata,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
         let body_codec = self.codec_for(context, DomainMessageStage::Response, message)?;
@@ -219,6 +223,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .evaluate(
                 context,
                 DomainMessageStage::Response,
+                request,
                 Some(message),
                 body_codec.clone(),
             )

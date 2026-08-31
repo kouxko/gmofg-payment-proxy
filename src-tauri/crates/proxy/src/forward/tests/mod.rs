@@ -45,6 +45,7 @@ impl PipelinePorts for CapturingPipelinePorts {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &crate::http::HttpRequestMetadata,
         message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         self.requests.lock().unwrap().push(message.clone());
@@ -58,6 +59,7 @@ impl PipelinePorts for CapturingPipelinePorts {
     async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &crate::http::HttpRequestMetadata,
         message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         self.responses.lock().unwrap().push(message.clone());

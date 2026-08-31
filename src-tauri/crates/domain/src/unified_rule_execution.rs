@@ -6,15 +6,17 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    Document, DocumentSchemaNode, DocumentValue, DocumentValueType, DomainError, ErrorCode,
-    HttpAction, JsonPointer, MatchField, MatchOperator, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, RuleId, TerminalAction,
+    Document, DocumentMatchPath, DocumentSchemaNode, DocumentValue, DocumentValueType, DomainError,
+    ErrorCode, HttpAction, JsonPointer, MatchContext, MatchField, MatchOperator, RuleId,
+    TerminalAction, matches_http_condition,
 };
 
 mod condition_evaluation;
+mod mutation;
 mod program;
 
 pub use condition_evaluation::{ConditionEvaluation, RuleConditionEvaluation};
+pub use mutation::validate_unified_actions_schema;
 pub use program::{RuleProgramEntry, UnifiedRuleExecution, UnifiedRuleProgram};
 
 /// String comparison supported by a typed Document predicate.
@@ -100,6 +102,13 @@ pub enum Condition {
         /// Strict predicate.
         predicate: DocumentPredicate,
     },
+    /// A typed Document predicate whose condition-only path may contain `*` segments.
+    DocumentPattern {
+        /// Condition-only match path.
+        path: DocumentMatchPath,
+        /// Strict predicate applied with ANY semantics to expanded values.
+        predicate: DocumentPredicate,
+    },
     /// Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree.
     Http {
         /// Typed HTTP field.
@@ -136,51 +145,6 @@ impl ConditionTree {
             }
             Self::Leaf(_) => 1,
         }
-    }
-    /// Builds one AND tree from the legacy HTTP runtime projection.
-    #[must_use]
-    pub fn from_http_conditions(conditions: impl IntoIterator<Item = Condition>) -> Self {
-        Self::All(conditions.into_iter().map(Self::Leaf).collect())
-    }
-
-    /// Builds one AND tree from the Phase-12 legacy Document runtime projection.
-    #[must_use]
-    pub fn from_document_conditions(
-        conditions: impl IntoIterator<Item = ProtocolDocumentPredicate>,
-    ) -> Self {
-        Self::All(
-            conditions
-                .into_iter()
-                .map(|condition| match condition {
-                    ProtocolDocumentPredicate::Equals { field, value } => {
-                        Self::Leaf(Condition::Document {
-                            path: field,
-                            predicate: match value {
-                                DocumentValue::String(value) => {
-                                    DocumentPredicate::String(StringPredicate {
-                                        operator: StringOperator::Equal,
-                                        value,
-                                    })
-                                }
-                                DocumentValue::Number(value) => {
-                                    DocumentPredicate::Number(NumberPredicate {
-                                        operator: NumberOperator::Equal,
-                                        value,
-                                    })
-                                }
-                                DocumentValue::Boolean(value) => {
-                                    DocumentPredicate::Boolean(BooleanPredicate::Equal(value))
-                                }
-                                DocumentValue::Null(()) => DocumentPredicate::NullEqual,
-                                DocumentValue::Object(_) | DocumentValue::Array(_) => {
-                                    return Self::All(Vec::new());
-                                }
-                            },
-                        })
-                    }
-                })
-                .collect(),
-        )
     }
     /// Creates a non-empty AND group.
     pub fn all(children: Vec<Self>) -> Result<Self, DomainError> {
@@ -221,7 +185,9 @@ impl ConditionTree {
         while let Some(node) = pending.pop() {
             match node {
                 Self::All(children) | Self::Any(children) => pending.extend(children),
-                Self::Leaf(Condition::Document { .. }) => return true,
+                Self::Leaf(Condition::Document { .. } | Condition::DocumentPattern { .. }) => {
+                    return true;
+                }
                 Self::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => {}
             }
         }
@@ -306,6 +272,14 @@ impl ConditionTree {
                 }) => Ok(ConditionEvaluation::ordinary(false)),
                 Err(error) => Err(error.into()),
             },
+            Self::Leaf(Condition::DocumentPattern { path, predicate }) => {
+                Ok(ConditionEvaluation::ordinary(
+                    document
+                        .resolve_match_path(path)
+                        .into_iter()
+                        .any(|actual| predicate.matches(actual)),
+                ))
+            }
             Self::Leaf(Condition::Http { field, operator }) => {
                 http_matches(field, operator).map(ConditionEvaluation::ordinary)
             }
@@ -317,16 +291,104 @@ impl ConditionTree {
         }
     }
 
+    /// Evaluates the authoritative recursive tree at the HTTP-only actor boundary.
+    ///
+    /// Document leaves belong to the joint Document program and are rejected when no joint
+    /// program owns the rule. This keeps ordinary HTTP execution on the same tree without a
+    /// legacy flattened representation.
+    pub fn evaluate_http_with_nth(
+        &self,
+        nth_attempt: u64,
+        http_matches: &mut impl FnMut(&MatchField, &MatchOperator) -> Result<bool, String>,
+    ) -> Result<ConditionEvaluation, String> {
+        match self {
+            Self::All(children) => {
+                let mut result = ConditionEvaluation {
+                    matched: true,
+                    eligible_without_nth: true,
+                    contains_nth: false,
+                };
+                for child in children {
+                    let child = child.evaluate_http_with_nth(nth_attempt, http_matches)?;
+                    result.matched &= child.matched;
+                    result.eligible_without_nth &= child.eligible_without_nth;
+                    result.contains_nth |= child.contains_nth;
+                }
+                Ok(result)
+            }
+            Self::Any(children) => {
+                let mut result = ConditionEvaluation {
+                    matched: false,
+                    eligible_without_nth: false,
+                    contains_nth: false,
+                };
+                for child in children {
+                    let child = child.evaluate_http_with_nth(nth_attempt, http_matches)?;
+                    result.matched |= child.matched;
+                    result.eligible_without_nth |= child.eligible_without_nth;
+                    result.contains_nth |= child.contains_nth;
+                }
+                Ok(result)
+            }
+            Self::Leaf(Condition::Http { field, operator }) => {
+                http_matches(field, operator).map(ConditionEvaluation::ordinary)
+            }
+            Self::Leaf(Condition::NthHit { count }) => Ok(ConditionEvaluation {
+                matched: *count > 0 && nth_attempt == *count,
+                eligible_without_nth: true,
+                contains_nth: true,
+            }),
+            Self::Leaf(Condition::Document { .. } | Condition::DocumentPattern { .. }) => {
+                Err("Document 条件必须由统一 Document program 负责".into())
+            }
+        }
+    }
+
+    /// Evaluates an HTTP-only tree against the authoritative typed match context.
+    pub fn evaluate_http_context_with_nth(
+        &self,
+        nth_attempt: u64,
+        context: &MatchContext<'_>,
+    ) -> Result<ConditionEvaluation, DomainError> {
+        self.evaluate_http_with_nth(nth_attempt, &mut |field, operator| {
+            matches_http_condition(field, operator, context).map_err(|error| error.message)
+        })
+        .map_err(|message| {
+            DomainError::new(ErrorCode::RuleInvalid, "统一 HTTP 条件树运行时匹配失败")
+                .with_field_error("condition", message)
+        })
+    }
+
     /// Validates declared Schema paths while preserving undeclared paths as rule-local metadata.
     pub fn validate_document_schema(&self, schema: &DocumentSchemaNode) -> Result<(), DomainError> {
-        self.visit_document_leaves(&mut |path, predicate| {
-            if let Ok(node) = schema.resolve(path)
-                && !node.accepts(predicate.value_type())
-            {
-                return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
+        match self {
+            Self::All(children) | Self::Any(children) => {
+                for child in children {
+                    child.validate_document_schema(schema)?;
+                }
+                Ok(())
             }
-            Ok(())
-        })
+            Self::Leaf(Condition::Document { path, predicate }) => {
+                if let Ok(node) = schema.resolve(path)
+                    && !node.accepts(predicate.value_type())
+                {
+                    return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
+                }
+                Ok(())
+            }
+            Self::Leaf(Condition::DocumentPattern { path, predicate }) => {
+                let nodes = schema.resolve_match_path(path);
+                if !nodes.is_empty()
+                    && !nodes
+                        .iter()
+                        .any(|node| node.accepts(predicate.value_type()))
+                {
+                    return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
+                }
+                Ok(())
+            }
+            Self::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => Ok(()),
+        }
     }
 
     /// Returns the independently owned path/type metadata carried by Document leaves.
@@ -352,7 +414,11 @@ impl ConditionTree {
                 Ok(())
             }
             Self::Leaf(Condition::Document { path, predicate }) => visitor(path, predicate),
-            Self::Leaf(Condition::Http { .. } | Condition::NthHit { .. }) => Ok(()),
+            Self::Leaf(
+                Condition::DocumentPattern { .. }
+                | Condition::Http { .. }
+                | Condition::NthHit { .. },
+            ) => Ok(()),
         }
     }
 }
@@ -384,17 +450,6 @@ pub enum DocumentMutation {
     },
 }
 
-impl DocumentMutation {
-    pub fn apply(&self, document: &mut Document) -> Result<(), DomainError> {
-        match self {
-            Self::Set { path, value } => document.set(path, value.clone()),
-            Self::Clear { path, .. } => document.clear_path(path),
-            Self::Insert { path, index, value } => document.insert(path, *index, value.clone()),
-            Self::Append { path, value } => document.append(path, value.clone()),
-        }
-    }
-}
-
 /// One item in the single ordered action list.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "source", content = "value", rename_all = "snake_case")]
@@ -407,66 +462,6 @@ pub enum UnifiedAction {
     Http(HttpAction),
     /// Terminal effect; at most one is allowed and it must be last.
     Terminal(TerminalAction),
-}
-
-/// Validates Document mutation values at paths declared by the package Schema.
-pub fn validate_unified_actions_schema(
-    actions: &[UnifiedAction],
-    schema: &DocumentSchemaNode,
-) -> Result<(), DomainError> {
-    for (index, action) in actions.iter().enumerate() {
-        let expected_and_value = match action {
-            UnifiedAction::Document(DocumentMutation::Set { path, value }) => {
-                schema.resolve(path).ok().map(|node| (node, value))
-            }
-            UnifiedAction::Document(
-                DocumentMutation::Insert { path, value, .. }
-                | DocumentMutation::Append { path, value },
-            ) => match schema.resolve(path).ok() {
-                Some(DocumentSchemaNode::Array { items, .. }) => Some((items.as_ref(), value)),
-                _ => None,
-            },
-            UnifiedAction::RecordMatch
-            | UnifiedAction::Document(DocumentMutation::Clear { .. })
-            | UnifiedAction::Http(_)
-            | UnifiedAction::Terminal(_) => None,
-        };
-        if let Some((expected, value)) = expected_and_value
-            && !expected.accepts(value.value_type())
-        {
-            return Err(rule_error(
-                &format!("actions.{index}"),
-                "动作值类型与 Schema 声明不一致",
-            ));
-        }
-    }
-    Ok(())
-}
-
-impl From<HttpAction> for UnifiedAction {
-    fn from(action: HttpAction) -> Self {
-        match action {
-            HttpAction::Terminal(action) => Self::Terminal(action),
-            action => Self::Http(action),
-        }
-    }
-}
-
-impl From<ProtocolDocumentOperation> for UnifiedAction {
-    fn from(action: ProtocolDocumentOperation) -> Self {
-        Self::Document(match action {
-            ProtocolDocumentOperation::SetField { field, value } => {
-                DocumentMutation::Set { path: field, value }
-            }
-            ProtocolDocumentOperation::ClearField { field, value_type } => {
-                DocumentMutation::Clear {
-                    path: field,
-                    value_type,
-                }
-            }
-            ProtocolDocumentOperation::RecordMatch => return Self::RecordMatch,
-        })
-    }
 }
 
 fn rule_error(field: &str, message: &str) -> DomainError {

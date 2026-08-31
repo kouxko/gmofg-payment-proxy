@@ -151,384 +151,679 @@
     ],
     "rules": [
       {
-        "type": "http",
         "name": "Request transformations",
-        "description": "Canonical request-stage non-terminal actions",
         "enabled": true,
         "priority": 10,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [
-          {
-            "Field": {
-              "field": "TerminalIp",
-              "operator": {
-                "Equals": "192.0.2.10"
-              }
-            }
-          },
-          {
-            "Field": {
-              "field": {
-                "JsonPath": "$.amount"
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Canonical request-stage non-terminal actions",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "http",
+                    "field": "TerminalIp",
+                    "operator": {
+                      "Equals": "192.0.2.10"
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "http",
+                    "field": {
+                      "Header": "/x-amount"
+                    },
+                    "operator": {
+                      "Wildcard": "12*"
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "http",
+                "value": "Pause"
               },
-              "operator": {
-                "Regex": "^[0-9]+$"
+              {
+                "source": "http",
+                "value": {
+                  "SetJsonField": {
+                    "path": "$.amount",
+                    "value": 1000
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "ReplaceBodyText": "replacement"
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "SetHeader": {
+                    "name": "X-Test",
+                    "value": "yes"
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Delay": {
+                    "milliseconds": 1
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Jitter": {
+                    "minimum_milliseconds": 1,
+                    "maximum_milliseconds": 2,
+                    "scope": "BeforeMessage"
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Throttle": {
+                    "bytes_per_second": 1024,
+                    "chunk_bytes": 128,
+                    "direction": "Upstream"
+                  }
+                }
               }
-            }
-          },
-          {
-            "NthHit": 1
+            ],
+            "document": null
           }
-        ],
-        "actions": [
-          "Pause",
-          {
-            "SetJsonField": {
-              "path": "$.amount",
-              "value": 1000
-            }
-          },
-          {
-            "ReplaceBodyText": "replacement"
-          },
-          {
-            "SetHeader": {
-              "name": "X-Test",
-              "value": "yes"
-            }
-          },
-          {
-            "Delay": {
-              "milliseconds": 1
-            }
-          },
-          {
-            "Jitter": {
-              "minimum_milliseconds": 1,
-              "maximum_milliseconds": 2,
-              "scope": "BeforeMessage"
-            }
-          },
-          {
-            "Throttle": {
-              "bytes_per_second": 1024,
-              "chunk_bytes": 128,
-              "direction": "Upstream"
-            }
-          }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Response transformations",
-        "description": "Canonical response-stage non-terminal actions",
         "enabled": true,
         "priority": 11,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Intermittent": {
-              "available_milliseconds": 10,
-              "blocked_milliseconds": 5,
-              "direction": "Downstream"
-            }
-          },
-          {
-            "CustomHttpStatus": {
-              "status": 503
-            }
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Canonical response-stage non-terminal actions",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "http",
+                "value": {
+                  "Intermittent": {
+                    "available_milliseconds": 10,
+                    "blocked_milliseconds": 5,
+                    "direction": "Downstream"
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "CustomHttpStatus": {
+                    "status": 503
+                  }
+                }
+              }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Reject TLS handshake",
-        "description": "TLS terminal action",
         "enabled": true,
         "priority": 12,
         "listener_alias": "http-entry",
         "stage": "tls_handshake",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": "RejectTlsHandshake"
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "TLS terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": "RejectTlsHandshake"
+              }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Disconnect before upstream",
-        "description": "Request terminal action",
         "enabled": true,
         "priority": 13,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": "DisconnectBeforeUpstream"
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": "DisconnectBeforeUpstream"
+              }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Upstream connect timeout",
-        "description": "Request terminal action",
         "enabled": true,
         "priority": 14,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "UpstreamConnectTimeout": {
-                "milliseconds": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "UpstreamConnectTimeout": {
+                    "milliseconds": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Upstream write timeout",
-        "description": "Request terminal action",
         "enabled": true,
         "priority": 15,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "UpstreamWriteTimeout": {
-                "milliseconds": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "UpstreamWriteTimeout": {
+                    "milliseconds": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Disconnect during upstream write",
-        "description": "Request terminal action",
         "enabled": true,
         "priority": 16,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "DisconnectDuringUpstreamWrite": {
-                "after_bytes": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "DisconnectDuringUpstreamWrite": {
+                    "after_bytes": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Upstream read timeout",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 17,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "UpstreamReadTimeout": {
-                "milliseconds": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "UpstreamReadTimeout": {
+                    "milliseconds": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Drop upstream response",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 18,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "DropUpstreamResponse": {
-                "mode": "ReadCompleteResponse"
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "DropUpstreamResponse": {
+                    "mode": "ReadCompleteResponse"
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Mock response",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 19,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "MockResponse": {
-                "status": 200,
-                "headers": [
-                  [
-                    "X-Test",
-                    "yes"
-                  ]
-                ],
-                "body_bytes": [
-                  79,
-                  75
-                ]
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "MockResponse": {
+                    "status": 200,
+                    "headers": [
+                      [
+                        "X-Test",
+                        "yes"
+                      ]
+                    ],
+                    "body_bytes": [
+                      79,
+                      75
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Invalid JSON response",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 20,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "InvalidJson": {
-                "body_bytes": [
-                  123
-                ]
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "InvalidJson": {
+                    "body_bytes": [
+                      123
+                    ]
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Incorrect content length",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 21,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "IncorrectContentLength": {
-                "delta": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "IncorrectContentLength": {
+                    "delta": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Truncate response",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 22,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "TruncateResponse": {
-                "bytes": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "TruncateResponse": {
+                    "bytes": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "http",
         "name": "Disconnect during downstream write",
-        "description": "Response terminal action",
         "enabled": true,
         "priority": 23,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "conditions": [{"NthHit": 1}],
-        "actions": [
-          {
-            "Terminal": {
-              "DisconnectDuringDownstreamWrite": {
-                "after_bytes": 1
+        "one_shot": false,
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "terminal",
+                "value": {
+                  "DisconnectDuringDownstreamWrite": {
+                    "after_bytes": 1
+                  }
+                }
               }
-            }
+            ],
+            "document": null
           }
-        ],
-        "one_shot": false
+        }
       },
       {
-        "type": "socket",
         "name": "Protocol Document values",
         "enabled": true,
         "priority": 20,
         "listener_alias": "socket-entry",
-        "package": {
-          "id": "au-eftex",
-          "version": "1.1.0"
-        },
-      "stage": "proxy_to_upstream",
-        "conditions": [
-          {
-            "operator": "equals",
-            "field": "/amount",
-            "value": 1000
-          },
-          {
-            "operator": "equals",
-            "field": "/approved",
-            "value": true
+        "stage": "proxy_to_upstream",
+        "one_shot": false,
+        "content": {
+          "type": "socket",
+          "value": {
+            "package": {
+              "id": "au-eftex",
+              "version": "1.1.0"
+            },
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "document",
+                    "path": "/amount",
+                    "predicate": {
+                      "type": "number",
+                      "value": {
+                        "operator": "equal",
+                        "value": 1000
+                      }
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "document",
+                    "path": "/approved",
+                    "predicate": {
+                      "type": "boolean",
+                      "value": {
+                        "equal": true
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "record_match"
+              },
+              {
+                "source": "document",
+                "value": {
+                  "type": "set",
+                  "path": "/approval_code",
+                  "value": "OK1234"
+                }
+              },
+              {
+                "source": "document",
+                "value": {
+                  "type": "clear",
+                  "path": "/temporary",
+                  "value_type": "string"
+                }
+              },
+              {
+                "source": "record_match"
+              }
+            ]
           }
-        ],
-        "actions": [
-          {
-            "type": "record_match"
-          },
-          {
-            "type": "set_field",
-            "field": "/approval_code",
-            "value": "OK1234"
-          },
-          {
-            "type": "clear_field",
-            "field": "/temporary"
-          },
-          {
-            "type": "record_match"
-          }
-        ]
+        }
       }
     ],
     "android_network_profiles": [

@@ -23,13 +23,12 @@ use intercept_proxy_application::{
     MessageContentViewModel, MessageStage as AppMessageStage, SessionDetailViewModel,
     SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
 };
-#[cfg(test)]
-use intercept_proxy_domain::Rule;
 use intercept_proxy_domain::{
     ChannelId as DomainChannelId, HttpAction, MessageStage as DomainMessageStage,
     RuleLifecycleDelta, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
 };
 use intercept_proxy_product_api::{BodyCodec, RequestClassifier};
+use intercept_proxy_runtime::http::HttpRequestMetadata;
 use intercept_proxy_runtime::{
     ChannelId, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
     Message, PipelinePorts, ProxyError, Result as ProxyResult, RuntimeMetricsProvider,
@@ -47,14 +46,10 @@ use message_projection::{
 };
 #[cfg(test)]
 use message_projection::{decode_body, display_headers, merge_edited_headers};
-#[cfg(test)]
-use rule_actions::apply_rule_actions;
-#[cfg(test)]
-use rule_actions::map_terminal_action;
 use rule_runtime::{EvaluatedRules, RuleRuntimeService};
 
 mod message_projection;
-mod rule_actions;
+pub(super) mod rule_actions;
 mod rule_runtime;
 mod upstream_security;
 
@@ -211,8 +206,6 @@ mod ports;
 mod session;
 
 pub(crate) use mapping::app_to_proxy;
-#[cfg(test)]
-use mapping::view_to_domain_rule;
 use mapping::{
     app_channel, apply_breakpoint_decision, breakpoint_detail, domain_channel, fingerprint,
     result_text, result_tone, tls_summary,

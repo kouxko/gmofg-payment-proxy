@@ -10,8 +10,9 @@ use crate::{
     EnvironmentIdentityAllocator, EnvironmentIdentityAllocatorPort, EnvironmentPreparedMaterials,
     EnvironmentProtectedMaterialPreparePort, EnvironmentValidatedApplyBaseline,
     EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest, EnvironmentValidationStatus,
-    ListenerId, ProtocolDocumentRuleId, RuleId, StagedProtectedMaterialHandle, WorkspaceId,
+    ListenerId, StagedProtectedMaterialHandle, WorkspaceId,
 };
+use intercept_proxy_domain::RuleId;
 
 struct TestEnvironmentBaselineCapture;
 
@@ -117,18 +118,16 @@ impl EnvironmentIdentityAllocatorPort for FixtureEnvironmentIdentityAllocator {
         ListenerId::from_uuid(uuid::Uuid::from_u128(0x101 + candidate_index as u128))
     }
 
-    fn allocate_http_rule(&self, candidate_index: usize) -> (RuleId, u64) {
+    fn allocate_http_rule(&self, candidate_index: usize) -> (uuid::Uuid, u64) {
         (
             uuid::Uuid::from_u128(0x120 + candidate_index as u128),
             10 + candidate_index as u64,
         )
     }
 
-    fn allocate_protocol_rule(&self, candidate_index: usize) -> (ProtocolDocumentRuleId, u64) {
+    fn allocate_protocol_rule(&self, candidate_index: usize) -> (RuleId, u64) {
         (
-            ProtocolDocumentRuleId::from_uuid(uuid::Uuid::from_u128(
-                0x130 + candidate_index as u128,
-            )),
+            RuleId::from_uuid(uuid::Uuid::from_u128(0x130 + candidate_index as u128)),
             20 + candidate_index as u64,
         )
     }

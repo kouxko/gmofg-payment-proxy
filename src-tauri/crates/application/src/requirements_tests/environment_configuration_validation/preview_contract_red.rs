@@ -18,9 +18,9 @@ use crate::{
     EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
     EnvironmentApplyGenerations, EnvironmentCandidateEpoch, EnvironmentIdentityAllocator,
     EnvironmentIdentityAllocatorPort, EnvironmentValidatedApplyBaseline, InMemoryListenerRuntime,
-    InMemoryWorkspaceStore, ListenerId, ProtocolDocumentRuleId, RuleId, WorkspaceId,
-    WorkspaceRepositoryPort,
+    InMemoryWorkspaceStore, ListenerId, WorkspaceId, WorkspaceRepositoryPort,
 };
+use intercept_proxy_domain::RuleId;
 
 const EXPECTED_PREVIEW: &[u8] = include_bytes!(concat!(
     env!("CARGO_MANIFEST_DIR"),
@@ -56,7 +56,7 @@ impl EnvironmentIdentityAllocatorPort for CountingIdentityAllocator {
         ListenerId::from_uuid(uuid::Uuid::from_u128(0x300 + call as u128))
     }
 
-    fn allocate_http_rule(&self, _: usize) -> (RuleId, u64) {
+    fn allocate_http_rule(&self, _: usize) -> (uuid::Uuid, u64) {
         let call = self.http_rules.fetch_add(1, Ordering::SeqCst);
         (
             uuid::Uuid::from_u128(0x400 + call as u128),
@@ -64,10 +64,10 @@ impl EnvironmentIdentityAllocatorPort for CountingIdentityAllocator {
         )
     }
 
-    fn allocate_protocol_rule(&self, _: usize) -> (ProtocolDocumentRuleId, u64) {
+    fn allocate_protocol_rule(&self, _: usize) -> (RuleId, u64) {
         let call = self.protocol_rules.fetch_add(1, Ordering::SeqCst);
         (
-            ProtocolDocumentRuleId::from_uuid(uuid::Uuid::from_u128(0x500 + call as u128)),
+            RuleId::from_uuid(uuid::Uuid::from_u128(0x500 + call as u128)),
             200 + call as u64,
         )
     }

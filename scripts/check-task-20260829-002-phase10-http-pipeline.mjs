@@ -12,10 +12,11 @@ const paths = {
   proxy: "src-tauri/crates/proxy/src/lib.rs",
   test: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
   productionTest: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+  requestMetadataTest: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/request_metadata.rs",
   exchangePipeline: "src-tauri/crates/exchange/src/pipeline.rs",
 };
 const source = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([key, file]) => [key, await readFile(file, "utf8")])));
-source.test = `${source.test}\n${source.productionTest}`;
+source.test = `${source.test}\n${source.productionTest}\n${source.requestMetadataTest}`;
 const failures = [];
 const requireText = (key, text, message) => { if (!source[key].includes(text)) failures.push(message); };
 const forbid = (key, pattern, message) => { if (pattern.test(source[key])) failures.push(message); };
@@ -51,18 +52,38 @@ for (const text of [
   "intercept_proxy_runtime::ErrorCode::Internal.as_str()",
   "assert_production_changed_commit",
   "assert_production_encode_failure_rolls_back",
+  "production_response_rule_matches_recursive_tree_against_associated_request_metadata",
 ])
   requireText("test", text, `Cargo Phase10 test missing ${text}`);
 
-if (process.env.PHASE10_CHECKER_TEST_MODE !== "sandbox") {
+const requiredCargoTests = [
+  "changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed",
+  "http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding",
+  "production_http_joint_leaves_ordinary_false_rule_to_actor_matching",
+  "production_http_actor_owns_unified_nth_attempt_and_one_shot_commit",
+  "production_snapshot_compiles_recursive_or_with_insert_and_append",
+  "production_snapshot_uses_shared_provider_for_both_directions_and_joint_encode",
+  "remote_decode_and_display_failures_keep_typed_json_rpc_identity",
+  "production_response_rule_matches_recursive_tree_against_associated_request_metadata",
+  "strict_http_package_codec_reads_original_utf8_and_shift_jis_wire_bytes",
+  "unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc",
+];
+if (process.env.PHASE10_CHECKER_TEST_MODE !== "sandbox" || process.env.PHASE10_DISCOVERY_NAMES) {
+  const injected = process.env.PHASE10_DISCOVERY_NAMES?.split(",").filter(Boolean);
   const result = spawnSync("cargo", [
     "test", "--manifest-path", "src-tauri/Cargo.toml", "-p", "intercept-proxy-infrastructure",
     "phase10_http_pipeline_tests", "--", "--list", "--format", "terse",
   ], { encoding: "utf8" });
-  const discovered = result.status === 0
-    ? result.stdout.split("\n").filter((line) => line.includes("phase10_http_pipeline_tests") && line.endsWith(": test"))
+  const discovered = injected
+    ? injected
+    : result.status === 0
+    ? result.stdout.split("\n")
+      .filter((line) => line.includes("phase10_http_pipeline_tests") && line.endsWith(": test"))
+      .map((line) => line.slice(0, -": test".length).split("::").at(-1))
     : [];
-  if (discovered.length !== 6) failures.push(`Cargo discovery expected 6 Phase10 tests, found ${discovered.length}`);
+  for (const required of requiredCargoTests) {
+    if (!discovered.includes(required)) failures.push(`Cargo discovery missing required Phase10 test ${required}`);
+  }
 }
 
 if (failures.length) {

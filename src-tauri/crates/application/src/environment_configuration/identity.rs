@@ -1,6 +1,7 @@
 use std::sync::Arc;
 
-use crate::{ListenerId, ProtocolDocumentRuleId, WorkspaceId};
+use crate::{ListenerId, WorkspaceId};
+use intercept_proxy_domain::RuleId;
 
 pub(crate) trait EnvironmentIdentityAllocatorPort: Send + Sync {
     fn allocate_workspace_id(&self) -> WorkspaceId;
@@ -9,7 +10,7 @@ pub(crate) trait EnvironmentIdentityAllocatorPort: Send + Sync {
 
     fn allocate_http_rule(&self, candidate_index: usize) -> (uuid::Uuid, u64);
 
-    fn allocate_protocol_rule(&self, candidate_index: usize) -> (ProtocolDocumentRuleId, u64);
+    fn allocate_protocol_rule(&self, candidate_index: usize) -> (RuleId, u64);
 
     fn allocate_android_profile_id(&self, candidate_index: usize) -> String;
 }
@@ -60,11 +61,8 @@ impl EnvironmentIdentityAllocatorPort for RandomEnvironmentIdentityAllocator {
         (uuid::Uuid::new_v4(), created_order(candidate_index))
     }
 
-    fn allocate_protocol_rule(&self, candidate_index: usize) -> (ProtocolDocumentRuleId, u64) {
-        (
-            ProtocolDocumentRuleId::new(),
-            created_order(candidate_index),
-        )
+    fn allocate_protocol_rule(&self, candidate_index: usize) -> (RuleId, u64) {
+        (RuleId::new(), created_order(candidate_index))
     }
 
     fn allocate_android_profile_id(&self, _candidate_index: usize) -> String {

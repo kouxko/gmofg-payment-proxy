@@ -11,12 +11,12 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use intercept_proxy_domain::{
-    BodyCodecKind, Document, DocumentValue, ErrorCode as PackageErrorCode, HttpBodyProcessing,
+    BodyCodecKind, Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate,
+    DocumentValue, ErrorCode as PackageErrorCode, HttpBodyProcessing, HttpDocumentRuleContent,
     HttpListenerSettings, HttpRuleContent, JsonPointer, ListenerDataPlane, ProtocolDirection,
-    ProtocolDocumentOperation, ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition,
-    ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleRuntimeSnapshot, SocketRuleContent,
+    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
+    RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleRuntimeSnapshot, RuleStage,
+    StringOperator, StringPredicate, UnifiedAction,
 };
 use intercept_proxy_exchange::{ExternalPackageCallStage, HttpContext};
 use intercept_proxy_package_contract::{
@@ -58,48 +58,64 @@ fn phase10_package() -> ProtocolPackageRef {
 
 fn set_string_rule(
     listener: &ProxyListener,
-    id: ProtocolDocumentRuleId,
-    stage: ProtocolRuleStage,
+    id: RuleId,
+    stage: RuleStage,
     created_order: u64,
     field: &str,
-    mut conditions: Vec<ProtocolDocumentPredicate>,
+    mut conditions: Vec<ConditionTree>,
     value: &str,
-) -> ProtocolDocumentRuleDefinition {
+) -> RuleDefinition {
     if conditions.is_empty() {
         let decoded_field = match stage {
-            ProtocolRuleStage::ProxyToUpstream => "route",
-            ProtocolRuleStage::ProxyToApp => "result",
+            RuleStage::ProxyToUpstream => "route",
+            RuleStage::ProxyToApp => "result",
+            RuleStage::TlsHandshake => panic!("Document fixture cannot target TLS handshake"),
         };
-        conditions.push(ProtocolDocumentPredicate::Equals {
-            field: JsonPointer::property(decoded_field),
-            value: DocumentValue::String("decoded".into()),
-        });
+        conditions.push(ConditionTree::Leaf(Condition::Document {
+            path: JsonPointer::property(decoded_field),
+            predicate: DocumentPredicate::String(StringPredicate {
+                operator: StringOperator::Equal,
+                value: "decoded".into(),
+            }),
+        }));
     }
-    ProtocolDocumentRuleDefinition::new_named_for_stage(
+    RuleDefinition::restore(
         id,
-        format!("{stage:?}"),
-        true,
-        10,
-        created_order,
-        listener.id,
-        phase10_package(),
-        stage,
-        conditions,
-        vec![ProtocolDocumentOperation::SetField {
-            field: JsonPointer::property(field),
-            value: DocumentValue::String(value.into()),
-        }],
+        RuleDefinitionDraft {
+            name: format!("{stage:?}"),
+            enabled: true,
+            priority: 10,
+            listener_id: listener.id,
+            stage,
+            one_shot: false,
+            content: RuleContent::Http(HttpRuleContent {
+                description: String::new(),
+                condition: ConditionTree::All(conditions),
+                actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                    path: JsonPointer::property(field),
+                    value: DocumentValue::String(value.into()),
+                })],
+                document: Some(HttpDocumentRuleContent {
+                    package: phase10_package(),
+                }),
+            }),
+        },
+        intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
+            revision: intercept_proxy_domain::Revision::INITIAL,
+            created_order,
+            lifecycle: intercept_proxy_domain::RuleLifecycle::default(),
+        },
     )
     .unwrap()
 }
 
 fn workspace_with_http_rules(
     listener: &ProxyListener,
-    rules: Vec<ProtocolDocumentRuleDefinition>,
+    rules: Vec<RuleDefinition>,
 ) -> ProxyWorkspace {
     let high_water = rules
         .iter()
-        .map(ProtocolDocumentRuleDefinition::created_order)
+        .map(RuleDefinition::created_order)
         .max()
         .unwrap_or(0);
     let mut workspace = ProxyWorkspace {
@@ -107,46 +123,7 @@ fn workspace_with_http_rules(
         rule_created_order_high_water: high_water,
         ..ProxyWorkspace::default()
     };
-    workspace.replace_document_runtime_rules(rules).unwrap();
-    workspace.rule_definitions = workspace
-        .rule_definitions
-        .iter()
-        .map(|definition| {
-            let RuleContent::Socket(SocketRuleContent {
-                package,
-                condition,
-                actions,
-            }) = definition.content()
-            else {
-                return definition.clone();
-            };
-            RuleDefinition::restore(
-                definition.rule_id(),
-                RuleDefinitionDraft {
-                    name: definition.name().to_owned(),
-                    enabled: definition.enabled(),
-                    priority: definition.priority(),
-                    listener_id: definition.listener_id(),
-                    stage: definition.stage(),
-                    one_shot: definition.one_shot(),
-                    content: RuleContent::Http(HttpRuleContent {
-                        description: String::new(),
-                        condition: condition.clone(),
-                        actions: actions.clone(),
-                        document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
-                            package: package.clone(),
-                        }),
-                    }),
-                },
-                intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
-                    revision: definition.revision(),
-                    created_order: definition.created_order(),
-                    lifecycle: definition.lifecycle().clone(),
-                },
-            )
-            .unwrap()
-        })
-        .collect();
+    workspace.rule_definitions = rules;
     workspace
 }
 
@@ -154,6 +131,10 @@ fn workspace_with_http_rules(
 mod mixed_rule_ownership;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
+#[path = "phase10_http_pipeline/request_metadata.rs"]
+mod request_metadata;
+#[path = "phase10_http_pipeline/unified_working_exchange.rs"]
+mod unified_working_exchange;
 
 #[test]
 fn strict_http_package_codec_reads_original_utf8_and_shift_jis_wire_bytes() {
@@ -355,6 +336,17 @@ fn http_registration() -> PackageManifest {
         }
     }))
     .unwrap()
+}
+
+fn http_registration_without_schema() -> PackageManifest {
+    let mut value = serde_json::to_value(http_registration()).expect("manifest value");
+    for direction in ["upstream", "downstream"] {
+        value["document"][direction]
+            .as_object_mut()
+            .expect("direction object")
+            .remove("schema");
+    }
+    serde_json::from_value(value).expect("schema-free HTTP manifest")
 }
 
 async fn prepared_external_snapshot(

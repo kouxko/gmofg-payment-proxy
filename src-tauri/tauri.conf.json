@@ -30,6 +30,9 @@
   "bundle": {
     "active": true,
     "targets": "all",
+    "externalBin": [
+      "binaries/intercept-proxy-package-sidecar"
+    ],
     "resources": [
       "resources/android-companion.apk",
       "../templates/socket-protocol/iso8583-standard/**/*"

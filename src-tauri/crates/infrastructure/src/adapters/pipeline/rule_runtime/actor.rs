@@ -3,16 +3,12 @@ use std::{
     sync::{Arc, mpsc as std_mpsc},
 };
 
-use chrono::Utc;
 use intercept_proxy_application::EventHub;
 use intercept_proxy_domain::{
-    MatchContext, MessageStage, NthCounterAdvance, NthCounterSnapshot, RuleConditionEvaluation,
-    RuleEngine, RuleRuntimeSnapshot, RuntimeEpoch,
+    HttpHeader, MatchContext, MessageStage, RuleId, RuleRuntimeSnapshot, RuleStage, RuntimeEpoch,
 };
 use intercept_proxy_exchange::SocketContext;
-use intercept_proxy_runtime::{
-    ConnectionContext, JointRuleConditionEvaluation, Result as ProxyResult, SocketJointEvaluation,
-};
+use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult, SocketJointEvaluation};
 use tokio::sync::{mpsc, oneshot};
 use uuid::Uuid;
 
@@ -25,19 +21,28 @@ use crate::adapters::pipeline::{
     rule_actions::terminal_identity,
 };
 
+mod evaluation;
+
 pub(super) type RuleActorSender = mpsc::Sender<Command>;
 
-#[derive(Debug)]
+#[derive(Clone, Debug, Eq, Hash, PartialEq)]
+struct CounterKey {
+    rule_id: RuleId,
+    source_ip: String,
+    certificate_sha256: String,
+}
+
+#[derive(Clone, Debug)]
 struct RuleRuntime {
     snapshot: RuleRuntimeSnapshot,
-    engine: RuleEngine,
+    counters: std::collections::HashMap<CounterKey, u64>,
 }
 
 pub(super) struct EvaluationInput {
     pub(super) context: ConnectionContext,
     pub(super) stage: MessageStage,
-    pub(super) json: Option<serde_json::Value>,
-    pub(super) target: Option<String>,
+    pub(super) method: Option<String>,
+    pub(super) request_target: Option<String>,
     pub(super) joint_document: Option<JointDocumentEvaluation>,
     pub(super) socket_joint: Option<Box<dyn SocketJointEvaluation>>,
     pub(super) message: Option<intercept_proxy_runtime::Message>,
@@ -127,56 +132,62 @@ async fn evaluate_owned(
 ) -> ProxyResult<EvaluatedRules> {
     prepare_runtime(runtime, input, rules).await?;
     let current = runtime.as_mut().expect("rule runtime was initialized");
-    let checkpoint = current.engine.clone();
-    let counters_before = checkpoint.nth_counter_snapshots();
+    let checkpoint = current.clone();
     let terminal = terminal_identity(&input.context);
+    let http_header_values = input
+        .message
+        .as_ref()
+        .map(|message| {
+            message
+                .headers
+                .iter()
+                .map(|header| (header.name.clone(), header.value.clone()))
+                .collect::<Vec<_>>()
+        })
+        .unwrap_or_default();
+    let http_headers = http_header_values
+        .iter()
+        .map(|(name, value)| HttpHeader::new(name, value))
+        .collect::<Vec<_>>();
     let match_context = MatchContext {
         runtime_epoch: RuntimeEpoch::from_uuid(epoch),
         channel: domain_channel(&input.context.channel)?,
         stage: input.stage,
         terminal: &terminal,
-        path_or_request_type: input.target.as_deref(),
-        json_body: input.json.as_ref(),
+        method: input.method.as_deref(),
+        request_target: input.request_target.as_deref(),
+        headers: &http_headers,
     };
     let execution_order = current.snapshot.execution_order.clone();
-    let evaluation = evaluate_rules(
+    let (evaluation, deltas) = evaluation::evaluate_rules(
         current,
         &mut input.joint_document,
         &mut input.socket_joint,
         &match_context,
         &execution_order,
+        input.message.as_mut(),
+        input.body_codec.as_deref(),
     )?;
-    let hit_rules = matched_rule_summaries(&evaluation, current.engine.rules(), channel_labels);
+    let hit_rules = matched_rule_summaries(&evaluation, &current.snapshot.rules, channel_labels);
     let (prepared_message, prepared_socket, fault_actions, pause) =
         match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
             Ok(prepared) => prepared,
             Err(error) => {
-                current.engine = checkpoint;
+                *current = checkpoint;
                 return Err(error);
             }
         };
-    let nth_advances = match nth_advances(&counters_before, &current.engine.nth_counter_snapshots())
-    {
-        Ok(advances) => advances,
-        Err(error) => {
-            current.engine = checkpoint;
-            return Err(app_to_proxy(error.into()));
-        }
-    };
-    if evaluation.traces.iter().any(|trace| trace.matched) || !nth_advances.is_empty() {
+    if !deltas.is_empty() {
         let base = current.snapshot.clone();
-        let evaluated_rules = current.engine.rules().to_vec();
-        let deltas = match crate::adapters::rules::conversion::runtime_deltas(
-            &base,
-            &evaluated_rules,
-            &nth_advances,
-        ) {
-            Ok(deltas) => deltas,
-            Err(error) => {
-                current.engine = checkpoint;
-                return Err(app_to_proxy(error));
-            }
-        };
+        let evaluated_rules =
+            match crate::adapters::rules::conversion::apply_runtime_deltas(&base, &deltas) {
+                Ok(rules) => rules,
+                Err(error) => {
+                    *current = checkpoint;
+                    *runtime = None;
+                    return Err(app_to_proxy(error));
+                }
+            };
         match rules.commit_runtime_deltas(&base, &deltas).await {
             Ok(revision) => {
                 current.snapshot = RuleRuntimeSnapshot::with_collection_identity_and_order(
@@ -187,7 +198,7 @@ async fn evaluate_owned(
                 );
             }
             Err(error) => {
-                current.engine = checkpoint;
+                *current = checkpoint;
                 *runtime = None;
                 publish_repository_error(events, epoch, &error);
                 return Err(app_to_proxy(error));
@@ -211,109 +222,6 @@ async fn evaluate_owned(
         fault_actions,
         pause,
     })
-}
-
-fn evaluate_rules(
-    current: &mut RuleRuntime,
-    joint_document: &mut Option<JointDocumentEvaluation>,
-    socket_joint: &mut Option<Box<dyn SocketJointEvaluation>>,
-    match_context: &MatchContext<'_>,
-    execution_order: &[intercept_proxy_domain::RuleId],
-) -> ProxyResult<intercept_proxy_domain::RuleEvaluation> {
-    let evaluation = match (joint_document.as_mut(), socket_joint.as_mut()) {
-        (Some(joint), None) => current
-            .engine
-            .evaluate_with_condition_gate_in_order(
-                match_context,
-                Utc::now(),
-                execution_order,
-                |rule, nth_attempt| {
-                    joint
-                        .gate(rule, nth_attempt, match_context)
-                        .map(|evaluated| match evaluated {
-                            JointRuleConditionEvaluation::UnifiedOwned(condition) => {
-                                RuleConditionEvaluation::UnifiedOwned(
-                                    intercept_proxy_domain::ConditionEvaluation {
-                                        matched: condition.matched,
-                                        eligible_without_nth: condition.eligible_without_nth,
-                                        contains_nth: condition.contains_nth,
-                                    },
-                                )
-                            }
-                            JointRuleConditionEvaluation::NotOwned => {
-                                RuleConditionEvaluation::NotOwned
-                            }
-                        })
-                },
-            )
-            .map_err(|error| app_to_proxy(error.into()))?,
-        (None, Some(joint)) => current.engine.evaluate_with_condition_gate_in_order(
-            match_context,
-            Utc::now(),
-            execution_order,
-            |rule, nth_attempt| {
-                joint
-                    .gate(rule.id.as_uuid(), nth_attempt)
-                    .map(|evaluated| match evaluated {
-                        JointRuleConditionEvaluation::UnifiedOwned(condition) => {
-                            RuleConditionEvaluation::UnifiedOwned(
-                                intercept_proxy_domain::ConditionEvaluation {
-                                    matched: condition.matched,
-                                    eligible_without_nth: condition.eligible_without_nth,
-                                    contains_nth: condition.contains_nth,
-                                },
-                            )
-                        }
-                        JointRuleConditionEvaluation::NotOwned => RuleConditionEvaluation::NotOwned,
-                    })
-            },
-        )?,
-        (None, None) => current
-            .engine
-            .evaluate_with_gate_in_order(match_context, Utc::now(), execution_order, |_| {
-                Ok::<_, std::convert::Infallible>(true)
-            })
-            .expect("an infallible rule gate cannot fail"),
-        (Some(_), Some(_)) => unreachable!("one evaluation cannot be both HTTP and Socket"),
-    };
-    Ok(evaluation)
-}
-
-fn nth_advances(
-    before: &[NthCounterSnapshot],
-    after: &[NthCounterSnapshot],
-) -> Result<Vec<NthCounterAdvance>, intercept_proxy_domain::DomainError> {
-    let mut advances = Vec::new();
-    for next in after {
-        let expected_attempts = before
-            .iter()
-            .find(|previous| previous.rule_id == next.rule_id && previous.terminal == next.terminal)
-            .map_or(0, |previous| previous.attempts);
-        let increment = next
-            .attempts
-            .checked_sub(expected_attempts)
-            .ok_or_else(|| {
-                intercept_proxy_domain::DomainError::new(
-                    intercept_proxy_domain::ErrorCode::RuleInvalid,
-                    "Nth counter 不得减少",
-                )
-            })?;
-        if increment > 0 {
-            if increment != 1 {
-                return Err(intercept_proxy_domain::DomainError::new(
-                    intercept_proxy_domain::ErrorCode::RuleInvalid,
-                    "Nth counter 每次事务只能增加 1",
-                ));
-            }
-            advances.push(NthCounterAdvance {
-                rule_id: next.rule_id,
-                terminal: next.terminal.clone(),
-                expected_attempts,
-                increment,
-            });
-        }
-    }
-    Ok(advances)
 }
 
 async fn prepare_evaluated_message(
@@ -382,7 +290,18 @@ async fn prepare_runtime(
             || current.snapshot.collection_revision != snapshot.collection_revision
             || current.snapshot.signature != snapshot.signature
         {
-            current.engine.reconcile(snapshot.rules.clone());
+            current.counters.retain(|key, _| {
+                let previous = current
+                    .snapshot
+                    .rules
+                    .iter()
+                    .find(|rule| rule.rule_id() == key.rule_id);
+                let replacement = snapshot
+                    .rules
+                    .iter()
+                    .find(|rule| rule.rule_id() == key.rule_id);
+                matches!((previous, replacement), (Some(previous), Some(replacement)) if replacement.enabled() && previous.to_draft() == replacement.to_draft())
+            });
             current.snapshot = snapshot;
         }
         return Ok(());
@@ -398,11 +317,16 @@ async fn prepare_runtime(
             .map_err(app_to_proxy)?;
     }
     *runtime = Some(RuleRuntime {
-        engine: RuleEngine::new(
-            RuntimeEpoch::from_uuid(input.context.runtime_epoch),
-            snapshot.rules.clone(),
-        ),
         snapshot,
+        counters: std::collections::HashMap::new(),
     });
     Ok(())
+}
+
+const fn message_stage(stage: RuleStage) -> MessageStage {
+    match stage {
+        RuleStage::ProxyToUpstream => MessageStage::Request,
+        RuleStage::ProxyToApp => MessageStage::Response,
+        RuleStage::TlsHandshake => MessageStage::TlsHandshake,
+    }
 }

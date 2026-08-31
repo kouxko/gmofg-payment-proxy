@@ -1,9 +1,41 @@
 use super::*;
 use intercept_proxy_domain::{
-    Document, DocumentValue, JsonPointer, ListenerId, ProtocolDirection, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolDocumentRuleProgram, ProtocolRuleStage,
+    Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate, DocumentValue,
+    JsonPointer, ListenerId, ProtocolDirection, RuleContent, RuleDefinition, RuleDefinitionDraft,
+    RuleStage, SocketRuleContent, StringOperator, StringPredicate, UnifiedAction,
 };
+
+fn socket_rule(
+    listener_id: ListenerId,
+    package: intercept_proxy_domain::ProtocolPackageRef,
+) -> RuleDefinition {
+    RuleDefinition::create(
+        RuleDefinitionDraft {
+            name: "relay rule".to_owned(),
+            enabled: true,
+            priority: 10,
+            listener_id,
+            stage: RuleStage::ProxyToUpstream,
+            one_shot: false,
+            content: RuleContent::Socket(SocketRuleContent {
+                package,
+                condition: ConditionTree::Leaf(Condition::Document {
+                    path: JsonPointer::property("request"),
+                    predicate: DocumentPredicate::String(StringPredicate {
+                        operator: StringOperator::Equal,
+                        value: "original".to_owned(),
+                    }),
+                }),
+                actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                    path: JsonPointer::property("request"),
+                    value: DocumentValue::String("updated".to_owned()),
+                })],
+            }),
+        },
+        1,
+    )
+    .unwrap()
+}
 use intercept_proxy_package_contract::{
     CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult,
     PackageManifest,
@@ -148,29 +180,12 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
     let registration = registration();
     let listener = listener();
     let package = registration.package().identity().clone();
-    let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
-        ProtocolDocumentRuleId::new(),
-        "relay rule".to_owned(),
-        true,
-        10,
-        1,
-        listener.id,
-        package,
-        ProtocolRuleStage::ProxyToUpstream,
-        vec![ProtocolDocumentPredicate::Equals {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("original".to_owned()),
-        }],
-        vec![ProtocolDocumentOperation::SetField {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("updated".to_owned()),
-        }],
-    )
-    .unwrap();
-    let mut workspace = ProxyWorkspace::default();
-    workspace
-        .replace_document_runtime_rules(vec![rule])
-        .unwrap();
+    let rule = socket_rule(listener.id, package);
+    let workspace = ProxyWorkspace {
+        rule_created_order_high_water: rule.created_order(),
+        rule_definitions: vec![rule],
+        ..ProxyWorkspace::default()
+    };
     let snapshot = ExternalSocketRuntimeSnapshot::new(
         ExternalSocketPackageBinding::new(registration.clone(), Arc::new(DisconnectedRpc)),
         empty_rules(&registration, listener.id),
@@ -180,15 +195,16 @@ async fn replace_document_rules_installs_new_rules_for_the_running_snapshot() {
         crate::SqliteStore::in_memory().unwrap(),
     ));
 
-    snapshot
-        .replace_document_rules(&adapter, &workspace, &listener)
+    let replacement = snapshot
+        .compile_replacement(&adapter, &workspace, &listener)
         .await
         .unwrap();
+    snapshot.publish_replacement(&replacement);
 
     assert_eq!(
         snapshot
             .rules
-            .program(ProtocolRuleStage::ProxyToUpstream)
+            .direction_programs(ProtocolDirection::Upstream)[0]
             .rules()
             .len(),
         1
@@ -211,8 +227,7 @@ async fn queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unc
         crate::SqliteStore::in_memory().unwrap(),
     ));
     let capacity = adapter.document_rule_compiler.occupy_all().await;
-    let mut replacement =
-        Box::pin(snapshot.replace_document_rules(&adapter, &workspace, &listener));
+    let mut replacement = Box::pin(snapshot.compile_replacement(&adapter, &workspace, &listener));
     let first_poll =
         std::future::poll_fn(|context| Poll::Ready(Pin::new(&mut replacement).poll(context))).await;
     assert!(matches!(first_poll, Poll::Pending));
@@ -225,14 +240,14 @@ async fn queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unc
     assert!(
         snapshot
             .rules
-            .program(ProtocolRuleStage::ProxyToUpstream)
+            .direction_programs(ProtocolDirection::Upstream)[0]
             .rules()
             .is_empty()
     );
 }
 
 #[test]
-fn stale_rule_compile_generation_cannot_overwrite_newer_rules() {
+fn compiled_rule_replacement_is_published_as_one_snapshot() {
     let registration = registration();
     let listener = listener();
     let workspace = relay_rule_workspace(&registration, &listener);
@@ -241,26 +256,22 @@ fn stale_rule_compile_generation_cannot_overwrite_newer_rules() {
         empty_rules(&registration, listener.id),
         SocketTopology::default(),
     );
-    let stale = snapshot.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
-    let current = snapshot.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
     let newer = document_rules::compile_document_rules(
         &workspace,
         &listener,
         &registration.package().identity(),
-        registration.document().upstream().schema().unwrap(),
-        registration.document().downstream().schema().unwrap(),
+        registration.document().upstream().schema(),
+        registration.document().downstream().schema(),
         &SocketTopology::default(),
     )
     .unwrap();
-    let older = empty_rules(&registration, listener.id);
 
-    snapshot.publish_document_rules(current, &newer);
-    snapshot.publish_document_rules(stale, &older);
+    snapshot.publish_replacement(&newer);
 
     assert_eq!(
         snapshot
             .rules
-            .program(ProtocolRuleStage::ProxyToUpstream)
+            .direction_programs(ProtocolDirection::Upstream)[0]
             .rules()
             .len(),
         1
@@ -271,30 +282,12 @@ fn relay_rule_workspace(
     registration: &PackageManifest,
     listener: &ProxyListener,
 ) -> ProxyWorkspace {
-    let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
-        ProtocolDocumentRuleId::new(),
-        "relay rule".to_owned(),
-        true,
-        10,
-        1,
-        listener.id,
-        registration.package().identity().clone(),
-        ProtocolRuleStage::ProxyToUpstream,
-        vec![ProtocolDocumentPredicate::Equals {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("original".to_owned()),
-        }],
-        vec![ProtocolDocumentOperation::SetField {
-            field: JsonPointer::property("request"),
-            value: DocumentValue::String("updated".to_owned()),
-        }],
-    )
-    .unwrap();
-    let mut workspace = ProxyWorkspace::default();
-    workspace
-        .replace_document_runtime_rules(vec![rule])
-        .unwrap();
-    workspace
+    let rule = socket_rule(listener.id, registration.package().identity().clone());
+    ProxyWorkspace {
+        rule_created_order_high_water: rule.created_order(),
+        rule_definitions: vec![rule],
+        ..ProxyWorkspace::default()
+    }
 }
 
 fn listener() -> ProxyListener {
@@ -304,35 +297,14 @@ fn listener() -> ProxyListener {
     }
 }
 
-fn empty_rules(
-    registration: &PackageManifest,
-    listener_id: ListenerId,
-) -> ProtocolDocumentRuleConnectionFactory {
+fn empty_rules(registration: &PackageManifest, listener_id: ListenerId) -> DocumentProgramFactory {
     let package = registration.package().identity().clone();
-    let upstream = registration.document().upstream().schema().unwrap().clone();
-    let downstream = registration
-        .document()
-        .downstream()
-        .schema()
-        .unwrap()
-        .clone();
-    let program = |stage, schema| {
-        Arc::new(
-            ProtocolDocumentRuleProgram::new_for_stage(
-                listener_id,
-                package.clone(),
-                schema,
-                stage,
-                Vec::new(),
-            )
-            .unwrap(),
-        )
-    };
-    ProtocolDocumentRuleConnectionFactory::new(
-        &program(ProtocolRuleStage::ProxyToUpstream, upstream),
-        &program(ProtocolRuleStage::ProxyToApp, downstream),
+    DocumentProgramFactory::new(
+        listener_id,
+        package,
+        Arc::new(intercept_proxy_domain::UnifiedRuleProgram::new(Vec::new()).unwrap()),
+        Arc::new(intercept_proxy_domain::UnifiedRuleProgram::new(Vec::new()).unwrap()),
     )
-    .unwrap()
 }
 
 fn registration() -> PackageManifest {

@@ -10,8 +10,8 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
     let listener = phase10_listener();
     let unified = set_string_rule(
         &listener,
-        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(996)),
-        ProtocolRuleStage::ProxyToUpstream,
+        RuleId::from_uuid(Uuid::from_u128(996)),
+        RuleStage::ProxyToUpstream,
         1,
         "value",
         Vec::new(),
@@ -35,10 +35,16 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
             "ordinary true",
             30,
             3,
-            ConditionTree::Leaf(Condition::Http {
-                field: MatchField::TerminalIp,
-                operator: MatchOperator::Equals("127.0.0.1".into()),
-            }),
+            ConditionTree::Any(vec![
+                ConditionTree::Leaf(Condition::Http {
+                    field: MatchField::Method,
+                    operator: MatchOperator::Equals("PATCH".into()),
+                }),
+                ConditionTree::Leaf(Condition::Http {
+                    field: MatchField::TerminalIp,
+                    operator: MatchOperator::Equals("127.0.0.1".into()),
+                }),
+            ]),
             "x-ordinary-true",
         ),
         ordinary_header_rule(
@@ -61,7 +67,7 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
         snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity_and_order(
             Some(Uuid::from_u128(997)),
             7,
-            workspace.http_runtime_rules().unwrap(),
+            workspace.rule_definitions.clone(),
             workspace.http_runtime_rule_execution_order(),
         )),
         commit_attempts: AtomicUsize::new(0),
@@ -82,8 +88,9 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
         committed
             .rules
             .iter()
-            .find(|rule| rule.name == name)
+            .find(|rule| rule.name() == name)
             .unwrap()
+            .lifecycle()
             .hit_count
     };
     assert_eq!(hit_count("ordinary false"), 0);

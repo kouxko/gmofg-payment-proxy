@@ -117,7 +117,7 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
                 ),
             }),
             ConditionTree::Leaf(Condition::Http {
-                field: intercept_proxy_domain::MatchField::PathOrRequestType,
+                field: intercept_proxy_domain::MatchField::RequestTarget,
                 operator: intercept_proxy_domain::MatchOperator::Equals("ignored".into()),
             }),
         ])
@@ -212,7 +212,7 @@ async fn commit_validation_failure_returns_no_partial_output_and_is_not_retried(
 async fn condition_action_encode_and_cancel_fail_before_commit() {
     let http_condition = || {
         ConditionTree::Leaf(Condition::Http {
-            field: intercept_proxy_domain::MatchField::PathOrRequestType,
+            field: intercept_proxy_domain::MatchField::RequestTarget,
             operator: intercept_proxy_domain::MatchOperator::Equals("x".into()),
         })
     };

@@ -11,6 +11,23 @@ pub struct JsonPointer {
     tokens: Vec<String>,
 }
 
+/// Condition-only RFC 6901 path whose `*` token selects exactly one object/array level.
+///
+/// Mutation APIs deliberately continue to accept only [`JsonPointer`].
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
+#[serde(transparent)]
+pub struct DocumentMatchPath {
+    source: String,
+    #[serde(skip)]
+    tokens: Vec<DocumentMatchToken>,
+}
+
+#[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd)]
+pub(crate) enum DocumentMatchToken {
+    Exact(String),
+    Wildcard,
+}
+
 impl JsonPointer {
     /// Returns the root pointer.
     #[must_use]
@@ -64,7 +81,67 @@ impl JsonPointer {
         &self.tokens
     }
 }
+
+impl DocumentMatchPath {
+    /// Parses an RFC 6901 path extended only by a complete `*` path token.
+    pub fn parse(source: &str) -> Result<Self, DomainError> {
+        let pointer = JsonPointer::parse(source)?;
+        let tokens = pointer
+            .tokens()
+            .iter()
+            .map(|token| {
+                if token == "*" {
+                    DocumentMatchToken::Wildcard
+                } else {
+                    DocumentMatchToken::Exact(token.clone())
+                }
+            })
+            .collect();
+        Ok(Self {
+            source: source.to_owned(),
+            tokens,
+        })
+    }
+
+    /// Converts an exact mutation/schema pointer into a condition path.
+    #[must_use]
+    pub fn exact(pointer: &JsonPointer) -> Self {
+        Self {
+            source: pointer.as_str().to_owned(),
+            tokens: pointer
+                .tokens()
+                .iter()
+                .cloned()
+                .map(DocumentMatchToken::Exact)
+                .collect(),
+        }
+    }
+
+    /// Returns the stable serialized condition path.
+    #[must_use]
+    pub fn as_str(&self) -> &str {
+        &self.source
+    }
+
+    /// Returns whether this condition path expands any level.
+    #[must_use]
+    pub fn has_wildcard(&self) -> bool {
+        self.tokens
+            .iter()
+            .any(|token| matches!(token, DocumentMatchToken::Wildcard))
+    }
+
+    pub(crate) fn tokens(&self) -> &[DocumentMatchToken] {
+        &self.tokens
+    }
+}
 impl<'de> Deserialize<'de> for JsonPointer {
+    fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+        let source = String::deserialize(deserializer)?;
+        Self::parse(&source).map_err(serde::de::Error::custom)
+    }
+}
+impl<'de> Deserialize<'de> for DocumentMatchPath {
     fn deserialize<D: serde::Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
         let source = String::deserialize(deserializer)?;
         Self::parse(&source).map_err(serde::de::Error::custom)

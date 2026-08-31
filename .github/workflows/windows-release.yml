@@ -126,6 +126,9 @@ jobs:
       - name: Audit production frontend dependencies
         run: pnpm audit --prod --audit-level high
 
+      - name: Stage Windows Boa package sidecar
+        run: node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc
+
       - name: Verify generated IPC bindings twice
         shell: pwsh
         run: |
@@ -484,9 +487,7 @@ jobs:
         run: pnpm audit --prod --audit-level high
 
       - name: Build universal macOS app and DMG
-        uses: tauri-apps/tauri-action@84b9d35b5fc46c1e45415bdb6144030364f7ebc5 # v0
-        with:
-          args: --target universal-apple-darwin --bundles app,dmg
+        run: pnpm build:macos:universal
 
       - name: Package macOS app bundle
         shell: bash

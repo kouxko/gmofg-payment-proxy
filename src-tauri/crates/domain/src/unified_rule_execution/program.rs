@@ -133,13 +133,7 @@ impl UnifiedRuleProgram {
         nth_attempt: u64,
         mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<ConditionEvaluation, DomainError> {
-        let Some(rule) = self.rules.iter().find(|rule| rule.rule_id == rule_id) else {
-            return Ok(ConditionEvaluation {
-                matched: true,
-                eligible_without_nth: true,
-                contains_nth: false,
-            });
-        };
+        let rule = self.rule_or_error(rule_id)?;
         let evaluation =
             rule.condition
                 .evaluate_with_nth(document, nth_attempt, &mut http_matches)?;
@@ -151,6 +145,28 @@ impl UnifiedRuleProgram {
             }
         }
         Ok(evaluation)
+    }
+
+    pub fn evaluate_rule_with_http(
+        &self,
+        rule_id: RuleId,
+        document: &Document,
+        nth_attempt: u64,
+        mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
+    ) -> Result<ConditionEvaluation, DomainError> {
+        let rule = self.rule_or_error(rule_id)?;
+        rule.condition
+            .evaluate_with_nth(document, nth_attempt, &mut http_matches)
+    }
+
+    #[must_use]
+    pub fn rule(&self, rule_id: RuleId) -> Option<&RuleProgramEntry> {
+        self.rules.iter().find(|rule| rule.rule_id == rule_id)
+    }
+
+    fn rule_or_error(&self, rule_id: RuleId) -> Result<&RuleProgramEntry, DomainError> {
+        self.rule(rule_id)
+            .ok_or_else(|| rule_error("rule_id", "规则不属于当前统一程序"))
     }
 
     pub fn execute_with_http(

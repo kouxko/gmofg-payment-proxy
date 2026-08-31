@@ -224,9 +224,10 @@ impl ListenerRuntimePort for FailingRuntime {
 
     async fn replace_rule_definitions(
         &self,
+        _: &dyn intercept_proxy_application::WorkspaceRepositoryPort,
         _: ProxyWorkspace,
         _: intercept_proxy_domain::ListenerId,
-    ) -> AppResult<()> {
+    ) -> AppResult<ProxyWorkspace> {
         runtime_failure()
     }
 

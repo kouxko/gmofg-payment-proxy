@@ -17,13 +17,24 @@ const files = [
   "src/features/protocol-packages/protocol-package-detail.tsx",
   "src-tauri/crates/application/src/models/unified_rule.rs",
   "src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs",
+  "src-tauri/crates/application/src/facade/unified_rule_editor.rs",
+  "src-tauri/crates/application/src/facade/rule_capabilities.rs",
+  "src-tauri/crates/application/src/facade/protocol_package_portability.rs",
+  "src-tauri/crates/application/src/facade.rs",
+  "src-tauri/crates/domain/src/workspace.rs",
+  "src-tauri/crates/domain/src/rule/matching.rs",
+  "src-tauri/crates/proxy/src/http/contracts.rs",
   "src-tauri/crates/exchange/src/observation.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
-  "src-tauri/crates/domain/src/rule/engine.rs",
+  "src-tauri/crates/domain/src/unified_rule_execution.rs",
+  "src-tauri/crates/domain/src/unified_rule_execution/mutation.rs",
   "src-tauri/crates/proxy/src/socket_relay/processing.rs",
   "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/runtime_rule_bundle.rs",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/port.rs",
   "src-tauri/src/runtime_logs/exchange_ui_layer.rs",
   "src/generated/rust-types.ts",
 ];
@@ -48,6 +59,62 @@ test("checker rejects legacy Document runtime projection re-entry", () => {
   for (const [relative, token] of [
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs", "workspace.document_runtime_rules()"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs", ".document_runtime_rules()?"],
+    ["src-tauri/crates/application/src/facade/protocol_package_portability.rs", "workspace.document_runtime_rules()"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, relative);
+      writeFileSync(path, `${readFileSync(path, "utf8")}\n// ${token}\n`);
+    });
+    try {
+      assert.notEqual(run(root).status, 0, token);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects loss of unified portability schema validation", () => {
+  for (const token of [
+    "workspace.rule_definitions",
+    "condition.validate_document_schema",
+    "validate_unified_actions_schema",
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, "src-tauri/crates/application/src/facade/protocol_package_portability.rs");
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(token, "REMOVED_PORTABILITY_OWNER"));
+    });
+    try {
+      assert.notEqual(run(root).status, 0, token);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects loss of listener runtime generation CAS", () => {
+  for (const [relative, token] of [
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/runtime_rule_bundle.rs", "enum RuntimeRuleBundleBaseline"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/runtime_rule_bundle.rs", "Running(uuid::Uuid)"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/port.rs", "if current != baseline"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/port.rs", "RuntimeRuleBundleBaseline::Running(running.run_token)"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, relative);
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(token, "REMOVED_RUNTIME_GENERATION_CAS"));
+    });
+    try {
+      assert.notEqual(run(root).status, 0, token);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects legacy ProtocolDocumentRule production paths", () => {
+  for (const [relative, token] of [
+    ["src-tauri/crates/application/src/facade.rs", "protocol_rule_save"],
+    ["src-tauri/crates/domain/src/workspace.rs", "document_runtime_rules("],
+    ["src-tauri/crates/domain/src/workspace.rs", "replace_document_runtime_rules("],
   ]) {
     const root = fixture((directory) => {
       const path = join(directory, relative);
@@ -63,16 +130,39 @@ test("checker rejects legacy Document runtime projection re-entry", () => {
 
 test("checker rejects loss of actor-owned unified Nth contract", () => {
   for (const [relative, token] of [
-    ["src-tauri/crates/domain/src/rule/engine.rs", "evaluate_with_condition_gate_in_order"],
-    ["src-tauri/crates/domain/src/rule/engine.rs", "RuleConditionEvaluation::NotOwned"],
     ["src-tauri/crates/proxy/src/socket_relay/processing.rs", "JointRuleConditionEvaluation"],
     ["src-tauri/crates/proxy/src/socket_relay/processing.rs", "UnifiedOwned(JointConditionEvaluation)"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs", "JointRuleConditionEvaluation::NotOwned"],
-    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "gate(rule.id.as_uuid(), nth_attempt)"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "let checkpoint = current.clone()"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "current.counters.retain"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "commit_runtime_deltas"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "rules: &[RuleDefinition]"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "joint.gate(rule.rule_id().as_uuid(), nth_attempt)?"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "current.counters.insert(key, nth_attempt)"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "rule.lifecycle_delta_for_successful_match"],
   ]) {
     const root = fixture((directory) => {
       const path = join(directory, relative);
       writeFileSync(path, readFileSync(path, "utf8").replaceAll(token, "REMOVED_NTH_OWNER"));
+    });
+    try {
+      assert.notEqual(run(root).status, 0, token);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects retired runtime owner re-entry", () => {
+  for (const [relative, token] of [
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "struct RuleEngine;"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "fn evaluate_with_condition_gate_in_order() {}"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "fn runtime_rules() {}"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "fn replace_runtime_rule_lifecycle() {}"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, relative);
+      writeFileSync(path, `${readFileSync(path, "utf8")}\n${token}\n`);
     });
     try {
       assert.notEqual(run(root).status, 0, token);
@@ -93,15 +183,22 @@ test("checker rejects removal of each recursive editor and modal owner", () => {
     ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentConditionDraft"],
     ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentActionDraft"],
     ["src-tauri/crates/application/src/models/unified_rule.rs", "local_document_type_capabilities"],
+    ["src-tauri/crates/application/src/models/unified_rule.rs", "RuleDocumentActionCapability"],
+    ["src-tauri/crates/application/src/models/unified_rule.rs", "document_schema_field_capabilities"],
+    ["src-tauri/crates/application/src/models/unified_rule.rs", "target_value_type"],
+    ["src-tauri/crates/application/src/models/unified_rule.rs", "operand_value_type"],
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "condition_draft"],
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "action_draft"],
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "value_type: domain_value_type(value_type)"],
     ["src/features/rules/rule-document-fields.ts", "capabilities.get(type)"],
     ["src/features/rules/rule-document-fields.ts", "condition.predicate.type === \"null_equal\" ? \"null\""],
     ["src/features/rules/rule-document-fields.ts", "action.type === \"clear\" ? action.value_type"],
-    ["src/features/rules/rule-definition-model.ts", "localTypes.find((item) => item.value_type === valueType)"],
-    ["src/features/rules/rule-definition-model.ts", "capability?.actions.includes(mutation.type)"],
-    ["src/features/rules/rule-definition-model.ts", "if (mutation.type === \"clear\") return mutation.value_type;"],
+    ["src/features/rules/rule-definition-model.ts", "descriptor.kind !== mutation.type"],
+    ["src/features/rules/rule-definition-model.ts", "descriptor.target_value_type"],
+    ["src/features/rules/rule-definition-model.ts", "descriptor.operand_value_type"],
+    ["src/features/rules/rule-definition-editor.tsx", "action.operand_value_type ?? action.target_value_type"],
+    ["src/generated/rust-types.ts", "export type RuleDocumentActionCapability"],
+    ["src/generated/rust-types.ts", "document_fields: RuleDocumentSchemaFieldCapability[]"],
     ["src/generated/rust-types.ts", "{ type: \"clear\"; path: JsonPointer; value_type: DocumentValueType }"],
     ["src/features/rules/rules-view.tsx", "editorGeneration.current !== generation"],
   ]) {
@@ -143,6 +240,63 @@ test("checker rejects removal of stable failure and package lifecycle evidence",
     });
     try {
       assert.notEqual(run(root).status, 0, token);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects loss or compatibility re-entry in the unified matching contract", () => {
+  for (const [relative, from, to] of [
+    ["src-tauri/crates/application/src/facade/rule_capabilities.rs", "match_fields", "REMOVED_MATCH_FIELDS"],
+    ["src-tauri/crates/application/src/facade/unified_rule_editor.rs", "rule_definition_http_condition_draft", "REMOVED_HTTP_FACTORY"],
+    ["src-tauri/crates/domain/src/rule/matching.rs", "RequestTarget 匹配缺少关联请求元数据", "REMOVED_FAIL_CLOSED_METADATA"],
+    ["src-tauri/crates/proxy/src/http/contracts.rs", "uri.path_and_query()", "REMOVED_REQUEST_TARGET_OWNER"],
+    ["src/features/rules/rule-definition-model.ts", "", "// PathOrRequestType compatibility\n"],
+    ["src/features/rules/rule-definition-model.ts", "", "// MatchOperator::Regex compatibility\n"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, relative);
+      const source = readFileSync(path, "utf8");
+      writeFileSync(path, from ? source.replaceAll(from, to) : `${source}\n${to}`);
+    });
+    try {
+      assert.notEqual(run(root).status, 0, `${relative}: ${to}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects frontend variant defaults", () => {
+  for (const [relative, from, to] of [
+    ["src/features/rules/rule-definition-model.ts", "return unreachableContract(field);", 'return "header";'],
+    ["src/features/rules/rule-definition-model.ts", "return unreachableContract(operator);", 'return "wildcard";'],
+    ["src/features/rules/rule-definition-model.ts", 'if ("UpstreamConnectTimeout" in action)', "if (Object.keys(action)[0])"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, relative);
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(from, to));
+    });
+    try {
+      assert.notEqual(run(root).status, 0, `${relative}: ${to}`);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects schema fields falling back to schema-free capabilities", () => {
+  for (const [from, to] of [
+    ["selectedSchemaField?.predicates", "selectedLocalType?.predicates"],
+    ["selectedSchemaField?.actions", "selectedLocalType?.actions"],
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, "src/features/rules/rule-definition-editor.tsx");
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(from, to));
+    });
+    try {
+      assert.notEqual(run(root).status, 0, `${from}: ${to}`);
     } finally {
       rmSync(root, { recursive: true, force: true });
     }

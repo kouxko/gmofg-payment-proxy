@@ -1,4 +1,4 @@
-use super::JsonPointer;
+use super::{DocumentMatchPath, DocumentMatchToken, JsonPointer};
 use crate::{DomainError, ErrorCode};
 use serde::{Deserialize, Deserializer, Serialize, de::Visitor};
 use specta::Type;
@@ -203,6 +203,43 @@ impl Document {
     /// Resolves an RFC 6901 pointer.
     pub fn resolve(&self, pointer: &JsonPointer) -> Result<&DocumentValue, DomainError> {
         resolve_tokens(&self.0, pointer.tokens(), pointer.as_str())
+    }
+    /// Resolves a condition path. Each wildcard expands exactly one object/array level.
+    #[must_use]
+    pub fn resolve_match_path(&self, path: &DocumentMatchPath) -> Vec<&DocumentValue> {
+        let mut current = vec![&self.0];
+        for token in path.tokens() {
+            let mut next = Vec::new();
+            for value in current {
+                match (token, value) {
+                    (DocumentMatchToken::Wildcard, DocumentValue::Object(values)) => {
+                        next.extend(values.values());
+                    }
+                    (DocumentMatchToken::Wildcard, DocumentValue::Array(values)) => {
+                        next.extend(values.iter());
+                    }
+                    (DocumentMatchToken::Exact(token), DocumentValue::Object(values)) => {
+                        if let Some(value) = values.get(token) {
+                            next.push(value);
+                        }
+                    }
+                    (DocumentMatchToken::Exact(token), DocumentValue::Array(values)) => {
+                        if let Ok(index) = token.parse::<usize>()
+                            && token == &index.to_string()
+                            && let Some(value) = values.get(index)
+                        {
+                            next.push(value);
+                        }
+                    }
+                    (DocumentMatchToken::Wildcard | DocumentMatchToken::Exact(_), _) => {}
+                }
+            }
+            if next.is_empty() {
+                return next;
+            }
+            current = next;
+        }
+        current
     }
     /// Replaces root/existing node, or adds a final object property when its parent exists.
     pub fn set(&mut self, pointer: &JsonPointer, value: DocumentValue) -> Result<(), DomainError> {

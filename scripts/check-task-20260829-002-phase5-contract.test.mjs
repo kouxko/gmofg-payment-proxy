@@ -118,6 +118,10 @@ fn fake_seven() {}
     "src-tauri/crates/domain/src/unified_rule_execution.rs",
     "\npub type SecondaryUnifiedAction = UnifiedAction;\n",
   ), "alias unified wire owner"],
+  ["duplicate generated wire owner", append(
+    "src/generated/rust-types.ts",
+    "\nexport type Condition = { source: \"legacy_duplicate\" };\n",
+  ), "expected one Condition"],
 ]) {
   test(`fails closed for review mutation: ${name}`, () => {
     const target = sandbox();

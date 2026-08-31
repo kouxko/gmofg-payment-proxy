@@ -92,7 +92,8 @@ for (const [name, mutate, expected] of [
   ["timeout policy", append(files[3], "struct HookPolicy { rpc_timeout: u64 }"), /hook timeout/u],
   ["Rhai fallback", append(files[3], "fn bad() { let _ = rhai::Engine::new(); }"), /Rhai\/TOML/u],
   ["phase7 checker owns phase8", append(files[7], "const SIDE = \"intercept-proxy-package-sidecar\";"), /Phase7 checker/u],
-  ["premature Tauri externalBin", append(files[8], '"externalBin": ["intercept-proxy-package-sidecar"]'), /externalBin/u],
+  ["missing Tauri externalBin", replace(files[8], '"externalBin": [', '"removedExternalBin": ['), /externalBin/u],
+  ["wrong Tauri externalBin stem", replace(files[8], "binaries/intercept-proxy-package-sidecar", "binaries/wrong-sidecar"), /externalBin/u],
 ]) {
   test(`fails closed for ${name}`, () => {
     const target = sandbox();

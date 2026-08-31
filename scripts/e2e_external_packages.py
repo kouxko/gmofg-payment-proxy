@@ -46,6 +46,8 @@ from scripts.e2e_socket_cases import (
     with_iso8583_message_type,
 )
 
+EXPECTED_SCHEMA_VERSION = 100
+
 DATABASE_PATH = (
     Path.home()
     / "Library/Application Support/com.interceptproxy.desktop/intercept-proxy.sqlite3"
@@ -174,8 +176,10 @@ def install_workspace(
         version = connection.execute(
             "SELECT version FROM application_schema WHERE singleton_id = 1"
         ).fetchone()
-        if version != (19,):
-            raise AcceptanceError(f"Expected database schema 19, found {version}")
+        if version != (EXPECTED_SCHEMA_VERSION,):
+            raise AcceptanceError(
+                f"Expected database schema {EXPECTED_SCHEMA_VERSION}, found {version}"
+            )
         for package in (DENO_PACKAGE, AU_EFTEX_PACKAGE):
             row = connection.execute(
                 "SELECT enabled FROM external_protocol_packages "

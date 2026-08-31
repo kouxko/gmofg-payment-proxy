@@ -38,7 +38,7 @@ macro_rules! runtime_status {
     };
 }
 
-pub(super) fn apply_rule_actions(
+pub(crate) fn apply_rule_actions(
     body_codec: &dyn BodyCodec,
     message: &mut Message,
     actions: &[HttpAction],

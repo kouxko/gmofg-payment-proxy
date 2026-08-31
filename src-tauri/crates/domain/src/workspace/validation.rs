@@ -7,8 +7,7 @@ use super::{
     SocketPayloadProcessing, SocketTopology,
 };
 use crate::{
-    MAX_JAVASCRIPT_SAFE_INTEGER, MAX_PROTOCOL_DOCUMENT_RULES, RuleContent, RuleDefinition,
-    RuleStage,
+    MAX_JAVASCRIPT_SAFE_INTEGER, MAX_RULE_DEFINITIONS, RuleContent, RuleDefinition, RuleStage,
 };
 
 mod listener;
@@ -52,7 +51,7 @@ fn validate_rule_definitions(
             "规则创建顺序高水位不能小于现存规则的 created_order",
         );
     }
-    if workspace.rule_definitions.len() > MAX_PROTOCOL_DOCUMENT_RULES {
+    if workspace.rule_definitions.len() > MAX_RULE_DEFINITIONS {
         push_field_error(
             error,
             "rule_definitions",

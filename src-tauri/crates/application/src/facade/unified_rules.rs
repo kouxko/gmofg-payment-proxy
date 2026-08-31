@@ -45,7 +45,6 @@ impl Application {
     ) -> AppResult<RuleDefinition> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_rule_workspace().await?;
-        let previous = workspace.clone();
         let listener_id = input.draft.listener_id;
         let saved_rule_id = match (input.rule_id, input.expected_revision) {
             (None, None) => {
@@ -96,7 +95,7 @@ impl Application {
         sort_rule_definitions(&mut workspace.rule_definitions);
         workspace.validate()?;
         let saved = self
-            .save_rule_definitions_with_runtime_rollback(previous, workspace, listener_id)
+            .save_rule_definitions_atomically(workspace, listener_id)
             .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         saved
@@ -114,7 +113,6 @@ impl Application {
     ) -> AppResult<RuleDefinition> {
         let _gate = self.mutation_gate.lock().await;
         let mut workspace = self.selected_rule_workspace().await?;
-        let previous = workspace.clone();
         let rule = workspace
             .rule_definitions
             .iter_mut()
@@ -124,7 +122,7 @@ impl Application {
         rule.set_enabled(expected_revision, enabled)?;
         let result = rule.clone();
         let saved = self
-            .save_rule_definitions_with_runtime_rollback(previous, workspace, listener_id)
+            .save_rule_definitions_atomically(workspace, listener_id)
             .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         Ok(result)
@@ -139,7 +137,6 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         require_confirmation(confirmed, "删除规则需要确认。")?;
         let mut workspace = self.selected_rule_workspace().await?;
-        let previous = workspace.clone();
         let index = workspace
             .rule_definitions
             .iter()
@@ -154,7 +151,7 @@ impl Application {
             .max(workspace.rule_definitions[index].created_order());
         workspace.rule_definitions.remove(index);
         let saved = self
-            .save_rule_definitions_with_runtime_rollback(previous, workspace, listener_id)
+            .save_rule_definitions_atomically(workspace, listener_id)
             .await?;
         self.publish_workspace(&saved, true, WorkspaceChangeKind::Updated);
         Ok(OperationResultViewModel {
@@ -168,41 +165,14 @@ impl Application {
         })
     }
 
-    async fn save_rule_definitions_with_runtime_rollback(
+    async fn save_rule_definitions_atomically(
         &self,
-        previous: crate::ProxyWorkspace,
         candidate: crate::ProxyWorkspace,
         listener_id: crate::ListenerId,
     ) -> AppResult<crate::ProxyWorkspace> {
-        let saved = self.workspaces.save(candidate).await?;
-        if let Err(replacement_error) = self
-            .listener_runtime
-            .replace_rule_definitions(saved.clone(), listener_id)
+        self.listener_runtime
+            .replace_rule_definitions(self.workspaces.as_ref(), candidate, listener_id)
             .await
-        {
-            let mut rollback = previous;
-            rollback.revision = saved.revision;
-            let restored = self.workspaces.save(rollback).await.map_err(|error| {
-                AppError::new(
-                    "RULE_PERSISTENCE_ROLLBACK_FAILED",
-                    format!(
-                        "运行时替换失败，且持久化恢复失败：{}",
-                        error.view_model.code
-                    ),
-                )
-            })?;
-            self.listener_runtime
-                .replace_rule_definitions(restored, listener_id)
-                .await
-                .map_err(|error| {
-                    AppError::new(
-                        "RULE_RUNTIME_ROLLBACK_FAILED",
-                        format!("持久化已恢复，但运行时恢复失败：{}", error.view_model.code),
-                    )
-                })?;
-            return Err(replacement_error);
-        }
-        Ok(saved)
     }
 
     pub(super) async fn selected_rule_workspace(&self) -> AppResult<crate::ProxyWorkspace> {

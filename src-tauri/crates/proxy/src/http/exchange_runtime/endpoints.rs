@@ -22,6 +22,7 @@ use super::{
     InformationalResponseSink, Message, PipelinePorts, ResponseDisposition, UpstreamConnector,
 };
 use crate::fault::project_response_for_observation;
+use crate::http::HttpRequestMetadata;
 
 pub(super) struct BufferedApp {
     reader: BufferedAppReader,
@@ -118,7 +119,15 @@ struct BufferedAppWriter {
 #[async_trait]
 impl Writer<Http, Downstream> for BufferedAppWriter {
     async fn write(&mut self, context: HttpContext) -> Result<HttpContext, Error> {
-        let (mut response, mocked, close_requested, pipeline_context, ports, cancellation) = {
+        let (
+            mut response,
+            request_metadata,
+            mocked,
+            close_requested,
+            pipeline_context,
+            ports,
+            cancellation,
+        ) = {
             let mut state = self
                 .state
                 .lock()
@@ -132,8 +141,12 @@ impl Writer<Http, Downstream> for BufferedAppWriter {
                     "HTTP response missing before App write",
                 )
             })?;
+            let request_metadata =
+                HttpRequestMetadata::from_method_and_uri(&transaction.method, &transaction.uri)
+                    .map_err(proxy_write_error)?;
             (
                 response,
+                request_metadata,
                 transaction.mocked,
                 transaction.close_requested,
                 state.context.clone(),
@@ -146,7 +159,7 @@ impl Writer<Http, Downstream> for BufferedAppWriter {
             Vec::new()
         } else {
             ports
-                .apply_response_policy(&pipeline_context, &mut response)
+                .apply_response_policy(&pipeline_context, &request_metadata, &mut response)
                 .await
                 .map_err(proxy_write_error)?
         };
@@ -315,10 +328,12 @@ impl Writer<Http, Upstream> for BufferedServerWriter {
             })?;
             (transaction.method.clone(), transaction.uri.clone(), request)
         };
+        let request_metadata =
+            HttpRequestMetadata::from_method_and_uri(&method, &uri).map_err(proxy_write_error)?;
         let original = message_context(&request);
         let actions = self
             .ports
-            .apply_request_policy(&self.context, &mut request)
+            .apply_request_policy(&self.context, &request_metadata, &mut request)
             .await
             .map_err(proxy_write_error)?;
         apply_context_changes(&mut request, &original, &context)?;

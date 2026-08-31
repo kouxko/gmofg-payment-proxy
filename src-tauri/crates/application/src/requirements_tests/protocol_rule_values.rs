@@ -1,6 +1,6 @@
 //! Recursive protocol-rule value parsing at the application boundary.
 
-use intercept_proxy_domain::{DocumentValue, MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES};
+use intercept_proxy_domain::{DocumentValue, MAX_DOCUMENT_RULE_STRING_BYTES};
 
 use crate::{
     AppError, ProtocolPackageSchemaFieldTypeViewModel as FieldType, parse_protocol_rule_value,
@@ -51,12 +51,12 @@ fn number_uses_standard_json_and_the_javascript_safe_integer_contract() {
 
 #[test]
 fn string_limit_counts_utf8_bytes_and_preserves_the_exact_value() {
-    let exact = "x".repeat(MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES);
+    let exact = "x".repeat(MAX_DOCUMENT_RULE_STRING_BYTES);
     assert_eq!(
         parse_protocol_rule_value(FieldType::String, &exact).unwrap(),
         DocumentValue::String(exact)
     );
-    let oversized = "s".repeat(MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES + 1);
+    let oversized = "s".repeat(MAX_DOCUMENT_RULE_STRING_BYTES + 1);
     assert_error(
         &parse_protocol_rule_value(FieldType::String, &oversized).unwrap_err(),
         "PROTOCOL_RULE_VALUE_TOO_LARGE",

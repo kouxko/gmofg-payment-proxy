@@ -2,92 +2,31 @@ use std::collections::BTreeSet;
 
 use http::{HeaderName, HeaderValue};
 use intercept_proxy_domain::{
-    ChannelId, ConditionTree, HttpRuleContent, ProtocolDirection, UnifiedAction,
+    Condition, ConditionTree, HttpRuleContent, MatchField, MatchOperator, ProtocolDirection,
+    TerminalAction, UnifiedAction,
 };
 
 use super::Application;
-use crate::facade::unified_rule_editor::{domain_action, domain_condition};
 use crate::{
     AppError, AppResult, ExchangeContext, ExchangeObservationEvent, ExchangeObservationRecord,
-    ExchangeProtocol, MessageStage, RuleAction, RuleCondition, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleDefinitionSaveInput, RuleDraft, RuleMatchField, RuleMatchOperator,
-    RuleStage, RuleTerminalAction,
+    ExchangeProtocol, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleDefinitionSaveInput,
+    RuleStage,
 };
 
 const INVALID_SOURCE: &str = "HTTP_MOCK_DRAFT_SOURCE_INVALID";
 
 impl Application {
-    /// 从完整服务器响应构造未保存、未启用的普通 HTTP Mock 规则草稿。
-    #[cfg(test)]
-    pub(crate) fn rule_create_from_exchange_observation(
-        &self,
-        record: &ExchangeObservationRecord,
-        response_event_index: usize,
-    ) -> AppResult<RuleDraft> {
-        let _ = self;
-        let source = MockDraftSource::from_record(record, response_event_index)?;
-        let draft = source.into_draft(record)?;
-        let unified = unified_input(record, draft.clone())?;
-        RuleDefinition::create(unified.draft, 1)?;
-        Ok(draft)
-    }
-
     /// Builds an unsaved unified HTTP rule draft from a complete captured response.
     pub fn rule_definition_create_from_exchange_observation(
         &self,
         record: &ExchangeObservationRecord,
         response_event_index: usize,
     ) -> AppResult<RuleDefinitionSaveInput> {
-        let source =
-            MockDraftSource::from_record(record, response_event_index)?.into_draft(record)?;
-        let unified = unified_input(record, source)?;
+        let source = MockDraftSource::from_record(record, response_event_index)?;
+        let unified = source.into_unified_input(record)?;
         RuleDefinition::create(unified.draft.clone(), 1)?;
         Ok(unified)
     }
-}
-
-fn unified_input(
-    record: &ExchangeObservationRecord,
-    source: RuleDraft,
-) -> AppResult<RuleDefinitionSaveInput> {
-    let stage = match source.stage {
-        Some(MessageStage::Request) => RuleStage::ProxyToUpstream,
-        Some(MessageStage::Response) => RuleStage::ProxyToApp,
-        Some(MessageStage::TlsHandshake) => RuleStage::TlsHandshake,
-        Some(MessageStage::Terminal) | None => {
-            return Err(source_error("抓包生成的规则缺少有效 HTTP 阶段。"));
-        }
-    };
-    let actions = source
-        .actions
-        .into_iter()
-        .map(domain_action)
-        .collect::<AppResult<Vec<_>>>()?;
-    Ok(RuleDefinitionSaveInput {
-        rule_id: None,
-        expected_revision: None,
-        draft: RuleDefinitionDraft {
-            name: source.name,
-            enabled: false,
-            priority: source.priority,
-            listener_id: record.listener_id,
-            stage,
-            one_shot: source.one_shot,
-            content: RuleContent::Http(HttpRuleContent {
-                description: source.description,
-                condition: ConditionTree::All(
-                    source
-                        .conditions
-                        .into_iter()
-                        .map(domain_condition)
-                        .map(ConditionTree::Leaf)
-                        .collect(),
-                ),
-                actions: actions.into_iter().map(UnifiedAction::from).collect(),
-                document: None,
-            }),
-        },
-    })
 }
 
 struct MockDraftSource<'a> {
@@ -143,7 +82,10 @@ impl<'a> MockDraftSource<'a> {
         })
     }
 
-    fn into_draft(self, record: &ExchangeObservationRecord) -> AppResult<RuleDraft> {
+    fn into_unified_input(
+        self,
+        record: &ExchangeObservationRecord,
+    ) -> AppResult<RuleDefinitionSaveInput> {
         if !self.response_body_is_utf8 {
             return Err(AppError::new(
                 "HTTP_MOCK_DRAFT_BODY_NOT_UTF8",
@@ -151,29 +93,30 @@ impl<'a> MockDraftSource<'a> {
             ));
         }
         let (status, headers) = response_metadata(self.response_header)?;
-        Ok(RuleDraft {
+        Ok(RuleDefinitionSaveInput {
             rule_id: None,
             expected_revision: None,
-            name: format!("Mock {}", self.request_target),
-            description: format!("由 HTTP 抓包 {} 的服务器响应生成。", record.exchange_id),
-            enabled: false,
-            priority: 100,
-            channel: Some(ChannelId::new(record.listener_id.to_string()).map_err(AppError::from)?),
-            stage: Some(MessageStage::Request),
-            conditions: vec![RuleCondition::Field {
-                field: RuleMatchField::PathOrRequestType,
-                operator: RuleMatchOperator::Equals {
-                    value: self.request_target,
-                },
-            }],
-            actions: vec![RuleAction::Terminal {
-                action: RuleTerminalAction::MockResponse {
-                    status,
-                    headers,
-                    body_bytes: self.response_body.as_bytes().to_vec(),
-                },
-            }],
-            one_shot: false,
+            draft: RuleDefinitionDraft {
+                name: format!("Mock {}", self.request_target),
+                enabled: false,
+                priority: 100,
+                listener_id: record.listener_id,
+                stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
+                content: RuleContent::Http(HttpRuleContent {
+                    description: format!("由 HTTP 抓包 {} 的服务器响应生成。", record.exchange_id),
+                    condition: ConditionTree::Leaf(Condition::Http {
+                        field: MatchField::RequestTarget,
+                        operator: MatchOperator::Equals(self.request_target),
+                    }),
+                    actions: vec![UnifiedAction::Terminal(TerminalAction::MockResponse {
+                        status,
+                        headers,
+                        body_bytes: self.response_body.as_bytes().to_vec(),
+                    })],
+                    document: None,
+                }),
+            },
         })
     }
 }

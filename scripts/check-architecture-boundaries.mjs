@@ -163,7 +163,7 @@ function rustViolationCodes(role, source) {
   if (role === "domain_document") {
     if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "protocol_package"]))) failures.push("DOCUMENT_PROTOCOL_PACKAGE_DEPENDENCY");
     if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "external_package"]))) failures.push("DOCUMENT_EXTERNAL_PACKAGE_DEPENDENCY");
-    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "protocol_document_rule"])
+    if (hasPath(imports, (parts) => includesSequence(parts, ["crate", "unified_rule"])
       || includesSequence(parts, ["crate", "rule"]))) failures.push("DOCUMENT_RULE_DEPENDENCY");
     if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_application")) failures.push("DOCUMENT_APPLICATION_UPWARD");
     if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("DOCUMENT_INFRASTRUCTURE_UPWARD");
@@ -460,7 +460,7 @@ const fixtureCases = [
   ["Socket document rule is allowed", "socket", "use intercept_proxy_domain::socket_document_rule::{SocketDocumentRuleDefinition as Rule, SocketRuleStage};", []],
   ["neutral grouped upward imports", "neutral", "use {intercept_proxy_application::{facade::TrafficFacade as F}, tauri::{Manager as M}};", ["NEUTRAL_APPLICATION_UPWARD", "NEUTRAL_UI_UPWARD"]],
   ["neutral fully qualified UI path", "neutral", "fn attach() { tauri::Manager::manage(app, state); }", ["NEUTRAL_UI_UPWARD"]],
-  ["Document grouped domain dependencies", "domain_document", "use crate::{protocol_package::PackageId, external_package::ExternalDocumentWire, protocol_document_rule::ProtocolDocumentRule};", ["DOCUMENT_EXTERNAL_PACKAGE_DEPENDENCY", "DOCUMENT_PROTOCOL_PACKAGE_DEPENDENCY", "DOCUMENT_RULE_DEPENDENCY"]],
+  ["Document grouped domain dependencies", "domain_document", "use crate::{protocol_package::PackageId, external_package::ExternalDocumentWire, unified_rule::RuleDefinition};", ["DOCUMENT_EXTERNAL_PACKAGE_DEPENDENCY", "DOCUMENT_PROTOCOL_PACKAGE_DEPENDENCY", "DOCUMENT_RULE_DEPENDENCY"]],
   ["Document upward and Rhai dependencies", "domain_document", "use {intercept_proxy_application::TrafficFacade, intercept_proxy_infrastructure::Store, tauri::Manager}; fn engine() { rhai::Engine::new(); }", ["DOCUMENT_APPLICATION_UPWARD", "DOCUMENT_INFRASTRUCTURE_UPWARD", "DOCUMENT_RHAI_DEPENDENCY", "DOCUMENT_TAURI_UPWARD"]],
   ["Document protocol-neutral dependencies are allowed", "domain_document", "use crate::{error::DomainError, id::WorkspaceId};", []],
   ["protocol package cannot define Document types", "domain_protocol_package", "pub struct Document;", ["PROTOCOL_PACKAGE_DOCUMENT_TYPE"]],
@@ -932,7 +932,7 @@ async function scanProduction() {
   for (const absolute of await filesBelow(domainSourceRoot, [".rs"])) {
     const relative = path.relative(domainSourceRoot, absolute).split(path.sep).join("/");
     if (!isProduction(relative)
-      || (relative !== "protocol_document_rule.rs" && !relative.startsWith("protocol_document_rule/"))) continue;
+      || (relative !== "unified_rule.rs" && !relative.startsWith("unified_rule/"))) continue;
     for (const code of rustViolationCodes("domain_document_rules", await readFile(absolute, "utf8"))) {
       failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
     }

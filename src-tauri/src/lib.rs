@@ -15,7 +15,6 @@ mod runtime_logs;
 use std::{error::Error, path::PathBuf, sync::Arc};
 
 use intercept_proxy_application::ExchangeObservationQueries;
-#[cfg(debug_assertions)]
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::ExchangeObservationStore;
 use intercept_proxy_product_api::InterceptProxyProfile;

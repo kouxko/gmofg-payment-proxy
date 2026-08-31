@@ -1,7 +1,7 @@
 use super::{
     Arc, AtomicU64, BodyCodec, BreakpointCoordinator, CaptureRepositoryAdapter, ConnectionContext,
-    DomainMessageStage, EvaluatedRules, EventHub, InMemorySessionStore, Message, Mutex,
-    PipelineState, ProxyResult, RuleRuntimeService, RuntimeBodyCodecResolver,
+    DomainMessageStage, EvaluatedRules, EventHub, HttpRequestMetadata, InMemorySessionStore,
+    Message, Mutex, PipelineState, ProxyResult, RuleRuntimeService, RuntimeBodyCodecResolver,
     RuntimePipelineAdapter, RuntimePipelineProductHooks, RuntimeRuleRepository,
 };
 
@@ -66,6 +66,7 @@ impl RuntimePipelineAdapter {
         &self,
         context: &ConnectionContext,
         stage: DomainMessageStage,
+        request: &HttpRequestMetadata,
         message: Option<&Message>,
         body_codec: Arc<dyn BodyCodec>,
     ) -> ProxyResult<EvaluatedRules> {
@@ -73,7 +74,7 @@ impl RuntimePipelineAdapter {
             .joint_http_rules
             .take(context, matches!(stage, DomainMessageStage::Response));
         self.rule_runtime
-            .evaluate(context, stage, message, body_codec, joint_document)
+            .evaluate(context, stage, request, message, body_codec, joint_document)
             .await
     }
 

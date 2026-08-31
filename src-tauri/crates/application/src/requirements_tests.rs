@@ -38,7 +38,6 @@ mod environment_configuration_candidate_lifecycle;
 mod environment_configuration_validation;
 mod events;
 mod external_package_lifecycle;
-mod http_mock_draft;
 mod listener_certificates;
 mod local_responder_topology;
 mod protocol_package_lifecycle;

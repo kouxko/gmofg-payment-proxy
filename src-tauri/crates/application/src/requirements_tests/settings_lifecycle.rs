@@ -287,7 +287,6 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
             breakpoint_validation: ports.clone(),
-            rules: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -356,99 +355,20 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
             .any(|action| action.kind == RuleActionKind::MockResponse)
     );
     assert_eq!(
-        tls.match_field_kinds,
+        tls.match_fields
+            .iter()
+            .map(|capability| capability.kind)
+            .collect::<Vec<_>>(),
         vec![RuleMatchFieldKind::CertificateFingerprint]
     );
     assert_eq!(tls.actions.len(), 1);
     assert_eq!(tls.actions[0].kind, RuleActionKind::RejectTlsHandshake);
-    for stage in &capabilities {
-        for action in &stage.actions {
-            let draft = application
-                .rule_action_draft(action.kind, stage.stage)
-                .expect("every advertised action must produce a valid draft");
-            match (draft, action.traffic_direction) {
-                (
-                    RuleAction::Throttle { direction, .. }
-                    | RuleAction::Intermittent { direction, .. },
-                    Some(expected),
-                ) => assert_eq!(direction, expected),
-                (RuleAction::Throttle { .. } | RuleAction::Intermittent { .. }, None) => {
-                    panic!("directional action must advertise its fixed direction")
-                }
-                (_, _) => {}
-            }
-        }
-    }
-    assert_eq!(
-        application.rule_condition_draft(RuleConditionKind::NthHit, MessageStage::Request),
-        RuleCondition::NthHit { count: 1 }
-    );
-    assert!(matches!(
-        application
-            .rule_action_draft(RuleActionKind::MockResponse, MessageStage::Request)
-            .expect("request action draft"),
-        RuleAction::Terminal {
-            action: RuleTerminalAction::MockResponse { .. }
-        }
-    ));
     assert_eq!(
         application
-            .rule_match_field_draft(RuleMatchFieldKind::JsonPath, MessageStage::Response)
-            .expect("response field draft"),
-        RuleMatchField::JsonPath {
-            path: "$.field".into()
-        }
+            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
+                count: 1,
+            })
+            .unwrap(),
+        intercept_proxy_domain::Condition::NthHit { count: 1 }
     );
-    assert!(
-        application
-            .rule_action_draft(RuleActionKind::CustomHttpStatus, MessageStage::Request,)
-            .is_err()
-    );
-    assert!(
-        application
-            .rule_match_field_draft(RuleMatchFieldKind::JsonPath, MessageStage::TlsHandshake,)
-            .is_err()
-    );
-}
-
-#[test]
-fn rule_editor_primitives_and_byte_parser_are_owned_by_rust() {
-    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
-    assert_eq!(
-        application.rule_match_operator_draft(RuleMatchOperatorKind::Regex),
-        RuleMatchOperator::Regex {
-            pattern: String::new()
-        }
-    );
-    assert_eq!(
-        application
-            .rule_parse_byte_input(" 123, 0,255 ")
-            .expect("valid bytes"),
-        RuleByteInputViewModel {
-            bytes: vec![123, 0, 255],
-            normalized: "123, 0, 255".into(),
-        }
-    );
-    let error = application
-        .rule_parse_byte_input("1, 256")
-        .expect_err("out of range");
-    assert_eq!(error.view_model.code, "RULE_INVALID");
-    assert!(error.view_model.field_errors.contains_key("raw"));
-    assert_eq!(
-        application
-            .rule_parse_header_input(" Content-Type: application/json \nX-Trace: abc:123 ")
-            .expect("valid headers"),
-        RuleHeaderInputViewModel {
-            headers: vec![
-                ("content-type".into(), "application/json".into()),
-                ("x-trace".into(), "abc:123".into()),
-            ],
-            normalized: "content-type: application/json\nx-trace: abc:123".into(),
-        }
-    );
-    let error = application
-        .rule_parse_header_input("missing-separator")
-        .expect_err("invalid header line");
-    assert_eq!(error.view_model.code, "RULE_INVALID");
-    assert!(error.view_model.field_errors.contains_key("raw"));
 }

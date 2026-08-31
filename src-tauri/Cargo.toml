@@ -89,6 +89,7 @@ crate-type = ["staticlib", "cdylib", "rlib"]
 
 [features]
 export-bindings = []
+macos-universal-vendored-openssl = ["intercept-proxy-runtime/macos-universal-vendored-openssl"]
 
 [[bin]]
 name = "intercept-proxy"

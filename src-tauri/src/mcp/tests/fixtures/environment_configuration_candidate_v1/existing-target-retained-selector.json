@@ -204,90 +204,131 @@
       {
         "existing_rule_id": "00000000-0000-0000-0000-000000000020",
         "name": "Retained HTTP request rule",
-        "description": "Canonical retained-selector fixture",
         "enabled": true,
         "priority": 10,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "conditions": [
-          {
-            "Field": {
-              "field": "TerminalIp",
-              "operator": {
-                "Equals": "192.0.2.10"
-              }
-            }
-          },
-          {
-            "Field": {
-              "field": {
-                "JsonPath": "$.amount"
-              },
-              "operator": {
-                "Regex": "^[0-9]+$"
-              }
-            }
-          },
-          {
-            "NthHit": 1
-          }
-        ],
-        "actions": [
-          "Pause",
-          {
-            "SetJsonField": {
-              "path": "$.amount",
-              "value": 1000
-            }
-          },
-          {
-            "ReplaceBodyText": "replacement"
-          },
-          {
-            "SetHeader": {
-              "name": "X-Test",
-              "value": "yes"
-            }
-          },
-          {
-            "Delay": {
-              "milliseconds": 1
-            }
-          },
-          {
-            "Jitter": {
-              "minimum_milliseconds": 1,
-              "maximum_milliseconds": 2,
-              "scope": "BeforeMessage"
-            }
-          },
-          {
-            "Throttle": {
-              "bytes_per_second": 1024,
-              "chunk_bytes": 128,
-              "direction": "Upstream"
-            }
-          }
-        ],
         "one_shot": false,
-        "type": "http",
-        "document": {
-          "package": {
-            "id": "au-eftex",
-            "version": "1.1.0"
-          },
-          "conditions": [
-            {
-              "operator": "equals",
-              "field": "/amount",
-              "value": 1000
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Canonical retained-selector fixture",
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "http",
+                    "field": "TerminalIp",
+                    "operator": {
+                      "Equals": "192.0.2.10"
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "http",
+                    "field": {
+                      "Header": "/x-amount"
+                    },
+                    "operator": {
+                      "Wildcard": "12*"
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "nth_hit",
+                    "count": 1
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "document",
+                    "path": "/amount",
+                    "predicate": {
+                      "type": "number",
+                      "value": {
+                        "operator": "equal",
+                        "value": 1000
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "http",
+                "value": "Pause"
+              },
+              {
+                "source": "http",
+                "value": {
+                  "SetJsonField": {
+                    "path": "$.amount",
+                    "value": 1000
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "ReplaceBodyText": "replacement"
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "SetHeader": {
+                    "name": "X-Test",
+                    "value": "yes"
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Delay": {
+                    "milliseconds": 1
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Jitter": {
+                    "minimum_milliseconds": 1,
+                    "maximum_milliseconds": 2,
+                    "scope": "BeforeMessage"
+                  }
+                }
+              },
+              {
+                "source": "http",
+                "value": {
+                  "Throttle": {
+                    "bytes_per_second": 1024,
+                    "chunk_bytes": 128,
+                    "direction": "Upstream"
+                  }
+                }
+              },
+              {
+                "source": "record_match"
+              }
+            ],
+            "document": {
+              "package": {
+                "id": "au-eftex",
+                "version": "1.1.0"
+              }
             }
-          ],
-          "actions": [
-            {
-              "type": "record_match"
-            }
-          ]
+          }
         }
       },
       {
@@ -296,49 +337,73 @@
         "enabled": true,
         "priority": 20,
         "listener_alias": "socket-entry",
-        "package": {
-          "id": "au-eftex",
-          "version": "1.1.0"
-        },
         "stage": "proxy_to_upstream",
-        "conditions": [
-          {
-            "operator": "equals",
-            "field": "/amount",
-            "value": 1000
-          },
-          {
-            "operator": "equals",
-            "field": "/approved",
-            "value": true
-          },
-          {
-            "operator": "equals",
-            "field": "/raw",
-            "value": [
-              65,
-              66
+        "one_shot": false,
+        "content": {
+          "type": "socket",
+          "value": {
+            "package": {
+              "id": "au-eftex",
+              "version": "1.1.0"
+            },
+            "condition": {
+              "operator": "all",
+              "children": [
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "document",
+                    "path": "/amount",
+                    "predicate": {
+                      "type": "number",
+                      "value": {
+                        "operator": "equal",
+                        "value": 1000
+                      }
+                    }
+                  }
+                },
+                {
+                  "operator": "leaf",
+                  "children": {
+                    "source": "document",
+                    "path": "/approved",
+                    "predicate": {
+                      "type": "boolean",
+                      "value": {
+                        "equal": true
+                      }
+                    }
+                  }
+                }
+              ]
+            },
+            "actions": [
+              {
+                "source": "record_match"
+              },
+              {
+                "source": "document",
+                "value": {
+                  "type": "set",
+                  "path": "/approval_code",
+                  "value": "OK1234"
+                }
+              },
+              {
+                "source": "document",
+                "value": {
+                  "type": "clear",
+                  "path": "/temporary",
+                  "value_type": "string"
+                }
+              },
+              {
+                "source": "record_match"
+              }
             ]
           }
-        ],
-        "actions": [
-          {
-            "type": "record_match"
-          },
-          {
-            "type": "set_field",
-            "field": "/approval_code",
-            "value": "OK1234"
-          },
-          {
-            "type": "clear_field",
-            "field": "/temporary"
-          },
-          {
-            "type": "record_match"
-          }
-        ],
-        "type": "socket"
+        }
       }
     ]
   },

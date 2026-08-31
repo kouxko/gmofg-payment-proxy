@@ -79,11 +79,13 @@ function protocolRuleBoundaryCodes(source) {
 
 function generatedProtocolRuleBindingCodes(source) {
   const codes = [];
-  if (!/ruleEditorContext:\s*\(listenerId:\s*ListenerId\)[\s\S]{0,240}__TAURI_INVOKE\("rule_editor_context",\s*\{ listenerId \}\)/.test(source)) {
+  const hasTypedSignature = /ruleEditorContext:\s*\(listenerId:\s*ListenerId\)/.test(source);
+  const hasCamelCaseInvoke = /__TAURI_INVOKE\("rule_editor_context",\s*\{\s*listenerId\s*\}\)/.test(source);
+  if (!hasTypedSignature || !hasCamelCaseInvoke) {
     codes.push("PROTOCOL_RULE_GENERATED_IPC_MISSING");
   }
   if (!source.includes("export type RuleEditorContext = {")
-    || !source.includes("new_rule_draft: RuleDefinitionSaveInput")) {
+    || !source.includes("new_rule_draft: RuleNewDefinitionDraft")) {
     codes.push("PROTOCOL_RULE_EDITOR_DTO_MISSING");
   }
   return codes;
@@ -146,13 +148,18 @@ const protocolRuleBoundaryFixtures = [
 const generatedProtocolRuleBindingFixtures = [
   [
     "generated binding keeps camelCase argument translation and editor DTO",
-    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { new_rule_draft: RuleDefinitionSaveInput };',
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleNewDefinitionDraft };',
     [],
   ],
   [
     "generated binding cannot regress to a snake_case caller argument",
-    'ruleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listener_id }); export type RuleEditorContext = { new_rule_draft: RuleDefinitionSaveInput };',
+    'ruleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listener_id }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleNewDefinitionDraft };',
     ["PROTOCOL_RULE_GENERATED_IPC_MISSING"],
+  ],
+  [
+    "generated editor context rejects the old save-input draft DTO",
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleDefinitionSaveInput };',
+    ["PROTOCOL_RULE_EDITOR_DTO_MISSING"],
   ],
   [
     "generated editor context must retain the Rust draft DTO",
@@ -351,7 +358,8 @@ if (
   );
 }
 for (const command of [
-  "commands.ruleDefinitionConditionDraft",
+  "commands.ruleDefinitionNthHitConditionDraft",
+  "commands.ruleDefinitionHttpConditionDraft",
   "commands.ruleDefinitionActionDraft",
 ]) {
   if (!ruleEditorSource.includes(command)) {

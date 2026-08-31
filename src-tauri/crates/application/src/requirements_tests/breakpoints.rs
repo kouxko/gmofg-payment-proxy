@@ -173,7 +173,6 @@ async fn dynamic_listener_breakpoint_resolve_normalizes_without_reformatting_bod
             sessions: ports.clone(),
             breakpoints: coordinator,
             breakpoint_validation: Arc::new(breakpoint_validator()),
-            rules: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),

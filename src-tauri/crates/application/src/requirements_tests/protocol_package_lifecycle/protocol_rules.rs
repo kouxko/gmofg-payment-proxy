@@ -1,8 +1,6 @@
 use super::*;
-mod concurrency;
-mod lifecycle;
+
 mod listener_modes;
-mod topology;
 mod unified_validation;
 
 fn pkg(id: &str, version: &str) -> ProtocolPackageRef {
@@ -13,40 +11,35 @@ fn field(name: &str) -> JsonPointer {
     JsonPointer::property(name)
 }
 
-fn equals(name: &str, value: DocumentValue) -> ProtocolDocumentPredicate {
-    ProtocolDocumentPredicate::Equals {
-        field: field(name),
-        value,
-    }
+fn equals(name: &str, value: DocumentValue) -> ConditionTree {
+    ConditionTree::Leaf(Condition::Document {
+        path: field(name),
+        predicate: document_equals_predicate(value),
+    })
 }
 
-fn set(name: &str, value: DocumentValue) -> ProtocolDocumentOperation {
-    ProtocolDocumentOperation::SetField {
-        field: field(name),
+fn set(name: &str, value: DocumentValue) -> UnifiedAction {
+    UnifiedAction::Document(DocumentMutation::Set {
+        path: field(name),
         value,
-    }
+    })
 }
 
-fn input(
-    listener_id: ListenerId,
-    package: ProtocolPackageRef,
-    direction: ProtocolDirection,
-    priority: i32,
-) -> ProtocolRuleSaveInput {
-    ProtocolRuleSaveInput {
-        rule_id: None,
-        expected_revision: None,
-        name: "测试规则".into(),
-        enabled: true,
-        priority,
-        listener_id,
-        package,
-        stage: match direction {
-            ProtocolDirection::Upstream => ProtocolRuleStage::ProxyToUpstream,
-            ProtocolDirection::Downstream => ProtocolRuleStage::ProxyToApp,
-        },
-        conditions: vec![equals("trace_id", DocumentValue::String("phase5".into()))],
-        actions: vec![ProtocolDocumentOperation::RecordMatch],
+fn document_equals_predicate(value: DocumentValue) -> DocumentPredicate {
+    match value {
+        DocumentValue::String(value) => DocumentPredicate::String(StringPredicate {
+            operator: StringOperator::Equal,
+            value,
+        }),
+        DocumentValue::Number(value) => DocumentPredicate::Number(NumberPredicate {
+            operator: NumberOperator::Equal,
+            value,
+        }),
+        DocumentValue::Boolean(value) => DocumentPredicate::Boolean(BooleanPredicate::Equal(value)),
+        DocumentValue::Null(()) => DocumentPredicate::NullEqual,
+        DocumentValue::Object(_) | DocumentValue::Array(_) => {
+            panic!("fixture equality requires a scalar Document value")
+        }
     }
 }
 
@@ -134,357 +127,4 @@ async fn configure_http(
     let listener_id = listener.id;
     workspaces.save(workspace).await.unwrap();
     listener_id
-}
-
-#[tokio::test]
-async fn http_and_socket_entries_reject_cross_kind_rule_capabilities_and_save() {
-    for entry_kind in [
-        ProtocolPackageKindViewModel::Http,
-        ProtocolPackageKindViewModel::Socket,
-    ] {
-        let (application, services, workspaces, _) = fixture();
-        let package = pkg("kind-mismatch", "1.0.0");
-        let listener_id = match entry_kind {
-            ProtocolPackageKindViewModel::Http => {
-                configure_http(&services, &workspaces, &package).await
-            }
-            ProtocolPackageKindViewModel::Socket => {
-                configure_relay(&services, &workspaces, &package).await
-            }
-        };
-        let mut wrong_description = description_with_blob(package.clone());
-        wrong_description.kind = match entry_kind {
-            ProtocolPackageKindViewModel::Http => ProtocolPackageKindViewModel::Socket,
-            ProtocolPackageKindViewModel::Socket => ProtocolPackageKindViewModel::Http,
-        };
-        services.set_description(package.clone(), wrong_description);
-
-        let capabilities_error = application
-            .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToUpstream)
-            .await
-            .unwrap_err();
-        assert_eq!(
-            error_code(&capabilities_error),
-            "PROTOCOL_PACKAGE_KIND_MISMATCH"
-        );
-
-        let editor_context_error = application
-            .protocol_rule_editor_context(listener_id)
-            .await
-            .unwrap_err();
-        assert_eq!(
-            error_code(&editor_context_error),
-            "PROTOCOL_PACKAGE_KIND_MISMATCH"
-        );
-
-        let save_error = application
-            .protocol_rule_save(input(listener_id, package, ProtocolDirection::Upstream, 0))
-            .await
-            .unwrap_err();
-        assert_eq!(error_code(&save_error), "PROTOCOL_PACKAGE_KIND_MISMATCH");
-    }
-}
-
-#[tokio::test]
-async fn capability_catalog_is_schema_typed_and_has_no_http_surface() {
-    let (application, services, workspaces, _) = fixture();
-    let package = pkg("iso-8583", "1.0.0");
-    let listener_id = configure_relay(&services, &workspaces, &package).await;
-
-    let upstream = application
-        .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToUpstream)
-        .await
-        .unwrap();
-    assert_eq!(upstream.package, package);
-    assert_eq!(upstream.fields.len(), 5);
-    assert_eq!(
-        upstream
-            .fields
-            .iter()
-            .map(|item| item.name.as_str())
-            .collect::<Vec<_>>(),
-        ["/amount", "/approved", "/raw/0", "/raw", "/trace_id"]
-    );
-    assert!(upstream.fields.iter().all(|item| {
-        item.operators == [ProtocolRuleFieldOperatorCapability::Equals]
-            && item.actions
-                == [
-                    ProtocolRuleFieldActionCapability::SetField,
-                    ProtocolRuleFieldActionCapability::ClearField,
-                ]
-    }));
-    assert_eq!(
-        upstream.common_actions,
-        [ProtocolRuleCommonActionCapability::RecordMatch]
-    );
-
-    let downstream = application
-        .protocol_rule_capabilities(listener_id, ProtocolRuleStage::ProxyToApp)
-        .await
-        .unwrap();
-    assert!(downstream.fields.iter().all(|item| {
-        item.actions
-            == [
-                ProtocolRuleFieldActionCapability::SetField,
-                ProtocolRuleFieldActionCapability::ClearField,
-            ]
-    }));
-    assert_eq!(
-        downstream.common_actions,
-        [ProtocolRuleCommonActionCapability::RecordMatch]
-    );
-
-    let json = serde_json::to_value(&upstream).unwrap();
-    let object = json.as_object().unwrap();
-    for forbidden in [
-        "method",
-        "path",
-        "query",
-        "header",
-        "cookie",
-        "status",
-        "json_path",
-        "body",
-    ] {
-        assert!(!object.contains_key(forbidden));
-        assert!(!json.to_string().contains(&format!("\"{forbidden}\"")));
-    }
-
-    let mut forged = serde_json::to_value(input(
-        listener_id,
-        pkg("iso-8583", "1.0.0"),
-        ProtocolDirection::Upstream,
-        0,
-    ))
-    .unwrap();
-    forged["http_status"] = serde_json::json!(500);
-    assert!(serde_json::from_value::<ProtocolRuleSaveInput>(forged).is_err());
-}
-
-#[tokio::test]
-async fn save_validates_all_four_schema_value_types_and_exact_bindings() {
-    let (application, services, workspaces, _) = fixture();
-    let package = pkg("iso-8583", "1.0.0");
-    let listener_id = configure_relay(&services, &workspaces, &package).await;
-    let mut valid = input(listener_id, package.clone(), ProtocolDirection::Upstream, 0);
-    valid.conditions = vec![
-        equals("trace_id", DocumentValue::String("abc".into())),
-        equals("amount", DocumentValue::integer(1000).unwrap()),
-        equals("approved", DocumentValue::Boolean(true)),
-    ];
-    valid.actions = vec![
-        ProtocolDocumentOperation::RecordMatch,
-        set("trace_id", DocumentValue::String("next".into())),
-        set("amount", DocumentValue::integer(2).unwrap()),
-        set("approved", DocumentValue::Boolean(false)),
-        set("raw", DocumentValue::byte_array(vec![1, 2])),
-    ];
-    application.protocol_rule_save(valid).await.unwrap();
-
-    let mut undeclared = input(listener_id, package.clone(), ProtocolDirection::Upstream, 1);
-    undeclared.conditions = vec![equals("extension_flag", DocumentValue::Boolean(true))];
-    undeclared.actions = vec![set(
-        "extension_value",
-        DocumentValue::String("preserved by rule metadata".into()),
-    )];
-    application
-        .protocol_rule_save(undeclared)
-        .await
-        .expect("incomplete schema metadata allows rule-owned paths and values");
-
-    let mut wrong_type = input(listener_id, package.clone(), ProtocolDirection::Upstream, 2);
-    wrong_type.conditions = vec![equals("amount", DocumentValue::String("1000".into()))];
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_rule_save(wrong_type)
-                .await
-                .unwrap_err()
-        ),
-        "RULE_INVALID"
-    );
-
-    let wrong_package = input(
-        listener_id,
-        pkg("iso-8583", "2.0.0"),
-        ProtocolDirection::Upstream,
-        1,
-    );
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_rule_save(wrong_package.clone())
-                .await
-                .unwrap_err()
-        ),
-        "PROTOCOL_RULE_PACKAGE_MISMATCH"
-    );
-}
-
-#[tokio::test]
-async fn update_preserves_binding_rejects_stale_revision_and_never_queries_forged_pkg() {
-    let (application, services, workspaces, _) = fixture();
-    let package = pkg("iso-8583", "1.0.0");
-    let listener_id = configure_relay(&services, &workspaces, &package).await;
-    let created = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            0,
-        ))
-        .await
-        .unwrap();
-    let describe_calls = services.describe_calls.load(Ordering::SeqCst);
-
-    let mut forged = input(
-        ListenerId::new(),
-        pkg("other", "9.0.0"),
-        ProtocolDirection::Downstream,
-        1,
-    );
-    forged.rule_id = Some(created.rule_id());
-    forged.expected_revision = Some(created.revision().get());
-    assert_eq!(
-        error_code(&application.protocol_rule_save(forged).await.unwrap_err()),
-        "PROTOCOL_RULE_BINDING_IMMUTABLE"
-    );
-    assert_eq!(
-        services.describe_calls.load(Ordering::SeqCst),
-        describe_calls
-    );
-
-    let mut stale = input(listener_id, package, ProtocolDirection::Upstream, 2);
-    stale.rule_id = Some(created.rule_id());
-    stale.expected_revision = Some(0);
-    assert_eq!(
-        error_code(&application.protocol_rule_save(stale).await.unwrap_err()),
-        "REVISION_CONFLICT"
-    );
-    assert_eq!(
-        services.describe_calls.load(Ordering::SeqCst),
-        describe_calls
-    );
-}
-
-#[tokio::test]
-async fn save_rejects_missing_entry_and_incomplete_update_identity() {
-    let (application, _, _, _) = fixture();
-    let package = pkg("iso-8583", "1.0.0");
-    let missing_listener = ListenerId::new();
-
-    let missing_entry = application
-        .protocol_rule_save(input(
-            missing_listener,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            0,
-        ))
-        .await
-        .unwrap_err();
-    assert_eq!(
-        error_code(&missing_entry),
-        "PROTOCOL_RULE_LISTENER_NOT_FOUND"
-    );
-
-    let mut incomplete = input(missing_listener, package, ProtocolDirection::Upstream, 0);
-    incomplete.rule_id = Some(ProtocolDocumentRuleId::new());
-    let incomplete_update = application
-        .protocol_rule_save(incomplete)
-        .await
-        .unwrap_err();
-    assert_eq!(
-        error_code(&incomplete_update),
-        "PROTOCOL_RULE_REVISION_REQUIRED"
-    );
-}
-
-#[tokio::test]
-async fn create_update_toggle_delete_keep_monotonic_order_revision_and_stable_sort() {
-    let (application, services, workspaces, _) = fixture();
-    let package = pkg("iso-8583", "1.0.0");
-    let listener_id = configure_relay(&services, &workspaces, &package).await;
-    let first = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            10,
-        ))
-        .await
-        .unwrap();
-    let second = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            0,
-        ))
-        .await
-        .unwrap();
-    let third = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            10,
-        ))
-        .await
-        .unwrap();
-    assert!(first.created_order() < second.created_order());
-    assert!(second.created_order() < third.created_order());
-    let mut equal_priority = [first.rule_id(), third.rule_id()];
-    equal_priority.sort();
-    assert_eq!(
-        application
-            .protocol_rule_list()
-            .await
-            .unwrap()
-            .iter()
-            .map(ProtocolDocumentRuleDefinition::rule_id)
-            .collect::<Vec<_>>(),
-        [second.rule_id(), equal_priority[0], equal_priority[1]]
-    );
-
-    application
-        .protocol_rule_delete(third.rule_id(), third.revision().get(), true)
-        .await
-        .unwrap();
-    let replacement = application
-        .protocol_rule_save(input(
-            listener_id,
-            package.clone(),
-            ProtocolDirection::Upstream,
-            10,
-        ))
-        .await
-        .unwrap();
-    assert!(replacement.created_order() > third.created_order());
-
-    let mut update = input(listener_id, package, ProtocolDirection::Upstream, -1);
-    update.rule_id = Some(first.rule_id());
-    update.expected_revision = Some(first.revision().get());
-    let updated = application.protocol_rule_save(update).await.unwrap();
-    assert_eq!(updated.created_order(), first.created_order());
-    assert_eq!(updated.revision().get(), first.revision().get() + 1);
-    let toggled = application
-        .protocol_rule_toggle(updated.rule_id(), updated.revision().get(), false)
-        .await
-        .unwrap();
-    assert!(!toggled.enabled());
-    assert_eq!(toggled.revision().get(), updated.revision().get() + 1);
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_rule_delete(toggled.rule_id(), updated.revision().get(), true)
-                .await
-                .unwrap_err()
-        ),
-        "REVISION_CONFLICT"
-    );
-    application
-        .protocol_rule_delete(toggled.rule_id(), toggled.revision().get(), true)
-        .await
-        .unwrap();
-    assert_eq!(application.protocol_rule_list().await.unwrap().len(), 2);
 }

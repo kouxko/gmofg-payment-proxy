@@ -11,6 +11,7 @@ use crate::http::{ChannelId, HandshakePolicy, SystemClock, UpstreamExchange};
 struct RecordingWirePolicy {
     requests: AtomicUsize,
     responses: AtomicUsize,
+    request_metadata: Mutex<Vec<crate::http::HttpRequestMetadata>>,
 }
 
 impl HandshakePolicy for RecordingWirePolicy {}
@@ -20,8 +21,13 @@ impl PipelinePorts for RecordingWirePolicy {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        request: &crate::http::HttpRequestMetadata,
         message: &mut Message,
     ) -> super::super::Result<Vec<FaultAction>> {
+        self.request_metadata
+            .lock()
+            .expect("request metadata mutex poisoned")
+            .push(request.clone());
         self.requests.fetch_add(1, Ordering::SeqCst);
         message.replace_body(Bytes::from_static(b"policy-request"));
         Ok(Vec::new())
@@ -30,8 +36,13 @@ impl PipelinePorts for RecordingWirePolicy {
     async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
+        request: &crate::http::HttpRequestMetadata,
         message: &mut Message,
     ) -> super::super::Result<Vec<FaultAction>> {
+        self.request_metadata
+            .lock()
+            .expect("request metadata mutex poisoned")
+            .push(request.clone());
         self.responses.fetch_add(1, Ordering::SeqCst);
         message.replace_body(Bytes::from_static(b"policy-response"));
         Ok(vec![FaultAction::CustomStatus(
@@ -153,6 +164,17 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
         .unwrap();
 
     assert_eq!(policy.responses.load(Ordering::SeqCst), 1);
+    assert_eq!(
+        policy
+            .request_metadata
+            .lock()
+            .expect("request metadata mutex poisoned")
+            .as_slice(),
+        &[crate::http::HttpRequestMetadata {
+            method: "POST".into(),
+            request_target: "/sale".into(),
+        }]
+    );
     let output = output.await.unwrap().unwrap();
     let ResponseDisposition::Send { message, .. } = output.disposition else {
         panic!("expected response send disposition");

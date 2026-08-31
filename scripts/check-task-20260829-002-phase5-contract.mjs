@@ -78,6 +78,8 @@ function isSerdeSpectaWire(definition, shape) {
 
 function extractGeneratedType(source, symbol) {
   const marker = `export type ${symbol} =`;
+  const count = source.split(marker).length - 1;
+  if (count !== 1) fail(`generated semantic drift: expected one ${symbol}, found ${count}`);
   const start = source.indexOf(marker);
   if (start < 0) fail(`generated semantic drift: missing ${symbol}`);
   const bodyStart = start + marker.length;

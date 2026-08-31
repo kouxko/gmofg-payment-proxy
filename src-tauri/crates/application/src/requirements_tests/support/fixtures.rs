@@ -290,37 +290,41 @@ pub(in crate::requirements_tests) fn scripted_workspace(
         }),
     });
     let listener_id = listener.id;
-    let direction = if local_responder {
-        ProtocolDirection::Downstream
+    let stage = if local_responder {
+        RuleStage::ProxyToApp
     } else {
-        ProtocolDirection::Upstream
+        RuleStage::ProxyToUpstream
     };
-    workspace
-        .replace_document_runtime_rules(vec![
-            ProtocolDocumentRuleDefinition::new(
-                ProtocolDocumentRuleId::new(),
-                true,
-                -10,
-                41,
+    workspace.rule_definitions = vec![
+        RuleDefinition::create(
+            RuleDefinitionDraft {
+                name: "Scripted fixture rule".into(),
+                enabled: true,
+                priority: -10,
                 listener_id,
-                package,
-                direction,
-                vec![
-                    document_equals("text", DocumentValue::String("sale".into())),
-                    document_equals("amount", DocumentValue::integer(1234).unwrap()),
-                    document_equals("approved", DocumentValue::Boolean(true)),
-                ],
-                vec![
-                    ProtocolDocumentOperation::RecordMatch,
-                    document_set("text", DocumentValue::String("reply".into())),
-                    document_set("amount", DocumentValue::integer(4321).unwrap()),
-                    document_set("approved", DocumentValue::Boolean(false)),
-                    document_set("raw", DocumentValue::byte_array(vec![9, 8, 7])),
-                ],
-            )
-            .unwrap(),
-        ])
-        .unwrap();
+                stage,
+                one_shot: false,
+                content: RuleContent::Socket(intercept_proxy_domain::SocketRuleContent {
+                    package,
+                    condition: ConditionTree::All(vec![
+                        document_equals("text", DocumentValue::String("sale".into())),
+                        document_equals("amount", DocumentValue::integer(1234).unwrap()),
+                        document_equals("approved", DocumentValue::Boolean(true)),
+                    ]),
+                    actions: vec![
+                        UnifiedAction::RecordMatch,
+                        document_set("text", DocumentValue::String("reply".into())),
+                        document_set("amount", DocumentValue::integer(4321).unwrap()),
+                        document_set("approved", DocumentValue::Boolean(false)),
+                        document_set("raw", DocumentValue::byte_array(vec![9, 8, 7])),
+                    ],
+                }),
+            },
+            41,
+        )
+        .unwrap(),
+    ];
+    workspace.rule_created_order_high_water = 41;
     workspace.validate().unwrap();
     workspace
 }
@@ -355,18 +359,34 @@ pub(in crate::requirements_tests) fn protocol_rule_definitions(
         .collect()
 }
 
-fn document_equals(name: &str, value: DocumentValue) -> ProtocolDocumentPredicate {
-    ProtocolDocumentPredicate::Equals {
-        field: JsonPointer::property(name),
-        value,
-    }
+fn document_equals(name: &str, value: DocumentValue) -> ConditionTree {
+    ConditionTree::Leaf(Condition::Document {
+        path: JsonPointer::property(name),
+        predicate: match value {
+            DocumentValue::String(value) => DocumentPredicate::String(StringPredicate {
+                operator: StringOperator::Equal,
+                value,
+            }),
+            DocumentValue::Number(value) => DocumentPredicate::Number(NumberPredicate {
+                operator: NumberOperator::Equal,
+                value,
+            }),
+            DocumentValue::Boolean(value) => {
+                DocumentPredicate::Boolean(BooleanPredicate::Equal(value))
+            }
+            DocumentValue::Null(()) => DocumentPredicate::NullEqual,
+            DocumentValue::Object(_) | DocumentValue::Array(_) => {
+                panic!("fixture equality requires a scalar value")
+            }
+        },
+    })
 }
 
-fn document_set(name: &str, value: DocumentValue) -> ProtocolDocumentOperation {
-    ProtocolDocumentOperation::SetField {
-        field: JsonPointer::property(name),
+fn document_set(name: &str, value: DocumentValue) -> UnifiedAction {
+    UnifiedAction::Document(DocumentMutation::Set {
+        path: JsonPointer::property(name),
         value,
-    }
+    })
 }
 
 // DATA-008, TEST-CAPACITY: logical bytes are deterministic and use lengths, not allocations.

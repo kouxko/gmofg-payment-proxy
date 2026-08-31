@@ -89,11 +89,10 @@ impl InfrastructureServiceBundle {
             Arc::clone(capacity),
         ));
         let capture = Arc::new(CaptureRepositoryAdapter::new(sessions.clone()));
-        let rules = Arc::new(RuleRepositoryAdapter::new(
-            (sqlite.clone(), Arc::clone(&store)),
-            Arc::clone(dialog),
-            product.channels(),
-        ));
+        let rules = Arc::new(RuleRepositoryAdapter::new((
+            sqlite.clone(),
+            Arc::clone(&store),
+        )));
         let settings = Arc::new(SettingsRepositoryAdapter::new(
             sqlite.clone(),
             product.as_ref(),

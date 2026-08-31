@@ -1,10 +1,3 @@
-async fn poll_body_codec_policy_once<F: std::future::Future>(
-    future: std::pin::Pin<&mut F>,
-) -> std::task::Poll<F::Output> {
-    let mut future = future;
-    std::future::poll_fn(|cx| std::task::Poll::Ready(future.as_mut().poll(cx))).await
-}
-
 #[tokio::test(flavor = "current_thread")]
 async fn frozen_body_codec_pipeline_progresses_while_sqlite_executor_is_occupied() {
     use std::sync::mpsc;
@@ -63,13 +56,13 @@ async fn frozen_body_codec_pipeline_progresses_while_sqlite_executor_is_occupied
     open_test_connection(&pipeline, &context).await;
     let mut request = message;
     pipeline
-        .apply_request_policy(&context, &mut request)
+        .apply_request_policy(&context, request_metadata(), &mut request)
         .await
         .unwrap();
 
     let mut response = response_message();
     pipeline
-        .apply_response_policy(&context, &mut response)
+        .apply_response_policy(&context, request_metadata(), &mut response)
         .await
         .unwrap();
 

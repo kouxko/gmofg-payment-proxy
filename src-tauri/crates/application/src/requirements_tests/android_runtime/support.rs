@@ -148,8 +148,13 @@ impl ListenerRuntimePort for StaticListenerRuntime {
         unused()
     }
 
-    async fn replace_rule_definitions(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
-        Ok(())
+    async fn replace_rule_definitions(
+        &self,
+        workspaces: &dyn WorkspaceRepositoryPort,
+        workspace: ProxyWorkspace,
+        _: ListenerId,
+    ) -> AppResult<ProxyWorkspace> {
+        workspaces.save(workspace).await
     }
 
     async fn test_upstream_tls(
@@ -296,7 +301,6 @@ async fn running_vpn_fixture_with_listener_state(
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
             breakpoint_validation: ports.clone(),
-            rules: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),

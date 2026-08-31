@@ -3,6 +3,12 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-01
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260829-002 | phase18-final-unified-release-automation | 最终自动化验收单一RuleDefinition/RuntimeRuleBundle、HTTP/Socket generation lease、递归Document/UI、无兼容路径与全层测试；独立Reviewer/Verifier P0/P1/P2=0。Universal App/DMG真实构建，双架构、strict codesign结构、挂载校验与清理PASS。GUI/权限、Windows、Android、Developer ID、CI/push/release按用户要求留到明日NOT_RUN | VERIFIED / APPROVED / CODE CHECKPOINT READY / MANUAL ACCEPTANCE PENDING | TASK-20260829-002 | phase17-release-schema100-preservation | [父证据](2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/README.md) | [证据](2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md) |
+
 ## 2026-08-31
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

@@ -3,8 +3,9 @@ use crate::{
     RuleLocalDocumentValueType,
 };
 use intercept_proxy_domain::{
-    BooleanPredicate, Condition, Document, DocumentMutation, DocumentPredicate, DocumentValue,
-    JsonPointer, NumberOperator, NumberPredicate, StringOperator, StringPredicate, UnifiedAction,
+    BooleanPredicate, Condition, Document, DocumentMatchPath, DocumentMutation, DocumentPredicate,
+    DocumentValue, JsonPointer, NumberOperator, NumberPredicate, StringOperator, StringPredicate,
+    UnifiedAction,
 };
 
 pub(super) fn condition_draft(
@@ -50,10 +51,15 @@ pub(super) fn condition_draft(
         }
         _ => return Err(invalid_capability("predicate")),
     };
-    Ok(Condition::Document {
-        path: JsonPointer::parse(path)?,
-        predicate,
-    })
+    let path = DocumentMatchPath::parse(path)?;
+    if path.has_wildcard() {
+        Ok(Condition::DocumentPattern { path, predicate })
+    } else {
+        Ok(Condition::Document {
+            path: JsonPointer::parse(path.as_str())?,
+            predicate,
+        })
+    }
 }
 
 pub(super) fn action_draft(
