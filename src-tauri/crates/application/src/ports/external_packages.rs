@@ -3,8 +3,10 @@
 use async_trait::async_trait;
 
 use crate::{
-    AppResult, ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
-    ProtocolPackageDescriptionViewModel, ProtocolPackageRef, ProtocolPackageVersionViewModel,
+    AppResult, ApplicationBackupProtocolPackageBaseline, ApplicationConfigurationDocument,
+    ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
+    PortableApplicationProtocolPackage, ProtocolPackageDescriptionViewModel, ProtocolPackageRef,
+    ProtocolPackageVersionViewModel,
 };
 
 #[async_trait]
@@ -27,7 +29,7 @@ pub trait ExternalPackageApplicationPort: Send + Sync + std::fmt::Debug {
         package: &ProtocolPackageRef,
     ) -> AppResult<Option<ProtocolPackageVersionViewModel>>;
 
-    /// 返回注册时严格校验并持久化的安全描述，不执行 Rhai 编译或网络 RPC。
+    /// 返回注册时严格校验并持久化的安全描述，不执行 JavaScript 编译或网络 RPC。
     async fn describe(
         &self,
         package: &ProtocolPackageRef,
@@ -52,4 +54,27 @@ pub trait ExternalPackageApplicationPort: Send + Sync + std::fmt::Debug {
 
     /// 删除已由 Application 确认无引用的持久化元数据。
     async fn delete(&self, package: &ProtocolPackageRef) -> AppResult<()>;
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>>;
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>>;
+    async fn preflight_application_packages(
+        &self,
+        packages: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>>;
+    async fn preflight_installed_packages(
+        &self,
+        packages: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>>;
+    async fn replace_application_bundle(
+        &self,
+        packages: Vec<PortableApplicationProtocolPackage>,
+        document: ApplicationConfigurationDocument,
+    ) -> AppResult<()>;
+    async fn reset_application_bundle(
+        &self,
+        document: ApplicationConfigurationDocument,
+    ) -> AppResult<()>;
 }

@@ -1,7 +1,7 @@
 use std::{
     fs,
     io::{Cursor, Write},
-    path::{Path, PathBuf},
+    path::PathBuf,
     sync::Arc,
 };
 
@@ -15,7 +15,7 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 use super::runtime_fixture_with_builtin;
 
 #[tokio::test(flavor = "current_thread")]
-async fn baseline_capture_observes_the_enabled_builtin_exact_package() {
+async fn phase13_seed_projects_the_enabled_builtin_before_sidecar_start() {
     let fixture = runtime_fixture_with_builtin(Some(Arc::from(template_zip()))).await;
     let mut candidate = ProxyWorkspace::default();
     let ListenerDataPlane::Http(settings) = &mut candidate.listeners[0].data_plane else {
@@ -47,33 +47,20 @@ async fn baseline_capture_observes_the_enabled_builtin_exact_package() {
         &builtin_iso8583_package_ref()
     );
     assert!(baseline.exact_packages()[0].enabled());
-    assert!(baseline.exact_packages()[0].online());
+    assert!(!baseline.exact_packages()[0].online());
 }
 
 fn template_zip() -> Vec<u8> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../templates/socket-protocol/iso8583-standard");
-    let mut paths = Vec::new();
-    collect_files(&root, &root, &mut paths);
-    paths.sort();
     let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
-    for path in paths {
-        let relative = path.strip_prefix(&root).unwrap().to_string_lossy();
+    for relative in ["manifest.json", "protocol.js", "display.js"] {
         writer
-            .start_file(relative.replace('\\', "/"), SimpleFileOptions::default())
+            .start_file(relative, SimpleFileOptions::default())
             .unwrap();
-        writer.write_all(&fs::read(path).unwrap()).unwrap();
+        writer
+            .write_all(&fs::read(root.join(relative)).unwrap())
+            .unwrap();
     }
     writer.finish().unwrap().into_inner()
-}
-
-fn collect_files(root: &Path, current: &Path, output: &mut Vec<PathBuf>) {
-    for entry in fs::read_dir(current).unwrap() {
-        let path = entry.unwrap().path();
-        if path.is_dir() {
-            collect_files(root, &path, output);
-        } else if path.strip_prefix(root).is_ok() {
-            output.push(path);
-        }
-    }
 }

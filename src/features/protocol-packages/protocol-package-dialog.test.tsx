@@ -180,9 +180,16 @@ describe("ProtocolPackageDialog details", () => {
 
   it("explains the exact scope and limitations of the built-in ISO example", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
-      versions: [version("1.0.0", { package_source: { type: "internal", built_in: true } })],
+      id: "iso8583-ascii-standard",
+      versions: [version("1.0.0", {
+        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+        package_source: { type: "external", online: true },
+      })],
     })]);
-    mocks.protocolPackageDetail.mockResolvedValue(detail(version("1.0.0", { package_source: { type: "internal", built_in: true } })));
+    mocks.protocolPackageDetail.mockResolvedValue(detail(version("1.0.0", {
+      package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+      package_source: { type: "external", online: true },
+    })));
     await openDialog();
 
     const dialog = screen.getByRole("dialog", { name: "ISO 8583" });
@@ -258,7 +265,7 @@ describe("ProtocolPackageDialog details", () => {
   it("contains no source entry, source text, or source request", async () => {
     await openDialog();
     expect(screen.queryByRole("button", { name: /源码|源代码|Source/i })).not.toBeInTheDocument();
-    expect(screen.queryByText(/protocol\.rhai|manifest\.toml|源码内容/)).not.toBeInTheDocument();
+    expect(screen.queryByText(/protocol\.js|manifest\.toml|源码内容/)).not.toBeInTheDocument();
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
     expect(mocks.protocolPackageDetail).toHaveBeenCalledTimes(1);
     expect(Object.keys({ protocolPackageList: mocks.protocolPackageList, protocolPackageDetail: mocks.protocolPackageDetail }))
@@ -472,11 +479,10 @@ describe("ProtocolPackageDialog details", () => {
     expect(screen.getByRole("button", { name: "确认删除" })).toBeEnabled();
     expect(screen.getByRole("alertdialog")).toBeVisible();
   });
-
-  it("does not expose external lifecycle controls for internal packages", async () => {
+  it("exposes the unified external lifecycle controls for every package", async () => {
     await openDialog();
-    expect(screen.queryByRole("button", { name: "停用外部软件包" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "删除外部软件包" })).not.toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "停用外部软件包" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "删除外部软件包" })).toBeVisible();
   });
 
   it("keeps narrow dialogs scrollable with keyboard-accessible version actions", async () => {

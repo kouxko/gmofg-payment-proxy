@@ -120,7 +120,7 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn production_ports_commit_full_resource_candidate_with_builtin_exact_package() {
+async fn production_full_resource_candidate_requires_builtin_sidecar_online() {
     let _guard = APPLICATION_HOST_LOCK.lock().await;
     let directory = TempDir::new().expect("temporary production Host data directory");
     let host = build_production_host(&directory).await;
@@ -140,26 +140,15 @@ async fn production_ports_commit_full_resource_candidate_with_builtin_exact_pack
         json!({"candidate":full_resource_candidate()}),
     )
     .await;
-    assert_eq!(created["status"], "preview_ready", "{created}");
-    let candidate_id = created["candidate_id"].as_str().expect("candidate id");
-    let confirmation_token = created["confirmation_token"]
-        .as_str()
-        .expect("confirmation token");
-    let queued = call(
-        &server,
-        312,
-        "environment_candidate_apply",
-        json!({
-            "candidate_id":candidate_id,
-            "confirmation_token":confirmation_token,
-        }),
-    )
-    .await;
-    assert_eq!(queued["status"], "apply_queued", "{queued}");
-
-    let terminal = await_terminal(&server, candidate_id, 313).await;
-    assert_eq!(terminal["status"], "committed", "{terminal}");
-    assert_eq!(terminal["terminal_result"]["result"], "committed");
+    assert_eq!(created["status"], "validation_failed", "{created}");
+    assert_eq!(created["errors"][0]["code"], "EXTERNAL_PACKAGE_OFFLINE");
+    assert_eq!(
+        created["validation_layers"][3]["layer"],
+        "package_projection"
+    );
+    assert_eq!(created["validation_layers"][3]["status"], "failed");
+    assert!(created["confirmation_token"].is_null());
+    assert!(created["preview"].is_null());
 
     server.shutdown().await;
     host.shutdown().await.expect("shutdown production Host");
@@ -175,29 +164,6 @@ async fn build_production_host(directory: &TempDir) -> ApplicationHost {
     .build()
     .await
     .expect("build production environment services")
-}
-
-async fn await_terminal(server: &McpServer, candidate_id: &str, id: usize) -> Value {
-    tokio::time::timeout(Duration::from_secs(2), async {
-        loop {
-            let status = call(
-                server,
-                id,
-                "environment_candidate_status",
-                json!({"candidate_id":candidate_id}),
-            )
-            .await;
-            if !matches!(
-                status["status"].as_str(),
-                Some("apply_queued" | "apply_in_progress")
-            ) {
-                return status;
-            }
-            tokio::task::yield_now().await;
-        }
-    })
-    .await
-    .expect("production apply reaches terminal state")
 }
 
 fn full_resource_candidate() -> Value {

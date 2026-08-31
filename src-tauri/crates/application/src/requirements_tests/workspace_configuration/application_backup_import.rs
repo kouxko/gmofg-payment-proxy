@@ -351,7 +351,7 @@ async fn preview_and_debug_never_expose_scripts_certificate_bytes_passwords_path
         "script-secret-marker",
         "fake-test-certificate",
         "password-secret-marker",
-        "manifest.toml",
+        "manifest.json",
         "captured-payload-marker",
     ] {
         assert!(!prepared_debug.contains(secret));

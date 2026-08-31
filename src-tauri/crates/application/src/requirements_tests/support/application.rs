@@ -299,12 +299,9 @@ pub(in crate::requirements_tests) fn protocol_package_services(
     portability: Arc<FakeProtocolPackagePortability>,
 ) -> ProtocolPackageApplicationServices {
     ProtocolPackageApplicationServices {
-        store: portability.clone(),
-        compiler: portability.clone(),
         importer: portability.clone(),
         builtin: portability.clone(),
         usage_query: portability.clone(),
-        portability,
-        external: Arc::new(UnusedExternalPackagePort),
+        external: portability,
     }
 }

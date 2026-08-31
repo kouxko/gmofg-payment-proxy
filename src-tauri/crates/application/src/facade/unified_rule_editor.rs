@@ -3,17 +3,15 @@
 mod validation;
 
 use super::{
-    Application,
-    protocol_packages::{ensure_description_identity, ensure_external_description},
+    Application, protocol_packages::ensure_external_description,
     rule_capabilities::stage_capability,
 };
 use crate::{
     AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStage, ListenerDataPlane, ListenerId,
     MessageStage, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
-    ProtocolPackageRef, ProtocolPackageSourceViewModel, ProtocolRuleCommonActionCapability,
-    ProtocolRuleFieldActionCapability, ProtocolRuleFieldCapability,
-    ProtocolRuleFieldOperatorCapability, ProtocolRuleStage, ProxyListener,
-    RuleAction as AppRuleAction, RuleActionKind, RuleCondition as AppRuleCondition,
+    ProtocolPackageRef, ProtocolRuleCommonActionCapability, ProtocolRuleFieldActionCapability,
+    ProtocolRuleFieldCapability, ProtocolRuleFieldOperatorCapability, ProtocolRuleStage,
+    ProxyListener, RuleAction as AppRuleAction, RuleActionKind, RuleCondition as AppRuleCondition,
     RuleConditionKind, RuleContent, RuleDefinitionDraft, RuleDefinitionSaveInput,
     RuleEditorContentContext, RuleEditorContext, RuleMatchField, RuleMatchOperator, RuleStage,
     RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
@@ -100,19 +98,9 @@ impl Application {
         listener: &ProxyListener,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageDescriptionViewModel> {
-        let version = self.require_protocol_package(package).await?;
-        let description = match version.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                let description = self.protocol_package_compiler.describe(package).await?;
-                ensure_description_identity(package, &description)?;
-                description
-            }
-            ProtocolPackageSourceViewModel::External { .. } => {
-                let description = self.external_packages.describe(package).await?;
-                ensure_external_description(package, &description)?;
-                description
-            }
-        };
+        self.require_protocol_package(package).await?;
+        let description = self.external_packages.describe(package).await?;
+        ensure_external_description(package, &description)?;
         let valid_kind = matches!(
             (&listener.data_plane, description.kind),
             (

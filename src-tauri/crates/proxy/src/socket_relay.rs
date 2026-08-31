@@ -1,6 +1,6 @@
 //! Protocol-neutral Socket Relay and `LocalResponder` data plane.
 //!
-//! This module never parses HTTP and never knows Rhai, Document or rule types. Direct Relay keeps
+//! This module never parses HTTP and never knows JavaScript, Document or rule types. Direct Relay keeps
 //! forwarding TCP bytes unchanged; Scripted Relay and `LocalResponder` only coordinate the generic
 //! bounded [`SocketDirectionCapabilities`] boundary. TLS termination/origination remains explicit in the
 //! selected topology.

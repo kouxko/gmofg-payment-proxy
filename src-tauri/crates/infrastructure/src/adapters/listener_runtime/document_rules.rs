@@ -1,24 +1,15 @@
-//! 每连接绑定的 协议 Document 规则运行时外壳。
-//!
-//! Domain Program 负责纯规则语义；本模块只补齐 Domain 不应认识的网络连接身份。这样未来
-//! T24/T25 可以把 Decode 产生的 owned Document 交给规则程序，同时在真正执行前拒绝跨连接、
-//! 跨 Listener、跨包或跨方向串用。这里不进行网络 I/O，也不保存上一 Frame 的 Document。
+//! Immutable two-stage Socket Document programs shared by the external package pipeline.
 
-use std::{fmt, sync::Arc};
+use std::sync::Arc;
 
-use async_trait::async_trait;
+use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    Document, DomainError, ErrorCode, ListenerId, ProtocolDocumentRuleExecution,
-    ProtocolDocumentRuleProgram, ProtocolPackageRef, ProtocolRuleStage,
+    DocumentSchemaNode, DomainError, ErrorCode, ProtocolDirection, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleProgram, ProtocolPackageRef, ProtocolRuleStage, ProxyListener,
+    ProxyWorkspace, SocketTopology, sort_protocol_document_rules,
 };
-use intercept_proxy_exchange::{Error as ExchangeError, Rules};
-use intercept_proxy_runtime::SocketConnectionIdentity;
 use parking_lot::RwLock;
 
-/// 一个入口运行期间可原子替换的双方向 Document 规则连接工厂。
-///
-/// 每组 Program 都不可变；保存规则时一次性替换整组。每个连接、每条报文执行前读取当前组，
-/// 因此已有连接也能使用新规则，同时不会共享任何报文 Document 状态。
 #[derive(Clone)]
 pub struct ProtocolDocumentRuleConnectionFactory {
     programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
@@ -30,36 +21,13 @@ struct ProtocolDocumentRulePrograms {
     proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
 }
 
-/// 一个连接、一个方向独占的规则执行入口。
-///
-/// Program 自身不可变，可在不同连接间共享；Connection 只保存无 payload 的 owner identity，
-/// 每次调用的 Document 和命中列表都属于返回值，因此没有跨 Frame 的可变状态。
-pub struct ProtocolDocumentRuleConnection {
-    connection: SocketConnectionIdentity,
-    programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
-    stage: ProtocolRuleStage,
-}
-
-/// Decode 后等待规则处理的 owned Document 及其完整运行时归属。
-///
-/// 字段保持私有，生产调用方只能通过绑定它的 Connection 创建；执行时仍会逐项复核，防止未来
-/// 适配器扩展或错误重构把另一个连接/包/方向的 Document 交给当前 Program。
-pub struct BoundSocketDocument {
-    connection: SocketConnectionIdentity,
-    listener_id: ListenerId,
-    package: ProtocolPackageRef,
-    stage: ProtocolRuleStage,
-    document: Document,
-}
-
-impl fmt::Debug for ProtocolDocumentRuleConnectionFactory {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
+impl std::fmt::Debug for ProtocolDocumentRuleConnectionFactory {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let programs = self.programs.read();
         formatter
             .debug_struct("ProtocolDocumentRuleConnectionFactory")
             .field("listener_id", &programs.proxy_to_upstream.listener_id())
             .field("package", programs.proxy_to_upstream.package())
-            .field("schema", &programs.proxy_to_upstream.schema())
             .field(
                 "proxy_to_upstream",
                 &programs.proxy_to_upstream.rules().len(),
@@ -69,125 +37,7 @@ impl fmt::Debug for ProtocolDocumentRuleConnectionFactory {
     }
 }
 
-impl fmt::Debug for ProtocolDocumentRuleConnection {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        let program = self.program();
-        formatter
-            .debug_struct("ProtocolDocumentRuleConnection")
-            .field("connection", &self.connection)
-            .field("stage", &self.stage)
-            .field("listener_id", &program.listener_id())
-            .field("package", program.package())
-            .finish_non_exhaustive()
-    }
-}
-
-impl fmt::Debug for BoundSocketDocument {
-    fn fmt(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
-        // Document 的 Debug 含字段值；运行诊断只能暴露归属与 Schema 形状。
-        formatter
-            .debug_struct("BoundSocketDocument")
-            .field("connection", &self.connection)
-            .field("listener_id", &self.listener_id)
-            .field("package", &self.package)
-            .field("stage", &self.stage)
-            .field("document", &"<redacted>")
-            .finish_non_exhaustive()
-    }
-}
-
-impl ProtocolDocumentRuleConnection {
-    /// 为一个不可变规则 Program 绑定精确 Socket 连接身份。
-    fn new(
-        connection: SocketConnectionIdentity,
-        programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
-        stage: ProtocolRuleStage,
-    ) -> Self {
-        Self {
-            connection,
-            programs,
-            stage,
-        }
-    }
-
-    fn program(&self) -> Arc<ProtocolDocumentRuleProgram> {
-        let programs = self.programs.read();
-        match self.stage {
-            ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
-        }
-    }
-
-    /// 绑定 Decode 产生的 owned Document；Program 只持有规则路径所需的 Schema 元数据。
-    pub fn bind_document(&self, document: Document) -> BoundSocketDocument {
-        let program = self.program();
-        BoundSocketDocument {
-            connection: self.connection.clone(),
-            listener_id: program.listener_id(),
-            package: program.package().clone(),
-            stage: program.stage(),
-            document,
-        }
-    }
-
-    /// 复核运行时归属后执行整组规则，并只返回一个聚合结果。
-    pub fn execute(
-        &self,
-        document: BoundSocketDocument,
-    ) -> Result<ProtocolDocumentRuleExecution, DomainError> {
-        self.execute_with_cancellation(document, || false)
-    }
-
-    /// 复核归属后，以调用方提供的同步取消检查执行规则。
-    ///
-    /// 取消检查由 Domain 在每条规则、条件和动作边界调用；失败时 owned Document 被整体丢弃。
-    pub fn execute_with_cancellation(
-        &self,
-        document: BoundSocketDocument,
-        is_cancelled: impl FnMut() -> bool,
-    ) -> Result<ProtocolDocumentRuleExecution, DomainError> {
-        let program = self.program();
-        if document.connection != self.connection {
-            return Err(binding_error(
-                "binding.connection",
-                "Document 不属于当前 Socket 连接",
-            ));
-        }
-        if document.listener_id != program.listener_id() {
-            return Err(binding_error(
-                "binding.listener_id",
-                "Document 不属于当前 Listener",
-            ));
-        }
-        if &document.package != program.package() {
-            return Err(binding_error(
-                "binding.package",
-                "Document 不属于当前协议包版本",
-            ));
-        }
-        if document.stage != program.stage() {
-            return Err(binding_error(
-                "binding.stage",
-                "Document 不属于当前处理阶段",
-            ));
-        }
-        program.execute_with_cancellation(document.document, is_cancelled)
-    }
-}
-
-#[async_trait]
-impl Rules for ProtocolDocumentRuleConnection {
-    async fn apply(&mut self, document: Document) -> Result<Document, ExchangeError> {
-        let execution = self
-            .execute(self.bind_document(document))
-            .map_err(|error| ExchangeError::new(format!("{}\n{}", error.code.as_str(), error)))?;
-        let (document, _) = execution.into_parts();
-        Ok(document)
-    }
-}
-
 impl ProtocolDocumentRuleConnectionFactory {
-    /// 组合同一入口和协议包的两个权威写出阶段 Program。
     pub(crate) fn new(
         proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
         proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
@@ -221,31 +71,17 @@ impl ProtocolDocumentRuleConnectionFactory {
         })
     }
 
-    /// 为一个连接和一个处理方向创建无状态执行入口。
-    pub fn connection(
-        &self,
-        connection: SocketConnectionIdentity,
-        stage: ProtocolRuleStage,
-    ) -> ProtocolDocumentRuleConnection {
-        ProtocolDocumentRuleConnection::new(connection, Arc::clone(&self.programs), stage)
-    }
-
     pub(crate) fn direction_programs(
         &self,
-        direction: intercept_proxy_domain::ProtocolDirection,
+        direction: ProtocolDirection,
     ) -> [Arc<ProtocolDocumentRuleProgram>; 1] {
         let programs = self.programs.read();
         match direction {
-            intercept_proxy_domain::ProtocolDirection::Upstream => {
-                [Arc::clone(&programs.proxy_to_upstream)]
-            }
-            intercept_proxy_domain::ProtocolDirection::Downstream => {
-                [Arc::clone(&programs.proxy_to_app)]
-            }
+            ProtocolDirection::Upstream => [Arc::clone(&programs.proxy_to_upstream)],
+            ProtocolDirection::Downstream => [Arc::clone(&programs.proxy_to_app)],
         }
     }
 
-    /// 返回当前指定方向 Program。
     #[cfg(test)]
     pub(crate) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {
         let programs = self.programs.read();
@@ -255,14 +91,98 @@ impl ProtocolDocumentRuleConnectionFactory {
         }
     }
 
-    /// 原子替换双方向规则；已有连接下一条报文会读取新 Program。
     pub(crate) fn replace(&self, replacement: &Self) {
-        let replacement = replacement.programs.read().clone();
-        *self.programs.write() = replacement;
+        *self.programs.write() = replacement.programs.read().clone();
     }
 }
 
 fn binding_error(field: &str, message: &str) -> DomainError {
     DomainError::new(ErrorCode::RuleInvalid, "协议 Document 运行时绑定不一致")
         .with_field_error(field, message)
+}
+
+fn compile_rule_program(
+    listener: &ProxyListener,
+    package: &ProtocolPackageRef,
+    schema: &DocumentSchemaNode,
+    stage: ProtocolRuleStage,
+    rules: &[ProtocolDocumentRuleDefinition],
+) -> AppResult<ProtocolDocumentRuleProgram> {
+    let selected = rules
+        .iter()
+        .filter(|rule| rule.stage() == stage)
+        .cloned()
+        .collect();
+    ProtocolDocumentRuleProgram::new_for_stage(
+        listener.id,
+        package.clone(),
+        schema.clone(),
+        stage,
+        selected,
+    )
+    .map_err(AppError::from)
+}
+
+pub(super) fn compile_document_rules(
+    workspace: &ProxyWorkspace,
+    listener: &ProxyListener,
+    package: &ProtocolPackageRef,
+    upstream_schema: &DocumentSchemaNode,
+    downstream_schema: &DocumentSchemaNode,
+    topology: &SocketTopology,
+) -> AppResult<ProtocolDocumentRuleConnectionFactory> {
+    let mut rules = workspace
+        .document_runtime_rules()?
+        .into_iter()
+        .filter(|rule| rule.listener_id() == listener.id)
+        .collect::<Vec<_>>();
+    for rule in &rules {
+        let schema = match rule.direction() {
+            ProtocolDirection::Upstream => upstream_schema,
+            ProtocolDirection::Downstream => downstream_schema,
+        };
+        if rule.package() != package {
+            return Err(AppError::new(
+                "PROTOCOL_RULE_RUNTIME_BINDING_MISMATCH",
+                "协议报文规则与当前协议包或 Schema 不一致。",
+            )
+            .entity(rule.rule_id().to_string()));
+        }
+        rule.validate_against_schema(schema)?;
+        validate_rule_direction(rule, topology)?;
+    }
+    sort_protocol_document_rules(&mut rules);
+    let compile = |stage: ProtocolRuleStage| {
+        let schema = match stage.direction() {
+            ProtocolDirection::Upstream => upstream_schema,
+            ProtocolDirection::Downstream => downstream_schema,
+        };
+        compile_rule_program(listener, package, schema, stage, &rules).map(Arc::new)
+    };
+    ProtocolDocumentRuleConnectionFactory::new(
+        compile(ProtocolRuleStage::ProxyToUpstream)?,
+        compile(ProtocolRuleStage::ProxyToApp)?,
+    )
+    .map_err(AppError::from)
+}
+
+fn validate_rule_direction(
+    rule: &ProtocolDocumentRuleDefinition,
+    topology: &SocketTopology,
+) -> AppResult<()> {
+    match topology {
+        SocketTopology::LocalResponder(_)
+            if !matches!(
+                rule.stage(),
+                ProtocolRuleStage::ProxyToUpstream | ProtocolRuleStage::ProxyToApp
+            ) =>
+        {
+            Err(AppError::new(
+                "PROTOCOL_RULE_DIRECTION_INVALID",
+                "本机应答运行快照只接受两个统一代理写出阶段。",
+            )
+            .entity(rule.rule_id().to_string()))
+        }
+        SocketTopology::Relay(_) | SocketTopology::LocalResponder(_) => Ok(()),
+    }
 }

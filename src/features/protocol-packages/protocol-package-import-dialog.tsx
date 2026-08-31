@@ -50,7 +50,7 @@ export function ProtocolPackageImportDialog({
               {state.kind === "preparing" && (
                 <div className="grid min-h-32 place-items-center gap-3 text-center" aria-live="polite">
                   <Spinner aria-label="正在选择并完整校验协议包 ZIP" />
-                  <p className="text-sm text-[var(--telemetry-muted)]">正在读取 ZIP，并校验 Manifest、Schema、Rhai 模块与入口……</p>
+                  <p className="text-sm text-[var(--telemetry-muted)]">正在读取 ZIP，并校验 Manifest、Schema、JavaScript 模块与入口……</p>
                 </div>
               )}
               {state.kind === "committing" && <BusyMessage label="正在安装协议包" detail="一次性确认凭据已提交，正在等待应用核心完成原子安装。" />}

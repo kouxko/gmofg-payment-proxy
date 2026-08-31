@@ -31,7 +31,7 @@ function option(
   return {
     package: { id: "iso-8583", version },
     name: `ISO 8583 ${version}`,
-    package_source: { type: "internal", built_in: false },
+    package_source: { type: "external", online: true },
     kind: "socket",
     capabilities,
     upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },

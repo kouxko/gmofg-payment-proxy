@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use intercept_proxy_domain::{
     Document, DocumentValue, ErrorCode, JsonPointer, ListenerId, ProtocolDocumentOperation,
     ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
-    SocketTopology,
+    ProtocolRuleStage, SocketTopology,
 };
-use intercept_proxy_exchange::{FrameResult, SocketContext};
+use intercept_proxy_exchange::SocketContext;
 use intercept_proxy_package_contract::{
     DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult as PackageFrameResult,
     PackageManifest, PackageRpcError,
@@ -106,54 +106,6 @@ fn non_rpc_error_diagnostic_is_uncorrelated_and_supports_downstream_direction() 
     assert_eq!(diagnostic.remote_code, None);
     assert_eq!(diagnostic.remote_message, None);
     assert_eq!(diagnostic.remote_data_summary, None);
-}
-
-#[tokio::test]
-async fn capabilities_run_frame_decode_display_rules_encode_in_order() {
-    let registration = registration();
-    let rpc = Arc::new(FakeExternalRpc::default());
-    let snapshot = ExternalSocketRuntimeSnapshot::new(
-        ExternalSocketPackageBinding::new(registration.clone(), rpc.clone()),
-        rules(&registration),
-        SocketTopology::default(),
-    );
-    let factory = ExternalSocketCapabilityFactoryAdapter::new(&snapshot, observation_metadata());
-    let mut capabilities = factory.create_upstream(connection()).unwrap();
-
-    assert_eq!(
-        capabilities.frame.split(b"abc").await.unwrap(),
-        FrameResult::Complete { consumed: 3 }
-    );
-    let context = SocketContext {
-        data: b"abc".to_vec(),
-    };
-    let document = capabilities.decode.decode(&context).await.unwrap();
-    assert_eq!(
-        capabilities.display.display(&document).await.unwrap(),
-        "<p>ok</p>"
-    );
-    let document = capabilities.rules.apply(document).await.unwrap();
-    let encoded = capabilities
-        .encode
-        .encode(&context, &document)
-        .await
-        .unwrap();
-    assert_eq!(encoded.data, b"encoded");
-
-    assert_eq!(
-        rpc.calls.lock().as_slice(),
-        [
-            "hooks.upstream.frame",
-            "hooks.upstream.decode",
-            "document.upstream.display",
-            "hooks.upstream.encode",
-        ]
-    );
-    let encoded_document = rpc.encoded_document.lock().clone().unwrap();
-    assert_eq!(
-        serde_json::to_value(encoded_document).unwrap()["amount"],
-        json!(42.0)
-    );
 }
 
 #[path = "tests/production_joint.rs"]

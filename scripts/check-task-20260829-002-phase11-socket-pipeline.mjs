@@ -83,7 +83,6 @@ for (const text of [
   "production_joint_pipeline_preserves_unchanged_bytes_without_encode_rpc",
   "production_joint_pipeline_changes_document_before_encode_rpc",
   "production_joint_pipeline_encode_failure_preserves_typed_identity",
-  "capabilities_run_frame_decode_display_rules_encode_in_order",
 ]) requireText("tests", text, `Cargo Phase11 test missing ${text}`);
 const socketRule = source.bindings.match(/export type SocketRuleContent = \{[\s\S]*?\n\};/u)?.[0] ?? "";
 if (!socketRule || /\b(?:headers|method|status|url)\b/u.test(socketRule)) {

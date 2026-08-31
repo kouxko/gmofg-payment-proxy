@@ -50,15 +50,12 @@ fn importer(
     let path = temp.path().join("package.zip");
     std::fs::write(&path, bytes).unwrap();
     let dialog = Arc::new(QueueDialog(Mutex::new(vec![path])));
-    let repository = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-        Arc::new(SqliteStore::in_memory().unwrap()),
-    ));
     let registry = Arc::new(ExternalPackageRegistryAdapter::new(Arc::new(
         SqliteStore::in_memory().unwrap(),
     )));
     (
         temp,
-        ProtocolPackageImportAdapter::new(repository, Arc::clone(&registry), dialog),
+        ProtocolPackageImportAdapter::new(Arc::clone(&registry), dialog),
         registry,
     )
 }
@@ -119,8 +116,8 @@ async fn commit_persists_enabled_archive_without_evaluating_top_level_code_in_im
 async fn legacy_toml_rhai_and_wrapper_archives_never_reach_legacy_prepare() {
     for entries in [
         vec![
-            ("manifest.toml", b"api=1".as_slice()),
-            ("protocol.rhai", b"fn x(){}".as_slice()),
+            ("manifest.json", b"api=1".as_slice()),
+            ("protocol.js", b"fn x(){}".as_slice()),
         ],
         vec![
             ("package/manifest.json", MANIFEST.as_bytes()),

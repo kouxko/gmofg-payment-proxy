@@ -107,6 +107,39 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
         self.records.lock().remove(package);
         Ok(())
     }
+
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        unused()
+    }
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
+        unused()
+    }
+    async fn preflight_application_packages(
+        &self,
+        _: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        unused()
+    }
+    async fn preflight_installed_packages(
+        &self,
+        _: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        unused()
+    }
+    async fn replace_application_bundle(
+        &self,
+        _: Vec<PortableApplicationProtocolPackage>,
+        _: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        unused()
+    }
+    async fn reset_application_bundle(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
+        unused()
+    }
 }
 
 fn external_detail(local_process: bool) -> ExternalPackageDetailViewModel {

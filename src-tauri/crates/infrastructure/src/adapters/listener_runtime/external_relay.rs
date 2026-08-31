@@ -8,8 +8,6 @@ use std::sync::Arc;
 #[cfg(test)]
 use intercept_proxy_application::ExternalPackageCallStage;
 use intercept_proxy_domain::ProtocolDirection;
-#[cfg(test)]
-use intercept_proxy_domain::ProtocolRuleStage;
 use intercept_proxy_exchange::{Direction, Downstream, Upstream};
 use intercept_proxy_runtime::{
     PipelinePorts, SocketConnectionIdentity, SocketDirectionCapabilities,
@@ -17,8 +15,6 @@ use intercept_proxy_runtime::{
 };
 
 use super::ProtocolDocumentRuleConnectionFactory;
-#[cfg(test)]
-use capabilities::ExternalEncode;
 use capabilities::{ExternalDecode, ExternalDisplay, ExternalFrame};
 
 mod capabilities;
@@ -39,23 +35,10 @@ pub(super) struct ExternalSocketCapabilityFactoryAdapter {
     binding: ExternalSocketPackageBinding,
     rules: ProtocolDocumentRuleConnectionFactory,
     observation: SocketObservationMetadata,
-    pipeline: Option<Arc<dyn PipelinePorts>>,
+    pipeline: Arc<dyn PipelinePorts>,
 }
 
 impl ExternalSocketCapabilityFactoryAdapter {
-    #[cfg(test)]
-    pub(super) fn new(
-        snapshot: &ExternalSocketRuntimeSnapshot,
-        observation: SocketObservationMetadata,
-    ) -> Self {
-        Self {
-            binding: snapshot.binding.clone(),
-            rules: snapshot.rules.clone(),
-            observation,
-            pipeline: None,
-        }
-    }
-
     pub(super) fn new_with_pipeline(
         snapshot: &ExternalSocketRuntimeSnapshot,
         observation: SocketObservationMetadata,
@@ -65,7 +48,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
             binding: snapshot.binding.clone(),
             rules: snapshot.rules.clone(),
             observation,
-            pipeline: Some(pipeline),
+            pipeline,
         }
     }
 
@@ -90,41 +73,20 @@ impl ExternalSocketCapabilityFactoryAdapter {
         let (rules, encode): (
             Box<dyn intercept_proxy_exchange::Rules>,
             Box<dyn intercept_proxy_exchange::Encode<intercept_proxy_exchange::Socket, D>>,
-        ) = if let Some(pipeline) = &self.pipeline {
-            (
-                Box::new(joint_socket::JointSocketRules::new(
-                    Arc::clone(pipeline),
-                    connection.clone(),
-                    self.observation.listener_id.clone(),
-                    Arc::clone(&rpc),
-                    binding.protocol_direction,
-                    Arc::clone(&observed),
-                    Arc::clone(&prepared),
-                    self.rules.direction_programs(binding.protocol_direction),
-                    package.clone(),
-                )),
-                Box::new(joint_socket::PreparedSocketEncode::<D>::new(prepared)),
-            )
-        } else {
-            #[cfg(test)]
-            {
-                (
-                    Box::new(
-                        self.rules
-                            .connection(connection.clone(), binding.rules_stage),
-                    ),
-                    Box::new(ExternalEncode::<D>::new(
-                        Arc::clone(&rpc),
-                        methods.encode,
-                        package.clone(),
-                        connection.clone(),
-                        binding.protocol_direction,
-                    )),
-                )
-            }
-            #[cfg(not(test))]
-            unreachable!("production external Socket factory always has pipeline ports")
-        };
+        ) = (
+            Box::new(joint_socket::JointSocketRules::new(
+                Arc::clone(&self.pipeline),
+                connection.clone(),
+                self.observation.listener_id.clone(),
+                Arc::clone(&rpc),
+                binding.protocol_direction,
+                Arc::clone(&observed),
+                Arc::clone(&prepared),
+                self.rules.direction_programs(binding.protocol_direction),
+                package.clone(),
+            )),
+            Box::new(joint_socket::PreparedSocketEncode::<D>::new(prepared)),
+        );
         SocketDirectionCapabilities::new(
             Box::new(ExternalFrame::<D>::new(
                 Arc::clone(&rpc),
@@ -150,13 +112,9 @@ impl ExternalSocketCapabilityFactoryAdapter {
         match direction {
             ProtocolDirection::Upstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Upstream,
-                #[cfg(test)]
-                rules_stage: ProtocolRuleStage::ProxyToUpstream,
             },
             ProtocolDirection::Downstream => DirectionBinding {
                 protocol_direction: ProtocolDirection::Downstream,
-                #[cfg(test)]
-                rules_stage: ProtocolRuleStage::ProxyToApp,
             },
         }
     }
@@ -185,8 +143,6 @@ impl SocketProtocolCapabilityFactory for ExternalSocketCapabilityFactoryAdapter 
 #[derive(Clone, Copy)]
 struct DirectionBinding {
     protocol_direction: ProtocolDirection,
-    #[cfg(test)]
-    rules_stage: ProtocolRuleStage,
 }
 
 impl DirectionBinding {
@@ -195,15 +151,11 @@ impl DirectionBinding {
             ProtocolDirection::Upstream => DirectionMethods {
                 frame: "hooks.upstream.frame",
                 decode: "hooks.upstream.decode",
-                #[cfg(test)]
-                encode: "hooks.upstream.encode",
                 display: "document.upstream.display",
             },
             ProtocolDirection::Downstream => DirectionMethods {
                 frame: "hooks.downstream.frame",
                 decode: "hooks.downstream.decode",
-                #[cfg(test)]
-                encode: "hooks.downstream.encode",
                 display: "document.downstream.display",
             },
         }
@@ -213,8 +165,6 @@ impl DirectionBinding {
 struct DirectionMethods {
     frame: &'static str,
     decode: &'static str,
-    #[cfg(test)]
-    encode: &'static str,
     display: &'static str,
 }
 

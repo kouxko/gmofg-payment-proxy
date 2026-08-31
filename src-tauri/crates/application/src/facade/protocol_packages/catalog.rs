@@ -1,6 +1,6 @@
 //! Listener 协议包目录的严格组装。
 
-use super::{Application, ensure_description_identity, ensure_external_description};
+use super::{Application, ensure_external_description};
 use crate::{
     AppError, AppResult, ListenerProtocolPackageCatalogViewModel,
     ListenerProtocolPackageOptionViewModel, ProtocolPackageSourceViewModel,
@@ -54,21 +54,6 @@ impl Application {
                 continue;
             }
             let description = match version.source {
-                ProtocolPackageSourceViewModel::Internal { .. } => {
-                    // 内置来源使用 portability 的纯读 preflight，从规范持久化文件重新恢复
-                    // 和编译；不能复用 compiler.describe 的暖 AST 缓存。
-                    let Ok(descriptions) = self
-                        .protocol_package_portability
-                        .preflight_installed_packages(std::slice::from_ref(&version.package))
-                        .await
-                    else {
-                        continue;
-                    };
-                    let [description] = descriptions.as_slice() else {
-                        continue;
-                    };
-                    description.clone()
-                }
                 ProtocolPackageSourceViewModel::External { online: true } => {
                     let Ok(description) = self.external_packages.describe(&version.package).await
                     else {
@@ -78,14 +63,7 @@ impl Application {
                 }
                 ProtocolPackageSourceViewModel::External { online: false } => continue,
             };
-            let description_valid = match version.source {
-                ProtocolPackageSourceViewModel::Internal { .. } => {
-                    ensure_description_identity(&version.package, &description)
-                }
-                ProtocolPackageSourceViewModel::External { .. } => {
-                    ensure_external_description(&version.package, &description)
-                }
-            };
+            let description_valid = ensure_external_description(&version.package, &description);
             if description_valid.is_err() {
                 continue;
             }

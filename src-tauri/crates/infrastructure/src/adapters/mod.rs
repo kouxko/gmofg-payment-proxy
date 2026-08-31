@@ -5,6 +5,7 @@
 
 mod android_adb;
 mod body_codecs;
+mod builtin_protocol_package;
 mod bundle;
 mod capture;
 mod certificates;
@@ -36,7 +37,6 @@ mod pipeline;
 mod protected_secrets;
 mod protocol_package_import;
 mod protocol_package_usage;
-mod protocol_packages;
 mod rules;
 mod settings;
 mod workspaces;
@@ -46,6 +46,8 @@ pub use crate::package_transport::{
 };
 pub use android_adb::AndroidAdbAdapter;
 pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
+pub use builtin_protocol_package::BuiltinProtocolPackageAdapter;
+pub(crate) use builtin_protocol_package::PackageArchiveLimits;
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;
 pub use certificates::CertificateServiceAdapter;
@@ -78,7 +80,6 @@ pub use pipeline::{RuntimePipelineAdapter, RuntimePipelineProductHooks};
 pub use protected_secrets::ProtectedSecretAdapter;
 pub use protocol_package_import::ProtocolPackageImportAdapter;
 pub use protocol_package_usage::ProtocolPackageUsageQueryAdapter;
-pub use protocol_packages::ProtocolPackageRepositoryAdapter;
 pub use rules::RuleRepositoryAdapter;
 pub use settings::SettingsRepositoryAdapter;
 pub use workspaces::WorkspaceRepositoryAdapter;

@@ -1,6 +1,6 @@
 //! HTTP Exchange 的方向能力装配合同。
 //!
-//! Proxy 核心只认识独立的 Decode、Display、Rules、Encode 能力。Rhai、外部进程和 Rust
+//! Proxy 核心只认识独立的 Decode、Display、Rules、Encode 能力。JavaScript、外部进程和 Rust
 //! 内建实现都通过同一个 factory 注入，禁止把已经完成整条协议处理的旧 processor 包进
 //! Decode 再用空 adapter 冒充其余阶段。
 

@@ -13,7 +13,7 @@ use intercept_proxy_application::{
     AppError, AppResult, EnvironmentMaterialProbe, EnvironmentMaterialProbeKind,
     EnvironmentValidationLayer, EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest,
     EnvironmentValidationStatus, ExternalPackageApplicationPort, ProtocolPackageSourceViewModel,
-    ProtocolPackageStorePort, ProtocolPackageValidationViewModel,
+    ProtocolPackageValidationViewModel,
 };
 use tokio::net::{TcpStream, lookup_host};
 use zeroize::Zeroizing;
@@ -34,7 +34,6 @@ const MAX_CONCURRENT_NETWORK_PROBES: usize = 4;
 const MAX_UPSTREAM_TARGETS: usize = 16;
 
 pub(crate) struct EnvironmentConfigurationValidationAdapter {
-    internal_packages: Arc<dyn ProtocolPackageStorePort>,
     external_packages: Arc<dyn ExternalPackageApplicationPort>,
     installation_tls: Arc<dyn ListenerMitmAuthorityProvider>,
     certificates: CertificateService,
@@ -53,12 +52,10 @@ impl fmt::Debug for EnvironmentConfigurationValidationAdapter {
 
 impl EnvironmentConfigurationValidationAdapter {
     pub(crate) fn new(
-        internal_packages: Arc<dyn ProtocolPackageStorePort>,
         external_packages: Arc<dyn ExternalPackageApplicationPort>,
         installation_tls: Arc<dyn ListenerMitmAuthorityProvider>,
     ) -> Self {
         Self {
-            internal_packages,
             external_packages,
             installation_tls,
             certificates: CertificateService,
@@ -162,14 +159,11 @@ impl EnvironmentConfigurationValidationAdapter {
         packages: &[intercept_proxy_application::ProtocolPackageRef],
     ) -> AppResult<EnvironmentValidationStatus> {
         for package in packages {
-            let projection = match self.internal_packages.get(package).await? {
-                Some(projection) => projection,
-                None => self
-                    .external_packages
-                    .get(package)
-                    .await?
-                    .ok_or_else(|| stable_error("PROTOCOL_PACKAGE_NOT_INSTALLED"))?,
-            };
+            let projection = self
+                .external_packages
+                .get(package)
+                .await?
+                .ok_or_else(|| stable_error("PROTOCOL_PACKAGE_NOT_INSTALLED"))?;
             if !projection.enabled {
                 return Err(stable_error("PROTOCOL_PACKAGE_DISABLED"));
             }

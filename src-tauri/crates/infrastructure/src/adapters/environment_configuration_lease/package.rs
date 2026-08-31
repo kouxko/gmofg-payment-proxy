@@ -1,7 +1,4 @@
-use intercept_proxy_application::{
-    AppResult, ProtocolPackageRef, ProtocolPackageSourceViewModel, ProtocolPackageStorePort,
-    ProtocolPackageVersionViewModel,
-};
+use intercept_proxy_application::{AppResult, ProtocolPackageRef, ProtocolPackageVersionViewModel};
 use uuid::Uuid;
 
 use super::{
@@ -28,21 +25,7 @@ impl EnvironmentApplyRuntimeAdapter {
                 projection,
             ));
         }
-        let current = ProtocolPackageStorePort::get(self.packages.as_ref(), package)
-            .await
-            .map_err(|_| package_unavailable())?
-            .ok_or_else(package_unavailable)?;
-        let generation = self
-            .packages
-            .observe_generation(package)
-            .await
-            .map_err(|_| package_unavailable())?;
-        let online = match current.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => true,
-            ProtocolPackageSourceViewModel::External { online } => online,
-        };
-        let projection = self.observe_projection(package, &current, online);
-        Ok(exact_observation(generation, &current, online, projection))
+        Err(package_unavailable())
     }
 
     fn observe_projection(

@@ -11,7 +11,7 @@ Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论�
 1. [模块与代码组织](modules.md)：Rust crate、Tauri 组合根和前端 feature 的所有权。
 2. [Exchange 与 Pipeline](exchange-pipeline.md)：协议无关核心、强类型方向和可替换能力。
 3. [数据流、错误与验证](data-flow.md)：真实连接如何按顺序转发、观察和失败。
-4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema、Rhai 与外部包。
+4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema 与 Sidecar 包。
 5. [运行时观测与诊断](runtime-observability.md)：内存证据、日志、UI 实时刷新、MCP 和复现报告。
 6. [安全、TLS 与持久化](security-and-persistence.md)：双连接 TLS/mTLS、SQLite 与应用导入导出。
 7. [Android VPN 透明路由](android-vpn-transparent-routing.md)：设备侧 TUN、SOCKS5 与流量恢复。
@@ -31,7 +31,7 @@ flowchart LR
 - Rust 是业务真相源；Next.js 只负责展示 ViewModel、收集操作意图和维护纯视觉状态。
 - `domain` 保存纯领域不变量，`application` 编排用例，`infrastructure` 实现端口并装配
   持久化和系统能力，`proxy` 处理 HTTP/Socket/TLS transport。
-- `exchange` 是连接级数据交换核心，只依赖 `domain`，不依赖 Tauri、SQLite、Rhai 或具体网络库。
+- `exchange` 是连接级数据交换核心，只依赖 `domain`，不依赖 Tauri、SQLite、Sidecar 或具体网络库。
 - 每个已接受的 App connection 对应一个 `Exchange<P>`；协议模式严格执行一问一答，
   Socket 透明模式只转发真实读取到的字节。
 - HTTP 与 Socket 共享 `Exchange/Pipeline/Envelope` 模型，但各自保留不同 Context、Reader、
@@ -53,7 +53,7 @@ flowchart LR
 | Exchange 核心 | `src-tauri/crates/exchange/src/lib.rs` |
 | HTTP/Socket/TLS runtime | `src-tauri/crates/proxy/src/lib.rs` |
 | 系统与持久化适配器 | `src-tauri/crates/infrastructure/src/lib.rs` |
-| 协议包编译与执行 | `src-tauri/crates/protocol-scripting/src/lib.rs` |
+| 协议包合同与严格 ZIP | `src-tauri/crates/package-contract/src/lib.rs`、`src-tauri/crates/package-runtime/src/lib.rs` |
 | 前端持久外壳 | `src/features/shell/app-runtime.tsx` |
 | Rust 生成的 IPC 类型 | `src/generated/rust-types.ts` |
 

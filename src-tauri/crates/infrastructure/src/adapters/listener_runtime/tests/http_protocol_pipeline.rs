@@ -39,8 +39,8 @@ use zip::{ZipWriter, write::SimpleFileOptions};
 use crate::{
     SqliteStore,
     adapters::{
-        CaptureRepositoryAdapter, ProtocolPackageRepositoryAdapter, RuntimePipelineAdapter,
-        RuntimePipelineProductHooks, pipeline::RuntimeRuleRepository,
+        CaptureRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+        pipeline::RuntimeRuleRepository,
     },
 };
 

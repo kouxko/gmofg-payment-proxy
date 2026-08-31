@@ -243,7 +243,7 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 | TLS 与 mTLS | `src-tauri/crates/proxy/tests/tls_mtls.rs`、`src-tauri/crates/proxy/tests/reverse_listener/` |
 | HTTP 协议包完整 Pipeline | `src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/http_protocol_pipeline.rs` |
 | Socket Remote/Local/透明 runtime | `src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/socket_runtime.rs`、`local_responder_runtime.rs` |
-| 脚本规则方向和冻结快照 | `src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/scripted_snapshot/rule_matrix.rs` |
+| Socket 双向规则、Encode 与事务 | `src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/tests/production_joint.rs` |
 | HTTP 标准规则能力矩阵 | `src-tauri/crates/application/src/requirements_tests/settings_lifecycle.rs`、`src/features/rules/rules-view.test.tsx` |
 | Observation 顺序、容量和 UI 刷新 | `src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs`、`src/features/capture/exchange-observation-view.test.tsx` |
 | 架构依赖和文件大小 | `scripts/check-architecture-boundaries.mjs`、`scripts/check-source-file-sizes.mjs` |

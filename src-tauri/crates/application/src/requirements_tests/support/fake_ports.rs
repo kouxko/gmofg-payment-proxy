@@ -99,60 +99,6 @@ pub(in crate::requirements_tests) fn unused<T>() -> AppResult<T> {
 }
 
 #[derive(Debug, Default)]
-pub(in crate::requirements_tests) struct UnusedExternalPackagePort;
-
-#[async_trait]
-impl ExternalPackageApplicationPort for UnusedExternalPackagePort {
-    async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel> {
-        Ok(ExternalPackageServiceStatusViewModel {
-            websocket_url: "ws://0.0.0.0:8765/packages".into(),
-            fixed_path: "/packages".into(),
-            online_connection_count: 0,
-            state: ExternalPackageServiceStateViewModel::Listening,
-            authentication_enabled: false,
-        })
-    }
-
-    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        Ok(Vec::new())
-    }
-
-    async fn get(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
-        Ok(None)
-    }
-
-    async fn describe(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
-        unused()
-    }
-
-    async fn detail(&self, _: &ProtocolPackageRef) -> AppResult<ExternalPackageDetailViewModel> {
-        unused()
-    }
-
-    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
-        unused()
-    }
-
-    async fn restart(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        unused()
-    }
-
-    async fn disconnect(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        unused()
-    }
-
-    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        unused()
-    }
-}
-
-#[derive(Debug, Default)]
 pub(in crate::requirements_tests) struct NoopApplicationConfigurationStore;
 
 #[async_trait]

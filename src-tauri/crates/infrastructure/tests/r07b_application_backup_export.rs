@@ -319,7 +319,7 @@ fn snapshot() -> ApplicationBackupExportSnapshot {
             "protocol_packages": [{
                 "package": { "id": "sample", "version": "1.0.0" },
                 "enabled": true,
-                "files": ["protocol-packages/sample/1.0.0/manifest.toml"]
+                "files": ["protocol-packages/sample/1.0.0/manifest.json"]
             }],
             "portable_materials": []
         }))
@@ -329,7 +329,7 @@ fn snapshot() -> ApplicationBackupExportSnapshot {
     ApplicationBackupExportSnapshot {
         document,
         files: BTreeMap::from([(
-            PortableArchivePath::new("protocol-packages/sample/1.0.0/manifest.toml").unwrap(),
+            PortableArchivePath::new("protocol-packages/sample/1.0.0/manifest.json").unwrap(),
             b"manifest".to_vec(),
         )]),
     }

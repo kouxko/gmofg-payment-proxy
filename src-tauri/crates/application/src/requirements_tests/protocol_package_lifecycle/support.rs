@@ -2,13 +2,13 @@ use std::collections::HashMap;
 
 use super::*;
 
-mod portability;
+mod models;
+pub(super) use models::*;
 
 #[derive(Debug, Default)]
 pub(super) struct ProtocolPortFailures {
     pub list: Option<AppError>,
     pub get: Option<AppError>,
-    pub compile: Option<AppError>,
     pub describe: Option<AppError>,
     pub installed_preflight: Option<AppError>,
     pub import: Option<AppError>,
@@ -22,9 +22,6 @@ pub(super) struct FakeProtocolPackageServices {
     records: parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageVersionViewModel>>,
     usages: parking_lot::Mutex<HashMap<ProtocolPackageRef, Vec<ProtocolPackageUsageViewModel>>>,
     usage_responses: parking_lot::Mutex<VecDeque<AppResult<Vec<ProtocolPackageUsageViewModel>>>>,
-    compilation_results: parking_lot::Mutex<
-        HashMap<ProtocolPackageRef, AppResult<ProtocolPackageCompilationReceipt>>,
-    >,
     descriptions:
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
     import_responses:
@@ -33,7 +30,6 @@ pub(super) struct FakeProtocolPackageServices {
         parking_lot::Mutex<VecDeque<AppResult<ProtocolPackageImportViewModel>>>,
     pub failures: parking_lot::Mutex<ProtocolPortFailures>,
     pub get_calls: AtomicUsize,
-    pub compile_calls: AtomicUsize,
     pub describe_calls: AtomicUsize,
     pub installed_preflight_calls: AtomicUsize,
     pub import_calls: AtomicUsize,
@@ -43,9 +39,9 @@ pub(super) struct FakeProtocolPackageServices {
     pub delete_calls: AtomicUsize,
     pub application_export_calls: AtomicUsize,
     pub exact_calls: parking_lot::Mutex<Vec<ProtocolPackageRef>>,
-    pub block_compile: AtomicBool,
-    pub compile_entered: tokio::sync::Notify,
-    pub continue_compile: tokio::sync::Notify,
+    pub block_describe: AtomicBool,
+    pub describe_entered: tokio::sync::Notify,
+    pub continue_describe: tokio::sync::Notify,
     pub block_installed_preflight: AtomicBool,
     pub installed_preflight_entered: tokio::sync::Notify,
     pub continue_installed_preflight: tokio::sync::Notify,
@@ -79,14 +75,6 @@ impl FakeProtocolPackageServices {
         self.usage_responses.lock().push_back(response);
     }
 
-    pub fn set_compilation_result(
-        &self,
-        package: ProtocolPackageRef,
-        result: AppResult<ProtocolPackageCompilationReceipt>,
-    ) {
-        self.compilation_results.lock().insert(package, result);
-    }
-
     pub fn set_description(
         &self,
         package: ProtocolPackageRef,
@@ -109,10 +97,31 @@ impl FakeProtocolPackageServices {
     fn record_call(&self, package: &ProtocolPackageRef) {
         self.exact_calls.lock().push(package.clone());
     }
+
+    fn preflight<T>(
+        &self,
+        packages: &[T],
+        identity: impl Fn(&T) -> &ProtocolPackageRef,
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        let descriptions = self.descriptions.lock();
+        packages
+            .iter()
+            .map(|package| {
+                let package = identity(package);
+                Ok(descriptions
+                    .get(package)
+                    .cloned()
+                    .unwrap_or_else(|| description(package.clone())))
+            })
+            .collect()
+    }
 }
 
 #[async_trait]
-impl ProtocolPackageStorePort for FakeProtocolPackageServices {
+impl ExternalPackageApplicationPort for FakeProtocolPackageServices {
+    async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel> {
+        unused()
+    }
     async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
         if let Some(error) = self.failures.lock().list.clone() {
             return Err(error);
@@ -130,6 +139,53 @@ impl ProtocolPackageStorePort for FakeProtocolPackageServices {
             return Err(error);
         }
         Ok(self.records.lock().get(package).cloned())
+    }
+
+    async fn describe(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
+        self.describe_calls.fetch_add(1, Ordering::SeqCst);
+        self.record_call(package);
+        if self.block_describe.swap(false, Ordering::SeqCst) {
+            self.describe_entered.notify_one();
+            self.continue_describe.notified().await;
+        }
+        if let Some(error) = self.failures.lock().describe.clone() {
+            return Err(error);
+        }
+        if !self.records.lock().contains_key(package) {
+            return Err(AppError::new(
+                "PROTOCOL_PACKAGE_NOT_FOUND",
+                "测试记录不存在。",
+            ));
+        }
+        Ok(self
+            .descriptions
+            .lock()
+            .get(package)
+            .cloned()
+            .unwrap_or_else(|| description(package.clone())))
+    }
+
+    async fn detail(&self, _: &ProtocolPackageRef) -> AppResult<ExternalPackageDetailViewModel> {
+        let methods = ExternalPackageDirectionMethodsViewModel {
+            frame: "hooks.frame".into(),
+            decode: "hooks.decode".into(),
+            encode: "hooks.encode".into(),
+            display: "hooks.display".into(),
+        };
+        Ok(ExternalPackageDetailViewModel {
+            local_process: false,
+            remote_address: Some("127.0.0.1:9000".into()),
+            connection_id: None,
+            first_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
+            last_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
+            registration_fingerprint_sha256: "00".repeat(32),
+            upstream_methods: methods.clone(),
+            downstream_methods: methods,
+            recent_error: None,
+        })
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
@@ -158,60 +214,73 @@ impl ProtocolPackageStorePort for FakeProtocolPackageServices {
             .ok_or_else(|| AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。"))?;
         Ok(())
     }
-}
 
-#[async_trait]
-impl ProtocolPackageCompilerPort for FakeProtocolPackageServices {
-    async fn compile_fresh(
-        &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageCompilationReceipt> {
-        self.compile_calls.fetch_add(1, Ordering::SeqCst);
-        self.record_call(package);
-        if self.block_compile.load(Ordering::SeqCst) {
-            self.compile_entered.notify_one();
-            self.continue_compile.notified().await;
-        }
-        if let Some(error) = self.failures.lock().compile.clone() {
-            return Err(error);
-        }
-        if let Some(result) = self.compilation_results.lock().get(package).cloned() {
-            return result;
-        }
-        let record = self
-            .records
-            .lock()
-            .get(package)
-            .cloned()
-            .ok_or_else(|| AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试记录不存在。"))?;
-        Ok(ProtocolPackageCompilationReceipt {
-            package: package.clone(),
-            host_api: record.host_api,
-            compatible: true,
-        })
+    async fn restart(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
+    async fn disconnect(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        Ok(())
     }
 
-    async fn describe(
+    async fn application_backup_baseline(
         &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageDescriptionViewModel> {
-        self.describe_calls.fetch_add(1, Ordering::SeqCst);
-        self.record_call(package);
-        if let Some(error) = self.failures.lock().describe.clone() {
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        Ok(self
+            .records
+            .lock()
+            .values()
+            .map(|record| ApplicationBackupProtocolPackageBaseline {
+                package: record.package.clone(),
+                enabled: record.enabled,
+                generation: uuid::Uuid::nil(),
+            })
+            .collect())
+    }
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
+        self.application_export_calls.fetch_add(1, Ordering::SeqCst);
+        Ok(self
+            .records
+            .lock()
+            .values()
+            .map(|record| PortableApplicationProtocolPackage {
+                package: record.package.clone(),
+                files: Vec::new(),
+                enabled: record.enabled,
+            })
+            .collect())
+    }
+    async fn preflight_application_packages(
+        &self,
+        packages: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        self.preflight(packages, |package| &package.package)
+    }
+    async fn preflight_installed_packages(
+        &self,
+        packages: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        self.installed_preflight_calls
+            .fetch_add(1, Ordering::SeqCst);
+        if self.block_installed_preflight.swap(false, Ordering::SeqCst) {
+            self.installed_preflight_entered.notify_one();
+            self.continue_installed_preflight.notified().await;
+        }
+        if let Some(error) = self.failures.lock().installed_preflight.clone() {
             return Err(error);
         }
-        if !self.records.lock().contains_key(package) {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_NOT_FOUND",
-                "测试记录不存在。",
-            ));
-        }
-        Ok(self
-            .descriptions
-            .lock()
-            .get(package)
-            .cloned()
-            .unwrap_or_else(|| description(package.clone())))
+        self.preflight(packages, |package| package)
+    }
+    async fn replace_application_bundle(
+        &self,
+        _: Vec<PortableApplicationProtocolPackage>,
+        _: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        unused()
+    }
+    async fn reset_application_bundle(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
+        unused()
     }
 }
 
@@ -287,93 +356,6 @@ impl ProtocolPackageUsageQueryPort for FakeProtocolPackageServices {
     }
 }
 
-pub(super) fn package(id: &str, version: &str) -> ProtocolPackageRef {
-    ProtocolPackageRef {
-        id: ProtocolPackageId::new(id).unwrap(),
-        version: ProtocolPackageVersion::new(version).unwrap(),
-    }
-}
-
-pub(super) fn record(
-    package: ProtocolPackageRef,
-    enabled: bool,
-) -> ProtocolPackageVersionViewModel {
-    ProtocolPackageVersionViewModel {
-        name: format!("{} {}", package.id, package.version),
-        package,
-        host_api: 1,
-        kind: ProtocolPackageKindViewModel::Socket,
-        source: ProtocolPackageSourceViewModel::Internal { built_in: false },
-        enabled,
-        validation: ProtocolPackageValidationViewModel::Valid,
-        installed_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),
-    }
-}
-
-pub(super) fn usage(
-    workspace_id: WorkspaceId,
-    listener_id: ListenerId,
-    runtime_state: ListenerRuntimeState,
-) -> ProtocolPackageUsageViewModel {
-    ProtocolPackageUsageViewModel {
-        workspace_id,
-        workspace_name: format!("Workspace {workspace_id}"),
-        listener_id,
-        listener_name: format!("Listener {listener_id}"),
-        listener_enabled: runtime_state != ListenerRuntimeState::Stopped,
-        runtime_state,
-    }
-}
-
-pub(super) fn description(package: ProtocolPackageRef) -> ProtocolPackageDescriptionViewModel {
-    let upstream_schema = ProtocolPackageSchemaViewModel {
-        root: intercept_proxy_domain::DocumentSchemaNode::Object {
-            title: Some("Payments".into()),
-            properties: std::collections::BTreeMap::from([
-                (
-                    "trace_id".into(),
-                    intercept_proxy_domain::DocumentSchemaNode::String {
-                        title: Some("Trace ID".into()),
-                    },
-                ),
-                (
-                    "amount".into(),
-                    intercept_proxy_domain::DocumentSchemaNode::Number {
-                        title: Some("Amount".into()),
-                    },
-                ),
-                (
-                    "approved".into(),
-                    intercept_proxy_domain::DocumentSchemaNode::Boolean {
-                        title: Some("Approved".into()),
-                    },
-                ),
-            ]),
-        },
-    };
-    ProtocolPackageDescriptionViewModel {
-        package,
-        kind: ProtocolPackageKindViewModel::Socket,
-        capabilities: ProtocolPackageCapabilitiesViewModel {
-            upstream: ProtocolPackageDirectionCapabilitiesViewModel {
-                frame: true,
-                decode: true,
-                encode: true,
-            },
-            downstream: ProtocolPackageDirectionCapabilitiesViewModel {
-                frame: true,
-                decode: true,
-                encode: false,
-            },
-            display: true,
-        },
-        upstream_schema: Some(upstream_schema.clone()),
-        downstream_schema: Some(ProtocolPackageSchemaViewModel {
-            root: upstream_schema.root,
-        }),
-    }
-}
-
 pub(super) fn application(
     services: Arc<FakeProtocolPackageServices>,
     workspaces: Arc<InMemoryWorkspaceStore>,
@@ -412,13 +394,10 @@ pub(super) fn application_with_proxy_ports(
             listener_runtime: runtime,
             listener_certificates: ports,
             protocol_packages: ProtocolPackageApplicationServices {
-                store: services.clone(),
-                compiler: services.clone(),
                 importer: services.clone(),
                 builtin: unused_protocol_package_services().builtin,
                 usage_query: services.clone(),
-                portability: services,
-                external: Arc::new(UnusedExternalPackagePort),
+                external: services,
             },
             events: Arc::new(EventHub::default()),
             environment_baseline_capture:

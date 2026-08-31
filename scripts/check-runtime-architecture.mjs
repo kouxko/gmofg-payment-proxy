@@ -25,7 +25,6 @@ const infrastructureCleanupFiles = [
   "src/adapters/listener_runtime/document_rule_compiler.rs",
   "src/adapters/pipeline/rule_runtime.rs",
   "src/adapters/pipeline/rule_runtime/actor.rs",
-  "src/adapters/protocol_packages/runtime_snapshot.rs",
   "src/adapters/android_adb/owner.rs",
   "src/sqlite/executor.rs",
 ];
@@ -62,7 +61,6 @@ const infrastructureCleanupSpawnLedger = [
   ledger("src/adapters/listener_runtime/lifecycle.rs", "finish_stopping_owned", "tokio::spawn", "listener-runtime", "owner.finish_stopping(listener_id, handle).await", "src/adapters/listener_runtime/tests/body_codec_cancellation.rs", "aborted_stop_caller_cannot_cancel_epoch_cleanup"),
   ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run(", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"),
   ledger("src/adapters/pipeline/rule_runtime.rs", "runtime_stopping", "tokio::spawn", "rule-runtime", "sender.send(Command::Stop", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborted_runtime_stopping_still_retires_epoch_and_resets_actor"),
-  ledger("src/adapters/protocol_packages/runtime_snapshot.rs", "freeze_for_listener_start_async", "tokio::task::spawn_blocking", "protocol-runtime", "freeze_loaded", "src/adapters/protocol_packages/tests/runtime_snapshot_async.rs", "listener_snapshot_waits_asynchronously_and_queued_cancel_does_not_run_sqlite_work"),
   ledger("src/adapters/listener_runtime/document_rule_compiler.rs", "compile", "tokio::task::spawn_blocking", "document-rule-compiler", "compile()", "src/adapters/listener_runtime/external_relay/contract_tests.rs", "queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unchanged"),
   ledger("src/sqlite/executor.rs", "execute", "tokio::task::spawn_blocking", "sqlite-executor", "operation(&store)", "src/sqlite/executor.rs", "cancelling_waiter_does_not_strand_the_sqlite_connection_lock"),
   ledger("src/sqlite/executor.rs", "open_sqlite_persistence_with", "tokio::task::spawn_blocking", "sqlite-bootstrap", "open", "src/sqlite/executor.rs", "cancelling_started_sqlite_open_only_stops_waiting"),
@@ -309,8 +307,6 @@ async function checkInfrastructureCleanupLedger(root, ledgerEntries) {
         && entry.file.startsWith("src/adapters/listener_runtime/"))
       || (entry.owner === "rule-runtime"
         && entry.file.startsWith("src/adapters/pipeline/"))
-      || (entry.owner === "protocol-runtime"
-        && entry.file === "src/adapters/protocol_packages/runtime_snapshot.rs")
       || (entry.owner === "document-rule-compiler"
         && entry.file === "src/adapters/listener_runtime/document_rule_compiler.rs")
       || (entry.owner === "android-runtime-owner"
@@ -389,7 +385,6 @@ const fixtureCases = [
       "src-tauri/crates/package-contract/Cargo.toml": `[package]\nname = "intercept-proxy-package-contract"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-domain = { path = "../domain" }\n`,
       "src-tauri/crates/package-runtime/Cargo.toml": `[package]\nname = "intercept-proxy-package-runtime"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-domain = { path = "../domain" }\nintercept-proxy-package-contract = { path = "../package-contract" }\n`,
       "src-tauri/crates/infrastructure/Cargo.toml": `[package]\nname = "intercept-proxy-infrastructure"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-application = { path = "../application" }\nintercept-proxy-package-contract = { path = "../package-contract" }\nintercept-proxy-package-runtime = { path = "../package-runtime" }\n`,
-      "src-tauri/crates/protocol-scripting/Cargo.toml": `[package]\nname = "intercept-proxy-protocol-scripting"\nversion = "0.0.0"\n[dependencies]\nintercept-proxy-domain = { path = "../domain" }\nintercept-proxy-package-runtime = { path = "../package-runtime" }\n`,
       "src-tauri/crates/proxy/src/listener/supervisor.rs": `pub async fn run() { tokio::spawn(async move { owned().await }); }\n`,
       "src-tauri/crates/proxy/src/listener/tests.rs": `fn cancellation_joins_children() {}\n`,
       "src-tauri/crates/proxy/src/http/handler.rs": `use crate::transport::BoxIo;\n`,
@@ -557,25 +552,6 @@ const fixtureCases = [
         `pub async fn open_sqlite_persistence_with() { open(); }\nfn cancelling_started_sqlite_open_only_stops_waiting() {}\n`,
     },
     infrastructureLedger: [ledger("src/sqlite/executor.rs", "open_sqlite_persistence_with", "tokio::task::spawn_blocking", "sqlite-bootstrap", "open", "src/sqlite/executor.rs", "cancelling_started_sqlite_open_only_stops_waiting")],
-  },
-  {
-    name: "unregistered infrastructure protocol compile spawn fails",
-    expected: ["INFRA_SPAWN_UNREGISTERED"],
-    files: {
-      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/runtime_snapshot.rs":
-        `pub async fn freeze_for_listener_start_async() { tokio::task::spawn_blocking(freeze_loaded).await; }\n`,
-    },
-  },
-  {
-    name: "stale infrastructure protocol compile ledger fails",
-    expected: ["INFRA_SPAWN_LEDGER_STALE"],
-    files: {
-      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/runtime_snapshot.rs":
-        `pub async fn freeze_for_listener_start_async() { freeze_loaded(); }\n`,
-      "src-tauri/crates/infrastructure/src/adapters/protocol_packages/tests/runtime_snapshot_async.rs":
-        `fn compile_cancellation_proof() {}\n`,
-    },
-    infrastructureLedger: [ledger("src/adapters/protocol_packages/runtime_snapshot.rs", "freeze_for_listener_start_async", "tokio::task::spawn_blocking", "protocol-runtime", "freeze_loaded", "src/adapters/protocol_packages/tests/runtime_snapshot_async.rs", "compile_cancellation_proof")],
   },
   {
     name: "unregistered infrastructure document rule compiler spawn fails",

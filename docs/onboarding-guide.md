@@ -92,7 +92,7 @@ Encode 或 transport 失败要 fail-closed，结束当前 Exchange。
 | Document | 协议包解析出的强类型字段集合 | `domain/document` |
 | HTTP 标准规则 | Header、Body、状态、延迟、断开等 HTTP 阶段动作 | `domain/rule` |
 | Document 规则 | 针对协议 Schema 字段的条件与修改 | `domain/protocol_document_rule` |
-| 协议包 | 提供 Frame、Decode、Encode、Display 能力的精确版本包 | `protocol-scripting` / external package |
+| 协议包 | 提供 Frame、Decode、Encode、Display 能力的精确版本包 | package API 1 / external Sidecar |
 | LocalResponder | 使用同一 Server 接口的本地响应端，不是旁路流程 | `exchange/local_server` |
 | Observation | 面向抓包 UI 的有界内存 Exchange 事件 | Infrastructure store |
 | runtime epoch | 一次 Listener 启动周期的身份 | runtime/application |
@@ -118,13 +118,14 @@ Downstream。TLS 也有两段：App ↔ Proxy 和 Proxy ↔ Server，证书角�
 | `src-tauri/crates/application` | Use Case、Port、ViewModel、事件 | 编排用户操作 |
 | `src-tauri/crates/exchange` | 协议无关的交换顺序与方向类型 | Pipeline/Exchange 抽象 |
 | `src-tauri/crates/proxy` | HTTP、Socket、TCP/TLS、Listener runtime | 真实网络和资源生命周期 |
-| `src-tauri/crates/protocol-scripting` | ZIP、Manifest、Rhai 和阶段执行 | 内置协议包运行能力 |
+| `src-tauri/crates/package-contract` | API 1 Manifest、固定 RPC 与错误 wire | 协议包公共合同 |
+| `src-tauri/crates/package-runtime` | 严格 ZIP 与独立 Boa Sidecar | 本地协议包进程 |
 | `src-tauri/crates/infrastructure` | SQLite、证书、ADB、协议包、系统密钥和适配器 | 外部系统实现 |
 | `src-tauri/crates/host` | 无 UI 的 Rust 组合根和后台任务所有权 | 依赖装配与关闭 |
 | `src-tauri/crates/product-api` | 产品身份和稳定策略契约 | 通常很少修改 |
 | `src-tauri/crates/android-engine` | 纯 Rust TUN/路由/弱网数据面 | Android 网络算法 |
 | `android-companion` | VpnService、JNI、Android 平台边界 | 设备侧控制与打包 |
-| `templates/socket-protocol` | 内置协议包模板和作者 API | 新建 Rhai 协议包 |
+| `templates/socket-protocol` | 严格 JavaScript ZIP 模板和作者 API | 新建 Sidecar 协议包 |
 | `examples/external-packages` | Deno/Python 外部包示例 | 外部协议接入 |
 | `scripts` | 架构门禁、构建和真实 App E2E | 验证与发布自动化 |
 | `test-support` | 独立 runtime/平台测试工程 | 跨层验证 |
@@ -139,10 +140,10 @@ Downstream。TLS 也有两段：App ↔ Proxy 和 Proxy ↔ Server，证书角�
 ```text
 UI -> Tauri -> Host -> Application -> Domain
                      -> Infrastructure -> Runtime -> Exchange -> Domain
-                                       -> Protocol Scripting -> Domain
+                                       -> Package Contract/Runtime -> Domain
 ```
 
-`domain` 不知道 Tauri、SQLite 或真实网络；`exchange` 不知道数据库、Rhai 和 UI；`application` 通过 Port
+`domain` 不知道 Tauri、SQLite 或真实网络；`exchange` 不知道数据库、Sidecar 和 UI；`application` 通过 Port
 请求外部能力；`infrastructure` 实现 Port 并连接真实系统。新增反向依赖通常说明代码放错了位置。
 
 ### 4.3 建议的协作责任
@@ -216,9 +217,10 @@ Scripted 模式一次只处理一帧；`NeedMore` 表示继续累积，完整 Fr
 
 ### 5.5 内置与外部协议包
 
-内置包是 ZIP + Manifest/TOML + Rhai，由 `protocol-scripting` 校验和执行；模板入口见
-[Socket 协议模板](../templates/socket-protocol/README.md)。外部包通过 WebSocket JSON-RPC 注册精确
-`package id@version`，再提供上下行 hook。在线、启用、绑定、Listener 运行和 Exchange 成功是五个独立状态。
+官方起始包与用户导入包都是严格 ZIP：根目录固定为 `manifest.json`、`protocol.js`、`display.js`，
+由独立 Boa Sidecar 执行；模板入口见 [Socket 协议模板](../templates/socket-protocol/README.md)。软件包
+主动通过 WebSocket JSON-RPC 注册精确 `package id@version`，再提供上下行 hook。在线、启用、绑定、
+Listener 运行和 Exchange 成功是五个独立状态。
 
 示例：
 
@@ -379,7 +381,7 @@ rg "ERROR_CODE|error_code" src-tauri/crates
 | 数据库、文件、证书、ADB、外部 RPC | `infrastructure` | 原子性、超时、秘密和清理 |
 | HTTP/Socket/TLS 真实字节行为 | `proxy` | EOF、half-close、取消、容量和观测 |
 | Exchange/Pipeline 通用顺序 | `exchange` | HTTP/Socket 类型方向和确定性测试 |
-| Rhai Frame/Decode/Encode/Display | `protocol-scripting` | 包版本、Schema、资源限制 |
+| JavaScript Frame/Decode/Encode/Display | `package-contract`、`package-runtime` | 包版本、Schema、资源限制、Sidecar 生命周期 |
 | Tauri Command/Dialog/Channel | `src-tauri/src` | 薄适配、生成绑定、权限边界 |
 | 页面与交互草稿 | `src/features` | Rust ViewModel、pending/error、无障碍 |
 | Android 包调度算法 | `android-engine` | seed、包方向、JNI 边界 |

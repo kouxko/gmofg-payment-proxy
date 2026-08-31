@@ -1,4 +1,4 @@
-//! 内置与外部注册表的统一精确版本查询。
+//! 外部注册表的统一精确版本查询。
 
 use super::{Application, package_entity, protocol_package_not_found};
 use crate::{
@@ -11,38 +11,22 @@ impl Application {
         &self,
         package: &ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageVersionViewModel> {
-        let internal = self.protocol_package_store.get(package).await?;
-        let external = self.external_packages.get(package).await?;
-        match (internal, external) {
-            (Some(_), Some(_)) => Err(AppError::new(
-                "PROTOCOL_PACKAGE_SOURCE_CONFLICT",
-                "同一精确协议包版本不能同时来自内置注册表和外部注册表。",
-            )
-            .entity(package_entity(package))),
-            (Some(version), None) => {
-                ensure_source_kind(package, version.source, false)?;
+        match self.external_packages.get(package).await? {
+            Some(version) => {
+                ensure_external_source(package, version.source)?;
                 Ok(version)
             }
-            (None, Some(version)) => {
-                ensure_source_kind(package, version.source, true)?;
-                Ok(version)
-            }
-            (None, None) => Err(protocol_package_not_found(package)),
+            None => Err(protocol_package_not_found(package)),
         }
     }
 
     pub(super) async fn protocol_package_versions(
         &self,
     ) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        let mut versions = self.protocol_package_store.list().await?;
+        let versions = self.external_packages.list().await?;
         for version in &versions {
-            ensure_source_kind(&version.package, version.source, false)?;
+            ensure_external_source(&version.package, version.source)?;
         }
-        let external = self.external_packages.list().await?;
-        for version in &external {
-            ensure_source_kind(&version.package, version.source, true)?;
-        }
-        versions.extend(external);
         if versions.iter().enumerate().any(|(index, version)| {
             versions[index + 1..]
                 .iter()
@@ -57,12 +41,11 @@ impl Application {
     }
 }
 
-fn ensure_source_kind(
+fn ensure_external_source(
     package: &ProtocolPackageRef,
     source: ProtocolPackageSourceViewModel,
-    expected_external: bool,
 ) -> AppResult<()> {
-    if source.is_external() == expected_external {
+    if source.is_external() {
         return Ok(());
     }
     Err(AppError::new(

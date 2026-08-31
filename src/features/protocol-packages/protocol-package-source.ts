@@ -2,21 +2,18 @@ import type {
   ProtocolPackageSourceViewModel,
   ProtocolPackageVersionViewModel,
 } from "@/generated/rust-types";
+import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 
 /**
  * 严格验证 Rust 提供的协议包来源 closed union。
  *
- * IPC 边界不接受未知 variant、额外字段或缺失的判别字段，避免旧前端缓存把外部包
- * 误当作内部脚本执行，也避免把离线状态错误折叠为停用状态。
+ * IPC 边界不接受已删除的内部 variant、额外字段或缺失的判别字段，也不把离线状态
+ * 错误折叠为停用状态。
  */
 export function isProtocolPackageSource(
   value: unknown,
 ): value is ProtocolPackageSourceViewModel {
   if (!isRecord(value)) return false;
-  if (value.type === "internal") {
-    return hasOnly(value, ["type", "built_in"])
-      && typeof value.built_in === "boolean";
-  }
   if (value.type === "external") {
     return hasOnly(value, ["type", "online"])
       && typeof value.online === "boolean";
@@ -26,14 +23,12 @@ export function isProtocolPackageSource(
 
 /** 来源文案只读取 closed union，不从名称、ID 或启用状态反推来源。 */
 export function packageSourceText(version: ProtocolPackageVersionViewModel): string {
-  if (version.package_source.type === "internal") {
-    return version.package_source.built_in ? "内置示例" : "用户安装";
-  }
   return version.package_source.online ? "外部 · 在线" : "外部 · 离线";
 }
 
 export function isBuiltInPackage(version: ProtocolPackageVersionViewModel): boolean {
-  return version.package_source.type === "internal" && version.package_source.built_in;
+  return version.package.id === BUILT_IN_ISO_8583_PACKAGE.id
+    && version.package.version === BUILT_IN_ISO_8583_PACKAGE.version;
 }
 
 export function isExternalPackage(version: ProtocolPackageVersionViewModel): boolean {

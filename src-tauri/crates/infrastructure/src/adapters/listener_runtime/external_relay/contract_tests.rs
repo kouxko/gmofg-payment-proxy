@@ -243,7 +243,7 @@ fn stale_rule_compile_generation_cannot_overwrite_newer_rules() {
     );
     let stale = snapshot.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
     let current = snapshot.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
-    let newer = scripted_snapshot::compile_document_rules(
+    let newer = document_rules::compile_document_rules(
         &workspace,
         &listener,
         &registration.package().identity(),

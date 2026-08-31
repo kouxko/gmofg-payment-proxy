@@ -173,9 +173,7 @@ export function protocolPackageDetailError(
     || !isProtocolPackageSchema(value.downstream_schema)
     || !Array.isArray(value.usages)
     || !value.usages.every(isUsage)
-    || (value.version.package_source.type === "internal"
-      ? value.external !== null
-      : !isExternalDetail(value.external))) {
+    || !isExternalDetail(value.external)) {
     return "协议包详情数据不完整。";
   }
   return undefined;

@@ -98,8 +98,8 @@ impl Rules for RulesChain {
 }
 ```
 
-External adapter 的 Frame/Decode/Display/Encode 分别调用既有外部 RPC；Rhai adapter 分别
-调用单阶段脚本 API；Rust 内建 adapter 直接实现相同 trait。外部包 wire contract 不新增
+Package adapter 的 Frame/Decode/Display/Encode 分别调用统一固定 RPC；Rust 内建 adapter
+直接实现相同 trait。软件包 wire contract 不新增
 `direction`、开关字段或 ExecutionContext，仍使用既定 `hooks.upstream.*` 与
 `hooks.downstream.*`。
 

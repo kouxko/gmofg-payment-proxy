@@ -13,8 +13,7 @@ pub use external_packages::ExternalPackageApplicationPort;
 
 mod protocol_packages;
 pub use protocol_packages::{
-    BuiltinProtocolPackagePort, ProtocolPackageApplicationServices, ProtocolPackageCompilerPort,
-    ProtocolPackageImportPort, ProtocolPackagePortabilityPort, ProtocolPackageStorePort,
+    BuiltinProtocolPackagePort, ProtocolPackageApplicationServices, ProtocolPackageImportPort,
     ProtocolPackageUsageQueryPort,
 };
 

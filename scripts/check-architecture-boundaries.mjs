@@ -28,9 +28,6 @@ const listenerRuntimeScriptedPlanFile = path.join(infrastructureAdaptersRoot, "l
 const listenerRuntimeTlsPlanFile = path.join(infrastructureAdaptersRoot, "listener_runtime/plan/tls.rs");
 const listenerRuntimeTlsMaterialFile = path.join(infrastructureAdaptersRoot, "listener_runtime/tls_material.rs");
 const listenerRuntimeHttpProtocolFile = path.join(infrastructureAdaptersRoot, "listener_runtime/http_protocol_pipeline.rs");
-const listenerRuntimeScriptedSnapshotFile = path.join(infrastructureAdaptersRoot, "listener_runtime/scripted_snapshot.rs");
-const protocolPackageRuntimeSnapshotFile = path.join(infrastructureAdaptersRoot, "protocol_packages/runtime_snapshot.rs");
-const protocolPackageRepositoryFile = path.join(infrastructureAdaptersRoot, "protocol_packages.rs");
 const managedListenerCertificateFile = path.join(infrastructureAdaptersRoot, "listener_certificates.rs");
 const managedListenerCertificateResolutionFile = path.join(infrastructureAdaptersRoot, "listener_certificates/resolution.rs");
 const certificateServiceFile = path.join(infrastructureAdaptersRoot, "certificates.rs");
@@ -736,7 +733,7 @@ async function scanProduction() {
   }
   const protocolPackageListenerPlanSources = await Promise.all(
     [listenerRuntimePlanFile, listenerRuntimeHttpProtocolFile, listenerRuntimeScriptedPlanFile,
-      listenerRuntimeScriptedSnapshotFile, protocolPackageRuntimeSnapshotFile, protocolPackageRepositoryFile]
+      externalPackageRegistryFile]
       .map((file) => readFile(file, "utf8")),
   );
   for (const code of sqliteAsyncCrossFileBypassCodes(protocolPackageListenerPlanSources)) {

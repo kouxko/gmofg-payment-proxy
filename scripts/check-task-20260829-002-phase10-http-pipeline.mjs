@@ -1,15 +1,15 @@
 import { spawnSync } from "node:child_process";
 import { readFile } from "node:fs/promises";
+import { existsSync } from "node:fs";
 
 const paths = {
   context: "src-tauri/crates/exchange/src/protocol.rs",
   endpoints: "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
   pipeline: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
   external: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
-  joint: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/joint_rules.rs",
+  joint: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
   actor: "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
   proxy: "src-tauri/crates/proxy/src/lib.rs",
-  legacy: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/legacy_http.rs",
   test: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
   productionTest: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
   exchangePipeline: "src-tauri/crates/exchange/src/pipeline.rs",
@@ -24,14 +24,13 @@ requireText("context", "wire_body", "HTTP Context must retain original wire body
 requireText("endpoints", "wire_body: message.body.to_vec()", "HTTP endpoint must preserve authoritative body bytes");
 requireText("pipeline", "external_package_provider", "HTTP pipeline must resolve the shared online package provider");
 requireText("pipeline", "PackageKind::Http", "HTTP pipeline must reject a non-HTTP package registration");
-requireText("pipeline", "#[cfg(test)]\nmod legacy_http;", "legacy HTTP runtime must remain cfg(test)-contained");
+if (source.pipeline.includes("legacy_http") || existsSync("src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/legacy_http.rs")) failures.push("legacy HTTP runtime must remain removed after Phase 13");
 requireText("actor", ".with_external_package_call(error.external_package_call)", "joint actor must preserve typed package failure");
 requireText("actor", "ErrorCode::ExternalPackageCallFailed", "joint actor must preserve the top-level external package error code");
 requireText("proxy", "ExternalPackageCallFailed => \"EXTERNAL_PACKAGE_CALL_FAILED\"", "proxy error code must expose the external package failure classification");
 requireText("exchangePipeline", "failed_with_context::<Http, D>(\"display\"", "HTTP Display fail-open must emit typed observation evidence");
 requireText("exchangePipeline", "failed_with_context::<Socket, D>(\"display\"", "Socket Display fail-open must emit typed observation evidence");
 requireText("endpoints", "with_external_package_call(*failure)", "HTTP endpoint must preserve typed Proxy error details into Exchange");
-forbid("legacy", /cfg\s*\(not\s*\(test\)\)/u, "legacy HTTP runtime must never compile in production");
 for (const text of ["ExternalPackageRpc", "DecodeParams", "DisplayParams", "decode_http_body_for_package"])
   requireText("external", text, `HTTP shared RPC pipeline missing ${text}`);
 requireText("external", "HTTP_CONTENT_ENCODING_UNSUPPORTED", "non-identity Content-Encoding gate missing");

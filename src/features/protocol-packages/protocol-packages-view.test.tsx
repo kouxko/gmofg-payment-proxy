@@ -51,7 +51,7 @@ describe("ProtocolPackagesView list", () => {
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
         name: "ISO 8583 ASCII 示例",
-        package_source: { type: "internal", built_in: true },
+        package_source: { type: "external", online: true },
         enabled: true,
       }),
       capabilities: detail().capabilities,
@@ -94,7 +94,7 @@ describe("ProtocolPackagesView list", () => {
     const builtInVersion = version("1.0.0", {
       package: { id: "iso8583-ascii-standard", version: "1.0.0" },
       name: "ISO 8583 ASCII 示例",
-      package_source: { type: "internal", built_in: true },
+      package_source: { type: "external", online: true },
       enabled: true,
     });
     const builtInGroup = group({
@@ -116,7 +116,7 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2);
     expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("官方 ISO 8583 示例已存在并通过重新校验。");
-    expect(screen.getByText("内置示例", { selector: "dd" })).toBeVisible();
+    expect(screen.getByText("外部 · 在线", { selector: "dd" })).toBeVisible();
   });
 
   it("does not report success or refresh when the restore command fails", async () => {
@@ -144,7 +144,7 @@ describe("ProtocolPackagesView list", () => {
   it("fails closed for a mismatched restore response", async () => {
     mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
       outcome: "installed",
-      version: version("9.0.0", { package_source: { type: "internal", built_in: true } }),
+      version: version("9.0.0", { package_source: { type: "external", online: true } }),
     });
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
@@ -165,7 +165,7 @@ describe("ProtocolPackagesView list", () => {
       version: version("1.0.0", {
         package: { id: "iso8583-ascii-standard", version: "1.0.0" },
         name: "ISO 8583 ASCII 示例",
-        package_source: { type: "internal", built_in: true },
+        package_source: { type: "external", online: true },
         enabled: true,
       }),
       capabilities: detail().capabilities,
@@ -189,7 +189,7 @@ describe("ProtocolPackagesView list", () => {
     const restoredVersion = version("1.0.0", {
       package: { id: "iso8583-ascii-standard", version: "1.0.0" },
       name: "ISO 8583 ASCII 示例",
-      package_source: { type: "internal", built_in: true },
+      package_source: { type: "external", online: true },
       enabled: true,
     });
     const restoredGroup = group({
@@ -305,7 +305,11 @@ describe("ProtocolPackagesView list", () => {
 
   it("marks a built-in example in the package list", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
-      versions: [version("1.0.0", { package_source: { type: "internal", built_in: true } })],
+      id: "iso8583-ascii-standard",
+      versions: [version("1.0.0", {
+        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
+        package_source: { type: "external", online: true },
+      })],
     })]);
     render(<ProtocolPackagesView />);
 

@@ -93,8 +93,7 @@ async fn created_order_exhaustion_is_stable_and_does_not_write() {
 }
 
 #[tokio::test]
-async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_identity_free_schema()
-{
+async fn listener_save_and_validate_fresh_description_for_disabled_exact_package() {
     let (application, services, workspaces, _) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let _listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -122,7 +121,6 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_ide
         )
         .await
         .unwrap();
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 2);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 2);
 
     let mut incompatible = description_with_blob(package);
@@ -149,7 +147,7 @@ async fn listener_save_and_validate_fresh_compile_disabled_exact_package_and_ide
 }
 
 #[tokio::test]
-async fn listener_start_rechecks_revision_enabled_and_fresh_compilation() {
+async fn listener_start_rechecks_revision_enabled_and_fresh_description() {
     let (application, services, workspaces, runtime) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -182,27 +180,22 @@ async fn listener_start_rechecks_revision_enabled_and_fresh_compilation() {
     assert!(runtime.statuses().await.unwrap().is_empty());
 
     services.insert(record(package.clone(), true));
-    services.set_description(package.clone(), description_with_blob(package.clone()));
-    services.set_compilation_result(
-        package.clone(),
-        Ok(ProtocolPackageCompilationReceipt {
-            package: package.clone(),
-            host_api: 2,
-            compatible: true,
-        }),
-    );
+    services.failures.lock().describe = Some(AppError::new(
+        "PACKAGE_DESCRIBE_FAILED",
+        "description failed",
+    ));
     let error = application
         .listener_start(workspace.id, workspace.revision.get(), listener_id)
         .await
         .unwrap_err();
-    assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_API_INCOMPATIBLE");
+    assert_eq!(error_code(&error), "PACKAGE_DESCRIBE_FAILED");
     assert!(runtime.statuses().await.unwrap().is_empty());
     assert!(!workspaces.get(workspace.id).await.unwrap().listeners[0].enabled);
 }
 
 #[tokio::test]
 async fn active_scripted_listener_accepts_live_rule_changes_but_freezes_other_configuration() {
-    let (application, services, workspaces, _) = fixture();
+    let (application, services, workspaces, runtime) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
     let selected = workspaces.list().await.unwrap().remove(0);
@@ -261,21 +254,20 @@ async fn active_scripted_listener_accepts_live_rule_changes_but_freezes_other_co
             ListenerRuntimeState::Running,
         )],
     );
-    assert_eq!(
-        error_code(
-            &application
-                .protocol_package_disable(package.clone())
-                .await
-                .unwrap_err()
-        ),
-        "PROTOCOL_PACKAGE_RUNTIME_IN_USE"
-    );
-
-    let running = workspaces.get(workspace.id).await.unwrap();
-    application
-        .listener_stop(running.id, running.revision.get(), listener_id)
+    let disabled = application
+        .protocol_package_disable(package.clone())
         .await
         .unwrap();
+    assert!(!disabled.enabled);
+
+    assert!(
+        runtime
+            .statuses()
+            .await
+            .unwrap()
+            .into_iter()
+            .all(|status| status.listener_id != listener_id)
+    );
     services.set_usages(
         package.clone(),
         vec![usage(

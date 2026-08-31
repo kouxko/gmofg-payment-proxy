@@ -107,7 +107,7 @@ describe("ProtocolPackage ZIP import", () => {
     expect(preview).toHaveTextContent("默认停用");
     expect(preview).toHaveTextContent("上行 Encode：支持");
     expect(preview).toHaveTextContent("下行 Encode：支持");
-    expect(within(preview).queryByText(/protocol\.rhai|manifest\.toml|脚本内容|absolute_path/i)).not.toBeInTheDocument();
+    expect(within(preview).queryByText(/protocol\.js|manifest\.toml|脚本内容|absolute_path/i)).not.toBeInTheDocument();
     expect(within(preview).queryByText("018f-import-token")).not.toBeInTheDocument();
     expect(screen.getByRole("button", { name: "确认安装" })).toBeEnabled();
     expect(mocks.protocolPackageImportCommit).not.toHaveBeenCalled();
@@ -197,10 +197,10 @@ describe("ProtocolPackage ZIP import", () => {
   it.each([
     ["读取失败", "IO_ERROR", "无法读取协议包 ZIP", "/tmp/package.zip"],
     ["ZIP 非法", "INVALID_ZIP", "协议包不是合法 ZIP", "archive.zip: central directory"],
-    ["Manifest 非法", "MANIFEST_INVALID", "Manifest 校验失败", "manifest.toml:12:7"],
-    ["Schema 非法", "DOCUMENT_SCHEMA_INVALID", "Schema 校验失败", "document.toml:8:3"],
-    ["Rhai 语法错", "SCRIPT_SYNTAX_ERROR", "Rhai 编译失败", "protocol.rhai:21:9"],
-    ["入口错误", "ENTRY_POINT_MISSING", "脚本入口不存在", "protocol.rhai: frame"],
+    ["Manifest 非法", "MANIFEST_INVALID", "Manifest 校验失败", "manifest.json:12:7"],
+    ["Schema 非法", "DOCUMENT_SCHEMA_INVALID", "Schema 校验失败", "schema.json:8:3"],
+    ["JavaScript 语法错", "SCRIPT_SYNTAX_ERROR", "JavaScript 编译失败", "protocol.js:21:9"],
+    ["入口错误", "ENTRY_POINT_MISSING", "脚本入口不存在", "protocol.js: frame"],
     ["身份冲突", "PROTOCOL_PACKAGE_IDENTITY_CONFLICT", "相同身份内容不同", "iso-8583@3.0.0"],
   ])("keeps %s stable, accessible, and never commits", async (_name, code, message, position) => {
     mocks.protocolPackageImport.mockRejectedValue(appError(code, message, position));

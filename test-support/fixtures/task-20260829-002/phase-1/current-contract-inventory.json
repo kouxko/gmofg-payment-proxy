@@ -33,9 +33,9 @@
     },
     {
       "id": "protocol-package-tests",
-      "kind": "rust-unit-test-module",
-      "path": "src-tauri/crates/protocol-scripting/src/tests/fixtures.rs",
-      "owner_phase": 7
+      "kind": "rust-integration-test",
+      "path": "src-tauri/crates/package-runtime/tests/phase13_builtin_package.rs",
+      "owner_phase": 13
     },
     {
       "id": "infrastructure-contract-tests",
@@ -111,16 +111,6 @@
         "pub enum ProtocolRuleStage",
         "ProxyToUpstream",
         "ProxyToApp"
-      ]
-    },
-    {
-      "id": "rhai-toml-package-runtime",
-      "path": "src-tauri/crates/protocol-scripting/src/compiler/package_compiler.rs",
-      "owner_phase": 7,
-      "required_fragments": [
-        "use rhai::{AST, Position}",
-        "parse_protocol_manifest",
-        "PackageModuleResolver"
       ]
     },
     {

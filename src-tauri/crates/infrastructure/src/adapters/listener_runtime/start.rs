@@ -3,7 +3,6 @@ use std::sync::Arc;
 use intercept_proxy_application::{
     AppError, AppResult, ListenerId, ListenerStatusViewModel, ProxyListener, ProxyWorkspace,
 };
-use intercept_proxy_domain::SocketTopology;
 use parking_lot::RwLock;
 use tokio_util::sync::CancellationToken;
 
@@ -22,19 +21,6 @@ impl ListenerRuntimeAdapter {
         let plan = ListenerRuntimePlanBuilder::new(self)
             .build(workspace, listener, runtime_epoch)
             .await?;
-        if let Some(snapshot) = plan.scripted_snapshot()
-            && matches!(snapshot.topology(), SocketTopology::LocalResponder(_))
-            && matches!(
-                &plan,
-                PreparedListenerRuntime::ScriptedSocket { service: None, .. }
-            )
-        {
-            return Err(AppError::new(
-                "LOCAL_RESPONDER_PLAN_INVALID",
-                "LocalResponder 未能构造本地应答运行服务。",
-            )
-            .entity(listener.id.to_string()));
-        }
         let tcp_listener = bind_tcp_listener(plan.bind_addr(), listener.id).await?;
         Ok((plan, tcp_listener))
     }
@@ -101,7 +87,6 @@ impl ListenerRuntimeAdapter {
         tcp_listener: tokio::net::TcpListener,
     ) -> AppResult<ListenerStatusViewModel> {
         let listener_id = listener.id;
-        let scripted_snapshot = plan.scripted_snapshot();
         let external_socket_snapshot = plan.external_socket_snapshot();
         let http_protocol_snapshot = plan.http_protocol_snapshot();
         let listen_address = plan.bind_addr().to_string();
@@ -112,11 +97,9 @@ impl ListenerRuntimeAdapter {
         let task_fault = Arc::clone(&fault);
         let socket_service = match &plan {
             PreparedListenerRuntime::Socket { service, .. }
-            | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
-            | PreparedListenerRuntime::ScriptedSocket {
-                service: Some(service),
-                ..
-            } => Some(Arc::clone(service)),
+            | PreparedListenerRuntime::ExternalScriptedSocket { service, .. } => {
+                Some(Arc::clone(service))
+            }
             _ => None,
         };
         let pipeline_services = self.pipeline_services.read().clone();
@@ -179,7 +162,6 @@ impl ListenerRuntimeAdapter {
                 fault,
                 workspace,
                 socket_service,
-                scripted_snapshot,
                 external_socket_snapshot,
                 http_protocol_snapshot,
             },
@@ -236,11 +218,7 @@ async fn serve_prepared_listener(
                 .await
         }
         PreparedListenerRuntime::Socket { service, .. }
-        | PreparedListenerRuntime::ExternalScriptedSocket { service, .. }
-        | PreparedListenerRuntime::ScriptedSocket {
-            service: Some(service),
-            ..
-        } => {
+        | PreparedListenerRuntime::ExternalScriptedSocket { service, .. } => {
             service
                 .serve_listener_with_context(
                     tcp_listener,
@@ -253,12 +231,6 @@ async fn serve_prepared_listener(
                     cancellation,
                 )
                 .await
-        }
-        PreparedListenerRuntime::ScriptedSocket { service: None, .. } => {
-            Err(intercept_proxy_runtime::ProxyError::new(
-                intercept_proxy_runtime::ErrorCode::Internal,
-                "scripted socket plan reached serve without a runtime service",
-            ))
         }
     }
 }

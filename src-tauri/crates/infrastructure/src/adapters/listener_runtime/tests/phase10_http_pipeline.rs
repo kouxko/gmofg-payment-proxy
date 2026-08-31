@@ -12,9 +12,11 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use intercept_proxy_domain::{
     BodyCodecKind, Document, DocumentValue, ErrorCode as PackageErrorCode, HttpBodyProcessing,
-    HttpListenerSettings, JsonPointer, ListenerDataPlane, ProtocolDirection,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef,
-    ProtocolPackageVersion, ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleRuntimeSnapshot,
+    HttpListenerSettings, HttpRuleContent, JsonPointer, ListenerDataPlane, ProtocolDirection,
+    ProtocolDocumentOperation, ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition,
+    ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition,
+    RuleDefinitionDraft, RuleRuntimeSnapshot, SocketRuleContent,
 };
 use intercept_proxy_exchange::{ExternalPackageCallStage, HttpContext};
 use intercept_proxy_package_contract::{
@@ -45,11 +47,108 @@ use super::super::{
         HttpProtocolRuntimeSnapshot, JointDocumentEvaluation, decode_http_body_for_package,
     },
 };
-use super::{
-    SqliteStore,
-    http_protocol_pipeline_tests::{set_string_rule, workspace_with_http_rules},
-    test_listener_runtime,
-};
+use super::{SqliteStore, test_listener_runtime};
+
+fn phase10_package() -> ProtocolPackageRef {
+    ProtocolPackageRef {
+        id: ProtocolPackageId::new("http-pipeline-test").unwrap(),
+        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+    }
+}
+
+fn set_string_rule(
+    listener: &ProxyListener,
+    id: ProtocolDocumentRuleId,
+    stage: ProtocolRuleStage,
+    created_order: u64,
+    field: &str,
+    mut conditions: Vec<ProtocolDocumentPredicate>,
+    value: &str,
+) -> ProtocolDocumentRuleDefinition {
+    if conditions.is_empty() {
+        let decoded_field = match stage {
+            ProtocolRuleStage::ProxyToUpstream => "route",
+            ProtocolRuleStage::ProxyToApp => "result",
+        };
+        conditions.push(ProtocolDocumentPredicate::Equals {
+            field: JsonPointer::property(decoded_field),
+            value: DocumentValue::String("decoded".into()),
+        });
+    }
+    ProtocolDocumentRuleDefinition::new_named_for_stage(
+        id,
+        format!("{stage:?}"),
+        true,
+        10,
+        created_order,
+        listener.id,
+        phase10_package(),
+        stage,
+        conditions,
+        vec![ProtocolDocumentOperation::SetField {
+            field: JsonPointer::property(field),
+            value: DocumentValue::String(value.into()),
+        }],
+    )
+    .unwrap()
+}
+
+fn workspace_with_http_rules(
+    listener: &ProxyListener,
+    rules: Vec<ProtocolDocumentRuleDefinition>,
+) -> ProxyWorkspace {
+    let high_water = rules
+        .iter()
+        .map(ProtocolDocumentRuleDefinition::created_order)
+        .max()
+        .unwrap_or(0);
+    let mut workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        rule_created_order_high_water: high_water,
+        ..ProxyWorkspace::default()
+    };
+    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace.rule_definitions = workspace
+        .rule_definitions
+        .iter()
+        .map(|definition| {
+            let RuleContent::Socket(SocketRuleContent {
+                package,
+                condition,
+                actions,
+            }) = definition.content()
+            else {
+                return definition.clone();
+            };
+            RuleDefinition::restore(
+                definition.rule_id(),
+                RuleDefinitionDraft {
+                    name: definition.name().to_owned(),
+                    enabled: definition.enabled(),
+                    priority: definition.priority(),
+                    listener_id: definition.listener_id(),
+                    stage: definition.stage(),
+                    one_shot: definition.one_shot(),
+                    content: RuleContent::Http(HttpRuleContent {
+                        description: String::new(),
+                        condition: condition.clone(),
+                        actions: actions.clone(),
+                        document: Some(intercept_proxy_domain::HttpDocumentRuleContent {
+                            package: package.clone(),
+                        }),
+                    }),
+                },
+                intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
+                    revision: definition.revision(),
+                    created_order: definition.created_order(),
+                    lifecycle: definition.lifecycle().clone(),
+                },
+            )
+            .unwrap()
+        })
+        .collect();
+    workspace
+}
 
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;

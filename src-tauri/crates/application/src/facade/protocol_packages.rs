@@ -150,18 +150,9 @@ impl Application {
         package: ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageDetailViewModel> {
         let version = self.require_protocol_package(&package).await?;
-        let (description, external) = match version.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => (
-                self.protocol_package_compiler.describe(&package).await?,
-                None,
-            ),
-            ProtocolPackageSourceViewModel::External { .. } => {
-                let description = self.external_packages.describe(&package).await?;
-                ensure_external_description(&package, &description)?;
-                let external = self.external_packages.detail(&package).await?;
-                (description, Some(external))
-            }
-        };
+        let description = self.external_packages.describe(&package).await?;
+        ensure_external_description(&package, &description)?;
+        let external = Some(self.external_packages.detail(&package).await?);
         ensure_description_identity(&package, &description)?;
         let usages = self.protocol_package_usage.usages(&package).await?;
         Ok(ProtocolPackageDetailViewModel {
@@ -186,39 +177,24 @@ impl Application {
 
     /// 校验当前执行来源的严格描述后，原子写入启用位。
     ///
-    /// 内置来源每次 fresh 编译；远端外部来源必须在线。本地 Sidecar 即使离线也允许启用，
-    /// 由外部包端口启动 exact process。两者只使用注册边界已严格校验的描述，不发送业务 RPC。
+    /// 远端来源必须在线；本地 Sidecar 即使离线也允许启用，由外部包端口启动 exact process。
     pub async fn protocol_package_enable(
         &self,
         package: ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageVersionViewModel> {
         let _gate = self.mutation_gate.lock().await;
         let stored = self.require_protocol_package(&package).await?;
-        match stored.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                let receipt = self
-                    .protocol_package_compiler
-                    .compile_fresh(&package)
-                    .await?;
-                ensure_compilation_receipt(&package, stored.host_api, &receipt)?;
-                self.protocol_package_store
-                    .set_enabled(&package, true)
-                    .await?;
-            }
-            ProtocolPackageSourceViewModel::External { online } => {
-                if !online && !self.external_packages.detail(&package).await?.local_process {
-                    return Err(AppError::new(
-                        "EXTERNAL_PACKAGE_OFFLINE",
-                        "远端外部软件包当前离线，无法启用。",
-                    )
-                    .entity(package_entity(&package)));
-                }
-                let description = self.external_packages.describe(&package).await?;
-                ensure_description_identity(&package, &description)?;
-                ensure_external_description(&package, &description)?;
-                self.external_packages.set_enabled(&package, true).await?;
-            }
+        let ProtocolPackageSourceViewModel::External { online } = stored.source;
+        if !online && !self.external_packages.detail(&package).await?.local_process {
+            return Err(AppError::new(
+                "EXTERNAL_PACKAGE_OFFLINE",
+                "远端外部软件包当前离线，无法启用。",
+            )
+            .entity(package_entity(&package)));
         }
+        let description = self.external_packages.describe(&package).await?;
+        ensure_external_description(&package, &description)?;
+        self.external_packages.set_enabled(&package, true).await?;
         Ok(ProtocolPackageVersionViewModel {
             enabled: true,
             ..stored
@@ -227,8 +203,7 @@ impl Application {
 
     /// 停用精确版本；外部来源会先停止所有活动引用，并始终保留 WebSocket 连接。
     ///
-    /// 内置来源保持既有约束：调用方必须先停止活动入口。两类来源都保留已保存引用，且
-    /// 不会选择同 ID 的其他版本。
+    /// 保留已保存引用，且不会选择同 ID 的其他版本。
     pub async fn protocol_package_disable(
         &self,
         package: ProtocolPackageRef,
@@ -236,29 +211,10 @@ impl Application {
         let _gate = self.mutation_gate.lock().await;
         let stored = self.require_protocol_package(&package).await?;
         let usages = self.protocol_package_usage.usages(&package).await?;
-        match stored.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                if usages
-                    .iter()
-                    .any(crate::ProtocolPackageUsageViewModel::blocks_disable)
-                {
-                    return Err(AppError::new(
-                        "PROTOCOL_PACKAGE_RUNTIME_IN_USE",
-                        "仍有 Listener 正在使用该协议包版本，请先停止对应入口。",
-                    )
-                    .entity(package_entity(&package)));
-                }
-                self.protocol_package_store
-                    .set_enabled(&package, false)
-                    .await?;
-            }
-            ProtocolPackageSourceViewModel::External { .. } => {
-                for usage in usages.iter().filter(|usage| usage.blocks_disable()) {
-                    self.listener_runtime.stop(usage.listener_id).await?;
-                }
-                self.external_packages.set_enabled(&package, false).await?;
-            }
+        for usage in usages.iter().filter(|usage| usage.blocks_disable()) {
+            self.listener_runtime.stop(usage.listener_id).await?;
         }
+        self.external_packages.set_enabled(&package, false).await?;
         Ok(ProtocolPackageVersionViewModel {
             enabled: false,
             ..stored
@@ -284,17 +240,11 @@ impl Application {
             )
             .entity(package_entity(&package)));
         }
-        match stored.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                self.protocol_package_store.delete(&package).await?;
-            }
-            ProtocolPackageSourceViewModel::External { online } => {
-                if online {
-                    self.external_packages.disconnect(&package).await?;
-                }
-                self.external_packages.delete(&package).await?;
-            }
+        let ProtocolPackageSourceViewModel::External { online } = stored.source;
+        if online {
+            self.external_packages.disconnect(&package).await?;
         }
+        self.external_packages.delete(&package).await?;
         Ok(OperationResultViewModel {
             success: true,
             cancelled: false,
@@ -356,43 +306,24 @@ impl Application {
                 package_field,
             ));
         }
-        let description = match version.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                // validation 列是导入/上次编译的历史快照，不能代替当前 Host API
-                // 下的 fresh 恢复与编译。真实的可加载性只由 compiler receipt 决定。
-                let receipt = self
-                    .protocol_package_compiler
-                    .compile_fresh(package)
-                    .await
-                    .map_err(|error| listener_error_field(error, package_field))?;
-                ensure_compilation_receipt(package, version.host_api, &receipt)
-                    .map_err(|error| listener_error_field(error, package_field))?;
-                self.protocol_package_compiler
-                    .describe(package)
-                    .await
-                    .map_err(|error| listener_error_field(error, package_field))?
-            }
-            ProtocolPackageSourceViewModel::External { online } => {
-                if require_enabled && !online {
-                    return Err(listener_error_field(
-                        AppError::new(
-                            "EXTERNAL_PACKAGE_OFFLINE",
-                            "入口引用的外部软件包当前离线，不能启动。",
-                        )
-                        .entity(package_entity(package)),
-                        package_field,
-                    ));
-                }
-                let description = self
-                    .external_packages
-                    .describe(package)
-                    .await
-                    .map_err(|error| listener_error_field(error, package_field))?;
-                ensure_external_description(package, &description)
-                    .map_err(|error| listener_error_field(error, package_field))?;
-                description
-            }
-        };
+        let ProtocolPackageSourceViewModel::External { online } = version.source;
+        if require_enabled && !online {
+            return Err(listener_error_field(
+                AppError::new(
+                    "EXTERNAL_PACKAGE_OFFLINE",
+                    "入口引用的外部软件包当前离线，不能启动。",
+                )
+                .entity(package_entity(package)),
+                package_field,
+            ));
+        }
+        let description = self
+            .external_packages
+            .describe(package)
+            .await
+            .map_err(|error| listener_error_field(error, package_field))?;
+        ensure_external_description(package, &description)
+            .map_err(|error| listener_error_field(error, package_field))?;
         super::protocol_package_portability::validate_listener_protocol_binding(
             workspace,
             listener_id,
@@ -407,53 +338,7 @@ pub(super) fn ensure_external_description(
     package: &ProtocolPackageRef,
     description: &crate::ProtocolPackageDescriptionViewModel,
 ) -> AppResult<()> {
-    ensure_description_identity(package, description)?;
-    let capabilities = description.capabilities;
-    if description.kind == crate::ProtocolPackageKindViewModel::Socket
-        && capabilities.upstream.frame
-        && capabilities.upstream.decode
-        && capabilities.upstream.encode
-        && capabilities.downstream.frame
-        && capabilities.downstream.decode
-        && capabilities.downstream.encode
-        && capabilities.display
-        && matches!(
-            description
-                .upstream_schema
-                .as_ref()
-                .map(|schema| &schema.root),
-            Some(intercept_proxy_domain::DocumentSchemaNode::Object { .. })
-        )
-        && matches!(
-            description
-                .downstream_schema
-                .as_ref()
-                .map(|schema| &schema.root),
-            Some(intercept_proxy_domain::DocumentSchemaNode::Object { .. })
-        )
-    {
-        return Ok(());
-    }
-    Err(AppError::new(
-        "EXTERNAL_PACKAGE_DESCRIPTION_INVALID",
-        "外部软件包缺少第一版 Socket 处理所需的严格描述或完整能力。",
-    )
-    .entity(package_entity(package)))
-}
-
-fn ensure_compilation_receipt(
-    package: &ProtocolPackageRef,
-    stored_host_api: u32,
-    receipt: &crate::ProtocolPackageCompilationReceipt,
-) -> AppResult<()> {
-    if receipt.package == *package && receipt.host_api == stored_host_api && receipt.compatible {
-        return Ok(());
-    }
-    Err(AppError::new(
-        "PROTOCOL_PACKAGE_API_INCOMPATIBLE",
-        "协议包无法由当前版本的脚本 Host 安全加载。",
-    )
-    .entity(package_entity(package)))
+    ensure_description_identity(package, description)
 }
 
 fn protocol_package_not_found(package: &ProtocolPackageRef) -> AppError {

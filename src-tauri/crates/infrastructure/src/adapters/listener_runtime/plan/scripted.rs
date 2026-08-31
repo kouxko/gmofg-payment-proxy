@@ -14,10 +14,8 @@ use intercept_proxy_runtime::{
 };
 
 use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
-use crate::adapters::listener_runtime::{
-    external_relay::{ExternalSocketCapabilityFactoryAdapter, ExternalSocketRuntimeSnapshot},
-    scripted_relay::{ScriptedSocketCapabilityFactoryAdapter, pipeline_limits},
-    scripted_snapshot::{ScriptedSocketRuntimeSnapshot, ScriptedSocketSecuritySnapshot},
+use crate::adapters::listener_runtime::external_relay::{
+    ExternalSocketCapabilityFactoryAdapter, ExternalSocketRuntimeSnapshot,
 };
 
 impl ListenerRuntimePlanBuilder<'_> {
@@ -36,120 +34,24 @@ impl ListenerRuntimePlanBuilder<'_> {
             .entity(listener.id.to_string()));
         };
         let provider = self.adapter.external_package_provider.read().clone();
-        let binding = match provider {
-            Some(provider) => provider.resolve(&scripted.package).await?,
-            None => None,
-        };
-        if let Some(binding) = binding {
-            return self
-                .build_external_scripted_socket(workspace, listener, socket, bind_addr, binding)
-                .await;
-        }
-        let security = self
-            .scripted_socket_security(workspace, &socket.topology)
-            .await?;
-        let snapshot = ScriptedSocketRuntimeSnapshot::prepare_async(
-            self.adapter,
-            workspace,
-            listener,
-            security,
-        )
-        .await?
-        .ok_or_else(|| {
+        let provider = provider.ok_or_else(|| {
             AppError::new(
-                "SCRIPTED_SOCKET_PLAN_INVALID",
-                "Scripted Socket 未能生成不可变运行计划。",
-            )
-            .entity(listener.id.to_string())
-        })?;
-        let SocketTopology::Relay(_) = &socket.topology else {
-            return self.build_local_responder(workspace, listener, socket, bind_addr, snapshot);
-        };
-        let ScriptedSocketSecuritySnapshot::Relay(security) = snapshot.security() else {
-            return Err(AppError::new(
-                "SCRIPTED_SOCKET_PLAN_INVALID",
-                "Scripted Relay 快照的传输安全模式不一致。",
-            )
-            .entity(listener.id.to_string()));
-        };
-        let security = security.clone();
-        self.build_internal_scripted_relay(
-            workspace, listener, socket, bind_addr, snapshot, security,
-        )
-    }
-
-    fn build_internal_scripted_relay(
-        &self,
-        workspace: &ProxyWorkspace,
-        listener: &ProxyListener,
-        socket: &SocketRelaySettings,
-        bind_addr: SocketAddr,
-        snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
-        security: intercept_proxy_runtime::SocketRelaySecurity,
-    ) -> AppResult<PreparedListenerRuntime> {
-        let SocketTopology::Relay(relay) = &socket.topology else {
-            unreachable!("relay topology was checked before building the scripted relay")
-        };
-        let framing_limits = intercept_proxy_protocol_scripting::ProtocolFramingLimits::default();
-        let pipeline_limits: SocketPipelineLimits = pipeline_limits(
-            snapshot.runtime_limits(),
-            framing_limits,
-            usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
-                runtime_error(
-                    listener,
-                    "CONFIG_INVALID",
-                    "Socket 单次读取字节数超出平台范围".into(),
-                )
-            })?,
-            snapshot.upstream(),
-            snapshot.downstream(),
-        )
-        .map_err(|error| {
-            runtime_error(
-                listener,
-                error.stable_code(),
-                "脚本 Frame 资源限制无效".to_owned(),
+                "EXTERNAL_PACKAGE_PROVIDER_MISSING",
+                "Socket 协议包注册表尚未装配。",
             )
         })?;
-        let factory = Arc::new(ScriptedSocketCapabilityFactoryAdapter::new(
-            &snapshot,
-            listener.id.to_string(),
-            framing_limits,
-            Self::observation_metadata(workspace, listener),
-        ));
-        let observer = self.socket_observer(listener, socket)?;
-        let service = SocketRelayService::build_scripted_with_observer(
-            SocketRelayConfig {
-                bind_addr,
-                upstream: SocketEndpoint {
-                    host: relay.upstream.host.clone(),
-                    port: relay.upstream.port,
-                },
-                security,
-                maximum_connections: socket.maximum_connections,
-                read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
-                    |_| {
-                        runtime_error(
-                            listener,
-                            "CONFIG_INVALID",
-                            "Socket 单次读取字节数超出平台范围".into(),
-                        )
-                    },
-                )?,
-                connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                write_timeout: Duration::from_millis(listener.write_timeout_ms),
-            },
-            factory,
-            pipeline_limits,
-            observer,
-        )
-        .map_err(|error| runtime_error(listener, error.code, error.message))?;
-        Ok(PreparedListenerRuntime::ScriptedSocket {
-            bind_addr,
-            snapshot,
-            service: Some(Arc::new(service)),
-        })
+        let binding = provider.resolve(&scripted.package).await?.ok_or_else(|| {
+            AppError::new(
+                "EXTERNAL_PACKAGE_NOT_FOUND",
+                "Socket 协议包未在统一注册表中找到。",
+            )
+            .entity(format!(
+                "{}@{}",
+                scripted.package.id, scripted.package.version
+            ))
+        })?;
+        self.build_external_scripted_socket(workspace, listener, socket, bind_addr, binding)
+            .await
     }
 
     async fn build_external_scripted_socket(
@@ -210,16 +112,13 @@ impl ListenerRuntimePlanBuilder<'_> {
                     observer,
                 )
             }
-            SocketTopology::LocalResponder(_) => {
-                let ScriptedSocketSecuritySnapshot::LocalResponder { downstream_tls } = self
-                    .scripted_socket_security(workspace, &socket.topology)
-                    .await?
-                else {
-                    return Err(AppError::new(
-                        "SCRIPTED_SOCKET_PLAN_INVALID",
-                        "外部 LocalResponder 传输安全模式不一致。",
-                    )
-                    .entity(listener.id.to_string()));
+            SocketTopology::LocalResponder(local) => {
+                let downstream_tls = match &local.downstream_security {
+                    SocketDownstreamSecurity::Tcp => None,
+                    SocketDownstreamSecurity::Tls { downstream_tls } => Some(
+                        self.socket_downstream_tls(workspace, downstream_tls)
+                            .await?,
+                    ),
                 };
                 let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
                     &snapshot,
@@ -280,7 +179,7 @@ impl ListenerRuntimePlanBuilder<'_> {
         let topology = socket.topology.clone();
         self.adapter
             .compile_document_rules_on_blocking_owner(move || {
-                super::super::scripted_snapshot::compile_document_rules(
+                super::super::document_rules::compile_document_rules(
                     &workspace_for_compile,
                     &listener_for_compile,
                     &package,
@@ -292,87 +191,6 @@ impl ListenerRuntimePlanBuilder<'_> {
             .await
     }
 
-    fn build_local_responder(
-        &self,
-        workspace: &ProxyWorkspace,
-        listener: &ProxyListener,
-        socket: &SocketRelaySettings,
-        bind_addr: SocketAddr,
-        snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
-    ) -> AppResult<PreparedListenerRuntime> {
-        let ScriptedSocketSecuritySnapshot::LocalResponder { downstream_tls } = snapshot.security()
-        else {
-            return Err(AppError::new(
-                "SCRIPTED_SOCKET_PLAN_INVALID",
-                "LocalResponder 快照的传输安全模式不一致。",
-            )
-            .entity(listener.id.to_string()));
-        };
-        let framing_limits = intercept_proxy_protocol_scripting::ProtocolFramingLimits::default();
-        let pipeline_limits = pipeline_limits(
-            snapshot.runtime_limits(),
-            framing_limits,
-            usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
-                runtime_error(
-                    listener,
-                    "CONFIG_INVALID",
-                    "Socket 单次读取字节数超出平台范围".into(),
-                )
-            })?,
-            snapshot.upstream(),
-            snapshot.downstream(),
-        )
-        .map_err(|error| {
-            runtime_error(
-                listener,
-                error.stable_code(),
-                "LocalResponder 脚本资源限制无效".to_owned(),
-            )
-        })?;
-        let factory = Arc::new(ScriptedSocketCapabilityFactoryAdapter::new(
-            &snapshot,
-            listener.id.to_string(),
-            framing_limits,
-            Self::observation_metadata(workspace, listener),
-        ));
-        let observer = self.socket_observer(listener, socket)?;
-        let service = SocketRelayService::build_local_responder_with_observer(
-            SocketLocalResponderConfig {
-                bind_addr,
-                security: downstream_tls.as_ref().map_or(
-                    RuntimeDownstreamSecurity::Tcp,
-                    |downstream_tls| RuntimeDownstreamSecurity::Tls {
-                        downstream_tls: downstream_tls.clone(),
-                    },
-                ),
-                maximum_connections: socket.maximum_connections,
-                read_chunk_bytes: usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(
-                    |_| {
-                        runtime_error(
-                            listener,
-                            "CONFIG_INVALID",
-                            "Socket 单次读取字节数超出平台范围".into(),
-                        )
-                    },
-                )?,
-                // LocalResponder 没有 connect；沿用 Listener 的 connect timeout 作为唯一 App TLS
-                // handshake 上限，保证现有配置无需增加一个只对该拓扑生效的隐藏字段。
-                handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                write_timeout: Duration::from_millis(listener.write_timeout_ms),
-            },
-            factory,
-            pipeline_limits,
-            observer,
-        )
-        .map_err(|error| runtime_error(listener, error.code, error.message))?;
-        Ok(PreparedListenerRuntime::ScriptedSocket {
-            bind_addr,
-            snapshot,
-            service: Some(Arc::new(service)),
-        })
-    }
-
     fn observation_metadata(
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
@@ -380,29 +198,6 @@ impl ListenerRuntimePlanBuilder<'_> {
         SocketObservationMetadata {
             workspace_id: workspace.id.to_string(),
             listener_id: listener.id.to_string(),
-        }
-    }
-
-    async fn scripted_socket_security(
-        &self,
-        workspace: &ProxyWorkspace,
-        topology: &SocketTopology,
-    ) -> AppResult<ScriptedSocketSecuritySnapshot> {
-        match topology {
-            SocketTopology::Relay(relay) => Ok(ScriptedSocketSecuritySnapshot::Relay(
-                self.socket_security(workspace, &relay.security).await?,
-            )),
-            SocketTopology::LocalResponder(local) => {
-                Ok(ScriptedSocketSecuritySnapshot::LocalResponder {
-                    downstream_tls: match &local.downstream_security {
-                        SocketDownstreamSecurity::Tcp => None,
-                        SocketDownstreamSecurity::Tls { downstream_tls } => Some(
-                            self.socket_downstream_tls(workspace, downstream_tls)
-                                .await?,
-                        ),
-                    },
-                })
-            }
         }
     }
 }

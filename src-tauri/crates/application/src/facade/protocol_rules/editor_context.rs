@@ -1,16 +1,13 @@
 use intercept_proxy_domain::DocumentSchemaNode;
 
-use super::super::{
-    Application,
-    protocol_packages::{ensure_description_identity, ensure_external_description},
-};
+use super::super::{Application, protocol_packages::ensure_external_description};
 use super::find_listener;
 use crate::{
     AppError, AppResult, HttpBodyProcessing, ListenerDataPlane, ListenerId, ProtocolDirection,
     ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel, ProtocolPackageRef,
-    ProtocolPackageSchemaFieldTypeViewModel, ProtocolPackageSourceViewModel,
-    ProtocolRuleCapabilityCatalog, ProtocolRuleCommonActionCapability, ProtocolRuleEditorContext,
-    ProtocolRuleEditorStage, ProtocolRuleFieldActionCapability, ProtocolRuleFieldCapability,
+    ProtocolPackageSchemaFieldTypeViewModel, ProtocolRuleCapabilityCatalog,
+    ProtocolRuleCommonActionCapability, ProtocolRuleEditorContext, ProtocolRuleEditorStage,
+    ProtocolRuleFieldActionCapability, ProtocolRuleFieldCapability,
     ProtocolRuleFieldOperatorCapability, ProtocolRuleSaveInput, ProtocolRuleStage, ProxyListener,
     SocketPayloadProcessing, SocketTopology,
 };
@@ -90,19 +87,9 @@ impl Application {
                 &scripted.package
             }
         };
-        let version = self.require_protocol_package(package).await?;
-        let description = match version.source {
-            ProtocolPackageSourceViewModel::Internal { .. } => {
-                let description = self.protocol_package_compiler.describe(package).await?;
-                ensure_description_identity(package, &description)?;
-                description
-            }
-            ProtocolPackageSourceViewModel::External { .. } => {
-                let description = self.external_packages.describe(package).await?;
-                ensure_external_description(package, &description)?;
-                description
-            }
-        };
+        self.require_protocol_package(package).await?;
+        let description = self.external_packages.describe(package).await?;
+        ensure_external_description(package, &description)?;
         match (&listener.data_plane, description.kind) {
             (ListenerDataPlane::Http(_), ProtocolPackageKindViewModel::Http)
             | (ListenerDataPlane::Socket(_), ProtocolPackageKindViewModel::Socket) => {}
