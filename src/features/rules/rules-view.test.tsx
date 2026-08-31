@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
-
 import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProxyListener, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
 import { RulesView } from "./rules-view";
+import { localDocumentTypes, testListener, withOptionalHttpDocument, withSecondHttpStage, withSocketFields } from "./rules-view-test-fixtures";
 
 const commandMocks = vi.hoisted(() => ({
   workspaceList: vi.fn(), workspaceGet: vi.fn(), ruleDefinitionList: vi.fn(),
@@ -13,13 +13,14 @@ const commandMocks = vi.hoisted(() => ({
   ruleDefinitionToggle: vi.fn(), ruleDefinitionDelete: vi.fn(), ruleParseDocumentValue: vi.fn(),
   ruleDefinitionCopy: vi.fn(), ruleDefinitionCreateFromExchangeObservation: vi.fn(),
   ruleDefinitionConditionDraft: vi.fn(), ruleDefinitionActionDraft: vi.fn(),
+  ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
+  ruleDefinitionDocumentCommonActionDraft: vi.fn(),
 }));
 
 const navigationState = vi.hoisted(() => ({
   searchParams: new URLSearchParams(),
   navigate: vi.fn(),
 }));
-
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   appErrorViewModel: () => undefined,
@@ -32,21 +33,11 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
   useWorkspaceNavigation: () => navigationState,
 }));
 
-const httpListener = listener("http-listener", "HTTP Listener", "http");
-const socketListener = listener("socket-listener", "Socket Listener", "socket");
+const httpListener = testListener("http-listener", "HTTP Listener", "http");
+const socketListener = testListener("socket-listener", "Socket Listener", "socket");
 const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, field: "PathOrRequestType" as const, operator: { Equals: "/" } } };
 const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
 const lifecycle = { hit_count: 0, last_hit_at: null };
-
-function listener(id: string, name: string, kind: "http" | "socket"): ProxyListener {
-  return {
-    id, name, enabled: true, bind_address: "127.0.0.1", port: kind === "http" ? 8080 : 9000,
-    connect_timeout_ms: 1_000, read_timeout_ms: 1_000, write_timeout_ms: 1_000,
-    data_plane: kind === "http"
-      ? { kind: "http", settings: { body_processing: { mode: "plain" } } }
-      : { kind: "socket", settings: { processing: { mode: "direct" } } },
-  } as ProxyListener;
-}
 
 function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
   return {
@@ -72,6 +63,7 @@ function socketRule(): RuleDefinition_Serialize {
 
 const httpContext: RuleEditorContext = {
   listener_id: httpListener.id,
+  local_document_types: localDocumentTypes,
   content: { type: "http", value: { stages: [{
     stage: "proxy_to_upstream",
     http: { stage: "request", match_field_kinds: ["path_or_request_type", "json_path"], actions: [{ kind: "set_header", terminal: false, traffic_direction: null }] },
@@ -89,6 +81,7 @@ const httpContext: RuleEditorContext = {
 
 const socketContext: RuleEditorContext = {
   listener_id: socketListener.id,
+  local_document_types: localDocumentTypes,
   content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, stages: [{
     stage: "proxy_to_app", fields: [], common_actions: ["record_match"],
     new_rule_draft: { rule_id: null, expected_revision: null, draft: {
@@ -135,6 +128,15 @@ describe("unified rule workspace", () => {
     commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ source: "http", field: "PathOrRequestType", operator: { Equals: "" } });
     commandMocks.ruleDefinitionActionDraft.mockResolvedValue({ SetHeader: { name: "x-proxy-test", value: "" } });
     commandMocks.ruleParseDocumentValue.mockResolvedValue(0);
+    commandMocks.ruleDefinitionDocumentConditionDraft.mockImplementation(async (path, type, predicate, raw) => {
+      const value = JSON.parse(raw);
+      const typedPredicate = type === "string" ? { type: "string", value: { operator: predicate === "equals" ? "equal" : predicate, value } }
+        : type === "number" ? { type: "number", value: { operator: predicate === "equals" ? "equal" : predicate, value } }
+        : type === "boolean" ? { type: "boolean", value: { equal: value } } : { type: "null_equal" };
+      return { source: "document", path, predicate: typedPredicate };
+    });
+    commandMocks.ruleDefinitionDocumentActionDraft.mockImplementation(async (path, type, action, raw, index) => ({ source: "document", value: action === "clear" ? { type: "clear", path, value_type: type } : action === "insert" ? { type: "insert", path, index, value: JSON.parse(raw) } : { type: action, path, value: JSON.parse(raw) } }));
+    commandMocks.ruleDefinitionDocumentCommonActionDraft.mockResolvedValue({ source: "record_match" });
   });
 
   it("uses one list and groups rules by the fixed pipeline stage order", async () => {
@@ -155,6 +157,7 @@ describe("unified rule workspace", () => {
     expect(screen.getByRole("heading", { name: "HTTP Body Document" })).toBeVisible();
     expect(screen.getByDisplayValue("HTTP Listener")).toBeVisible();
     expect(screen.queryByRole("combobox", { name: "Listener" })).not.toBeInTheDocument();
+    expect(screen.getByRole("dialog", { name: "编辑规则" })).toBeVisible();
   });
 
   it("keeps Socket document-only and does not expose HTTP capabilities", async () => {
@@ -211,7 +214,7 @@ describe("unified rule workspace", () => {
     expect(commandMocks.ruleDefinitionCreateFromExchangeObservation).toHaveBeenCalledWith("exchange-7", 4);
     expect(await screen.findByDisplayValue("Mock /checkout")).toBeVisible();
     expect(screen.getByRole("switch", { name: "启用规则" })).not.toBeChecked();
-    expect(screen.getByText("Mock Response")).toBeVisible();
+    expect(screen.getByRole("listitem")).toHaveTextContent("Mock Response");
     expect(navigationState.navigate).toHaveBeenCalledWith("/rules");
   });
 
@@ -244,6 +247,7 @@ describe("unified rule workspace", () => {
 
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
     await user.click(await screen.findByRole("button", { name: "添加条件：字段" }));
+    await user.click(screen.getByRole("button", { name: "关闭规则编辑器" }));
     await user.click(screen.getByRole("button", { name: /HTTP second/ }));
     expect(await screen.findByDisplayValue("HTTP second")).toBeVisible();
 
@@ -289,7 +293,7 @@ describe("unified rule workspace", () => {
   });
 
   it("switches an HTTP rule between header-only and Rust's optional Document draft", async () => {
-    commandMocks.ruleEditorContext.mockResolvedValue(httpContextWithOptionalDocument());
+    commandMocks.ruleEditorContext.mockResolvedValue(withOptionalHttpDocument(httpContext));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
@@ -306,7 +310,7 @@ describe("unified rule workspace", () => {
   });
 
   it("creates HTTP Document conditions and field/common actions from Rust capabilities and typed values", async () => {
-    commandMocks.ruleEditorContext.mockResolvedValue(httpContextWithOptionalDocument());
+    commandMocks.ruleEditorContext.mockResolvedValue(withOptionalHttpDocument(httpContext));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
@@ -316,10 +320,17 @@ describe("unified rule workspace", () => {
     await user.click(screen.getByRole("button", { name: "添加动作：Set Amount" }));
     await user.click(screen.getByRole("button", { name: "添加动作：Clear Amount" }));
     await user.click(screen.getByRole("button", { name: "添加：记录命中" }));
-    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledTimes(2));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentCommonActionDraft).toHaveBeenCalledTimes(1));
+    expect(screen.queryByText(/当前阶段不可保存/)).not.toBeInTheDocument();
+    const httpSave = screen.getByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(httpSave).toBeEnabled());
+    await user.click(httpSave);
 
-    expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledTimes(2);
-    expect(commandMocks.ruleParseDocumentValue).toHaveBeenCalledWith("number", "0");
+    expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("/amount", "number", "equals", "0");
+    expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/amount", "number", "set", "0", null);
+    expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/amount", "number", "clear", null, null);
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
         document: { package: { id: "iso8583", version: "1.0.0" } },
@@ -327,7 +338,7 @@ describe("unified rule workspace", () => {
         actions: [
           { source: "record_match" },
           { source: "document", value: { type: "set", path: "/amount", value: 0 } },
-          { source: "document", value: { type: "clear", path: "/amount" } },
+          { source: "document", value: { type: "clear", path: "/amount", value_type: "number" } },
           { source: "record_match" },
         ],
       }) } }),
@@ -335,7 +346,7 @@ describe("unified rule workspace", () => {
   });
 
   it("preserves Socket Document conditions and Set/ClearField capabilities", async () => {
-    commandMocks.ruleEditorContext.mockResolvedValue(socketContextWithFields());
+    commandMocks.ruleEditorContext.mockResolvedValue(withSocketFields(socketContext));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /Socket document/ }));
@@ -343,7 +354,12 @@ describe("unified rule workspace", () => {
     await user.click(screen.getByRole("button", { name: "添加条件：Amount equals" }));
     await user.click(screen.getByRole("button", { name: "添加动作：Set Amount" }));
     await user.click(screen.getByRole("button", { name: "添加动作：Clear Amount" }));
-    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledTimes(1));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledTimes(2));
+    expect(screen.queryByText(/当前阶段不可保存/)).not.toBeInTheDocument();
+    const socketSave = screen.getByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(socketSave).toBeEnabled());
+    await user.click(socketSave);
 
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       rule_id: "socket-rule",
@@ -352,12 +368,74 @@ describe("unified rule workspace", () => {
         actions: [
           { source: "record_match" },
           { source: "document", value: { type: "set", path: "/amount", value: 0 } },
-          { source: "document", value: { type: "clear", path: "/amount" } },
+          { source: "document", value: { type: "clear", path: "/amount", value_type: "number" } },
         ],
       }) } }),
     }));
   });
 
+  it("creates the first schema-free rule-local metadata leaf from an explicit path type and value", async () => {
+    const empty = socketRule();
+    empty.content.value.condition = { operator: "leaf", children: { source: "nth_hit", count: 1 } };
+    commandMocks.ruleDefinitionList.mockResolvedValue([empty]); commandMocks.ruleDefinitionGet.mockResolvedValue(empty);
+    commandMocks.ruleParseDocumentValue.mockResolvedValue("merchant-7");
+    const user = userEvent.setup(); render(<RulesView />);
+    await user.click(await screen.findByRole("button", { name: /Socket document/ }));
+    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/merchant/id");
+    await user.click(screen.getByRole("button", { name: /规则本地类型/ }));
+    await user.click(await screen.findByRole("option", { name: "string" }));
+    await user.click(screen.getByRole("button", { name: /规则本地谓词/ }));
+    await user.click(await screen.findByRole("option", { name: "equals" }));
+    await user.type(screen.getByLabelText("规则本地值"), '"merchant-7"');
+    await user.click(screen.getByRole("button", { name: "创建规则本地元数据条件" }));
+    expect(await screen.findByRole("tree", { name: "Rule-local metadata tree" })).toHaveTextContent("/merchant/id");
+    const saveButton = screen.getByRole("button", { name: "保存规则" }); await waitFor(() => expect(saveButton).toBeEnabled());
+    await user.click(saveButton);
+
+    expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("/merchant/id", "string", "equals", '"merchant-7"');
+    const saved = commandMocks.ruleDefinitionSave.mock.calls.at(-1)?.[0]; expect(saved.draft.content.value.condition).toEqual({ operator: "all", children: [
+      { operator: "leaf", children: { source: "nth_hit", count: 1 } },
+      { operator: "leaf", children: { source: "document", path: "/merchant/id", predicate: { type: "string", value: { operator: "equal", value: "merchant-7" } } } },
+    ] });
+  });
+  it("uses Rust capabilities for an existing null rule-local field", async () => {
+    const existing = socketRule();
+    existing.content.value.condition = { operator: "leaf", children: { source: "document", path: "/nullable", predicate: { type: "null_equal" } } };
+    const context = { ...socketContext, local_document_types: localDocumentTypes.map((capability) => capability.value_type === "null" ? { ...capability, predicates: ["equals" as const], actions: ["clear" as const] } : capability) };
+    commandMocks.ruleDefinitionList.mockResolvedValue([existing]); commandMocks.ruleDefinitionGet.mockResolvedValue(existing); commandMocks.ruleEditorContext.mockResolvedValue(context);
+    const user = userEvent.setup(); render(<RulesView />);
+    await user.click(await screen.findByRole("button", { name: /Socket document/ }));
+    expect(await screen.findByLabelText("Document 值：/nullable")).toBeInTheDocument(); expect(screen.getByRole("button", { name: "添加条件：/nullable equals" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "添加动作：Clear /nullable" })).toBeInTheDocument(); expect(screen.queryByRole("button", { name: "添加动作：Set /nullable" })).not.toBeInTheDocument();
+  });
+  it("persists Rust-factory Insert and Append for a rule-local path", async () => {
+    const empty = socketRule(); empty.content.value.condition = { operator: "leaf", children: { source: "nth_hit", count: 1 } }; empty.content.value.actions = [];
+    commandMocks.ruleDefinitionList.mockResolvedValue([empty]); commandMocks.ruleDefinitionGet.mockResolvedValue(empty);
+    const user = userEvent.setup(); render(<RulesView />); await user.click(await screen.findByRole("button", { name: /Socket document/ }));
+    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/items"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "string" }));
+    const value = screen.getByLabelText("规则本地值"); await user.type(value, '"first"'); await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "insert" }));
+    await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" })); await user.clear(value); await user.type(value, '"last"');
+    await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "append" })); await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
+    const save = screen.getByRole("button", { name: "保存规则" }); await waitFor(() => expect(save).toBeEnabled()); await user.click(save);
+    expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/items", "string", "insert", '"first"', 0); expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/items", "string", "append", '"last"', null);
+    expect(commandMocks.ruleDefinitionSave.mock.calls.at(-1)?.[0].draft.content.value.actions).toEqual([{ source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } }, { source: "document", value: { type: "append", path: "/items", value: "last" } }]);
+  });
+  it("persists the first Rust-factory Clear-only rule-local metadata leaf with its selected type", async () => {
+    const empty = socketRule(); empty.content.value.condition = { operator: "leaf", children: { source: "nth_hit", count: 1 } }; empty.content.value.actions = []; commandMocks.ruleDefinitionList.mockResolvedValue([empty]); commandMocks.ruleDefinitionGet.mockResolvedValue(empty);
+    commandMocks.ruleEditorContext.mockResolvedValue({ ...socketContext, local_document_types: [{ value_type: "boolean", predicates: [], actions: ["clear"] }] }); const user = userEvent.setup(); render(<RulesView />); await user.click(await screen.findByRole("button", { name: /Socket document/ }));
+    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/enabled"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "boolean" })); await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "clear" })); await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
+    const save = screen.getByRole("button", { name: "保存规则" }); await waitFor(() => expect(save).toBeEnabled()); await user.click(save);
+    expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/enabled", "boolean", "clear", null, null); expect(commandMocks.ruleDefinitionSave.mock.calls.at(-1)?.[0].draft.content.value.actions).toEqual([{ source: "document", value: { type: "clear", path: "/enabled", value_type: "boolean" } }]);
+  });
+  it("does not reopen a closed editor when an old select request resolves", async () => {
+    let finishRule!: (value: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionGet.mockReturnValue(new Promise((resolve) => { finishRule = resolve; }));
+    const user = userEvent.setup(); render(<RulesView />);
+    await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await user.click(screen.getByRole("button", { name: "关闭规则编辑器" }));
+    await act(async () => { finishRule(httpRule()); await Promise.resolve(); });
+    expect(screen.queryByRole("dialog", { name: "编辑规则" })).not.toBeInTheDocument();
+  });
   it("blocks an HTTP stage whose Rust capabilities cannot edit the retained payload", async () => {
     const rule = httpRule({
       content: { type: "http", value: {
@@ -367,7 +445,7 @@ describe("unified rule workspace", () => {
     });
     commandMocks.ruleDefinitionList.mockResolvedValue([rule]);
     commandMocks.ruleDefinitionGet.mockResolvedValue(rule);
-    commandMocks.ruleEditorContext.mockResolvedValue(httpContextWithSecondStage([]));
+    commandMocks.ruleEditorContext.mockResolvedValue(withSecondHttpStage(httpContext, []));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
@@ -383,7 +461,7 @@ describe("unified rule workspace", () => {
       description: "", condition: httpCondition, actions: [{ source: "http", value: { SetHeader: { name: "x-test", value: "1" } } }],
       document: null,
     } } });
-    const context = httpContextWithSecondStage([]);
+    const context = withSecondHttpStage(httpContext, []);
     if (context.content.type !== "http" || !context.content.value.stages[0].http) throw new Error("HTTP context fixture is invalid");
     context.content.value.stages[0].http.actions = [];
     commandMocks.ruleDefinitionList.mockResolvedValue([rule]);
@@ -405,7 +483,7 @@ describe("unified rule workspace", () => {
     const rule = httpRule({ lifecycle: retainedLifecycle, content: { type: "http", value: retainedContent } });
     commandMocks.ruleDefinitionList.mockResolvedValue([rule]);
     commandMocks.ruleDefinitionGet.mockResolvedValue(rule);
-    commandMocks.ruleEditorContext.mockResolvedValue(httpContextWithSecondStage(["set_header"]));
+    commandMocks.ruleEditorContext.mockResolvedValue(withSecondHttpStage(httpContext, ["set_header"]));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
@@ -419,48 +497,3 @@ describe("unified rule workspace", () => {
     }));
   });
 });
-
-function httpContextWithOptionalDocument() {
-  const stage = httpContext.content.type === "http" ? httpContext.content.value.stages[0] : undefined;
-  if (!stage) throw new Error("HTTP context fixture is invalid");
-  return {
-    ...httpContext,
-    content: { type: "http", value: { stages: [{
-      ...stage,
-      document_fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
-    }] } },
-  } as unknown as RuleEditorContext;
-}
-
-function socketContextWithFields() {
-  const stage = socketContext.content.type === "socket" ? socketContext.content.value.stages[0] : undefined;
-  if (!stage) throw new Error("Socket context fixture is invalid");
-  return {
-    ...socketContext,
-    content: { type: "socket", value: { ...socketContext.content.value, stages: [{
-      ...stage,
-      fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
-    }] } },
-  } as RuleEditorContext;
-}
-
-function httpContextWithSecondStage(actionKinds: Array<"set_header">): RuleEditorContext {
-  const stage = httpContext.content.type === "http" ? httpContext.content.value.stages[0] : undefined;
-  if (!stage) throw new Error("HTTP context fixture is invalid");
-  return {
-    ...httpContext,
-    content: { type: "http", value: { stages: [stage, {
-      ...stage,
-      stage: "proxy_to_app",
-      http: {
-        stage: "response",
-        match_field_kinds: ["path_or_request_type", "json_path"],
-        actions: actionKinds.map((kind) => ({ kind, terminal: false, traffic_direction: null })),
-      },
-      new_rule_draft: {
-        ...stage.new_rule_draft,
-        draft: { ...stage.new_rule_draft.draft, stage: "proxy_to_app" },
-      },
-    }] } },
-  };
-}

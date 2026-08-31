@@ -329,8 +329,8 @@ fn empty_rules(
         )
     };
     ProtocolDocumentRuleConnectionFactory::new(
-        program(ProtocolRuleStage::ProxyToUpstream, upstream),
-        program(ProtocolRuleStage::ProxyToApp, downstream),
+        &program(ProtocolRuleStage::ProxyToUpstream, upstream),
+        &program(ProtocolRuleStage::ProxyToApp, downstream),
     )
     .unwrap()
 }

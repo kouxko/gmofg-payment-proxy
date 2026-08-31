@@ -1,5 +1,6 @@
 //! Rust-authoritative editor context for the unified rule API.
 
+mod document_factory;
 mod validation;
 
 use super::{
@@ -13,8 +14,10 @@ use crate::{
     ProtocolRuleFieldCapability, ProtocolRuleFieldOperatorCapability, ProtocolRuleStage,
     ProxyListener, RuleAction as AppRuleAction, RuleActionKind, RuleCondition as AppRuleCondition,
     RuleConditionKind, RuleContent, RuleDefinitionDraft, RuleDefinitionSaveInput,
-    RuleEditorContentContext, RuleEditorContext, RuleMatchField, RuleMatchOperator, RuleStage,
-    RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
+    RuleEditorContentContext, RuleEditorContext, RuleLocalDocumentActionKind,
+    RuleLocalDocumentPredicateKind, RuleLocalDocumentValueType, RuleMatchField, RuleMatchOperator,
+    RuleStage, RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
+    local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
     Condition, ConditionTree, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
@@ -74,7 +77,38 @@ impl Application {
         Ok(RuleEditorContext {
             listener_id,
             content,
+            local_document_types: local_document_type_capabilities(),
         })
+    }
+
+    pub fn rule_definition_document_condition_draft(
+        &self,
+        path: &str,
+        value_type: RuleLocalDocumentValueType,
+        predicate: RuleLocalDocumentPredicateKind,
+        raw: &str,
+    ) -> AppResult<Condition> {
+        document_factory::condition_draft(path, value_type, predicate, raw)
+    }
+
+    pub fn rule_definition_document_action_draft(
+        &self,
+        path: &str,
+        value_type: RuleLocalDocumentValueType,
+        action: RuleLocalDocumentActionKind,
+        raw: Option<&str>,
+        index: Option<u32>,
+    ) -> AppResult<UnifiedAction> {
+        document_factory::action_draft(path, value_type, action, raw, index)
+    }
+
+    pub fn rule_definition_document_common_action_draft(
+        &self,
+        action: ProtocolRuleCommonActionCapability,
+    ) -> UnifiedAction {
+        match action {
+            ProtocolRuleCommonActionCapability::RecordMatch => UnifiedAction::RecordMatch,
+        }
     }
 
     pub fn rule_definition_condition_draft(

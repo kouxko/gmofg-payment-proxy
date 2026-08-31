@@ -4,15 +4,19 @@ use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    Document, ProtocolDirection, ProtocolDocumentRuleId, ProtocolDocumentRuleProgram,
-    ProtocolPackageRef, Rule, RuleId,
+    Document, DocumentMutation, MatchContext, ProtocolDirection, ProtocolPackageRef, Rule, RuleId,
+    UnifiedAction, UnifiedRuleProgram, matches_http_condition,
 };
 use intercept_proxy_exchange::{
-    Error, ExternalPackageCallFailure, ExternalPackageCallStage, SocketContext,
+    Error, ExternalPackageCallFailure, ExternalPackageCallStage, RuleProcessingAccumulator,
+    RuleProcessingChange, RuleProcessingOperation, RuleProcessingOperationKind, SocketContext,
+    rules_processed,
 };
 use intercept_proxy_package_contract::{CanonicalBase64, EncodeParams};
 use intercept_proxy_product_api::BodyCodec;
-use intercept_proxy_runtime::{ConnectionContext, Message, SocketJointEvaluation};
+use intercept_proxy_runtime::{
+    ConnectionContext, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
+};
 use parking_lot::Mutex;
 use uuid::Uuid;
 
@@ -81,7 +85,8 @@ pub(crate) struct JointDocumentEvaluation {
     document: Document,
     original_document: Document,
     encoder: JointDocumentEncoder,
-    programs: HashMap<RuleId, Arc<ProtocolDocumentRuleProgram>>,
+    programs: HashMap<RuleId, Arc<UnifiedRuleProgram>>,
+    changes: RuleProcessingAccumulator,
 }
 
 #[derive(Clone)]
@@ -121,7 +126,7 @@ impl JointDocumentEvaluation {
         direction: ProtocolDirection,
         codec: Arc<dyn BodyCodec>,
         package: ProtocolPackageRef,
-        programs: impl IntoIterator<Item = Arc<ProtocolDocumentRuleProgram>>,
+        programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
     ) -> Self {
         let programs = programs
             .into_iter()
@@ -129,12 +134,7 @@ impl JointDocumentEvaluation {
                 program
                     .rules()
                     .iter()
-                    .map(|rule| {
-                        (
-                            RuleId::from_uuid(rule.rule_id().as_uuid()),
-                            Arc::clone(&program),
-                        )
-                    })
+                    .map(|rule| (rule.rule_id(), Arc::clone(&program)))
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -149,6 +149,7 @@ impl JointDocumentEvaluation {
                 package,
             },
             programs,
+            changes: RuleProcessingAccumulator::default(),
         }
     }
 
@@ -159,7 +160,7 @@ impl JointDocumentEvaluation {
         rpc: Arc<dyn ExternalPackageRpc>,
         direction: ProtocolDirection,
         package: ProtocolPackageRef,
-        programs: impl IntoIterator<Item = Arc<ProtocolDocumentRuleProgram>>,
+        programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
     ) -> Self {
         let programs = programs
             .into_iter()
@@ -167,12 +168,7 @@ impl JointDocumentEvaluation {
                 program
                     .rules()
                     .iter()
-                    .map(|rule| {
-                        (
-                            RuleId::from_uuid(rule.rule_id().as_uuid()),
-                            Arc::clone(&program),
-                        )
-                    })
+                    .map(|rule| (rule.rule_id(), Arc::clone(&program)))
                     .collect::<Vec<_>>()
             })
             .collect();
@@ -186,23 +182,42 @@ impl JointDocumentEvaluation {
                 package,
             },
             programs,
+            changes: RuleProcessingAccumulator::default(),
         }
     }
 
     pub(crate) fn gate(
         &mut self,
         rule: &Rule,
-    ) -> Result<bool, intercept_proxy_domain::DomainError> {
+        nth_attempt: u64,
+        match_context: &MatchContext<'_>,
+    ) -> Result<JointRuleConditionEvaluation, intercept_proxy_domain::DomainError> {
         let Some(program) = self.programs.get(&rule.id) else {
-            return Ok(true);
+            return Ok(JointRuleConditionEvaluation::NotOwned);
         };
-        program.apply_rule_if_matches(
-            ProtocolDocumentRuleId::from_uuid(rule.id.as_uuid()),
+        let evaluation = program.evaluate_and_apply_rule_with_http(
+            rule.id,
             &mut self.document,
-        )
+            nth_attempt,
+            |field, operator| matches_http_condition(field, operator, match_context),
+        )?;
+        self.changes
+            .record(processing_change(program, rule.id, evaluation.matched));
+        Ok(JointRuleConditionEvaluation::UnifiedOwned(
+            intercept_proxy_runtime::JointConditionEvaluation {
+                matched: evaluation.matched,
+                eligible_without_nth: evaluation.eligible_without_nth,
+                contains_nth: evaluation.contains_nth,
+            },
+        ))
     }
 
     pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
+        let direction = match &self.encoder {
+            JointDocumentEncoder::External { direction, .. }
+            | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
+        };
+        rules_processed(direction, &self.changes, &self.document);
         let written = match self.encoder {
             JointDocumentEncoder::External {
                 original_input,
@@ -247,6 +262,11 @@ impl JointDocumentEvaluation {
     }
 
     async fn encode_socket(self) -> Result<SocketContext, Error> {
+        let direction = match &self.encoder {
+            JointDocumentEncoder::External { direction, .. }
+            | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
+        };
+        rules_processed(direction, &self.changes, &self.document);
         let JointDocumentEncoder::SocketExternal {
             original_input,
             rpc,
@@ -294,20 +314,99 @@ impl JointDocumentEvaluation {
 
 #[async_trait]
 impl SocketJointEvaluation for JointDocumentEvaluation {
-    fn gate(&mut self, rule_id: Uuid) -> intercept_proxy_runtime::Result<bool> {
+    fn gate(
+        &mut self,
+        rule_id: Uuid,
+        nth_attempt: u64,
+    ) -> intercept_proxy_runtime::Result<JointRuleConditionEvaluation> {
         let Some(program) = self.programs.get(&RuleId::from_uuid(rule_id)) else {
-            return Ok(true);
+            return Ok(JointRuleConditionEvaluation::NotOwned);
         };
-        program
-            .apply_rule_if_matches(
-                ProtocolDocumentRuleId::from_uuid(rule_id),
+        let evaluation = program
+            .evaluate_and_apply_rule_with_http(
+                RuleId::from_uuid(rule_id),
                 &mut self.document,
+                nth_attempt,
+                |_, _| {
+                    Err(intercept_proxy_domain::DomainError::new(
+                        intercept_proxy_domain::ErrorCode::RuleInvalid,
+                        "Socket rules cannot evaluate HTTP conditions",
+                    ))
+                },
             )
-            .map_err(|error| crate::adapters::pipeline::app_to_proxy(error.into()))
+            .map_err(|error| crate::adapters::pipeline::app_to_proxy(error.into()))?;
+        self.changes.record(processing_change(
+            program,
+            RuleId::from_uuid(rule_id),
+            evaluation.matched,
+        ));
+        Ok(JointRuleConditionEvaluation::UnifiedOwned(
+            intercept_proxy_runtime::JointConditionEvaluation {
+                matched: evaluation.matched,
+                eligible_without_nth: evaluation.eligible_without_nth,
+                contains_nth: evaluation.contains_nth,
+            },
+        ))
     }
 
     async fn encode(self: Box<Self>) -> Result<SocketContext, Error> {
         (*self).encode_socket().await
+    }
+}
+
+fn processing_change(
+    program: &UnifiedRuleProgram,
+    rule_id: RuleId,
+    matched: bool,
+) -> RuleProcessingChange {
+    let operations = if matched {
+        program
+            .rules()
+            .iter()
+            .find(|rule| rule.rule_id() == rule_id)
+            .map_or_else(Vec::new, |rule| {
+                rule.actions()
+                    .iter()
+                    .filter_map(|operation| match operation {
+                        UnifiedAction::RecordMatch => Some(RuleProcessingOperation {
+                            kind: RuleProcessingOperationKind::RecordMatch,
+                            path: None,
+                        }),
+                        UnifiedAction::Document(DocumentMutation::Set { path, .. }) => {
+                            Some(RuleProcessingOperation {
+                                kind: RuleProcessingOperationKind::Set,
+                                path: Some(path.as_str().to_owned()),
+                            })
+                        }
+                        UnifiedAction::Document(DocumentMutation::Clear { path, .. }) => {
+                            Some(RuleProcessingOperation {
+                                kind: RuleProcessingOperationKind::Clear,
+                                path: Some(path.as_str().to_owned()),
+                            })
+                        }
+                        UnifiedAction::Document(DocumentMutation::Insert { path, .. }) => {
+                            Some(RuleProcessingOperation {
+                                kind: RuleProcessingOperationKind::Insert,
+                                path: Some(path.as_str().to_owned()),
+                            })
+                        }
+                        UnifiedAction::Document(DocumentMutation::Append { path, .. }) => {
+                            Some(RuleProcessingOperation {
+                                kind: RuleProcessingOperationKind::Append,
+                                path: Some(path.as_str().to_owned()),
+                            })
+                        }
+                        UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => None,
+                    })
+                    .collect()
+            })
+    } else {
+        Vec::new()
+    };
+    RuleProcessingChange {
+        rule_id: rule_id.to_string(),
+        matched,
+        operations,
     }
 }
 

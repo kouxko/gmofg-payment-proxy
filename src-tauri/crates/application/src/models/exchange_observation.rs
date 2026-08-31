@@ -4,7 +4,7 @@
 //! 不引入 message id 或 sequence；运行时报文只存在于有界内存中。
 
 use chrono::{DateTime, Utc};
-use intercept_proxy_domain::{ListenerId, ProtocolDirection, WorkspaceId};
+use intercept_proxy_domain::{ListenerId, ProtocolDirection, RuleId, WorkspaceId};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
@@ -50,6 +50,19 @@ pub enum ExchangeObservationEvent {
         /// 协议 Reader 固定 Display；透明 Socket 不调用 Display。
         display: Option<String>,
     },
+    Processed {
+        observed_at: DateTime<Utc>,
+        direction: ProtocolDirection,
+        changes: Vec<RuleDocumentChangeViewModel>,
+        changes_truncated: bool,
+        #[specta(type = specta_typescript::Unknown<Value>)]
+        final_document: Value,
+    },
+    Encoded {
+        observed_at: DateTime<Utc>,
+        direction: ProtocolDirection,
+        context: ExchangeContext,
+    },
     Sent {
         observed_at: DateTime<Utc>,
         direction: ProtocolDirection,
@@ -68,6 +81,31 @@ pub enum ExchangeObservationEvent {
         outcome: String,
         error: Option<String>,
     },
+}
+
+#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct RuleDocumentChangeViewModel {
+    pub rule_id: RuleId,
+    pub matched: bool,
+    pub operations: Vec<RuleDocumentOperationViewModel>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct RuleDocumentOperationViewModel {
+    pub kind: RuleDocumentOperationKindViewModel,
+    pub path: Option<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleDocumentOperationKindViewModel {
+    RecordMatch,
+    Set,
+    Clear,
+    Insert,
+    Append,
 }
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -132,7 +170,27 @@ fn event_bytes(event: &ExchangeObservationEvent) -> u64 {
                     + document.as_ref().map_or(0, json_bytes)
                     + display.as_ref().map_or(0, |value| value.len() as u64)
             }
-            ExchangeObservationEvent::Sent { context, .. } => context_bytes(context),
+            ExchangeObservationEvent::Sent { context, .. }
+            | ExchangeObservationEvent::Encoded { context, .. } => context_bytes(context),
+            ExchangeObservationEvent::Processed {
+                changes,
+                final_document,
+                ..
+            } => {
+                changes
+                    .iter()
+                    .map(|change| {
+                        48 + change
+                            .operations
+                            .iter()
+                            .map(|operation| {
+                                8 + operation.path.as_ref().map_or(0, |path| path.len() as u64)
+                            })
+                            .sum::<u64>()
+                    })
+                    .sum::<u64>()
+                    + json_bytes(final_document)
+            }
             ExchangeObservationEvent::Failed {
                 stage,
                 context,

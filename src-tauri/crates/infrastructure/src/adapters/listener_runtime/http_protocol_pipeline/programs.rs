@@ -2,18 +2,19 @@ use std::sync::Arc;
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    DocumentSchemaNode, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleProgram,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, sort_protocol_document_rules,
+    DocumentSchemaNode, HttpRuleContent, ProtocolPackageRef, ProtocolRuleStage, ProxyListener,
+    ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram,
+    validate_unified_actions_schema,
 };
 
 #[derive(Clone)]
 pub(super) struct HttpDocumentRulePrograms {
-    proxy_to_upstream: Arc<ProtocolDocumentRuleProgram>,
-    proxy_to_app: Arc<ProtocolDocumentRuleProgram>,
+    proxy_to_upstream: Arc<UnifiedRuleProgram>,
+    proxy_to_app: Arc<UnifiedRuleProgram>,
 }
 
 impl HttpDocumentRulePrograms {
-    pub(super) fn program(&self, stage: ProtocolRuleStage) -> Arc<ProtocolDocumentRuleProgram> {
+    pub(super) fn program(&self, stage: ProtocolRuleStage) -> Arc<UnifiedRuleProgram> {
         Arc::clone(match stage {
             ProtocolRuleStage::ProxyToUpstream => &self.proxy_to_upstream,
             ProtocolRuleStage::ProxyToApp => &self.proxy_to_app,
@@ -24,40 +25,23 @@ impl HttpDocumentRulePrograms {
 pub(super) fn compile_programs(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
-    package: &intercept_proxy_domain::ProtocolPackageRef,
+    package: &ProtocolPackageRef,
     upstream_schema: &DocumentSchemaNode,
     downstream_schema: &DocumentSchemaNode,
 ) -> AppResult<HttpDocumentRulePrograms> {
-    let mut rules = workspace
-        .document_runtime_rules()?
-        .into_iter()
-        .filter(|rule| rule.listener_id() == listener.id)
-        .collect::<Vec<_>>();
-    for rule in &rules {
-        let schema = schema_for_stage(rule.stage(), upstream_schema, downstream_schema);
-        if rule.package() != package {
-            return Err(AppError::new(
-                "DOCUMENT_RULE_RUNTIME_BINDING_MISMATCH",
-                "报文规则与当前协议包或 Schema 不一致。",
-            )
-            .entity(rule.rule_id().to_string()));
-        }
-        rule.validate_against_schema(schema)?;
-    }
-    sort_protocol_document_rules(&mut rules);
-    let program = |stage| {
+    let compile = |stage| {
         compile_program(
+            workspace,
             listener,
             package,
             schema_for_stage(stage, upstream_schema, downstream_schema),
             stage,
-            &rules,
         )
         .map(Arc::new)
     };
     Ok(HttpDocumentRulePrograms {
-        proxy_to_upstream: program(ProtocolRuleStage::ProxyToUpstream)?,
-        proxy_to_app: program(ProtocolRuleStage::ProxyToApp)?,
+        proxy_to_upstream: compile(ProtocolRuleStage::ProxyToUpstream)?,
+        proxy_to_app: compile(ProtocolRuleStage::ProxyToApp)?,
     })
 }
 
@@ -73,22 +57,46 @@ const fn schema_for_stage<'a>(
 }
 
 fn compile_program(
+    workspace: &ProxyWorkspace,
     listener: &ProxyListener,
-    package: &intercept_proxy_domain::ProtocolPackageRef,
-    schema: &intercept_proxy_domain::DocumentSchemaNode,
+    package: &ProtocolPackageRef,
+    schema: &DocumentSchemaNode,
     stage: ProtocolRuleStage,
-    rules: &[ProtocolDocumentRuleDefinition],
-) -> AppResult<ProtocolDocumentRuleProgram> {
-    ProtocolDocumentRuleProgram::new_for_stage(
-        listener.id,
-        package.clone(),
-        schema.clone(),
-        stage,
-        rules
-            .iter()
-            .filter(|rule| rule.stage() == stage)
-            .cloned()
-            .collect(),
-    )
-    .map_err(AppError::from)
+) -> AppResult<UnifiedRuleProgram> {
+    let expected_stage = match stage {
+        ProtocolRuleStage::ProxyToUpstream => RuleStage::ProxyToUpstream,
+        ProtocolRuleStage::ProxyToApp => RuleStage::ProxyToApp,
+    };
+    let mut entries = Vec::new();
+    for definition in &workspace.rule_definitions {
+        let RuleContent::Http(HttpRuleContent {
+            condition,
+            actions,
+            document: Some(document),
+            ..
+        }) = definition.content()
+        else {
+            continue;
+        };
+        if definition.listener_id() != listener.id || definition.stage() != expected_stage {
+            continue;
+        }
+        if &document.package != package {
+            return Err(AppError::new(
+                "DOCUMENT_RULE_RUNTIME_BINDING_MISMATCH",
+                "报文规则与当前协议包或 Schema 不一致。",
+            )
+            .entity(definition.rule_id().to_string()));
+        }
+        condition.validate_document_schema(schema)?;
+        validate_unified_actions_schema(actions, schema)?;
+        entries.push(RuleProgramEntry::new(
+            definition.rule_id(),
+            definition.priority(),
+            definition.created_order(),
+            condition.clone(),
+            actions.clone(),
+        )?);
+    }
+    UnifiedRuleProgram::new(entries).map_err(AppError::from)
 }

@@ -2,9 +2,7 @@ use std::{marker::PhantomData, sync::Arc};
 
 use async_trait::async_trait;
 use bytes::Bytes;
-use intercept_proxy_domain::{
-    BodyCodecKind, Document, ProtocolDirection, ProtocolDocumentRuleProgram,
-};
+use intercept_proxy_domain::{BodyCodecKind, Document, ProtocolDirection, UnifiedRuleProgram};
 use intercept_proxy_exchange::{
     Decode, Direction, Display, Encode, Error, ExternalPackageCallFailure,
     ExternalPackageCallStage, Http, HttpContext, Rules,
@@ -70,7 +68,7 @@ pub(super) fn build_capabilities<D: Direction>(
     response: bool,
     codec: BodyCodecKind,
     binding: &RuntimeExternalSocketPackageBinding,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
+    programs: [Arc<UnifiedRuleProgram>; 1],
 ) -> HttpDirectionCapabilities<D> {
     let observed = Arc::new(Mutex::new(None));
     let rpc = binding.rpc();
@@ -221,7 +219,7 @@ struct ExternalHttpDocumentRules {
     rpc: Arc<dyn ExternalPackageRpc>,
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
+    programs: [Arc<UnifiedRuleProgram>; 1],
     package: intercept_proxy_domain::ProtocolPackageRef,
 }
 
@@ -234,7 +232,7 @@ impl ExternalHttpDocumentRules {
         rpc: Arc<dyn ExternalPackageRpc>,
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 1],
+        programs: [Arc<UnifiedRuleProgram>; 1],
         package: intercept_proxy_domain::ProtocolPackageRef,
     ) -> Self {
         Self {

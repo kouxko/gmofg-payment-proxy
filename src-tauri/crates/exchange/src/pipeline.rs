@@ -299,6 +299,7 @@ impl<P: ObservedProtocol, D: Direction> WritePipeline<P, D> for Write<P, D> {
             .inspect_err(|error| {
                 observation::failed_with_context::<P, D>("encode", envelope.context(), error);
             })?;
+        observation::encoded::<P, D>(&context);
 
         writer.write(context.clone()).await.inspect_err(|error| {
             observation::failed_with_context::<P, D>("write", &context, error);

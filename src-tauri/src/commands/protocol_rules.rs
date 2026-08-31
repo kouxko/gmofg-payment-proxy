@@ -2,10 +2,11 @@
 
 use intercept_proxy_application::{
     DocumentValue, MessageStage, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    RuleActionKind, RuleConditionKind, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
-    parse_protocol_rule_value,
+    ProtocolRuleCommonActionCapability, RuleActionKind, RuleConditionKind, RuleDefinition,
+    RuleDefinitionSaveInput, RuleEditorContext, RuleLocalDocumentActionKind,
+    RuleLocalDocumentPredicateKind, RuleLocalDocumentValueType, parse_protocol_rule_value,
 };
-use intercept_proxy_domain::{Condition, HttpAction, ListenerId, Revision, RuleId};
+use intercept_proxy_domain::{Condition, HttpAction, ListenerId, Revision, RuleId, UnifiedAction};
 use tauri::State;
 
 use super::{CommandResult, command_error};
@@ -47,6 +48,55 @@ pub fn rule_definition_action_draft(
         .application
         .rule_definition_action_draft(kind, stage)
         .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn rule_definition_document_condition_draft(
+    app_state: State<'_, AppState>,
+    path: String,
+    value_type: RuleLocalDocumentValueType,
+    predicate: RuleLocalDocumentPredicateKind,
+    raw: String,
+) -> CommandResult<Condition> {
+    app_state
+        .application
+        .rule_definition_document_condition_draft(&path, value_type, predicate, &raw)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn rule_definition_document_action_draft(
+    app_state: State<'_, AppState>,
+    path: String,
+    value_type: RuleLocalDocumentValueType,
+    action: RuleLocalDocumentActionKind,
+    raw: Option<String>,
+    index: Option<u32>,
+) -> CommandResult<UnifiedAction> {
+    app_state
+        .application
+        .rule_definition_document_action_draft(&path, value_type, action, raw.as_deref(), index)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(
+    clippy::needless_pass_by_value,
+    clippy::result_large_err,
+    clippy::unnecessary_wraps
+)]
+pub fn rule_definition_document_common_action_draft(
+    app_state: State<'_, AppState>,
+    action: ProtocolRuleCommonActionCapability,
+) -> CommandResult<UnifiedAction> {
+    Ok(app_state
+        .application
+        .rule_definition_document_common_action_draft(action))
 }
 
 #[tauri::command]

@@ -21,7 +21,7 @@ export function eventRoute(event: ExchangeObservationEvent): string {
   if (event.event === "received") {
     return event.direction === "upstream" ? "App → Proxy" : "Server → Proxy";
   }
-  if (event.event === "sent") {
+  if (event.event === "sent" || event.event === "encoded") {
     return event.direction === "upstream" ? "Proxy → Server" : "Proxy → App";
   }
   if (event.direction === "upstream") return "App / Proxy → Server";
@@ -33,6 +33,8 @@ export function eventLabel(event: ExchangeObservationEvent): string {
   switch (event.event) {
     case "opened": return "连接建立";
     case "received": return "收到";
+    case "processed": return "规则处理";
+    case "encoded": return "编码";
     case "sent": return "发送";
     case "failed": return `失败 · ${event.stage}`;
     case "closed": return event.outcome === "completed" ? "正常结束" : "异常结束";

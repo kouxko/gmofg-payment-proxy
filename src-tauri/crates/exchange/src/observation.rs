@@ -3,12 +3,142 @@
 //! UI Layer 只读取这些 primitive 字段，不解析 `Debug` 文本。序列化属于观测旁路；超限
 //! 或失败时只发出固定大小的 loss 事件，绝不改变业务 `Result`。
 
-use crate::{Direction, Envelope, Error, ObservedContext, ObservedProtocol};
+use serde::Serialize;
+
+use crate::{
+    Direction, Document, Envelope, Error, ObservedContext, ObservedProtocol, ProtocolDirection,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RuleProcessingChange {
+    pub rule_id: String,
+    pub matched: bool,
+    pub operations: Vec<RuleProcessingOperation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleProcessingOperationKind {
+    RecordMatch,
+    Set,
+    Clear,
+    Insert,
+    Append,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RuleProcessingOperation {
+    pub kind: RuleProcessingOperationKind,
+    pub path: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RuleProcessingAccumulator {
+    changes: Vec<RuleProcessingChange>,
+    retained_bytes: usize,
+    truncated: bool,
+}
+
+impl RuleProcessingAccumulator {
+    pub fn record(&mut self, change: RuleProcessingChange) {
+        if self.truncated {
+            return;
+        }
+        let Ok(bytes) = serde_json::to_vec(&change) else {
+            self.truncated = true;
+            return;
+        };
+        let next = self.retained_bytes.saturating_add(bytes.len());
+        if next > MAX_OBSERVATION_TEXT_BYTES {
+            self.truncated = true;
+            return;
+        }
+        self.retained_bytes = next;
+        self.changes.push(change);
+    }
+
+    #[must_use]
+    pub fn changes(&self) -> &[RuleProcessingChange] {
+        &self.changes
+    }
+
+    #[must_use]
+    pub const fn retained_bytes(&self) -> usize {
+        self.retained_bytes
+    }
+
+    #[must_use]
+    pub const fn truncated(&self) -> bool {
+        self.truncated
+    }
+}
+
+pub fn rules_processed(
+    direction: ProtocolDirection,
+    changes: &RuleProcessingAccumulator,
+    final_document: &Document,
+) {
+    let Some(final_document_json) = document_json(final_document) else {
+        observation_lost("final_document_too_large_or_unserializable");
+        return;
+    };
+    let changes_budget = MAX_OBSERVATION_TEXT_BYTES.saturating_sub(final_document_json.len());
+    let Some((changes_json, serialization_truncated)) =
+        serialize_changes(changes.changes(), changes_budget)
+    else {
+        observation_lost("rule_changes_unserializable");
+        return;
+    };
+    tracing::info!(
+        target: "intercept_proxy::exchange::ui",
+        event = "processed",
+        direction = direction_name(direction),
+        changes_json = changes_json.as_str(),
+        changes_truncated = changes.truncated() || serialization_truncated,
+        final_document_json = final_document_json.as_str(),
+    );
+}
+
+pub(crate) fn encoded<P, D>(context: &P::Context)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    observe_context::<P, D>("encoded", context);
+}
 
 /// A single UI tracing projection may never allocate or copy more than this fixed text budget.
 /// The authoritative network payload remains owned by the business pipeline; overflow only drops
 /// observation evidence and is surfaced through the runtime loss counter.
-const MAX_OBSERVATION_TEXT_BYTES: usize = 16 * 1024 * 1024;
+pub const MAX_OBSERVATION_TEXT_BYTES: usize = 16 * 1024 * 1024;
+
+fn serialize_changes(changes: &[RuleProcessingChange], budget: usize) -> Option<(String, bool)> {
+    if budget < 2 {
+        return Some(("[]".to_owned(), !changes.is_empty()));
+    }
+    let mut output = String::with_capacity(budget.min(4096));
+    output.push('[');
+    for (index, change) in changes.iter().enumerate() {
+        let item = serde_json::to_string(change).ok()?;
+        let separator = usize::from(index > 0);
+        if output
+            .len()
+            .saturating_add(separator)
+            .saturating_add(item.len())
+            .saturating_add(1)
+            > budget
+        {
+            output.push(']');
+            return Some((output, true));
+        }
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&item);
+    }
+    output.push(']');
+    Some((output, false))
+}
 
 pub(crate) fn received<P, D>(envelope: &Envelope<P, D>)
 where
@@ -100,6 +230,33 @@ where
                 context_bytes_hex = encoded.as_str(),
             ),
             None => observation_lost("socket_sent_projection_too_large"),
+        },
+    }
+}
+
+fn observe_context<P, D>(event: &'static str, context: &P::Context)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    match P::observed(context) {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+        } if fits_projection(&[header, body]) => tracing::info!(
+            target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
+            direction = direction::<D>(), context_header = header, context_body = body,
+            context_body_is_utf8 = body_is_utf8, context_bytes_hex = tracing::field::Empty,
+        ),
+        ObservedContext::Http { .. } => observation_lost("http_encoded_projection_too_large"),
+        ObservedContext::Socket { data } => match hex(data) {
+            Some(encoded) => tracing::info!(
+                target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
+                direction = direction::<D>(), context_header = tracing::field::Empty,
+                context_body = tracing::field::Empty, context_bytes_hex = encoded.as_str(),
+            ),
+            None => observation_lost("socket_encoded_projection_too_large"),
         },
     }
 }
@@ -256,6 +413,13 @@ fn direction<D: Direction>() -> &'static str {
     }
 }
 
+fn direction_name(direction: ProtocolDirection) -> &'static str {
+    match direction {
+        ProtocolDirection::Upstream => "upstream",
+        ProtocolDirection::Downstream => "downstream",
+    }
+}
+
 fn document_json(document: &crate::Document) -> Option<String> {
     let mut output = LimitedBytes::default();
     match serde_json::to_writer(&mut output, document) {
@@ -321,133 +485,5 @@ impl std::io::Write for LimitedBytes {
 }
 
 #[cfg(test)]
-mod tests {
-    use std::sync::{Arc, Mutex};
-
-    use tracing::{Event, Subscriber, field::Visit, subscriber::with_default};
-    use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan};
-
-    use super::{MAX_OBSERVATION_TEXT_BYTES, failed_with_context, raw_failed, raw_received};
-    use crate::{
-        Error, ExternalPackageCallFailure, ExternalPackageCallStage, Http, HttpContext,
-        ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, Upstream,
-    };
-
-    #[derive(Default)]
-    struct CapturedFields {
-        event: Option<String>,
-        context_bytes: Option<String>,
-        external_method: Option<String>,
-        external_request_id: Option<String>,
-        external_stable_code: Option<String>,
-        external_remote_code: Option<i64>,
-    }
-
-    impl Visit for CapturedFields {
-        fn record_debug(&mut self, _field: &tracing::field::Field, _value: &dyn std::fmt::Debug) {}
-
-        fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
-            match field.name() {
-                "event" => self.event = Some(value.to_owned()),
-                "context_bytes_hex" => self.context_bytes = Some(value.to_owned()),
-                "external_method" => self.external_method = Some(value.to_owned()),
-                "external_request_id" => self.external_request_id = Some(value.to_owned()),
-                "external_stable_code" => self.external_stable_code = Some(value.to_owned()),
-                _ => {}
-            }
-        }
-
-        fn record_i64(&mut self, field: &tracing::field::Field, value: i64) {
-            if field.name() == "external_remote_code" {
-                self.external_remote_code = Some(value);
-            }
-        }
-    }
-
-    struct CaptureLayer(Arc<Mutex<CapturedFields>>);
-
-    impl<S> Layer<S> for CaptureLayer
-    where
-        S: Subscriber + for<'lookup> LookupSpan<'lookup>,
-    {
-        fn on_event(&self, event: &Event<'_>, _context: Context<'_, S>) {
-            let mut fields = CapturedFields::default();
-            event.record(&mut fields);
-            *self.0.lock().unwrap() = fields;
-        }
-    }
-
-    #[test]
-    fn raw_failure_without_bytes_omits_context_instead_of_forging_empty_frame() {
-        let captured = Arc::new(Mutex::new(CapturedFields::default()));
-        let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
-
-        with_default(subscriber, || {
-            raw_failed::<Upstream>("read", None, &Error::new("peer closed"));
-        });
-
-        let captured = captured.lock().unwrap();
-        assert_eq!(captured.event.as_deref(), Some("failed"));
-        assert!(captured.context_bytes.is_none());
-    }
-
-    #[test]
-    fn oversized_raw_payload_emits_fixed_loss_without_building_hex_projection() {
-        let captured = Arc::new(Mutex::new(CapturedFields::default()));
-        let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
-        let bytes = vec![0xA5; MAX_OBSERVATION_TEXT_BYTES / 2 + 1];
-
-        with_default(subscriber, || raw_received::<Upstream>(&bytes));
-
-        let captured = captured.lock().unwrap();
-        assert_eq!(captured.event.as_deref(), Some("observation_lost"));
-        assert!(captured.context_bytes.is_none());
-    }
-
-    #[test]
-    fn fail_open_display_observation_keeps_typed_external_failure_fields() {
-        let captured = Arc::new(Mutex::new(CapturedFields::default()));
-        let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
-        let error = Error::new("EXTERNAL_PACKAGE_CALL_FAILED\ndisplay rejected")
-            .with_external_package_call(ExternalPackageCallFailure {
-                package: ProtocolPackageRef {
-                    id: ProtocolPackageId::new("phase10.http").unwrap(),
-                    version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-                },
-                direction: ProtocolDirection::Upstream,
-                stage: ExternalPackageCallStage::Display,
-                method: "document.upstream.display".into(),
-                request_id: Some("display-observation-1".into()),
-                remote_code: Some(-32_409),
-                stable_code: Some("INTERNAL_ERROR".into()),
-                remote_message: Some("display rejected".into()),
-                remote_data_summary: Some("object(fields=1)".into()),
-            });
-        let context = HttpContext {
-            header: "POST / HTTP/1.1\r\n\r\n".into(),
-            body: "wire".into(),
-            body_is_utf8: true,
-            wire_body: b"wire".to_vec(),
-        };
-
-        with_default(subscriber, || {
-            failed_with_context::<Http, Upstream>("display", &context, &error);
-        });
-
-        let captured = captured.lock().unwrap();
-        assert_eq!(captured.event.as_deref(), Some("failed"));
-        assert_eq!(
-            captured.external_method.as_deref(),
-            Some("document.upstream.display")
-        );
-        assert_eq!(
-            captured.external_request_id.as_deref(),
-            Some("display-observation-1")
-        );
-        assert_eq!(captured.external_remote_code, Some(-32_409));
-        assert_eq!(
-            captured.external_stable_code.as_deref(),
-            Some("INTERNAL_ERROR")
-        );
-    }
-}
+#[path = "observation/tests.rs"]
+mod tests;

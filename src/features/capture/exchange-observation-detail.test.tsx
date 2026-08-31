@@ -26,20 +26,32 @@ describe("ExchangeObservationDetail", () => {
     expect(screen.getByText("该时间线存在观测淘汰")).toBeVisible();
   });
 
-  it("hides the internal Document and safely renders protocol Display HTML", async () => {
+  it("renders typed rule processing, final Document, and Encode evidence", async () => {
     const record = exchangeRecord();
-    record.events = record.events.map((event) => event.event === "received"
-      ? {
-          ...event,
-          document: { internal_only: "must not render" },
-          display: "<section><h3>ISO 8583</h3><table><tbody><tr><th>MTI</th><td>0200</td></tr></tbody></table><script>unsafe()</script></section>",
-        }
-      : event);
+    record.events = [
+      record.events[0],
+      { ...record.events[1], document: { amount: 100 }, display: "<section><h3>ISO 8583</h3><script>unsafe()</script></section>" },
+      {
+        event: "processed", observed_at: "2026-08-22T10:00:01.500Z", direction: "upstream",
+        changes: [{ rule_id: "40000000-0000-0000-0000-000000000004", matched: true, operations: [{ kind: "set", path: "/amount" }] }],
+        changes_truncated: true,
+        final_document: { amount: 120 },
+      },
+      { event: "encoded", observed_at: "2026-08-22T10:00:01.750Z", direction: "upstream", context: { protocol: "socket", bytes: [3, 4] } },
+      ...record.events.slice(2),
+    ] as typeof record.events;
 
     render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={vi.fn()} />);
 
-    expect(screen.queryByText("Document")).not.toBeInTheDocument();
-    expect(screen.queryByText(/must not render/)).not.toBeInTheDocument();
+    expect(screen.getAllByText("Original Decode Document")).toHaveLength(2);
+    expect(screen.getByText("Rule processing changes")).toBeVisible();
+    expect(screen.getByText("部分规则变化因观测预算被截断")).toBeVisible();
+    expect(screen.getByText(/40000000-0000-0000-0000-000000000004/)).toBeVisible();
+    expect(screen.getByText(/\"path\": \"\/amount\"/)).toBeVisible();
+    expect(screen.getByText(/\"amount\": 120/)).toBeVisible();
+    expect(screen.getByText("Final working Document")).toBeVisible();
+    expect(screen.getByText("Encode result")).toBeVisible();
+    expect(screen.queryByText(/contract 未提供/)).not.toBeInTheDocument();
     const frames = await screen.findAllByTitle("协议包安全展示");
     expect(frames).toHaveLength(2);
     await waitFor(() => expect(frames[0]).toHaveAttribute("srcdoc"));
@@ -74,5 +86,28 @@ describe("ExchangeObservationDetail", () => {
     expect(screen.getByText("异常结束")).toBeVisible();
     expect(screen.getByText("连接状态：异常结束")).toBeVisible();
     expect(screen.getByText("Upstream|READ_TIMEOUT: socket Exchange read timed out")).toBeVisible();
+  });
+
+  it("shows the Rust stable code for a failed package stage", () => {
+    const record = failedExchangeRecord();
+    const failed = record.events.find((event) => event.event === "failed");
+    if (!failed || failed.event !== "failed") throw new Error("failed fixture is invalid");
+    failed.stage = "decode";
+    failed.external_package_call = {
+      package: { id: "com.example.payment", version: "1.0.0" },
+      direction: "upstream",
+      stage: "decode",
+      method: "hooks.upstream.decode",
+      request_id: "rpc-7",
+      remote_code: -32001,
+      stable_code: "PACKAGE_DECODE_FAILED",
+      remote_message: "decode rejected",
+      remote_data_summary: "object(fields=1)",
+    };
+
+    render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={vi.fn()} />);
+
+    expect(screen.getByText("PACKAGE_DECODE_FAILED")).toBeVisible();
+    expect(screen.getByText("hooks.upstream.decode")).toBeVisible();
   });
 });

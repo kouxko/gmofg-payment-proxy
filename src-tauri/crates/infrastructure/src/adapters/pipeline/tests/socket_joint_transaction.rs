@@ -37,8 +37,20 @@ struct TestSocketJointEvaluation {
 
 #[async_trait]
 impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluation {
-    fn gate(&mut self, _rule_id: Uuid) -> intercept_proxy_runtime::Result<bool> {
-        Ok(true)
+    fn gate(
+        &mut self,
+        _rule_id: Uuid,
+        _nth_attempt: u64,
+    ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::JointRuleConditionEvaluation> {
+        Ok(
+            intercept_proxy_runtime::JointRuleConditionEvaluation::UnifiedOwned(
+                intercept_proxy_runtime::JointConditionEvaluation {
+                    matched: true,
+                    eligible_without_nth: true,
+                    contains_nth: false,
+                },
+            ),
+        )
     }
 
     async fn encode(

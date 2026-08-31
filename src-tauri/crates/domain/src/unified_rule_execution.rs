@@ -14,7 +14,7 @@ use crate::{
 mod condition_evaluation;
 mod program;
 
-pub use condition_evaluation::ConditionEvaluation;
+pub use condition_evaluation::{ConditionEvaluation, RuleConditionEvaluation};
 pub use program::{RuleProgramEntry, UnifiedRuleExecution, UnifiedRuleProgram};
 
 /// String comparison supported by a typed Document predicate.
@@ -367,7 +367,10 @@ pub enum DocumentMutation {
         value: DocumentValue,
     },
     /// Strict Clear using [`Document::clear_path`].
-    Clear { path: JsonPointer },
+    Clear {
+        path: JsonPointer,
+        value_type: DocumentValueType,
+    },
     /// Strict array Insert using [`Document::insert`].
     Insert {
         path: JsonPointer,
@@ -385,7 +388,7 @@ impl DocumentMutation {
     pub fn apply(&self, document: &mut Document) -> Result<(), DomainError> {
         match self {
             Self::Set { path, value } => document.set(path, value.clone()),
-            Self::Clear { path } => document.clear_path(path),
+            Self::Clear { path, .. } => document.clear_path(path),
             Self::Insert { path, index, value } => document.insert(path, *index, value.clone()),
             Self::Append { path, value } => document.append(path, value.clone()),
         }
@@ -455,8 +458,11 @@ impl From<ProtocolDocumentOperation> for UnifiedAction {
             ProtocolDocumentOperation::SetField { field, value } => {
                 DocumentMutation::Set { path: field, value }
             }
-            ProtocolDocumentOperation::ClearField { field } => {
-                DocumentMutation::Clear { path: field }
+            ProtocolDocumentOperation::ClearField { field, value_type } => {
+                DocumentMutation::Clear {
+                    path: field,
+                    value_type,
+                }
             }
             ProtocolDocumentOperation::RecordMatch => return Self::RecordMatch,
         })

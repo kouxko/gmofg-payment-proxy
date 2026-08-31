@@ -9,6 +9,7 @@ mod types;
 mod validation;
 
 pub use engine::RuleEngine;
+pub use matching::matches_http_condition;
 pub use types::*;
 pub use validation::validate_rule_draft;
 

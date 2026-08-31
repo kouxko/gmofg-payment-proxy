@@ -1,7 +1,7 @@
 use super::{
     ChannelId, Condition, DomainError, HttpAction, ProxyWorkspace, Rule, RuleContent,
-    RuleDefinition, RuleId, RuleStage, actor_owned_socket_conditions, legacy_http_parts,
-    message_stage_from_rule, runtime_priority, unified_persistence_error,
+    RuleDefinition, RuleId, RuleStage, legacy_http_parts, message_stage_from_rule,
+    runtime_priority, unified_persistence_error,
 };
 use crate::HttpRuleContent;
 
@@ -35,7 +35,11 @@ impl ProxyWorkspace {
             let RuleContent::Http(content) = definition.content() else {
                 continue;
             };
-            let (conditions, actions) = legacy_http_parts(content)?;
+            let (conditions, actions) = if content.document.is_some() {
+                unified_actor_parts(content)
+            } else {
+                legacy_http_parts(content)?
+            };
             if should_skip_empty_http_rule(definition, content, &conditions) {
                 continue;
             }
@@ -55,17 +59,17 @@ impl ProxyWorkspace {
         for definition in &self.rule_definitions {
             let (description, conditions, actions) = match definition.content() {
                 RuleContent::Http(content) => {
-                    let (conditions, actions) = legacy_http_parts(content)?;
+                    let (conditions, actions) = if content.document.is_some() {
+                        unified_actor_parts(content)
+                    } else {
+                        legacy_http_parts(content)?
+                    };
                     if should_skip_empty_http_rule(definition, content, &conditions) {
                         continue;
                     }
                     (content.description.clone(), conditions, actions)
                 }
-                RuleContent::Socket(content) => (
-                    String::new(),
-                    actor_owned_socket_conditions(&content.condition)?,
-                    Vec::new(),
-                ),
+                RuleContent::Socket(_) => (String::new(), Vec::new(), Vec::new()),
             };
             rules.push(project_runtime_rule(
                 definition,
@@ -152,6 +156,19 @@ impl ProxyWorkspace {
         }
         Ok(changed)
     }
+}
+
+fn unified_actor_parts(content: &HttpRuleContent) -> (Vec<Condition>, Vec<HttpAction>) {
+    let actions = content
+        .actions
+        .iter()
+        .filter_map(|action| match action {
+            crate::UnifiedAction::Http(action) => Some(action.clone()),
+            crate::UnifiedAction::Terminal(action) => Some(HttpAction::Terminal(action.clone())),
+            crate::UnifiedAction::RecordMatch | crate::UnifiedAction::Document(_) => None,
+        })
+        .collect();
+    (Vec::new(), actions)
 }
 
 fn runtime_order_key(definition: &RuleDefinition) -> (u8, u8, i32, RuleId) {

@@ -100,4 +100,11 @@ test("exports recursive Document scalar contracts exactly", async () => {
   assert.match(documentValue, /(?:^|\n)null \|/u);
   assert.doesNotMatch(documentValue, /"Null"/u);
   assert.doesNotMatch(generated, /ClearDocument|clear_document/u);
+  assert.match(generated, /\{ type: "clear"; path: JsonPointer; value_type: DocumentValueType \}/u);
+  assert.match(generated, /local_document_types: RuleLocalDocumentTypeCapability\[\]/u);
+  assert.match(generated, /ruleDefinitionDocumentConditionDraft:/u);
+  assert.match(generated, /ruleDefinitionDocumentActionDraft:/u);
+  assert.match(generated, /ruleDefinitionDocumentCommonActionDraft:/u);
+  assert.match(generated, /event: "processed"/u);
+  assert.match(generated, /event: "encoded"/u);
 });

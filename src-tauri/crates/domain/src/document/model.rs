@@ -97,7 +97,8 @@ pub enum DocumentValue {
 impl Eq for DocumentValue {}
 
 /// Schema-visible kind of a document value.
-#[derive(Clone, Copy, Debug, Eq, PartialEq)]
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(rename_all = "snake_case")]
 pub enum DocumentValueType {
     /// String.
     String,

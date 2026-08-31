@@ -3,9 +3,7 @@
 use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
-use intercept_proxy_domain::{
-    Document, ProtocolDirection, ProtocolDocumentRuleProgram, ProtocolPackageRef,
-};
+use intercept_proxy_domain::{Document, ProtocolDirection, ProtocolPackageRef, UnifiedRuleProgram};
 use intercept_proxy_exchange::{Direction, Encode, Error, Rules, Socket, SocketContext};
 use intercept_proxy_runtime::{
     ChannelId, ConnectionContext, PipelinePorts, SocketConnectionIdentity, SocketPayloadDirection,
@@ -30,7 +28,7 @@ pub(super) struct JointSocketRules {
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     prepared: Arc<Mutex<Option<SocketContext>>>,
-    programs: [Arc<ProtocolDocumentRuleProgram>; 1],
+    programs: [Arc<UnifiedRuleProgram>; 1],
     package: ProtocolPackageRef,
 }
 
@@ -44,7 +42,7 @@ impl JointSocketRules {
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
         prepared: Arc<Mutex<Option<SocketContext>>>,
-        programs: [Arc<ProtocolDocumentRuleProgram>; 1],
+        programs: [Arc<UnifiedRuleProgram>; 1],
         package: ProtocolPackageRef,
     ) -> Self {
         Self {

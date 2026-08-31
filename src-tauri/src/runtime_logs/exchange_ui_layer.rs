@@ -9,7 +9,7 @@ use chrono::Utc;
 use intercept_proxy_application::{
     EventHub, ExchangeContext, ExchangeObservationEvent, ExchangeObservationRecord,
     ExchangeProtocol, ExternalPackageCallDiagnosticViewModel, ExternalPackageCallStage,
-    UiEventPayload,
+    RuleDocumentChangeViewModel, UiEventPayload,
 };
 use intercept_proxy_domain::{
     ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
@@ -341,6 +341,21 @@ fn observation_event(
             context: context(fields)?,
             document: optional_json(fields.text("document_json")).ok()?,
             display: fields.text("display"),
+        }),
+        "processed" => Some(ExchangeObservationEvent::Processed {
+            observed_at,
+            direction: direction(fields)?,
+            changes: serde_json::from_str::<Vec<RuleDocumentChangeViewModel>>(
+                &fields.text("changes_json")?,
+            )
+            .ok()?,
+            changes_truncated: fields.text("changes_truncated")?.parse().ok()?,
+            final_document: serde_json::from_str(&fields.text("final_document_json")?).ok()?,
+        }),
+        "encoded" => Some(ExchangeObservationEvent::Encoded {
+            observed_at,
+            direction: direction(fields)?,
+            context: context(fields)?,
         }),
         "sent" => Some(ExchangeObservationEvent::Sent {
             observed_at,
