@@ -21,7 +21,7 @@
 3. **网络**：分别验证 DNS、TCP connect、监听地址和目标地址；连接成功不等于协议成功。
 4. **安全**：验证 TLS 版本、CA 链、SNI/hostname、客户端身份和服务端最终认证结果。
 5. **Framing**：确认一次消息的长度边界、分段、粘包、EOF 和剩余字节处理。
-6. **协议**：确认 Decode、Display、Rules、Encode 的方向、schema、版本和预算。
+6. **协议**：确认可选 Frame、Decode、Display、Rules、Encode 的方向、Schema、精确版本和预算。
 7. **业务报文**：比较 Proxy 实际收到、实际发送、Server 实际收到和 App 最终收到的内容。
 8. **观测闭环**：用同一 exchange_id/runtime epoch 对齐 Received、Sent、Failed、Closed 和诊断日志。
 
@@ -47,6 +47,14 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
 - 无修改时比较原始 wire bytes；JSON 或 Document 重新序列化即使语义相同也可能改变 MAC/签名字节。
 - 协议包必须使用 manifest 中的精确名称和版本。确认方向、schema、stage 以及外部包 generation/RPC ID。
 - Display 失败只影响观测；Frame/Decode/Rules/Encode/hook 失败必须终止当前 Exchange，不能透明转发。
+- 本地协议包必须是包含 `manifest.json`、`protocol.js`、`display.js` 的严格 ZIP，并由 Boa Sidecar 主动
+  连接 `/packages`；第三方进程也先发送无 `id` 的 `package.register` notification。
+- HTTP Hook 使用 string；Socket JSON-RPC wire 使用 canonical padded Base64，本地 JavaScript Hook 中才转换为
+  `Uint8Array`。不要把两种编码混用。
+- 统一规则只在 `Proxy -> Server` 和 `Proxy -> App` 执行。Encode 失败必须回滚 Document、Nth、hit 与
+  one-shot 生命周期，不能把处理过程或命中统计作为已提交结果。
+- `processed.changes_truncated=true` 表示 typed operation 摘要被有界截断；继续比较 `final_document`、
+  `encoded`、`sent` 与对端接收，不能把摘要缺失解释为动作未执行。
 
 ## 5. TLS 与 mTLS
 
@@ -88,10 +96,18 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
 - `protocol_package_detail`、`external_package_service_status`：确认精确包版本、在线状态和 hook 能力。
 - `reproduction_report`：汇总配置与日志；它不包含完整 Exchange payload。
 
+外部 RPC 失败按 typed `external_package_call` 的 stage、method、request ID、remote code 和 stable code
+关联；stable code 是自动化分支依据，remote message 不是。协议包详情中的 enabled/online、local process、
+registration fingerprint、首次/最后连接和最近错误是不同状态，不能合并成一个“可用”布尔值。
+
+产品 1.00 数据库兼容起点是 Schema 100。开发期低版本 recreate 只用于发布前数据库；Schema 100+
+不得以清空重建作为恢复或升级方式，未知/损坏版本必须 fail closed。
+
 ## 9. 停止与结论
 
 - **PASS**：本次范围的必要层均有当前输入输出或状态转换证据。
-- **FAIL**：实现或结果违反合同；保留首个失败层、错误码、目标身份和重放步骤。
-- **NOT_RUN**：真实设备、远端、证书或人工 UI 不可用；列出缺失条件和复测入口，不用其他测试替代。
+- **FAILED**：实现或结果违反合同；保留首个失败层、错误码、目标身份和重放步骤。
+- **BLOCKED**：已开始或应执行的层被明确外部条件阻塞；记录阻塞条件、已完成证据和解除方式。
+- **NOT_RUN**：该层没有执行；记录原因、前置条件和复测入口，不得写成 PASS、BLOCKED 或 N/A。
 
 只在证据能直接支持时说“成功”。历史用例适合复用步骤和资源，不应作为当前环境结论。

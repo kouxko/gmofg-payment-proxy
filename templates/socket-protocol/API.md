@@ -11,7 +11,7 @@ must not contain wrappers, absolute paths, empty segments, `.` or `..`.
 `manifest.json` is strict JSON with `api`, `kind`, `package`, and `document`. Socket packages must
 provide upstream and downstream recursive JSON Schema objects. Unknown fields are rejected.
 
-## Fixed exports
+## Local Boa exports
 
 `protocol.js` exports:
 
@@ -26,5 +26,20 @@ Decode receives `{ input: Uint8Array }` and returns a JSON Document. Encode rece
 `{ originalInput: Uint8Array, document }` and returns `Uint8Array`. Display receives `{ document }`
 and returns untrusted HTML text.
 
-The Sidecar evaluates modules and verifies every fixed export before registration. Hook failures are
-returned as typed JSON-RPC failures; the Proxy does not retry, replay or switch execution paths.
+The Boa Sidecar evaluates modules and verifies every fixed export before registration. The current
+host does not inject Node, filesystem, process, Buffer, fetch, timer, or WebSocket bindings. This is
+the current host surface, not a general restriction on Boa default or native capabilities.
+
+## Public `/packages` JSON-RPC
+
+Both local Sidecars and remote package processes initiate a WebSocket connection to `/packages` and
+send one `package.register` notification without an `id`; its `params` are the complete Manifest,
+and the Proxy sends no response to that notification. Proxy calls use the fixed method names
+`hooks.upstream.frame`, `hooks.upstream.decode`, `hooks.upstream.encode`,
+`hooks.downstream.frame`, `hooks.downstream.decode`, `hooks.downstream.encode`,
+`document.upstream.display`, and `document.downstream.display`.
+
+The public JSON-RPC wire carries Socket binary input and output as canonical padded Base64 text;
+`Uint8Array` is only the local Boa export boundary. Every response copies the request's string `id`.
+Failures place their stable machine code in `error.data.code`; clients must not depend on the human
+`message`. The Proxy does not retry, replay, select another package version, or switch execution paths.

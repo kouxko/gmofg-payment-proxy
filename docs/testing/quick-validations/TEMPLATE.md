@@ -90,6 +90,11 @@
 
 完整 Proxy 链路没有同一 `path_id` 的连接映射证据时不得为 `VERIFIED`。
 
+涉及协议包时额外记录精确 `package.id + version`、source、online/enabled、registration fingerprint、
+`/packages` connection ID 和 stable error。涉及规则处理时保存 `received.document`、typed
+`processed.changes`、`changes_truncated`、`processed.final_document`、`encoded.context`、`sent.context`
+与对端实际接收；`changes_truncated=true` 表示过程摘要不完整，不能据此断言未列出的动作没有执行。
+
 ## 分层结果
 
 | path_id | 层级 | 状态 | 精确输入或配置 | 实际结果 | 证据 | 不能证明的内容 |
@@ -127,6 +132,10 @@
 - 剩余风险：
 - 是否需要升级为正式任务：
 - 升级原因：
+
+`NOT_RUN` 表示该层完全没有执行，必须说明原因、缺失前置条件和复测入口；它不是 `N/A`、失败或外部
+阻塞。已经开始但被外部条件阻断时使用 `INCONCLUSIVE` 并写明阻塞点；发现实现或结果违反合同时使用
+`FAILED`。较低层 VERIFIED 不能替代较高层 `NOT_RUN`。
 
 ## 复测方式
 

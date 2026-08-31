@@ -18,16 +18,17 @@
 
 | 等级 | 证明内容 | 最低证据 |
 | --- | --- | --- |
-| L1 | 纯领域约束、规则和编解码 | Rust/TypeScript/Python/Deno 单元测试 |
+| L1 | 纯领域约束、规则和编解码 | Rust/TypeScript/JavaScript/Python 单元测试 |
 | L2 | 真实模块组合、SQLite、协议包运行时 | Rust/Python 集成测试，使用真实 TCP 或临时文件 |
 | L3 | 真实 Proxy 数据面 | release App + loopback App/Server 客户端，逐字节或逐字段断言 |
 | L4 | 原生 UI 与观测 | App 中 Listener 状态、规则命中、Exchange 四方向记录、错误事件 |
 
-总结果只有以下三种：
+每个用例和总结果使用以下四种状态，不得互相替代：
 
 - `PASS`：本次范围内所有必测项通过。
-- `BLOCKED`：只有无法由仓库或本机提供的外部条件阻塞，并记录具体缺失物和已完成的替代验证。
-- `FAIL`：任何业务流水线、字节保真、规则、TLS、协议包或观测合同不符合预期。
+- `FAILED`：任何业务流水线、字节保真、规则、TLS、协议包或观测合同不符合预期。
+- `BLOCKED`：必测项已被明确外部条件阻塞，并记录具体缺失物、解除方式和已完成的证据。
+- `NOT_RUN`：该层没有执行；记录原因、必要前置条件和复测入口，不得由较低层 PASS 替代。
 
 观测失败本身不应阻断交易，但观测缺失仍使对应 L4 项失败；业务流水线失败必须使交易失败，禁止静默透明转发。
 
@@ -85,7 +86,9 @@
 | H-BODY-HEX | arbitrary bytes | plain/binary | 未命中规则时逐字节保持 |
 | H-BODY-PROTOCOL | protocol Document | protocol package | Decode → Rules → Encode；无修改时不重写 |
 
-HTTP Body Protocol 当前只支持内部 ZIP/Rhai 协议包；外部 WebSocket 软件包当前是 Socket-only。该限制必须有配置拒绝测试，不能把“不支持”记录为跳过。
+HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本，并通过统一 `/packages` JSON-RPC 执行。
+HTTP Hook 使用 string；Socket RPC wire 使用 canonical padded Base64，本地 Boa JavaScript Hook 中使用
+`Uint8Array`。两类数据面互相绑定错误必须在配置阶段拒绝，不能记录为跳过。
 
 ### 4.3 HTTP 条件穷举
 
@@ -133,7 +136,7 @@ HTTP Body Protocol 当前只支持内部 ZIP/Rhai 协议包；外部 WebSocket �
 | ID | Endpoint | Pipeline | App 侧 | Server 侧 | 必须断言 |
 | --- | --- | --- | --- | --- | --- |
 | S-RELAY-DIRECT | RemoteServer | Direct | TCP | TCP | 任意二进制双向逐字节保持、半关闭保持 |
-| S-RELAY-SCRIPT | RemoteServer | Scripted | TCP | TCP | Frame → Decode → Display → Rules → Encode 四阶段 |
+| S-RELAY-SCRIPT | RemoteServer | Scripted | TCP | TCP | Frame → Decode → Display → Rules → Encode 完整流水线 |
 | S-LOCAL-DIRECT | LocalServer | Direct | TCP | 无连接 | 收到什么回复什么；不产生虚假 upstream connect |
 | S-LOCAL-SCRIPT | LocalServer | Scripted | TCP | 无连接 | upstream 文档经本地响应进入 downstream Pipeline |
 | S-UP-TLS | RemoteServer | Direct/Scripted | TCP | TLS | CA、SNI/hostname 成功；错误信任失败 |
@@ -154,34 +157,45 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 - EOF、reset、App 断开、Server 断开、读写超时：关闭 Exchange 并记录最终事件。
 - 同一 Exchange 内严格执行 request → response 配对；当前明确不支持多个并发在途请求。
 
-### 5.3 Document 规则穷举
+### 5.3 统一 Document 规则穷举
 
-- 四阶段：app_to_proxy、proxy_to_upstream、upstream_to_proxy、proxy_to_app。
-- 条件：字段严格类型 `Equals`；string、int、bool、blob 分别命中/不命中。
-- 多条件 AND、空条件恒匹配、priority、created order、disabled。
-- 动作：RecordMatch、SetField、ClearField、ClearDocument。
-- 多规则顺序累积；每次阶段从前一阶段产生的新 Document 继续执行。
-- 修改后必须 Encode；未修改时保持原始 wire bytes。
-- schema、package version、listener 或 direction 不匹配时 fail-closed。
+- 仅两个写出阶段：`Proxy -> Server`、`Proxy -> App`。
+- 条件树：递归 AND/OR、Document string/有限 number/boolean/null、HTTP typed condition 和 NthHit；类型不匹配为 false。
+- RFC 6901 路径覆盖 object、array 和规则本地 metadata；Schema 是编辑元数据，不是 Decode 完整性门。
+- action：RecordMatch、Set、Clear、Insert、Append；严格验证 array index、缺失路径和类型错误。
+- 多规则按权威顺序执行；有序 action 保留完整 payload，成功 transaction 最多 Encode 一次。
+- Encode、action 或 lifecycle commit 失败必须整体回滚，不消费 Nth counter，不提交 hit/one-shot。
+- 未修改时保持原始 wire bytes；Schema、精确 package version、listener 或 direction 不匹配时 fail closed。
 
 ## 6. 协议包与外部软件包矩阵
 
 | ID | 实现 | 能力 | 必须断言 |
 | --- | --- | --- | --- |
-| P-RHAI-ISO8583 | 内置 Rhai | Frame/Decode/Display/Encode | 分段、粘包、四方向规则、无修改字节保持 |
-| P-DENO-ISO8583 | 外部 Deno | WebSocket JSON-RPC | 注册、上下行 hook、断线、重连、超时、限额 |
+| P-BOA-ISO8583 | 本地 JavaScript ZIP + Boa Sidecar | Frame/Decode/Display/Encode | 严格 archive、固定 export、主动注册、分段/粘包、无修改原字节、进程清理 |
+| P-EXT-SOCKET | 第三方进程 | `/packages` WebSocket JSON-RPC | 无 id 注册 notification、固定方法、上下行 hook、断线与重连 |
+| P-EXT-HTTP | 第三方进程 | HTTP Body Decode/Display/Encode | string wire、request/response 独立 Schema、规则 transaction 与 Encode rollback |
 | P-PY-AU-EFTEX | 外部 Python | H01 + DUKPT + ISO8583 | 两方向派生、解密、Document、Display、重加密逐字节一致 |
-| P-HTTP-BODY | HTTP Body 包 | Decode/Display/Encode | request/response 独立 schema 和规则阶段 |
 
 所有包共同验证：
 
-- manifest、document schema、入口存在性、Rhai/JSON-RPC 合同和精确版本绑定。
-- 启用、禁用、离线、重连、替换版本、删除占用包。
-- frame/decode/display/rules/encode 调用顺序和超时预算。
+- `manifest.json`、`protocol.js`、`display.js`、递归 Document Schema、固定 JavaScript export/JSON-RPC 合同和精确版本绑定。
+- registration fingerprint、可选 local archive、启用、禁用、offline、重连、替换版本、引用占用和删除。
+- frame/decode/display/rules/encode 调用顺序；不得发明 Hook timeout 或应用队列上限。
 - 包错误、无效 Base64、错误 response id、超限消息、断线全部 fail-closed。
 - Display 失败只影响观测时，不影响已经成功的业务流水线；业务 hook 失败必须终止交易。
+- `processed.changes` 的 RecordMatch/Set/Clear/Insert/Append、`changes_truncated`、`final_document`、
+  `encoded.context` 与实际 Sent/对端接收逐项对应；stable code 不依赖 remote message。
 
-### 6.1 AU EFTEX / DUKPT 特殊验收
+### 6.1 Schema 100 与包生命周期
+
+- 空数据库创建唯一 Schema 100；`external_protocol_packages` 保存 registration、fingerprint、可选本地 ZIP、
+  enabled、首次/最后连接、最后远端地址和三字段原子的最近错误。
+- 低于 Schema 100 的开发数据库只允许通过明确 recreate 分支重建；Schema 100+、未知、损坏或未来
+  版本必须 fail closed，禁止把开发 reset 当成发布迁移。
+- Preserve 启动必须逐字段、逐字节保持 package identity、Manifest、local archive 和 lifecycle；
+  recreate 启动只证明开发分支，不证明产品迁移兼容。
+
+### 6.2 AU EFTEX / DUKPT 特殊验收
 
 - 公开合成向量：IPEK、transaction key、request/response Data key、3DES-OFB、动态 IV、padding。
 - 外部历史 trace：request/response wire round-trip、313 字节分段、三种长度前缀模式。
@@ -200,7 +214,8 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 
 LocalServer 不伪造 Server 网络连接，但仍通过同一 upstream/downstream Pipeline 显示请求与响应。失败交易必须显示已发生的输入/输出和失败阶段；刷新、页面切换和 WebSocket 推送不得遗漏或覆盖记录。
 
-HTTP 与 Socket 抓包、规则、协议包均使用统一列表，不以 Tab 隐藏另一个协议；详情只显示固定的 Display HTML，不渲染 Document JSON。
+HTTP 与 Socket 抓包、规则、协议包均使用统一列表，不以 Tab 隐藏另一个协议；详情展示 typed
+received/process/final/encoded Document evidence，并把 Display 作为独立的不可信观测结果。
 
 ## 8. 执行顺序与固定命令
 
@@ -218,10 +233,9 @@ pnpm test
 pnpm build
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
-cargo test --manifest-path src-tauri/Cargo.toml --workspace
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features
 examples/external-packages/au_eftex/.venv/bin/python -m unittest \
   scripts/test_verify_au_eftex_trace.py
-deno task --cwd examples/external-packages/iso8583-deno check
 examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
   -s examples/external-packages/au_eftex/tests -v
 ```
@@ -238,7 +252,7 @@ pnpm scan:architecture-docs
 
 定向套件必须同时锁定：
 
-- 37 个原有查询工具和五个环境配置工具名唯一，并与后端分发清单完全一致；
+- 36 个只读工具和五个环境配置工具名唯一，并与后端分发清单完全一致；
 - 每个输入字段（包括 `page`、`package` 等嵌套字段）有说明，所有对象层级均封闭未知字段；
 - object、array、object/null 三类成功根类型与生产返回合同一致，运行时拒绝错误根类型；
 - 原有查询/capabilities 的 256 KiB 输入、8 MiB 输出、8 秒期限，create 的 1 MiB 输入/输出、30 秒
@@ -252,38 +266,18 @@ pnpm scan:architecture-docs
 
 ### 8.2 release App 真实 loopback
 
-外部软件包使用独立、固定的 E2E Workspace，避免把注册生命周期证据误当成数据面证据：
+真实 loopback 使用独立 E2E Workspace、官方 Boa JavaScript ZIP 和严格 API 1 第三方 fixture。Runner 必须：
 
-```bash
-# App 必须已停止；命令拒绝占用端口，只新增/替换固定 E2E Workspace，且先备份 SQLite。
-python3 scripts/e2e_external_packages.py install
+1. App 停止时备份临时 SQLite，幂等安装固定 Workspace，记录原 selected Workspace。
+2. 启动 release App，等待 `/packages` readiness；本地 ZIP 由 Supervisor 启动 Boa Sidecar，第三方 fixture
+   主动发送 `package.register`。
+3. 分别通过真实 HTTP 与 Socket Listener/Mock Server，逐字段或逐字节断言 Frame/Decode/Rules/Encode、
+   `processed`、stable error 和双向 wire。
+4. 保持引用 Listener 运行时停止 package，断言精确 Listener 停止且端口释放；重连后不得自行恢复。
+5. 停止 App，恢复原选中 Workspace、临时文件、进程和端口，并输出 JSONL 与数据库/日志证据路径。
 
-# 启动 release App。分别启动以下真实进程，并在“入口配置”启动 18083、18084：
-EXTERNAL_PACKAGE_URL=ws://127.0.0.1:8765/packages \
-  deno task --cwd examples/external-packages/iso8583-deno start
-AU_EFTEX_BDK_HEX=0123456789ABCDEFFEDCBA9876543210 \
-EXTERNAL_PACKAGE_URL=ws://127.0.0.1:8765/packages \
-  examples/external-packages/au_eftex/.venv/bin/au-eftex
-
-# 两条交易都必须通过真实 Socket listener 和真实 Mock Server，逐字节断言上下行结果。
-python3 scripts/e2e_external_packages.py run \
-  --evidence output/e2e-external-packages.jsonl
-
-# 每个包分别执行：先保持对应 listener 运行，再停止包进程。
-# 断线必须停止精确绑定的 listener 并释放端口；重启包后 listener 仍不得自行恢复。
-python3 scripts/e2e_external_packages.py assert-stopped deno
-python3 scripts/e2e_external_packages.py assert-stopped au-eftex
-
-# App 停止后，使用 install 输出的 previous_selected_id 恢复原选中 Workspace。
-python3 scripts/e2e_external_packages.py restore-selection \
-  --workspace-id <previous_selected_id>
-```
-
-固定数据面合同：Deno 使用带 2 字节长度头的 ISO8583 `0200/0210`；AU EFTEX 使用公开 BDK/KSN
-合成的 request/response DUKPT 金丝雀向量。两者均测试 TCP 分段、精确包版本绑定、真实 Frame/Decode/
-Display/Encode RPC 和双向 wire 一致性。AU EFTEX 向量不含生产密钥、PAN、PIN 或真实交易数据。
-
-扩展 TLS、LocalServer、外部包场景必须由同一 E2E runner 自动创建临时证书、Mock Server、App client，并输出 JSONL 结果；不接受只凭 UI 肉眼判断。
+当前仓库若没有满足上述最终合同的 release E2E runner，该层必须记录 `NOT_RUN`，写明缺少的 runner、
+App/系统权限和复测入口；不得继续使用旧实现脚本，也不得用 Cargo 集成测试替代 L3/L4。
 
 ### 8.3 最终构建
 
@@ -296,7 +290,7 @@ CI=true pnpm tauri build --bundles app \
 
 每个测试 ID 记录：
 
-- 状态：PASS / FAIL / BLOCKED
+- 状态：PASS / FAILED / BLOCKED / NOT_RUN
 - 层级：L1 / L2 / L3 / L4
 - 执行命令或脚本入口
 - 输入摘要和预期输出
@@ -309,9 +303,9 @@ CI=true pnpm tauri build --bundles app \
 
 ## 10. 清理与幂等性
 
-- E2E runner 只管理固定 E2E Workspace 和自己创建的临时证书、端口与进程；长期目标是全部使用临时 App profile/SQLite。
+- E2E runner 只管理固定 E2E Workspace 和自己创建的临时证书、端口与进程，并使用临时 App profile/SQLite。
 - 不删除用户 Workspace；数据库修改前保留时间戳备份。
-- 若兼容模式使用用户数据库，结束时恢复原 selected Workspace；无法恢复即判定整次运行失败。
+- 验收只使用临时 App profile/SQLite，不存在用户数据库兼容模式。
 - 每次运行结束关闭 Mock Server 和外部包进程，释放端口。
 - readiness 必须使用明确的监听/健康检查，不用固定 sleep；环境失败最多清理后重试一次。
 - 结束后验证所有测试端口可重新绑定，且没有遗留子进程或临时密钥材料。

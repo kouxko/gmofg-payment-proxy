@@ -1,6 +1,6 @@
 # Intercept Proxy 架构文档
 
-状态：当前实现基线（2026-08-24）。本目录以源码为事实来源，描述已经落地的模块边界、
+状态：当前实现基线（2026-08-31）。本目录以源码为事实来源，描述已经落地的模块边界、
 Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论稿不属于当前架构契约。
 
 第一次接手项目时，先阅读[新人接手与项目全景指南](../onboarding-guide.md)，完成首次运行和术语学习后，
@@ -38,7 +38,8 @@ flowchart LR
   Frame 和 transport 语义。
 - LocalServer 与 RemoteServer 实现同一个 Server 端口；本地回环不是第二套旁路流程。
 - 观察链路与业务链路隔离：观察失败不能影响交易，业务阶段失败必须终止当前 Exchange。
-- HTTP 与 Socket 共用 `RuleDefinition`、四阶段坐标、单 Listener 绑定、单一持久化集合和 CRUD；
+- HTTP 与 Socket 共用 `RuleDefinition`、`Proxy -> Server` / `Proxy -> App` 两个写出阶段、单 Listener
+  绑定、单一持久化集合和 CRUD；
   内容差异由 `RuleContent::Http` 与 `RuleContent::Socket` 保持类型隔离。
 - 规则编辑能力由 Rust `rule_editor_context` 提供，领域保存时再次校验；前端不复制能力矩阵。
 
@@ -67,8 +68,11 @@ flowchart LR
 
 ## 决策与验证
 
-- 当前运行边界以 [ADR-007](decisions/ADR-007-exchange-pipeline-runtime-boundary.md) 为准。
-- [ADR-006](decisions/ADR-006-unified-exchange-observation.md) 已被替代，仅保留历史原因和被否决方案。
+- 当前递归 Document、两写出阶段和 JavaScript package API 1 边界以
+  [ADR-009](decisions/ADR-009-nested-document-javascript-package-runtime.md) 为准。
+- [ADR-002](decisions/ADR-002-protocol-packages-http.md)、
+  [ADR-006](decisions/ADR-006-unified-exchange-observation.md) 和
+  [ADR-007](decisions/ADR-007-exchange-pipeline-runtime-boundary.md) 已被替代，仅保留历史原因和被否决方案。
 - 全部 ADR 入口见 [文档总览](../README.md#架构决策)。
 - 固定验收合同见 [发布级验证矩阵](../testing/release-validation-matrix.md)。
 - 最新 release App 测试用例与结果见 [2026-08-25 App 测试结果](../testing/release-validation-results-20260825.md)；

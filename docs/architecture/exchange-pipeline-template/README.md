@@ -1,6 +1,8 @@
-# Exchange / Pipeline 最小架构模板
+# Exchange / Pipeline 历史架构模板
 
-> 这是本项目 Exchange/Pipeline 的权威设计模板，不参与工程编译。生产实现、测试和架构门禁必须持续与本模板一致。
+> 本模板已由 [ADR-009](../decisions/ADR-009-nested-document-javascript-package-runtime.md) 和
+> [当前规则与协议包架构](../rules-and-protocol-packages.md)替代，只保留历史设计语境，不再是生产实现、
+> 测试或架构门禁的权威来源。
 
 ## 代码结构
 
@@ -129,8 +131,8 @@ Decode  -> ProtocolDirectionExecutor::decode_document
 Display -> ProtocolDirectionExecutor::display_document
 Encode  -> ProtocolDirectionExecutor::encode_document
 
-upstream Rules   -> AppToProxy -> ProxyToUpstream
-downstream Rules -> UpstreamToProxy -> ProxyToApp
+upstream Rules   -> ProxyToUpstream working-state transaction
+downstream Rules -> ProxyToApp working-state transaction
 ```
 
 协议包只处理 UTF-8 Body；`HttpContext.header` 由 Encode 原样保留，新的 Body 必须仍是
@@ -324,7 +326,8 @@ pub enum ExchangeEvent {
 20. 日志和 UI 观测必须 fail-open；观测失败不影响交易。
 21. `FrameResult::NeedMore` 不携带长度。它只表达当前缓冲区不足；精确长度并非所有协议都能提前得知，且当前 `Reader::read()` 不接受读取长度提示。
 22. 不定义 `Stage` enum；阶段名称是 tracing 的结构化字段，业务失败仍必须通过 `Result::Err` 传播。
-23. Writer 接收 `&Envelope`；Rules 修改 Document 的 clone，不能覆盖 Reader 产生的原始 Document。
+23. Writer 从 Envelope 的 Decode Document 创建私有 working Document；规则按序读取并立即更新当前
+    working state，前序修改对后序 condition 可见；方向完成后只 Encode 一次。
 24. `shutdown()` 属于 `Connection<P, RD, WD>`；`Reader` 只负责 read，`Writer` 只负责 write。
 25. 每次 `Pipeline::read()` 返回 Envelope 后立即记录 `received`；Writer 成功后才记录 `sent`，因此 Rules/Encode/Connect/Write 失败不会隐藏已收到的 Envelope。
 26. 不增加 message sequence 或 interaction ID；同一连接内的事件按产生顺序逐条追加显示。
@@ -347,7 +350,8 @@ pub enum ExchangeEvent {
 43. 必要数据完成前的 read/write/flush/half-close 失败使 Exchange 失败；协议交易已完整写给 App 后的最终 Connection shutdown 失败只记录附加诊断，不把成功改为失败，也不覆盖既有业务错误。
 44. 不区分或保存 partial write 的 committed prefix；write/flush 未完整成功统一记录为 write 失败并结束 Exchange，不产生 `sent`，也不自动重试。
 45. Exchange 运行记录使用有界内存；达到容量后淘汰最旧记录并显式标记已经发生数据淘汰。内存淘汰和观测失败均不得改变交易结果。
-46. Exchange 不定义新的超时或容量默认值：Connect/Read/Write 使用 Listener 配置，Socket 单次读取与诊断队列/内存使用 Listener 的显式 `runtime_limits`，Session/UI Event 使用 Settings 配置，外部包 RPC 使用 external-package runtime 配置。Exchange 只接收已校验值，不在内部 fallback，也不使用 `max(1)` 静默修正非法输入。
+46. Exchange 不定义新的超时或容量默认值；它只接收各权威 owner 已校验的现有合同值，不在内部
+    发明 external-package RPC 配置、fallback 或 `max(1)` 静默修正。
 47. 除已确认的 Display fallback、观测 fail-open 和最终 shutdown 附加诊断外，不增加任何兜底、自动重试、静默降级、旁路处理或失败后的透明回退。
 48. 实现不受旧 Runtime、旧 DTO、旧数据库或旧模块边界限制；允许大规模破坏性重构，不增加兼容层。新行为通过测试和构建后删除未使用、重复和被替代的代码。
 49. 分包必须按 Protocol、Pipeline、Connection、Server、Exchange、Observation 和具体 adapter 的职责边界组织；不得为了满足文件行数机械拆分相互依赖的碎片。

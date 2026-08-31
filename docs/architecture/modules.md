@@ -78,7 +78,8 @@ flowchart LR
 `src-tauri/crates/domain/src/` 是领域真相：
 
 - `workspace/`：Listener 数据平面、HTTP Body 模式、Socket 拓扑、安全设置和校验。
-- `document/`：协议无关的 Schema、字段和值槽；当前字段类型是 String、Int、Bool、Blob。
+- `document/`：协议无关的递归 Schema 与 JSON Document；值类型覆盖 Null、Boolean、Number、String、
+  Object 和 Array，路径使用 JSON Pointer。
 - `protocol_document_rule/`：统一规则内部复用的 Schema 驱动 Document 条件、动作与执行原语；
   不形成独立规则集合或 CRUD。
 - `unified_rule.rs`：统一 `RuleDefinition`、固定阶段坐标、HTTP/Socket 带标签内容和顶层不变量。
@@ -144,7 +145,8 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 `src-tauri/crates/host/src/lib.rs` 先构造不依赖 UI 的 `ApplicationHost`：
 
 1. 校验 `ProductProfile`，再创建数据目录。
-2. 打开 SQLite；对于当前预发布阶段的不兼容 schema，按产品策略清理后重建。
+2. 打开 SQLite；仅当前 development recreate branch 可把 `<100` 开发数据清理并重建为 Schema 100；
+   Schema 100 必须保留，未来/损坏 Schema fail-closed。该开发分支须在 Phase17 发布前删除。
 3. 根据产品存储命名空间选择 Keychain 或 DPAPI secret protector。
 4. 创建 Infrastructure service bundle、容量账本、断点协调器和 EventHub。
 5. 构造 `RuntimePipelineAdapter` 并注入 Listener runtime。

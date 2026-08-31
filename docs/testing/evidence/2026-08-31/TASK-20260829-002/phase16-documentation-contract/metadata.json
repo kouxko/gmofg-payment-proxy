@@ -1,0 +1,77 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase16-documentation-contract",
+  "executed_at": "2026-08-31 16:05:16 +08:00",
+  "timezone": "Asia/Shanghai",
+  "baseline_head": "02e7ea478f8b4f83d8acf9139872b17322c1559f",
+  "result": "VERIFIED",
+  "acceptance_basis": "explicit file scope, commands, exit status, test counts, links, and review status; hashes cancelled by user",
+  "file_scope": [
+    "docs/README.md",
+    "docs/architecture/README.md",
+    "docs/architecture/data-flow.md",
+    "docs/architecture/decisions/ADR-002-protocol-packages-http.md",
+    "docs/architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
+    "docs/architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md",
+    "docs/architecture/exchange-pipeline-template/README.md",
+    "docs/architecture/modules.md",
+    "docs/architecture/rules-and-protocol-packages.md",
+    "docs/architecture/runtime-observability.md",
+    "docs/architecture/security-and-persistence.md",
+    "docs/mcp/app-integration-guide.md",
+    "docs/mcp/diagnostic-architecture.md",
+    "docs/mcp/external-package-integration-guide.md",
+    "docs/mcp/tool-reference.md",
+    "docs/mcp/validation-playbook.md",
+    "docs/onboarding-guide.md",
+    "docs/testing/evidence/TEMPLATE.md",
+    "docs/testing/quick-validations/TEMPLATE.md",
+    "docs/testing/release-validation-matrix.md",
+    "docs/user-operation-guide.md",
+    "package.json",
+    "scripts/check-architecture-docs.mjs",
+    "scripts/check-architecture-docs.test.mjs",
+    "scripts/check-task-20260829-002-phase16-docs.mjs",
+    "scripts/check-task-20260829-002-phase16-docs.test.mjs",
+    "src-tauri/src/mcp/tests.rs",
+    "templates/socket-protocol/API.md",
+    "templates/socket-protocol/AUTHORING.md"
+  ],
+  "review": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "code_checkpoint_ready": true
+  },
+  "green": {
+    "phase16_node": "17/17 PASS",
+    "phase16_checker": "PASS",
+    "architecture_docs": "PASS",
+    "mcp_embedded_resources": "6 exact tests PASS",
+    "architecture_static": "PASS",
+    "source_size": "PASS",
+    "lint": "PASS",
+    "rust_fmt": "PASS",
+    "diff_check": "PASS"
+  },
+  "checkpoint": {
+    "full_checkpoint": "N/A",
+    "reason": "NDR-JS-12 owns full-layer acceptance and the unique full checkpoint"
+  },
+  "fresh_run": {
+    "session": "80057",
+    "exit": 0,
+    "command": "pnpm test:task-20260829-002:phase16 && pnpm scan:architecture && pnpm scan:source-size && pnpm lint && cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check && git diff --check",
+    "mcp_raw_output": "not separately archived; session output showed six exact tests at 1 passed, 0 failed each"
+  },
+  "not_run": [
+    "manual UI",
+    "real App",
+    "external network",
+    "CI",
+    "push",
+    "release"
+  ]
+}

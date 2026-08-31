@@ -1,90 +1,134 @@
 # 外部软件包接入与 MCP 诊断指南
 
-本指南描述第三方进程如何通过 WebSocket 为 Socket Listener 提供协议处理，以及 AI 如何使用 MCP
-查询工具确认服务、注册、运行和失败阶段。这些查询工具保持只读；MCP 不会启用、停用、删除或重连
-软件包。
+本指南描述本地 Boa Sidecar 和第三方进程如何通过同一个 WebSocket 端点为 HTTP Body 或 Socket
+Listener 提供协议处理，以及 MCP 客户端如何确认注册、生命周期和失败阶段。MCP 查询保持只读；它
+不会替调用方启用、停用、删除、重连软件包或启动 Listener。
 
 ## 1. 找到权威服务地址
 
-先调用 `external_package_service_status`。只有状态为 `listening` 时才连接返回的 `ws://` 地址；路径固定为
-`/packages`，不能增加 query 或改用其他路径。服务不要求 token、HMAC、mTLS、Origin、注册身份或授权；所有能够
-到达该地址并正确实现 wire 合同的外部包都按受信任包接纳。监听范围只由配置的 bind address 决定，不存在额外的
-loopback、CIDR 或来源身份门禁。
+先调用 `external_package_service_status`。只有状态为 `listening` 时才连接返回的 `ws://` 地址；路径
+固定为 `/packages`，不能增加 query 或改用其他路径。服务不要求 token、HMAC、mTLS、Origin 或注册
+身份；监听范围只由 bind address 决定。
 
-设置页修改监听地址、端口、RPC timeout 或并发额度后，需要重启 Proxy 才会改变实际服务。环境配置
-MCP 工具可以在目标 Workspace 候选中配置精确外部包引用，但不能修改这些应用级服务设置，也不会
-启动、停止、注册或探测外部包。
+设置页修改 bind address 或 port 后，需要重启 Proxy 才会改变实际服务。本地严格
+JavaScript ZIP 由应用管理的 Boa Sidecar 主动连接同一端点；第三方进程也主动连接，但不获得 ZIP
+源码、本机路径或 Sidecar Host API。
 
-## 2. 完成唯一一次注册
+## 2. 发送唯一一次注册通知
 
-连接建立后，Proxy 首先发送 JSON-RPC 2.0 请求 `package.register`。第三方必须用完全相同的 `id` 返回
-`result`，并声明 `api: 1`、精确包身份、上下行 Document Schema、显示方法以及 frame/decode/encode 方法后缀。
-注册结果使用严格 closed wire，未知字段、非法 SemVer、重复方法或不完整 Schema 都会拒绝整条连接。
+WebSocket 建立后，软件包必须先发送无 `id` 的 JSON-RPC 2.0 notification：
 
-第三方只声明方法后缀。Proxy 生成实际方法名：
+```json
+{
+  "jsonrpc": "2.0",
+  "method": "package.register",
+  "params": {
+    "api": 1,
+    "kind": "socket",
+    "package": {
+      "id": "example.protocol",
+      "version": "1.0.0",
+      "name": "Example Protocol",
+      "description": "Example"
+    },
+    "document": {
+      "upstream": { "schema": { "type": "object", "properties": {} } },
+      "downstream": { "schema": { "type": "object", "properties": {} } }
+    }
+  }
+}
+```
 
-- `hooks.upstream.<frame|decode|encode suffix>`：应用到 Server。
-- `hooks.downstream.<frame|decode|encode suffix>`：Server 到应用。
-- `document.upstream.<display suffix>`：上行 Document 展示。
-- `document.downstream.<display suffix>`：下行 Document 展示。
+`params` 就是完整 `manifest.json`，没有额外 `manifest` 包装。注册 wire 使用 closed shape：未知字段、
+非法 ID/SemVer、非法递归 Schema 或不符合 `kind` 的方向能力会拒绝整条连接。注册没有成功响应；Proxy
+接纳 notification 后才发出带字符串 `id` 的固定 RPC 请求。同一 WebSocket 不得再次注册，也不能
+向 Proxy 发业务请求。Ping/Pong 是 WebSocket 心跳，不是 JSON-RPC 方法。
 
-同一 WebSocket 上不得再次注册，也不能发送无关业务请求。Ping/Pong 属于 WebSocket 心跳，不是 JSON-RPC 方法。
+固定方法名如下，不允许 Manifest 自定义后缀：
 
-## 3. JSON-RPC 处理合同
+- `hooks.upstream.frame` / `hooks.downstream.frame`：仅 Socket。
+- `hooks.upstream.decode` / `hooks.downstream.decode`。
+- `hooks.upstream.encode` / `hooks.downstream.encode`。
+- `document.upstream.display` / `document.downstream.display`。
 
-- `frame` 接收累积缓冲区的 canonical Base64，返回 `need_more` 或正数 `consumed_bytes`。
-- `decode` 接收完整 frame，返回严格匹配当前方向 Schema 的 Document。
-- Proxy 在 Document 上执行四阶段规则。
-- `encode` 接收规则处理后的 Document，返回 canonical Base64 frame。
-- `display` 返回未信任 HTML；Proxy 会清洗后展示，失败只回退 Hex，不反写已提交线路。
+## 3. JSON-RPC 与 JavaScript ZIP 合同
 
-每个响应必须关联当前连接代次中的请求 ID。错误 ID、重复响应、非法 envelope 或类型不匹配会使软件包协议失效并
-断开。普通 JSON-RPC error、调用 timeout 或低于 transport wire 上限的调用级大小错误只失败对应处理调用。
+- Socket `frame.params.buffer` 和 Socket decode/encode wire bytes 使用 canonical padded Base64。
+- HTTP decode 的 `params.input` 与 encode 的 `params.originalInput` 使用 Unicode string。
+- `decode` 返回递归 JSON Document；值只允许 string、有限 number、boolean、null、object、array。
+- `encode` 接收 `originalInput` 和规则处理后的 `document`；HTTP 返回 string，Socket 返回 canonical padded Base64。
+- `display` 接收 Document 并返回显示文本；失败只影响观测回退，不改变已成功的业务线路。
+- 成功响应复制请求 `id`；失败响应的 `error.data.code` 是稳定 machine code。错误 ID、重复响应、非法
+  envelope、缺失稳定 code 或结果类型不匹配会按对应边界失败。
 
-资源边界为：WebSocket handshake 10 秒、服务最多 256 条已接纳连接、注册 30 秒、默认单包 256 个在途 RPC、
-默认 RPC timeout 5 秒、单条 JSON-RPC wire message 1 MiB、display 结果 128 KiB。连接额度满时立即拒绝该次连接并
-记录 `EXTERNAL_PACKAGE_CONNECTION_LIMIT_REACHED`；失败连接退出后立即释放额度。入站消息超过 1 MiB 时无法安全
-取得请求 ID，因此属于连接致命错误，软件包会离线并停止引用它的活动 Listener。
+本地 ZIP 固定包含根目录 `manifest.json`、`protocol.js`、`display.js`。Boa Sidecar 从已校验 ZIP 字节
+加载 package-relative ES module，缓存固定 named exports。当前 host 不注入 Node、filesystem、process、
+Buffer、fetch、timer 或 WebSocket Host bindings；这不是对 Boa default/native capability 的限制声明。
+Socket hook 在 Sidecar 内看到 `Uint8Array`；跨 `/packages` 的 Socket wire 仍是 Base64。第三方进程只
+实现上述 JSON-RPC wire，不应把某个 JavaScript runtime 当作协议要求。
 
-注册 30 秒期限覆盖初始 `package.register` 写出、等待响应和期间的 heartbeat 写出，阻塞写不能绕过期限。
-这些额度按连接或精确包隔离：一个包的 stalled/timeout RPC 不占用另一个包的在途额度；非法 JSON、非法 envelope、
-错误/重复 ID 或 malformed WebSocket frame 只关闭该条外部包连接；malformed transport 记录稳定
-`EXTERNAL_PACKAGE_TRANSPORT_ERROR`，正常 Close/EOF 记录 disconnect。`frame` 返回超过当前累积 buffer 的
-`consumed_bytes` 时，只关闭当前业务连接；外部包连接和 Listener 继续服务后续业务连接。一个精确包离线时只停止
-引用该精确 `id + version` 的 Listener，不影响无关包及其 Listener。
+## 4. 规则事务与过程证据
 
-## 4. 在 Proxy 中启用和绑定
+Proxy 只在两个写出边界执行统一规则：`Proxy -> Server` 和 `Proxy -> App`。HTTP Body 与 Socket 的
+Document 条件树支持递归 AND/OR；命中规则的有序 action 在一次事务中执行，最后最多 Encode 一次。
+Frame、Decode、Rules 或 Encode 失败会终止当前 Exchange；Encode 失败不能提交 Nth counter、hit、
+one-shot 或 Document 修改。
 
-首次注册只会创建“在线但停用”的精确版本。用户需要在协议包详情中启用该版本，再在 Socket Listener 中选择同一
-`id + version`。目录只把 online、enabled、valid 且具有完整 Socket 能力的版本列为可用。
+`exchange_observation_get` 的时间线可包含：
 
-停用会停止引用入口但保留 WebSocket；删除要求没有任何 Workspace 引用。软件包断线后，Proxy 将其标记为 offline，
-并停止引用该精确版本的活动 Listener。重连必须提交相同规范注册指纹，且不会自动启动 Listener。
+- `received`：原始 HTTP/Socket context、Decode Document 和 Display。
+- `processed`：逐规则 typed `changes`（`record_match`、`set`、`clear`、`insert`、`append`）、
+  `changes_truncated` 和 `final_document`。
+- `encoded` / `sent`：Encode 后和实际写出的 context。
+- `failed`：stage、稳定错误以及可选的 typed `external_package_call`。
 
-## 5. MCP 排障顺序
+`changes_truncated=true` 表示过程操作摘要触及有界证据预算；不能据此断言未列出的规则或动作没有执行。
+`final_document` 仍用于判断事务最终值，真实线路结论还必须与 `encoded`、`sent` 和对端实际接收对齐。
 
-1. 调用 `external_package_service_status`，确认实际 URL、`/packages`、监听状态和在线数。
-2. 调用 `protocol_package_detail`，确认精确版本的 source、online、enabled、远端地址、连接 ID、方法映射、RPC timeout、
-   指纹和最近稳定错误。
-3. 调用 `protocol_package_usage`，确认哪些 Workspace/Listener 引用了该版本。
-4. 调用 `diagnostics_query`，用包 ID、连接 ID、`external package`、`外部软件包`、方法名或稳定错误码筛选。
-5. 调用 `diagnose_recent_failures` 获取不执行修改的建议。
-6. 对已产生业务流量的连接，使用 `exchange_observation_query` 按 Workspace、Listener 查询，再用
-   `exchange_observation_get` 查看同一连接按顺序追加的收到、发送、失败与关闭证据。
+## 5. 生命周期与持久化
 
-控制面 diagnostics 只承担生命周期、阶段、包身份、连接 ID、远端地址和稳定错误码，因此不会复制业务报文或远端
-JSON-RPC `data`；`data` 在该通道只投影 `string(bytes=N)`、`array(items=N)`、`object(fields=N)` 等形状。
-完整 Socket bytes、Document、处理输入输出和错误数据允许保存在其专用有界日志、Exchange observation、复现证据或
-外部包自身日志中；这是存储责任分离，不是隐私过滤要求。
+首次远端注册创建精确 `package.id + version` 的 external registry 记录并按合同启用；后续相同身份
+必须保持注册指纹一致。严格
+本地 ZIP 会把原始 archive 与同一注册指纹绑定；启用本地版本后由应用启动 Boa Sidecar，远端版本则
+要求第三方进程已经在线。Listener 只有在精确版本 enabled、online、valid 且能力与数据面匹配时才能
+启动。
 
-## 6. 常见判断
+持久化详情包括 registration、SHA-256 fingerprint、可选 local archive、enabled、首次/最后连接时间、
+最后远端地址和最近稳定错误。断线将版本标记 offline 并停止引用它的活动 Listener；重连必须提交
+相同精确身份与注册指纹，不会自动重启 Listener。停用在同一 mutation gate 中先停止阻止停用的活动
+精确引用，再把 `enabled` 设为 false；删除要求没有任何 Workspace 引用，并关闭仍在线的精确连接。
 
-- `service_failed`：检查端口占用、监听地址和重启边界。
-- `websocket_handshake`：确认使用权威 URL、精确 `/packages` 且没有 query。
-- `registration`：核对 API、SemVer、Schema、方法后缀和 JSON-RPC response ID。
+产品 1.00 的数据库兼容基线是 Schema 100。开发期旧 Schema 可在启动时走明确的 recreate 分支；
+Schema 100 及以后不能用该分支清空数据，未知、损坏或更新版本必须 fail closed。不要把开发 reset
+当成发布升级或恢复策略。
+
+## 6. 资源与隔离边界
+
+Transport 对 WebSocket handshake、registration、heartbeat 和 message 使用源码定义的独立预算；HTTP
+承载入口还应用其 `max_body_bytes`。文档不把这些边界合成为不存在的普通 RPC、in-flight 或 service
+status 配置。超大或 malformed transport、错误/重复 ID 会关闭对应包连接；一次业务 `frame` 返回
+越界 consumed bytes 或调用失败只终止对应业务连接。一个精确包失败不能停止无关 Listener。
+
+## 7. MCP 排障顺序
+
+1. `external_package_service_status`：确认实际 URL、精确 `/packages`、监听状态和在线数。
+2. `protocol_package_detail`：确认精确身份、kind、online/enabled、local process、连接 ID、指纹、首次/
+   最后连接、最后远端地址和最近稳定错误。
+3. `protocol_package_usage`：确认引用该版本的 Workspace/Listener 及运行状态。
+4. `diagnostics_query` / `application_log_query`：按包 ID、连接 ID、method、request ID 或 stable code 对齐。
+5. `exchange_observation_query/get`：检查同一 runtime epoch 与 Exchange 的 received、processed、encoded、
+   sent、failed、closed 顺序。
+6. `diagnose_recent_failures`：取得不执行修改的建议，并以实际缺失条件决定复测入口。
+
+常见分类：
+
+- `websocket_handshake`：地址、精确路径或 transport 不匹配。
+- `registration`：notification 带 `id`、Manifest/Schema/身份非法或注册超时。
 - `EXTERNAL_PACKAGE_ALREADY_ONLINE`：相同精确版本已有活动或关闭中的连接。
-- `PROTOCOL_PACKAGE_IDENTITY_CONFLICT`：内部或外部来源已占用相同 `id + version`，或者重连注册指纹改变。
-- RPC `frame/decode/encode/display`：按日志中的 direction、method、request ID 和 connection ID 对齐第三方进程日志。
-- offline：查看最近稳定错误，再检查第三方进程退出、心跳、wire 大小和 transport 状态；不要盲目自动重试。
+- `PROTOCOL_PACKAGE_IDENTITY_CONFLICT`：相同身份的注册指纹或 archive 不一致。
+- RPC failure：按 direction、method、request ID、remote code 和 stable code 对齐第三方日志。
+- offline：检查最近稳定错误、进程退出、heartbeat、wire 大小和 transport；不要用盲目重试掩盖合同错误。
 
-第三方进程可按排障需要记录完整报文和结果；应自行设置容量、轮转与保留期限，避免无界增长。
+诊断控制面只保留有界、类型化的生命周期和错误摘要；完整 payload、Document 与线路字节应在专用
+Exchange evidence 或正式测试证据中保存。任何未执行的真实 App、远端、系统权限或人工检查必须明确
+记录为 `NOT_RUN`，不能由单元测试或 MCP 查询成功替代。

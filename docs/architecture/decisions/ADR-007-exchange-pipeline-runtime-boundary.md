@@ -1,9 +1,12 @@
 # ADR-007：Exchange/Pipeline 运行与观察边界
 
-- Status: Accepted
+- Status: Superseded by [ADR-009](ADR-009-nested-document-javascript-package-runtime.md) on 2026-08-31
 - 日期：2026-08-24
 - Supersedes: [ADR-006](ADR-006-unified-exchange-observation.md)
 - Refines: [ADR-001](ADR-001-http-socket-boundary.md)、[ADR-002](ADR-002-protocol-packages-http.md)、[ADR-004](ADR-004-embedded-read-only-mcp.md)、[ADR-005](ADR-005-runtime-evidence-and-reproduction-report.md)
+
+> 当前递归 Document、两写出阶段、统一规则事务和 JavaScript package API 1 合同由 ADR-009 替代。
+> 下方内容只保留原始连接级 Exchange 决策语境。
 
 ## Context
 
@@ -31,7 +34,8 @@ HTTP 与 Socket 只共享协议中立核心。历史设计必须保留，但不�
 8. 本决策不改变协议包 wire、Manifest、Rhai Host API 或扁平 Document。`domain::document` 保持协议中立；
    Rhai 名称限制属于 `protocol-scripting`；HTTP 与 Socket 的规则绑定继续隔离。
 
-完整类型和流程约束以 [Exchange/Pipeline 权威架构模板](../exchange-pipeline-template/README.md) 为准。
+当时的完整类型和流程约束记录在
+[Exchange/Pipeline 历史架构模板](../exchange-pipeline-template/README.md)；当前实现不得以其替代 ADR-009。
 
 ## Boundary evidence
 

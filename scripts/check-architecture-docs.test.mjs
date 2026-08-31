@@ -82,3 +82,39 @@ test("accepted decisions still require explicit rejected alternatives", () => {
     /rejected alternatives are not explicit/u,
   );
 });
+
+test("accepts one decision that supersedes multiple bidirectional predecessors", () => {
+  const first = "decisions/ADR-002-first.md";
+  const second = "decisions/ADR-007-second.md";
+  const next = "decisions/ADR-009-next.md";
+  const decisionContracts = new Map([
+    [first, { status: "Superseded", supersededBy: next }],
+    [second, { status: "Superseded", supersededBy: next }],
+    [next, { status: "Accepted", supersedes: [first, second] }],
+  ]);
+  const decisionSources = new Map([
+    [first, "# First\n\n- Status: Superseded\n"],
+    [second, "# Second\n\n- Status: Superseded\n"],
+    [next, "# Next\n\n- Status: Accepted\n- Supersedes: [ADR-002](ADR-002-first.md)、[ADR-007](ADR-007-second.md)\n\n## Alternatives\n\n- Rejected: keep both predecessors active.\n"],
+  ]);
+  assert.deepEqual(validateDecisionPolicy(decisionSources, decisionContracts), []);
+});
+
+test("rejects a missing link from a multi-predecessor decision", () => {
+  const first = "decisions/ADR-002-first.md";
+  const second = "decisions/ADR-007-second.md";
+  const next = "decisions/ADR-009-next.md";
+  const failures = validateDecisionPolicy(
+    new Map([
+      [first, "# First\n\n- Status: Superseded\n"],
+      [second, "# Second\n\n- Status: Superseded\n"],
+      [next, "# Next\n\n- Status: Accepted\n- Supersedes: [ADR-002](ADR-002-first.md)\n\n## Alternatives\n\n- Rejected: keep both predecessors active.\n"],
+    ]),
+    new Map([
+      [first, { status: "Superseded", supersededBy: next }],
+      [second, { status: "Superseded", supersededBy: next }],
+      [next, { status: "Accepted", supersedes: [first, second] }],
+    ]),
+  );
+  assert.match(failures.join("\n"), /missing reverse link \[ADR-007\]/u);
+});

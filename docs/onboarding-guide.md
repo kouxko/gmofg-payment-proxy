@@ -14,7 +14,7 @@
 
 项目当前支持 HTTP/HTTPS、Socket TCP/TLS/mTLS、协议包、规则、断点、故障注入、Android 按应用透明
 路由、运行观测、MCP 查询/环境配置和应用级导入导出。当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket
-tunnel、CONNECT MITM 和 HTTP 外部 WebSocket 协议包；完整边界以
+tunnel 和 CONNECT MITM；`/packages` 是协议包控制面，不是被代理的 WebSocket tunnel。完整边界以
 [需求与验收基线](requirements.md)为准。
 
 ## 2. 用 15 分钟看懂系统
@@ -32,7 +32,7 @@ flowchart TB
     INFRA --> RUNTIME[HTTP Socket TLS Runtime]
     RUNTIME --> EXCHANGE[Exchange 和 Pipeline]
     INFRA --> SCRIPT[内置或外部协议包]
-    DESKTOP --> MCP[37 个查询 + 5 个环境工具]
+    DESKTOP --> MCP[36 个查询 + 5 个环境工具]
     INFRA --> ANDROID[ADB 和 Android Companion]
     ANDROID --> TARGET[目标 Android App]
 ```
@@ -65,11 +65,11 @@ WebView 是展示层，也是较低信任边界。它可以被旧页面、损坏
 ```text
 App read
   -> Upstream Reader: Frame(Socket) -> Decode -> Display
-  -> Writer: clone Document -> Rules -> Encode
+  -> Proxy -> Server: evaluate/update current working Document in order -> Encode once
   -> Server write
   -> Server read
   -> Downstream Reader: Frame(Socket) -> Decode -> Display
-  -> Writer: clone Document -> Rules -> Encode
+  -> Proxy -> App: evaluate/update current working Document in order -> Encode once
   -> App write
 ```
 
@@ -89,9 +89,9 @@ Encode 或 transport 失败要 fail-closed，结束当前 Exchange。
 | Exchange | 一条 App connection 内按顺序发生的全部请求、响应和失败 | `crates/exchange` |
 | Pipeline | Frame、Decode、Display、Rules、Encode 的可组合处理链 | `crates/exchange` |
 | Envelope | 原始字节、Document 和协议上下文的单次处理载体 | `crates/exchange` |
-| Document | 协议包解析出的强类型字段集合 | `domain/document` |
+| Document | 协议包解析出的递归 JSON tree | `domain/document` |
 | HTTP 标准规则 | Header、Body、状态、延迟、断开等 HTTP 阶段动作 | `domain/rule` |
-| Document 规则 | 针对协议 Schema 字段的条件与修改 | `domain/protocol_document_rule` |
+| 统一规则 | `RuleDefinition` 的递归 `ConditionTree` 与有序 `UnifiedAction` | `domain/unified_rule` |
 | 协议包 | 提供 Frame、Decode、Encode、Display 能力的精确版本包 | package API 1 / external Sidecar |
 | LocalResponder | 使用同一 Server 接口的本地响应端，不是旁路流程 | `exchange/local_server` |
 | Observation | 面向抓包 UI 的有界内存 Exchange 事件 | Infrastructure store |
@@ -126,7 +126,6 @@ Downstream。TLS 也有两段：App ↔ Proxy 和 Proxy ↔ Server，证书角�
 | `src-tauri/crates/android-engine` | 纯 Rust TUN/路由/弱网数据面 | Android 网络算法 |
 | `android-companion` | VpnService、JNI、Android 平台边界 | 设备侧控制与打包 |
 | `templates/socket-protocol` | 严格 JavaScript ZIP 模板和作者 API | 新建 Sidecar 协议包 |
-| `examples/external-packages` | Deno/Python 外部包示例 | 外部协议接入 |
 | `scripts` | 架构门禁、构建和真实 App E2E | 验证与发布自动化 |
 | `test-support` | 独立 runtime/平台测试工程 | 跨层验证 |
 | `.github/workflows` | CI、Windows/macOS 构建与发布 | 远程门禁和产物 |
@@ -198,8 +197,9 @@ src/features/workspaces/workspaces-view.tsx
 ### 5.3 HTTP
 
 HTTP Listener 接受 TCP/TLS 后，由 Hyper 处理 HTTP/1.1 framing，再进入 HTTP Exchange。请求可以按
-absolute-form 目标动态转发，也可以固定到一个 HTTP/HTTPS origin。请求和响应分别经过 Decode、Display、
-Rules、Encode。CONNECT 和 Upgrade 在创建 Server connection 与 Exchange 前返回 501。
+absolute-form 目标动态转发，也可以固定到一个 HTTP/HTTPS origin。请求和响应分别经过 Decode、Display，
+再在对应 `Proxy -> Server` / `Proxy -> App` 写出阶段执行统一规则并 Encode 一次。CONNECT 和 Upgrade
+在创建 Server connection 与 Exchange 前返回 501。
 
 修改 HTTP 时先区分：Listener/TLS、HTTP framing、请求策略、Pipeline、上游连接、响应策略还是 UI 观测。
 不要用透明 Socket 逻辑兜底 HTTP 不支持功能。
@@ -209,7 +209,7 @@ Rules、Encode。CONNECT 和 Upgrade 在创建 Server connection 与 Exchange �
 Socket 有三种关键形态：
 
 - Direct/Transparent：真实字节双向转发，保留任意分段、二进制和 half-close；
-- Scripted：Frame 完成一帧，再 Decode、Display、Rules、Encode；
+- Scripted：Frame 完成一帧，再 Decode、Display，并在写出阶段执行统一规则和 Encode；
 - LocalResponder：不连接远端，但仍实现同一个 Server 接口并沿同一 Exchange 流程返回。
 
 Scripted 模式一次只处理一帧；`NeedMore` 表示继续累积，完整 Frame 后立即发送。排障时按
@@ -219,14 +219,12 @@ Scripted 模式一次只处理一帧；`NeedMore` 表示继续累积，完整 Fr
 
 官方起始包与用户导入包都是严格 ZIP：根目录固定为 `manifest.json`、`protocol.js`、`display.js`，
 由独立 Boa Sidecar 执行；模板入口见 [Socket 协议模板](../templates/socket-protocol/README.md)。软件包
-主动通过 WebSocket JSON-RPC 注册精确 `package id@version`，再提供上下行 hook。在线、启用、绑定、
+主动通过 `/packages` WebSocket JSON-RPC 注册精确 `package id@version`，再提供上下行 hook。在线、启用、绑定、
 Listener 运行和 Exchange 成功是五个独立状态。
 
-示例：
-
-- [Deno ISO8583 外部包](../examples/external-packages/iso8583-deno/README.md)
-- [Python AU EFTEX 外部包](../examples/external-packages/au_eftex/README.md)
-- [外部包接入与 MCP 排障](mcp/external-package-integration-guide.md)
+包作者先阅读 [package API 1](../templates/socket-protocol/API.md) 与
+[Socket package authoring](../templates/socket-protocol/AUTHORING.md)。运行与生命周期排障见
+[外部包接入与 MCP 排障](mcp/external-package-integration-guide.md)。
 
 协议包断线会停止依赖它的 Listener；重连只恢复包在线状态，不自动重启 Listener。
 
@@ -246,7 +244,7 @@ MCP 以明文 Streamable HTTP 监听 `0.0.0.0:17653`，并在平台支持时监�
 Host、Origin、Authorization、API key、Cookie、来源 IP 或 CIDR；任何网络可达方都能调用工具，
 传输中的私钥、密码和 confirmation token 也可能被网络观察者读取。
 
-原有 37 个工具继续只读调用 Application 查询 facade；ExchangeObservation 查询通过 Application 的
+原有 36 个工具继续只读调用 Application 查询 facade；ExchangeObservation 查询通过 Application 的
 `ExchangeObservationQueries` port facade，只有 composition root 会把 Infrastructure `ExchangeObservationStore`
 注入该 port。运行日志继续使用其专用只读边界。五个环境配置工具提供 capabilities、create、status、
 cancel、apply：create 完成分层验证并返回完整预览和一次性 token，
@@ -254,8 +252,10 @@ apply 返回 `apply_queued` 后由 Application owned task 持有执行与清理�
 apply ack 后断开不会取消任务。MCP 不自动启停 Listener、不重放交易、不修改应用级 Settings、其他
 Workspace 或任意本机文件。
 
-抓包/ExchangeObservation 是有界内存证据，不写 SQLite；普通诊断日志使用独立滚动 JSONL。观测丢失不能让
-业务交易失败。工具清单和返回合同见[MCP 工具参考](mcp/tool-reference.md)。
+抓包/ExchangeObservation 是有界内存证据，不写 SQLite；普通诊断日志使用独立滚动 JSONL。协议处理
+事件包含 received Document、typed operation summary、final working Document、Encode/result 与 stable
+error；`changes_truncated` 只表示逐规则摘要达到观测预算。观测丢失不能让业务交易失败。工具清单和
+返回合同见 [MCP 工具参考](mcp/tool-reference.md)。
 
 ### 5.8 持久化和安全材料
 
@@ -278,7 +278,6 @@ Root CA 私钥、HTTP Basic 明文、运行态抓包或 Android 设备运行状�
 - macOS 使用 Xcode Command Line Tools；Windows 使用 Visual Studio C++ Build Tools 和 WebView2；
 - 需要 Android Companion 时，再安装 JDK 21、Android SDK 36、Build Tools 36.0.0 和 NDK
   29.0.14206865；
-- 需要运行 Deno/Python 外部包时，再安装 Deno 2.x 或 Python 3.11+。
 
 先验证版本：
 
@@ -481,9 +480,10 @@ production build、品牌检查、Rust fmt/clippy、Windows Rust 检查和 Cargo
 
 ### 11.2 App 测试
 
-真实 App 回归至少覆盖：App 启动、MCP 37 个查询与五个环境工具合同、HTTP Fixed Server、
-Socket Direct、Socket Scripted、不完整 Frame、成功/失败抓包、Deno 外部包、AU EFTEX 外部包，
-以及外部包断线重连不自动恢复 Listener。
+真实 App 回归至少覆盖：App 启动、MCP 36 个查询与五个环境工具合同、HTTP Fixed Server、
+Socket Direct、Socket Scripted、不完整 Frame、成功/失败抓包、本地 Boa Sidecar、远端 package API 1，
+以及外部包断线重连不自动恢复 Listener。未执行的人机、真实设备或外部网络项必须记录为 `NOT_RUN`，
+不能用模块测试代替。
 当前用例与当次结果见[最新 App 测试结果](testing/release-validation-results-20260825.md)，可重复步骤见
 [发布级验证矩阵](testing/release-validation-matrix.md)。
 
