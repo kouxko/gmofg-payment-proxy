@@ -17,6 +17,7 @@ const files = [
   "src-tauri/crates/proxy/src/lib.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/request_metadata.rs",
   "src-tauri/crates/exchange/src/pipeline.rs",
 ];
 
@@ -54,6 +55,31 @@ test("canonical repository passes", () => {
   assert.equal(result.status, 0, result.stderr);
 });
 
+test("fails closed when Phase10 Cargo discovery drifts", () => {
+  const target = sandbox();
+  const result = spawnSync(process.execPath, [checker], {
+    cwd: target,
+    encoding: "utf8",
+    env: {
+      ...process.env,
+      PHASE10_CHECKER_TEST_MODE: "sandbox",
+      PHASE10_DISCOVERY_NAMES: [
+        "changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed",
+        "http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding",
+        "production_http_joint_leaves_ordinary_false_rule_to_actor_matching",
+        "production_http_actor_owns_unified_nth_attempt_and_one_shot_commit",
+        "production_snapshot_compiles_recursive_or_with_insert_and_append",
+        "production_snapshot_uses_shared_provider_for_both_directions_and_joint_encode",
+        "remote_decode_and_display_failures_keep_typed_json_rpc_identity",
+        "strict_http_package_codec_reads_original_utf8_and_shift_jis_wire_bytes",
+        "unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc",
+      ].join(","),
+    },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /missing required Phase10 test/u);
+});
+
 for (const [name, mutate, expected] of [
   ["wire body removed", replace(files[0], "wire_body", "projected_body"), /original wire/u],
   ["endpoint loses wire bytes", replace(files[1], "wire_body: message.body.to_vec()", "wire_body: Vec::new()"), /authoritative body/u],
@@ -69,7 +95,7 @@ for (const [name, mutate, expected] of [
   ["legacy runtime restored", append(files[2], "mod legacy_http;"), /remain removed/u],
   ["actor external code folded to internal", replace(files[5], "ErrorCode::ExternalPackageCallFailed", "ErrorCode::Internal"), /top-level external package error code/u],
   ["proxy external code removed", replace(files[6], "ExternalPackageCallFailed => \"EXTERNAL_PACKAGE_CALL_FAILED\"", "ExternalPackageCallFailed => \"INTERNAL_ERROR\""), /external package failure classification/u],
-  ["display fail-open observation removed", replace(files[9], "failed_with_context::<Http, D>(\"display\"", "failed_with_context::<Http, D>(\"ignored\""), /Display fail-open/u],
+  ["display fail-open observation removed", replace(files[10], "failed_with_context::<Http, D>(\"display\"", "failed_with_context::<Http, D>(\"ignored\""), /Display fail-open/u],
   ["endpoint typed error removed", replace(files[1], ".with_external_package_call(*failure)", ""), /preserve typed Proxy/u],
   ["unchanged behavior test removed", replace(files[7], "unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc", "missing_unchanged_case"), /Cargo Phase10 test/u],
   ["changed behavior test removed", replace(files[7], "changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed", "missing_changed_case"), /Cargo Phase10 test/u],

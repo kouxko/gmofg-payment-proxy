@@ -1,3 +1,6 @@
+mod runtime_lifecycle;
+use runtime_lifecycle::reset_rule_lifecycle;
+
 #[test]
 fn codec_failures_keep_generic_stable_error_codes() {
     let codec = Utf8BodyCodec;
@@ -11,69 +14,6 @@ fn codec_failures_keep_generic_stable_error_codes() {
 #[derive(Debug)]
 struct StaticRules {
     snapshot: Mutex<RuleRuntimeSnapshot>,
-}
-
-#[derive(Debug)]
-struct RejectingCommitRules {
-    snapshot: Mutex<RuleRuntimeSnapshot>,
-    reject_commit: AtomicBool,
-}
-
-#[derive(Debug)]
-struct ConflictOnceRules {
-    snapshot: Mutex<RuleRuntimeSnapshot>,
-    conflict_once: AtomicBool,
-    commit_attempts: AtomicUsize,
-}
-
-#[derive(Debug)]
-struct BlockingCommitRules {
-    snapshot: Mutex<RuleRuntimeSnapshot>,
-    commit_entered: Arc<tokio::sync::Notify>,
-    commit_release: Arc<tokio::sync::Notify>,
-}
-
-#[derive(Debug)]
-struct BlockingStopRules {
-    snapshot: Mutex<RuleRuntimeSnapshot>,
-    reset_calls: AtomicUsize,
-    stop_reset_entered: Arc<tokio::sync::Notify>,
-    stop_reset_release: Arc<tokio::sync::Notify>,
-    stop_reset_completed: Arc<tokio::sync::Notify>,
-}
-
-#[derive(Debug)]
-struct CapacityRules {
-    snapshot: Mutex<RuleRuntimeSnapshot>,
-    commit_calls: AtomicUsize,
-    first_commit_entered: Arc<tokio::sync::Notify>,
-    first_commit_release: Arc<tokio::sync::Notify>,
-}
-
-#[async_trait]
-impl RuntimeRuleRepository for RejectingCommitRules {
-    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        Ok(self.snapshot.lock().clone())
-    }
-
-    async fn commit_runtime_deltas(
-        &self,
-        _: &RuleRuntimeSnapshot,
-        _: &[intercept_proxy_domain::RuleLifecycleDelta],
-    ) -> AppResult<u64> {
-        if self.reject_commit.load(AtomicOrdering::Acquire) {
-            Err(AppError::new(
-                "REVISION_CONFLICT",
-                "模拟运行态事务提交失败。",
-            ))
-        } else {
-            Ok(1)
-        }
-    }
-
-    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
-        Ok(())
-    }
 }
 
 #[async_trait]
@@ -106,10 +46,11 @@ impl RuntimeRuleRepository for StaticRules {
 
     async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
         let mut current = self.snapshot.lock();
-        for rule in &mut current.rules {
-            rule.hit_count = 0;
-            rule.last_hit_at = None;
-        }
+        current.rules = current
+            .rules
+            .iter()
+            .map(reset_rule_lifecycle)
+            .collect::<AppResult<Vec<_>>>()?;
         let next_revision = current.collection_revision.saturating_add(1);
         *current = RuleRuntimeSnapshot::with_collection_identity_and_order(
             current.collection_id,
@@ -117,171 +58,6 @@ impl RuntimeRuleRepository for StaticRules {
             current.rules.clone(),
             current.execution_order.clone(),
         );
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl RuntimeRuleRepository for ConflictOnceRules {
-    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        Ok(self.snapshot.lock().clone())
-    }
-
-    async fn commit_runtime_deltas(
-        &self,
-        snapshot: &RuleRuntimeSnapshot,
-        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
-    ) -> AppResult<u64> {
-        self.commit_attempts.fetch_add(1, AtomicOrdering::AcqRel);
-        let mut current = self.snapshot.lock();
-        if self.conflict_once.swap(false, AtomicOrdering::AcqRel) {
-            let externally_advanced_revision = current.collection_revision.saturating_add(1);
-            let externally_preserved_rules = current.rules.clone();
-            *current = RuleRuntimeSnapshot::with_collection_identity(
-                current.collection_id,
-                externally_advanced_revision,
-                externally_preserved_rules,
-            );
-            return Err(AppError::new(
-                "REVISION_CONFLICT",
-                "模拟评估后发生外部规则集合更新。",
-            ));
-        }
-        if current.collection_id != snapshot.collection_id
-            || current.signature != snapshot.signature
-            || current.collection_revision != snapshot.collection_revision
-        {
-            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
-        }
-        let next_revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
-            snapshot.collection_id,
-            next_revision,
-            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
-        );
-        Ok(next_revision)
-    }
-
-    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl RuntimeRuleRepository for BlockingCommitRules {
-    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        Ok(self.snapshot.lock().clone())
-    }
-
-    async fn commit_runtime_deltas(
-        &self,
-        snapshot: &RuleRuntimeSnapshot,
-        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
-    ) -> AppResult<u64> {
-        self.commit_entered.notify_one();
-        self.commit_release.notified().await;
-        let mut current = self.snapshot.lock();
-        if current.collection_revision != snapshot.collection_revision
-            || current.signature != snapshot.signature
-        {
-            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
-        }
-        let next_revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
-            snapshot.collection_id,
-            next_revision,
-            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
-        );
-        Ok(next_revision)
-    }
-
-    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl RuntimeRuleRepository for BlockingStopRules {
-    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        Ok(self.snapshot.lock().clone())
-    }
-
-    async fn commit_runtime_deltas(
-        &self,
-        snapshot: &RuleRuntimeSnapshot,
-        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
-    ) -> AppResult<u64> {
-        let mut current = self.snapshot.lock();
-        if current.collection_revision != snapshot.collection_revision
-            || current.signature != snapshot.signature
-        {
-            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
-        }
-        let next_revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
-            snapshot.collection_id,
-            next_revision,
-            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
-        );
-        Ok(next_revision)
-    }
-
-    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
-        let call = self.reset_calls.fetch_add(1, AtomicOrdering::AcqRel);
-        if call > 0 {
-            self.stop_reset_entered.notify_one();
-            self.stop_reset_release.notified().await;
-        }
-        let mut current = self.snapshot.lock();
-        for rule in &mut current.rules {
-            rule.hit_count = 0;
-            rule.last_hit_at = None;
-        }
-        let revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
-            current.collection_id,
-            revision,
-            current.rules.clone(),
-        );
-        if call > 0 {
-            self.stop_reset_completed.notify_one();
-        }
-        Ok(())
-    }
-}
-
-#[async_trait]
-impl RuntimeRuleRepository for CapacityRules {
-    async fn runtime_snapshot(&self, _channel: &ChannelId) -> AppResult<RuleRuntimeSnapshot> {
-        Ok(self.snapshot.lock().clone())
-    }
-
-    async fn commit_runtime_deltas(
-        &self,
-        snapshot: &RuleRuntimeSnapshot,
-        deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
-    ) -> AppResult<u64> {
-        let call = self.commit_calls.fetch_add(1, AtomicOrdering::AcqRel);
-        if call == 0 {
-            self.first_commit_entered.notify_one();
-            self.first_commit_release.notified().await;
-        }
-        let mut current = self.snapshot.lock();
-        if current.collection_revision != snapshot.collection_revision
-            || current.signature != snapshot.signature
-        {
-            return Err(AppError::new("REVISION_CONFLICT", "规则测试快照已变化。"));
-        }
-        let revision = current.collection_revision.saturating_add(1);
-        *current = RuleRuntimeSnapshot::with_collection_identity(
-            snapshot.collection_id,
-            revision,
-            crate::adapters::rules::conversion::apply_runtime_deltas(snapshot, deltas)?,
-        );
-        Ok(revision)
-    }
-
-    async fn reset_runtime_hit_metadata(&self, _collection_id: Uuid) -> AppResult<()> {
         Ok(())
     }
 }
@@ -299,117 +75,7 @@ async fn runtime_rule_repository_contract_is_async() {
     assert!(snapshot.rules.is_empty());
 }
 
-fn pause_rule() -> RuleViewModel {
-    let id = Uuid::new_v4();
-    RuleViewModel {
-        summary: RuleSummaryViewModel {
-            rule_id: id,
-            revision: 1,
-            name: "暂停请求".into(),
-            enabled: true,
-            priority: 1,
-            creation_order: 1,
-            channel_text: "全部".into(),
-            stage_text: "请求".into(),
-            match_summary: "请求路径等于 /payment".into(),
-            action_summary: "1 个动作".into(),
-            hit_count: 0,
-            last_hit_at: None,
-            ui_tone: UiTone::Positive,
-        },
-        draft: AppRuleDraft {
-            rule_id: Some(id),
-            expected_revision: Some(1),
-            name: "暂停请求".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 1,
-            channel: None,
-            stage: Some(AppMessageStage::Request),
-            conditions: vec![intercept_proxy_application::RuleCondition::Field {
-                field: intercept_proxy_application::RuleMatchField::PathOrRequestType,
-                operator: intercept_proxy_application::RuleMatchOperator::Equals {
-                    value: "/payment".into(),
-                },
-            }],
-            actions: vec![intercept_proxy_application::RuleAction::Pause],
-            one_shot: false,
-        },
-    }
-}
-
-fn one_shot_delay_rule() -> RuleViewModel {
-    let mut rule = pause_rule();
-    rule.summary.name = "一次性延迟".into();
-    rule.draft.name = "一次性延迟".into();
-    rule.draft.actions = vec![intercept_proxy_application::RuleAction::Delay { milliseconds: 25 }];
-    rule.draft.one_shot = true;
-    rule
-}
-
-fn response_status_rule(status: u16) -> RuleViewModel {
-    let mut rule = pause_rule();
-    rule.summary.name = "响应状态替换".into();
-    rule.summary.stage_text = "响应".into();
-    rule.draft.name = "响应状态替换".into();
-    rule.draft.stage = Some(AppMessageStage::Response);
-    rule.draft.conditions = vec![intercept_proxy_application::RuleCondition::Field {
-        field: intercept_proxy_application::RuleMatchField::PathOrRequestType,
-        operator: intercept_proxy_application::RuleMatchOperator::Equals {
-            value: "200".into(),
-        },
-    }];
-    rule.draft.actions = vec![intercept_proxy_application::RuleAction::CustomHttpStatus { status }];
-    rule
-}
-
-fn tls_fingerprint_reject_rule(fingerprint: &str) -> RuleViewModel {
-    let id = Uuid::new_v4();
-    RuleViewModel {
-        summary: RuleSummaryViewModel {
-            rule_id: id,
-            revision: 1,
-            name: "拒绝指定证书".into(),
-            enabled: true,
-            priority: 1,
-            creation_order: 1,
-            channel_text: "全部".into(),
-            stage_text: "TLS 握手".into(),
-            match_summary: "证书指纹".into(),
-            action_summary: "拒绝 TLS".into(),
-            hit_count: 0,
-            last_hit_at: None,
-            ui_tone: UiTone::Positive,
-        },
-        draft: AppRuleDraft {
-            rule_id: Some(id),
-            expected_revision: Some(1),
-            name: "拒绝指定证书".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 1,
-            channel: None,
-            stage: Some(AppMessageStage::TlsHandshake),
-            conditions: vec![intercept_proxy_application::RuleCondition::Field {
-                field: intercept_proxy_application::RuleMatchField::CertificateFingerprint,
-                operator: intercept_proxy_application::RuleMatchOperator::Equals {
-                    value: fingerprint.into(),
-                },
-            }],
-            actions: vec![intercept_proxy_application::RuleAction::Terminal {
-                action: intercept_proxy_application::RuleTerminalAction::RejectTlsHandshake,
-            }],
-            one_shot: false,
-        },
-    }
-}
-
-fn adapter(views: Vec<RuleViewModel>, max_sessions: usize) -> Arc<RuntimePipelineAdapter> {
-    let rules = views
-        .into_iter()
-        .map(view_to_domain_rule)
-        .collect::<ProxyResult<Vec<_>>>()
-        .expect("valid test rules");
+fn adapter(rules: Vec<RuleDefinition>, max_sessions: usize) -> Arc<RuntimePipelineAdapter> {
     Arc::new(RuntimePipelineAdapter::new(
         test_product_hooks(),
         Arc::new(StaticRules {
@@ -423,7 +89,7 @@ fn adapter(views: Vec<RuleViewModel>, max_sessions: usize) -> Arc<RuntimePipelin
 }
 
 fn transaction_channel() -> ChannelId {
-    ChannelId::new("transaction").expect("valid transaction channel")
+    ChannelId::new(Uuid::from_u128(0x7472).to_string()).expect("valid transaction channel")
 }
 
 fn dll_channel() -> ChannelId {

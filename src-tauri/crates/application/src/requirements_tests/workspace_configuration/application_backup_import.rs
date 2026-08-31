@@ -5,6 +5,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use super::*;
 mod commit;
 mod source;
+mod unified_portability;
 use source::FakeBackupPrepareSource;
 
 #[tokio::test]

@@ -1,12 +1,6 @@
 //! 外部 Socket 数据面的启动端口与不可变绑定。
 
-use std::{
-    fmt,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
 use intercept_proxy_application::AppResult;
@@ -17,7 +11,7 @@ use intercept_proxy_package_contract::{
     DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
 };
 
-use super::super::{ProtocolDocumentRuleConnectionFactory, document_rules};
+use super::super::{DocumentProgramFactory, document_rules};
 use crate::adapters::{PackageTransportClient, PackageTransportError};
 
 /// 外部连接的协议入口窄接口。
@@ -149,74 +143,69 @@ pub(crate) trait ExternalSocketPackageProvider: fmt::Debug + Send + Sync {
 #[derive(Clone)]
 pub(crate) struct ExternalSocketRuntimeSnapshot {
     pub(crate) binding: ExternalSocketPackageBinding,
-    pub(crate) rules: ProtocolDocumentRuleConnectionFactory,
+    pub(crate) rules: DocumentProgramFactory,
     topology: SocketTopology,
-    rule_generation: Arc<AtomicU64>,
+    pub(crate) listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl ExternalSocketRuntimeSnapshot {
+    #[cfg(test)]
     pub(crate) fn new(
         binding: ExternalSocketPackageBinding,
-        rules: ProtocolDocumentRuleConnectionFactory,
+        rules: DocumentProgramFactory,
         topology: SocketTopology,
+    ) -> Self {
+        Self::with_listener_transaction(
+            binding,
+            rules,
+            topology,
+            Arc::new(tokio::sync::Mutex::new(())),
+        )
+    }
+
+    pub(crate) fn with_listener_transaction(
+        binding: ExternalSocketPackageBinding,
+        rules: DocumentProgramFactory,
+        topology: SocketTopology,
+        listener_transaction: Arc<tokio::sync::Mutex<()>>,
     ) -> Self {
         Self {
             binding,
             rules,
             topology,
-            rule_generation: Arc::new(AtomicU64::new(0)),
+            listener_transaction,
         }
     }
 
-    /// 复用现有编译边界，原子替换运行中外部 Listener 的四阶段规则。
-    pub(crate) async fn replace_document_rules(
+    pub(crate) async fn compile_replacement(
         &self,
         adapter: &super::super::ListenerRuntimeAdapter,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
-    ) -> AppResult<()> {
-        let generation = self.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
+    ) -> AppResult<DocumentProgramFactory> {
         let registration = self.binding.registration();
         let workspace = workspace.clone();
         let listener = listener.clone();
         let package = registration.package().identity().clone();
-        let upstream_schema = registration
-            .document()
-            .upstream()
-            .schema()
-            .expect("validated Socket Manifest requires upstream schema")
-            .clone();
-        let downstream_schema = registration
-            .document()
-            .downstream()
-            .schema()
-            .expect("validated Socket Manifest requires downstream schema")
-            .clone();
+        let upstream_schema = registration.document().upstream().schema().cloned();
+        let downstream_schema = registration.document().downstream().schema().cloned();
         let topology = self.topology.clone();
-        let replacement = adapter
+        adapter
             .compile_document_rules_on_blocking_owner(move || {
                 document_rules::compile_document_rules(
                     &workspace,
                     &listener,
                     &package,
-                    &upstream_schema,
-                    &downstream_schema,
+                    upstream_schema.as_ref(),
+                    downstream_schema.as_ref(),
                     &topology,
                 )
             })
-            .await?;
-        self.publish_document_rules(generation, &replacement);
-        Ok(())
+            .await
     }
 
-    fn publish_document_rules(
-        &self,
-        generation: u64,
-        replacement: &ProtocolDocumentRuleConnectionFactory,
-    ) {
-        if self.rule_generation.load(Ordering::Acquire) == generation {
-            self.rules.replace(replacement);
-        }
+    pub(crate) fn publish_replacement(&self, replacement: &DocumentProgramFactory) {
+        self.rules.replace(replacement);
     }
 }
 

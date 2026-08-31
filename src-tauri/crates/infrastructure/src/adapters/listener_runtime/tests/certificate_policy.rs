@@ -142,6 +142,7 @@ impl PipelinePorts for CountingPipeline {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
         _message: &mut Message,
     ) -> intercept_proxy_runtime::Result<Vec<FaultAction>> {
         self.requests.fetch_add(1, Ordering::SeqCst);
@@ -151,6 +152,7 @@ impl PipelinePorts for CountingPipeline {
     async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
         _message: &mut Message,
     ) -> intercept_proxy_runtime::Result<Vec<FaultAction>> {
         self.responses.fetch_add(1, Ordering::SeqCst);

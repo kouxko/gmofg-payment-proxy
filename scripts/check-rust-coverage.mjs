@@ -32,11 +32,11 @@ const policies = [
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
-        suffix: "crates/domain/src/protocol_document_rule.rs",
+        suffix: "crates/domain/src/unified_rule.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {
-        suffix: "crates/domain/src/protocol_document_rule/validation.rs",
+        suffix: "crates/domain/src/unified_rule/validation.rs",
         thresholds: { functions: 90, lines: 90, regions: 90 },
       },
       {

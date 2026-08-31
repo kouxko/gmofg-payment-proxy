@@ -3,8 +3,17 @@ use super::*;
 fn protocol_document() -> serde_json::Value {
     serde_json::json!({
         "package": {"id": "au-eftex", "version": "1.1.0"},
-        "conditions": [{"operator": "equals", "field": "/amount", "value": 1000}],
-        "actions": [{"type": "record_match"}]
+    })
+}
+
+fn document_condition() -> serde_json::Value {
+    serde_json::json!({
+        "operator": "leaf",
+        "children": {
+            "source": "document",
+            "path": "/amount",
+            "predicate": {"type":"number","value":{"operator":"equal","value":1000}}
+        }
     })
 }
 
@@ -19,14 +28,14 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
         let candidate = domain_contract_red::candidate_json_with(|candidate| {
             let rule = &mut candidate["workspace"]["rules"][0];
             rule["stage"] = serde_json::json!(stage);
-            rule["document"] = protocol_document();
+            rule["content"]["value"]["document"] = protocol_document();
+            rule["content"]["value"]["condition"] = document_condition();
             if pure_document {
-                rule["conditions"] = serde_json::json!([]);
-                rule["actions"] = serde_json::json!([]);
+                rule["content"]["value"]["actions"] =
+                    serde_json::json!([{"source":"record_match"}]);
             } else {
-                rule["conditions"] = serde_json::json!([]);
-                rule["actions"] = serde_json::json!([{
-                    "Delay": {"milliseconds": 1}
+                rule["content"]["value"]["actions"] = serde_json::json!([{
+                    "source":"http", "value":{"Delay": {"milliseconds": 1}}
                 }]);
             }
         });
@@ -45,10 +54,12 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
 #[tokio::test]
 async fn request_stage_custom_status_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["actions"]
+        candidate["workspace"]["rules"][0]["content"]["value"]["actions"]
             .as_array_mut()
             .unwrap()
-            .push(serde_json::json!({"CustomHttpStatus": {"status": 503}}));
+            .push(
+                serde_json::json!({"source":"http","value":{"CustomHttpStatus": {"status": 503}}}),
+            );
     });
 
     domain_contract_red::assert_domain_code_before_preview(
@@ -61,15 +72,15 @@ async fn request_stage_custom_status_fails_with_exact_http_rule_code() {
 #[tokio::test]
 async fn request_stage_downstream_throttle_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["actions"]
+        candidate["workspace"]["rules"][0]["content"]["value"]["actions"]
             .as_array_mut()
             .unwrap()
-            .push(serde_json::json!({
+            .push(serde_json::json!({"source":"http","value":{
                 "Throttle": {
                     "bytes_per_second": 1024,
                     "chunk_bytes": 128,
                     "direction": "Downstream"
-                }
+                }}
             }));
     });
 
@@ -83,11 +94,11 @@ async fn request_stage_downstream_throttle_fails_with_exact_http_rule_code() {
 #[tokio::test]
 async fn two_terminal_actions_fail_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][3]["actions"]
+        candidate["workspace"]["rules"][3]["content"]["value"]["actions"]
             .as_array_mut()
             .unwrap()
             .push(serde_json::json!({
-                "Terminal": {"UpstreamConnectTimeout": {"milliseconds": 1}}
+                "source":"terminal", "value":{"UpstreamConnectTimeout": {"milliseconds": 1}}
             }));
     });
 
@@ -101,10 +112,10 @@ async fn two_terminal_actions_fail_with_exact_http_rule_code() {
 #[tokio::test]
 async fn non_terminal_action_after_terminal_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][3]["actions"]
+        candidate["workspace"]["rules"][3]["content"]["value"]["actions"]
             .as_array_mut()
             .unwrap()
-            .push(serde_json::json!("Pause"));
+            .push(serde_json::json!({"source":"http","value":"Pause"}));
     });
 
     domain_contract_red::assert_domain_code_before_preview(

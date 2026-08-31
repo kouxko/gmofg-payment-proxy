@@ -2,32 +2,16 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{ChannelId, MessageStage, Revision, RuleId, UiTone};
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum RuleMatchField {
-    TerminalIp,
-    CertificateFingerprint,
-    PathOrRequestType,
-    JsonPath { path: String },
-}
+use super::{MessageStage, Revision, RuleId, UiTone};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
 pub enum RuleMatchFieldKind {
     TerminalIp,
     CertificateFingerprint,
-    PathOrRequestType,
-    JsonPath,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum RuleMatchOperator {
-    Equals { value: String },
-    Contains { value: String },
-    Regex { pattern: String },
+    Method,
+    RequestTarget,
+    Header,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -35,26 +19,9 @@ pub enum RuleMatchOperator {
 pub enum RuleMatchOperatorKind {
     Equals,
     Contains,
-    Regex,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(tag = "type", rename_all = "snake_case")]
-pub enum RuleCondition {
-    Field {
-        field: RuleMatchField,
-        operator: RuleMatchOperator,
-    },
-    NthHit {
-        count: u64,
-    },
-}
-
-#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum RuleConditionKind {
-    Field,
-    NthHit,
+    StartsWith,
+    EndsWith,
+    Wildcard,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -192,42 +159,28 @@ pub struct RuleActionCapabilityViewModel {
     pub kind: RuleActionKind,
     pub terminal: bool,
     pub traffic_direction: Option<RuleTrafficDirection>,
+    pub parameters_required: bool,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleMatchSelectorKind {
+    HeaderNamePointer,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+pub struct RuleMatchFieldCapabilityViewModel {
+    pub kind: RuleMatchFieldKind,
+    pub operators: Vec<RuleMatchOperatorKind>,
+    pub selector: Option<RuleMatchSelectorKind>,
 }
 
 /// HTTP 规则编辑器针对一个阶段的完整能力表。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct RuleStageCapabilityViewModel {
     pub stage: MessageStage,
-    pub match_field_kinds: Vec<RuleMatchFieldKind>,
+    pub match_fields: Vec<RuleMatchFieldCapabilityViewModel>,
     pub actions: Vec<RuleActionCapabilityViewModel>,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct RuleByteInputViewModel {
-    pub bytes: Vec<u8>,
-    pub normalized: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-pub struct RuleHeaderInputViewModel {
-    pub headers: Vec<(String, String)>,
-    pub normalized: String,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-/// 新建或编辑规则时由展示层提交的输入模型。
-pub struct RuleDraft {
-    pub rule_id: Option<RuleId>,
-    pub expected_revision: Option<Revision>,
-    pub name: String,
-    pub description: String,
-    pub enabled: bool,
-    pub priority: i32,
-    pub channel: Option<ChannelId>,
-    pub stage: Option<MessageStage>,
-    pub conditions: Vec<RuleCondition>,
-    pub actions: Vec<RuleAction>,
-    pub one_shot: bool,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -245,10 +198,4 @@ pub struct RuleSummaryViewModel {
     pub hit_count: u64,
     pub last_hit_at: Option<DateTime<Utc>>,
     pub ui_tone: UiTone,
-}
-
-#[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
-pub struct RuleViewModel {
-    pub summary: RuleSummaryViewModel,
-    pub draft: RuleDraft,
 }

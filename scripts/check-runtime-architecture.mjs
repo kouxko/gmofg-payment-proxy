@@ -59,8 +59,8 @@ const infrastructureCleanupSpawnLedger = [
   ledger("src/adapters/listener_runtime/start.rs", "commit_prepared_start", "tokio::spawn", "listener-runtime", "serve_prepared_listener", "src/adapters/listener_runtime/tests/body_codec_lifecycle.rs", "body_codec_snapshot_is_installed_for_exact_epoch_and_removed_on_stop"),
   ledger("src/adapters/listener_runtime/lifecycle.rs", "finish_start_owned", "tokio::spawn", "listener-runtime", "owner.start_reserved", "src/adapters/listener_runtime/tests/body_codec_cancellation.rs", "aborted_start_caller_releases_pending_epoch_and_allows_restart"),
   ledger("src/adapters/listener_runtime/lifecycle.rs", "finish_stopping_owned", "tokio::spawn", "listener-runtime", "owner.finish_stopping(listener_id, handle).await", "src/adapters/listener_runtime/tests/body_codec_cancellation.rs", "aborted_stop_caller_cannot_cancel_epoch_cleanup"),
-  ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run(", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"),
-  ledger("src/adapters/pipeline/rule_runtime.rs", "runtime_stopping", "tokio::spawn", "rule-runtime", "sender.send(Command::Stop", "src/adapters/pipeline/tests/rules_and_faults.rs", "aborted_runtime_stopping_still_retires_epoch_and_resets_actor"),
+  ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run(", "src/adapters/pipeline/tests/runtime_cancellation.rs", "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"),
+  ledger("src/adapters/pipeline/rule_runtime.rs", "runtime_stopping", "tokio::spawn", "rule-runtime", "sender.send(Command::Stop", "src/adapters/pipeline/tests/runtime_cancellation.rs", "aborted_runtime_stopping_still_retires_epoch_and_resets_actor"),
   ledger("src/adapters/listener_runtime/document_rule_compiler.rs", "compile", "tokio::task::spawn_blocking", "document-rule-compiler", "compile()", "src/adapters/listener_runtime/external_relay/contract_tests.rs", "queued_rule_compile_cancellation_keeps_runtime_responsive_and_rules_unchanged"),
   ledger("src/sqlite/executor.rs", "execute", "tokio::task::spawn_blocking", "sqlite-executor", "operation(&store)", "src/sqlite/executor.rs", "cancelling_waiter_does_not_strand_the_sqlite_connection_lock"),
   ledger("src/sqlite/executor.rs", "open_sqlite_persistence_with", "tokio::task::spawn_blocking", "sqlite-bootstrap", "open", "src/sqlite/executor.rs", "cancelling_started_sqlite_open_only_stops_waiting"),
@@ -531,10 +531,32 @@ const fixtureCases = [
     files: {
       "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs":
         `pub async fn spawn() { run_actor().await; }\n`,
-      "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/rules_and_faults.rs":
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_cancellation.rs":
         `fn actor_cancellation_proof() {}\n`,
     },
-    infrastructureLedger: [ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run_actor", "src/adapters/pipeline/tests/rules_and_faults.rs", "actor_cancellation_proof")],
+    infrastructureLedger: [ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run_actor", "src/adapters/pipeline/tests/runtime_cancellation.rs", "actor_cancellation_proof")],
+  },
+  {
+    name: "missing current rule actor cancellation proof fails",
+    expected: ["INFRA_SPAWN_PROOF"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs":
+        `pub fn spawn() { tokio::spawn(async { run().await }); }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_cancellation.rs":
+        `fn unrelated_proof() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/pipeline/rule_runtime/actor.rs", "spawn", "tokio::spawn", "rule-runtime", "run(", "src/adapters/pipeline/tests/runtime_cancellation.rs", "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine")],
+  },
+  {
+    name: "missing current runtime stop cancellation proof fails",
+    expected: ["INFRA_SPAWN_PROOF"],
+    files: {
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs":
+        `pub async fn runtime_stopping() { tokio::spawn(async { sender.send(Command::Stop).await; }); }\n`,
+      "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_cancellation.rs":
+        `fn unrelated_proof() {}\n`,
+    },
+    infrastructureLedger: [ledger("src/adapters/pipeline/rule_runtime.rs", "runtime_stopping", "tokio::spawn", "rule-runtime", "sender.send(Command::Stop", "src/adapters/pipeline/tests/runtime_cancellation.rs", "aborted_runtime_stopping_still_retires_epoch_and_resets_actor")],
   },
   {
     name: "unregistered Android owner transition spawn fails",

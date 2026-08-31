@@ -1,0 +1,33 @@
+{
+  "result": "PASS",
+  "review": "APPROVED",
+  "verification": "VERIFIED",
+  "severities": {"p0": 0, "p1": 0, "p2": 0},
+  "valid_test_counts": {
+    "frontend": 571,
+    "domain": 101,
+    "application": 477,
+    "infrastructure": 519,
+    "host": 31,
+    "package_runtime": 22
+  },
+  "static_gates": {
+    "workspace_check": "PASS",
+    "strict_clippy": "PASS",
+    "rustfmt": "PASS",
+    "source_size": "PASS",
+    "diff_check": "PASS",
+    "bindings_fresh_deterministic": "PASS",
+    "architecture": "PASS"
+  },
+  "universal_build": {
+    "command": "pnpm build:macos:universal",
+    "exit_code": 0,
+    "main_architectures": ["x86_64", "arm64"],
+    "sidecar_architectures": ["x86_64", "arm64"],
+    "app_codesign": "PASS",
+    "mounted_dmg_app": "PASS",
+    "cleanup": "PASS"
+  },
+  "manual_acceptance": "NOT_RUN"
+}

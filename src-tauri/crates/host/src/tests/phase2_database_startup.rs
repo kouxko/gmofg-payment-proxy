@@ -6,8 +6,8 @@ use std::{
 
 use intercept_proxy_application::{
     AppResult, ConditionTree, MessageStage, ProtocolPackageKindViewModel,
-    ProtocolPackageValidationViewModel, RuleActionKind, RuleConditionKind, RuleContent,
-    RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
+    ProtocolPackageValidationViewModel, RuleActionKind, RuleContent, RuleEditorContentContext,
+    RuleStage, UnifiedAction, WorkspaceId,
 };
 use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use intercept_proxy_product_api::InterceptProxyProfile;
@@ -162,28 +162,51 @@ async fn seed_two_start_fixture(
     else {
         panic!("HTTP rule context expected");
     };
-    let mut input = stages
+    let structure = stages
         .into_iter()
         .find(|stage| stage.stage == RuleStage::ProxyToUpstream)
         .expect("proxy-to-upstream stage")
         .new_rule_draft;
-    input.draft.name = "phase2-two-start-rule".into();
-    input.draft.priority = 29;
-    let RuleContent::Http(content) = &mut input.draft.content else {
+    let intercept_proxy_application::RuleNewDefinitionDraft {
+        listener_id,
+        stage,
+        mut content,
+    } = structure;
+    let RuleContent::Http(http_content) = &mut content else {
         panic!("HTTP rule draft expected");
     };
-    content.description = "phase2 lifecycle fixture".into();
-    content.condition = ConditionTree::Leaf(
+    http_content.description = "phase2 lifecycle fixture".into();
+    http_content.condition = ConditionTree::Leaf(
         application
-            .rule_definition_condition_draft(RuleConditionKind::NthHit, MessageStage::Request)
-            .expect("current NthHit condition"),
+            .rule_definition_nth_hit_condition_draft(
+                intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
+            )
+            .expect("explicit positive nth-hit condition"),
     );
-    content.actions = vec![UnifiedAction::from(
+    http_content.actions = vec![UnifiedAction::from(
         application
-            .rule_definition_action_draft(RuleActionKind::Delay, MessageStage::Request)
-            .expect("current delay action"),
+            .rule_definition_action_draft(
+                intercept_proxy_application::RuleHttpActionDraftInput {
+                    kind: RuleActionKind::Delay,
+                    parameters_json: Some(r#"{"milliseconds":100}"#.into()),
+                },
+                MessageStage::Request,
+            )
+            .expect("explicit delay action"),
     )];
-    input.draft.one_shot = true;
+    let input = intercept_proxy_application::RuleDefinitionSaveInput {
+        rule_id: None,
+        expected_revision: None,
+        draft: intercept_proxy_application::RuleDefinitionDraft {
+            name: "phase2-two-start-rule".into(),
+            enabled: true,
+            priority: 29,
+            listener_id,
+            stage,
+            one_shot: true,
+            content,
+        },
+    };
     let created = application
         .rule_definition_save(input)
         .await

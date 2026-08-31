@@ -8,7 +8,7 @@ use tokio_util::sync::CancellationToken;
 
 use super::{
     ListenerRuntimeAdapter, ListenerRuntimePlanBuilder, PreparedListenerRuntime, RunningListener,
-    bind_tcp_listener, running_status,
+    RuntimeRuleBundle, bind_tcp_listener, running_status,
 };
 
 impl ListenerRuntimeAdapter {
@@ -89,6 +89,7 @@ impl ListenerRuntimeAdapter {
         let listener_id = listener.id;
         let external_socket_snapshot = plan.external_socket_snapshot();
         let http_protocol_snapshot = plan.http_protocol_snapshot();
+        let listener_transaction = self.listener_rule_transaction(listener_id);
         let listen_address = plan.bind_addr().to_string();
         let cancellation = CancellationToken::new();
         let task_cancellation = cancellation.clone();
@@ -160,10 +161,14 @@ impl ListenerRuntimeAdapter {
                 task,
                 listen_address: listen_address.clone(),
                 fault,
-                workspace,
+                rule_bundle: RuntimeRuleBundle::new(
+                    listener_id,
+                    workspace,
+                    external_socket_snapshot,
+                    http_protocol_snapshot,
+                    listener_transaction,
+                ),
                 socket_service,
-                external_socket_snapshot,
-                http_protocol_snapshot,
             },
         );
         self.environment_apply_resource_gates

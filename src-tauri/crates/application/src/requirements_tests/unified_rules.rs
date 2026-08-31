@@ -38,9 +38,10 @@ impl ListenerRuntimePort for FailFirstUnifiedReplacementRuntime {
 
     async fn replace_rule_definitions(
         &self,
+        workspaces: &dyn WorkspaceRepositoryPort,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
-    ) -> AppResult<()> {
+    ) -> AppResult<ProxyWorkspace> {
         let replacement_index = {
             let mut replacements = self.replacements.lock();
             replacements.push(workspace.clone());
@@ -53,7 +54,7 @@ impl ListenerRuntimePort for FailFirstUnifiedReplacementRuntime {
             ));
         }
         self.inner
-            .replace_rule_definitions(workspace, listener_id)
+            .replace_rule_definitions(workspaces, workspace, listener_id)
             .await
     }
 
@@ -125,29 +126,113 @@ async fn unified_copy_persists_an_independent_rule_with_monotonic_order() {
 fn unified_http_factories_return_domain_condition_and_action_types() {
     let application = application_with_fake_ports(Arc::new(FakePorts::default()));
     let condition = application
-        .rule_definition_condition_draft(RuleConditionKind::Field, MessageStage::Request)
+        .rule_definition_http_condition_draft(
+            crate::RuleMatchFieldKind::RequestTarget,
+            None,
+            crate::RuleMatchOperatorKind::Equals,
+            "/",
+            MessageStage::Request,
+        )
         .unwrap();
     assert!(matches!(
         condition,
         Condition::Http {
-            field: MatchField::PathOrRequestType,
-            ..
-        }
+            field: MatchField::RequestTarget,
+            operator: MatchOperator::Equals(ref value),
+        } if value == "/"
+    ));
+    let header = application
+        .rule_definition_http_condition_draft(
+            crate::RuleMatchFieldKind::Header,
+            Some("/content-type"),
+            crate::RuleMatchOperatorKind::Wildcard,
+            "application/*",
+            MessageStage::Response,
+        )
+        .unwrap();
+    assert!(matches!(
+        header,
+        Condition::Http {
+            field: MatchField::Header(ref path),
+            operator: MatchOperator::Wildcard(ref value),
+        } if path == "/content-type" && value == "application/*"
+    ));
+    assert!(
+        application
+            .rule_definition_http_condition_draft(
+                crate::RuleMatchFieldKind::Method,
+                None,
+                crate::RuleMatchOperatorKind::Contains,
+                "PO",
+                MessageStage::Request,
+            )
+            .is_err()
+    );
+    assert!(
+        application
+            .rule_definition_http_condition_draft(
+                crate::RuleMatchFieldKind::Header,
+                None,
+                crate::RuleMatchOperatorKind::Equals,
+                "application/json",
+                MessageStage::Request,
+            )
+            .is_err()
+    );
+    assert!(matches!(
+        application
+            .rule_definition_document_condition_draft(
+                "/customer/*/name",
+                crate::RuleLocalDocumentValueType::String,
+                crate::RuleLocalDocumentPredicateKind::Equals,
+                "\"Alice\"",
+            )
+            .unwrap(),
+        Condition::DocumentPattern { .. }
     ));
     assert_eq!(
         application
-            .rule_definition_action_draft(RuleActionKind::MockResponse, MessageStage::Request)
+            .rule_definition_action_draft(
+                crate::RuleHttpActionDraftInput {
+                    kind: RuleActionKind::MockResponse,
+                    parameters_json: Some(
+                        r#"{"status":201,"headers":[["x-test","explicit"]],"body_bytes":[98,111,100,121]}"#.into(),
+                    ),
+                },
+                MessageStage::Request,
+            )
             .unwrap(),
         DomainRuleAction::Terminal(intercept_proxy_domain::TerminalAction::MockResponse {
-            status: 200,
-            headers: vec![("content-type".into(), "application/json".into())],
-            body_bytes: b"{}".to_vec(),
+            status: 201,
+            headers: vec![("x-test".into(), "explicit".into())],
+            body_bytes: b"body".to_vec(),
         })
     );
 }
 
+#[test]
+fn nth_hit_factory_requires_an_explicit_positive_count() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+
+    assert!(
+        application
+            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
+                count: 0,
+            })
+            .is_err()
+    );
+    assert_eq!(
+        application
+            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
+                count: 3,
+            })
+            .unwrap(),
+        Condition::NthHit { count: 3 }
+    );
+}
+
 #[tokio::test]
-async fn unified_runtime_failure_restores_business_state_with_rebased_revision() {
+async fn unified_runtime_failure_does_not_persist_or_advance_revision() {
     let ports = Arc::new(FakePorts::default());
     let workspaces = Arc::new(InMemoryWorkspaceStore::default());
     let runtime = Arc::new(FailFirstUnifiedReplacementRuntime::default());
@@ -189,16 +274,9 @@ async fn unified_runtime_failure_restores_business_state_with_rebased_revision()
 
     assert_eq!(error.view_model.code, "RULE_RUNTIME_REPLACE_FAILED");
     let after = application.workspace_get(before.id).await.unwrap();
-    assert_eq!(after.rule_definitions, before.rule_definitions);
-    assert_eq!(
-        after.rule_created_order_high_water,
-        before.rule_created_order_high_water
-    );
-    assert!(after.revision > before.revision);
+    assert_eq!(after, before);
     let replacements = runtime.replacements.lock();
-    assert_eq!(replacements.len(), 2);
-    assert_eq!(replacements[1].rule_definitions, before.rule_definitions);
-    assert_eq!(replacements[1].revision, after.revision);
+    assert_eq!(replacements.len(), 1);
 }
 
 #[tokio::test]
@@ -212,8 +290,8 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
         (
             RuleStage::ProxyToUpstream,
             vec![Condition::Http {
-                field: MatchField::PathOrRequestType,
-                operator: MatchOperator::Regex("[".into()),
+                field: MatchField::Method,
+                operator: MatchOperator::Contains("OS".into()),
             }],
             vec![DomainRuleAction::Delay { milliseconds: 10 }],
         ),

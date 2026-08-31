@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use super::{
     ListenerRuntimeAdapter, ListenerRuntimePlanBuilder, PreparedListenerRuntime,
-    upstream_tls_test_error,
+    RuntimeRuleBundleBaseline, upstream_tls_test_error,
 };
 use crate::adapters::external_package_server::ExternalPackageListenerRuntime;
 use async_trait::async_trait;
@@ -80,28 +80,22 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
 
     async fn replace_rule_definitions(
         &self,
+        workspaces: &dyn intercept_proxy_application::WorkspaceRepositoryPort,
         workspace: ProxyWorkspace,
         listener_id: ListenerId,
-    ) -> AppResult<()> {
-        let _environment_apply_gate = self
-            .environment_apply_resource_gates
-            .acquire(
-                super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
-                    listener_id.as_uuid(),
-                ),
-            )
-            .await;
-        let (external_socket_snapshot, http_snapshot) = self
-            .running
-            .lock()
-            .await
-            .get(&listener_id)
-            .map_or((None, None), |running| {
-                (
-                    running.external_socket_snapshot.clone(),
-                    running.http_protocol_snapshot.clone(),
-                )
-            });
+    ) -> AppResult<ProxyWorkspace> {
+        let (baseline, external_socket_snapshot, http_snapshot, listener_transaction) =
+            self.running.lock().await.get(&listener_id).map_or(
+                (RuntimeRuleBundleBaseline::Stopped, None, None, None),
+                |running| {
+                    (
+                        RuntimeRuleBundleBaseline::Running(running.run_token),
+                        running.rule_bundle.external_socket_programs.clone(),
+                        running.rule_bundle.http_programs.clone(),
+                        Some(Arc::clone(&running.rule_bundle.transaction)),
+                    )
+                },
+            );
         let listener = workspace
             .listeners
             .iter()
@@ -110,15 +104,47 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 AppError::new("LISTENER_NOT_FOUND", "入口配置不存在。")
                     .entity(listener_id.to_string())
             })?;
-        if let Some(snapshot) = external_socket_snapshot {
-            snapshot
-                .replace_document_rules(self, &workspace, listener)
-                .await?;
+        let socket_replacement = match &external_socket_snapshot {
+            Some(snapshot) => Some(
+                snapshot
+                    .compile_replacement(self, &workspace, listener)
+                    .await?,
+            ),
+            None => None,
+        };
+        let http_replacement = match &http_snapshot {
+            Some(snapshot) => Some(
+                snapshot
+                    .compile_replacement(self, &workspace, listener)
+                    .await?,
+            ),
+            None => None,
+        };
+        let listener_transaction =
+            listener_transaction.unwrap_or_else(|| self.listener_rule_transaction(listener_id));
+        let _listener_transaction = listener_transaction.lock_owned().await;
+        let current = self
+            .running
+            .lock()
+            .await
+            .get(&listener_id)
+            .map_or(RuntimeRuleBundleBaseline::Stopped, |running| {
+                RuntimeRuleBundleBaseline::Running(running.run_token)
+            });
+        if current != baseline {
+            return Err(
+                AppError::new("REVISION_CONFLICT", "规则编译期间 Listener 运行代已变化。")
+                    .entity(listener_id.to_string()),
+            );
         }
-        if let Some(snapshot) = http_snapshot {
-            snapshot
-                .replace_document_rules(self, &workspace, listener)
-                .await?;
+        let workspace_id = workspace.id;
+        let saved = workspaces.save(workspace).await?;
+        if let (Some(snapshot), Some(replacement)) = (&external_socket_snapshot, socket_replacement)
+        {
+            snapshot.publish_replacement(&replacement);
+        }
+        if let (Some(snapshot), Some(replacement)) = (&http_snapshot, http_replacement) {
+            snapshot.publish_replacement(replacement);
         }
 
         for running in self
@@ -126,11 +152,11 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
             .lock()
             .await
             .values_mut()
-            .filter(|running| running.workspace.id == workspace.id)
+            .filter(|running| running.rule_bundle.workspace_id == workspace_id)
         {
-            running.workspace = workspace.clone();
+            running.rule_bundle.publish_workspace(&saved);
         }
-        Ok(())
+        Ok(saved)
     }
 
     async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel> {
@@ -163,7 +189,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .values()
                     .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch);
             if !active_epoch_owned {
-                self.retire_runtime_epoch(handle.workspace.id, handle.runtime_epoch);
+                self.retire_runtime_epoch(handle.rule_bundle.workspace_id, handle.runtime_epoch);
             }
             handle
         };
@@ -282,7 +308,10 @@ impl ExternalPackageListenerRuntime for ListenerRuntimeAdapter {
                             .values()
                             .any(|candidate| candidate.runtime_epoch == handle.runtime_epoch);
                     if !active_epoch_owned {
-                        self.retire_runtime_epoch(handle.workspace.id, handle.runtime_epoch);
+                        self.retire_runtime_epoch(
+                            handle.rule_bundle.workspace_id,
+                            handle.runtime_epoch,
+                        );
                     }
                     Some(handle)
                 }

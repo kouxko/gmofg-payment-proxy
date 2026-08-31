@@ -1,10 +1,14 @@
 //! 统一规则命令的薄适配层。
 
+#[cfg(test)]
+include!("protocol_rules/tests.rs");
+
 use intercept_proxy_application::{
     DocumentValue, MessageStage, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
-    ProtocolRuleCommonActionCapability, RuleActionKind, RuleConditionKind, RuleDefinition,
-    RuleDefinitionSaveInput, RuleEditorContext, RuleLocalDocumentActionKind,
-    RuleLocalDocumentPredicateKind, RuleLocalDocumentValueType, parse_protocol_rule_value,
+    RuleCommonActionCapability, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
+    RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
+    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
+    RuleNthHitConditionDraftInput, parse_protocol_rule_value,
 };
 use intercept_proxy_domain::{Condition, HttpAction, ListenerId, Revision, RuleId, UnifiedAction};
 use tauri::State;
@@ -25,14 +29,36 @@ pub fn rule_parse_document_value(
 #[tauri::command]
 #[specta::specta]
 #[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn rule_definition_condition_draft(
+pub fn rule_definition_nth_hit_condition_draft(
     app_state: State<'_, AppState>,
-    kind: RuleConditionKind,
+    input: RuleNthHitConditionDraftInput,
+) -> CommandResult<Condition> {
+    app_state
+        .application
+        .rule_definition_nth_hit_condition_draft(input)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn rule_definition_http_condition_draft(
+    app_state: State<'_, AppState>,
+    field_kind: RuleMatchFieldKind,
+    selector: Option<String>,
+    operator_kind: RuleMatchOperatorKind,
+    value: String,
     stage: MessageStage,
 ) -> CommandResult<Condition> {
     app_state
         .application
-        .rule_definition_condition_draft(kind, stage)
+        .rule_definition_http_condition_draft(
+            field_kind,
+            selector.as_deref(),
+            operator_kind,
+            &value,
+            stage,
+        )
         .map_err(command_error)
 }
 
@@ -41,12 +67,12 @@ pub fn rule_definition_condition_draft(
 #[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
 pub fn rule_definition_action_draft(
     app_state: State<'_, AppState>,
-    kind: RuleActionKind,
+    input: RuleHttpActionDraftInput,
     stage: MessageStage,
 ) -> CommandResult<HttpAction> {
     app_state
         .application
-        .rule_definition_action_draft(kind, stage)
+        .rule_definition_action_draft(input, stage)
         .map_err(command_error)
 }
 
@@ -92,7 +118,7 @@ pub fn rule_definition_document_action_draft(
 )]
 pub fn rule_definition_document_common_action_draft(
     app_state: State<'_, AppState>,
-    action: ProtocolRuleCommonActionCapability,
+    action: RuleCommonActionCapability,
 ) -> CommandResult<UnifiedAction> {
     Ok(app_state
         .application

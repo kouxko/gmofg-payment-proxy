@@ -7,7 +7,8 @@
 use std::collections::{HashMap, HashSet};
 
 use intercept_proxy_domain::{
-    DocumentSchemaNode, ListenerDataPlane, ProtocolDirection, ProtocolPackageRef, ProxyWorkspace,
+    ConditionTree, DocumentSchemaNode, ListenerDataPlane, ProtocolDirection, ProtocolPackageRef,
+    ProxyWorkspace, RuleContent, RuleDefinition, UnifiedAction, validate_unified_actions_schema,
 };
 
 use super::protocol_packages::ensure_description_identity;
@@ -79,11 +80,11 @@ pub(super) fn validate_listener_protocol_binding(
     ensure_description_identity(package, description)?;
     ensure_kind(&listener.data_plane, description.kind)?;
     for rule in workspace
-        .document_runtime_rules()?
-        .into_iter()
+        .rule_definitions
+        .iter()
         .filter(|rule| rule.listener_id() == listener_id)
     {
-        validate_rule_binding(package, &rule, description)?;
+        validate_rule_binding(package, rule, description)?;
     }
     Ok(())
 }
@@ -101,9 +102,12 @@ fn validate_workspace_bindings(
         ensure_kind(&listener.data_plane, description.kind)?;
     }
 
-    for rule in workspace.document_runtime_rules()? {
-        let description = required_description(descriptions, rule.package())?;
-        ensure_description_identity(rule.package(), description)?;
+    for rule in &workspace.rule_definitions {
+        let Some(rule_package) = rule_protocol_package(rule) else {
+            continue;
+        };
+        let description = required_description(descriptions, rule_package)?;
+        ensure_description_identity(rule_package, description)?;
         let listener = workspace
             .listeners
             .iter()
@@ -112,23 +116,72 @@ fn validate_workspace_bindings(
         let package = crate::listener_protocol_package(listener)
             .ok_or_else(|| portability_error("报文规则只能绑定已选择协议方案的入口。"))?;
         ensure_kind(&listener.data_plane, description.kind)?;
-        validate_rule_binding(package, &rule, description)?;
+        validate_rule_binding(package, rule, description)?;
     }
     Ok(())
 }
 
 fn validate_rule_binding(
     package: &ProtocolPackageRef,
-    rule: &intercept_proxy_domain::ProtocolDocumentRuleDefinition,
+    rule: &RuleDefinition,
     description: &ProtocolPackageDescriptionViewModel,
 ) -> AppResult<()> {
-    if let Some(schema) = schema_for_direction(description, rule.direction()) {
-        rule.validate_against_schema(&domain_schema(schema))?;
-    }
-    if package != rule.package() {
+    let Some(binding) = rule_protocol_binding(rule)? else {
+        return Ok(());
+    };
+    if package != binding.package {
         return Err(portability_error("规则与入口绑定的精确协议包不一致。"));
     }
+    if let Some(schema) = schema_for_direction(description, binding.direction) {
+        let schema = domain_schema(schema);
+        binding.condition.validate_document_schema(&schema)?;
+        validate_unified_actions_schema(binding.actions, &schema)?;
+    }
     Ok(())
+}
+
+fn rule_protocol_package(rule: &RuleDefinition) -> Option<&ProtocolPackageRef> {
+    match rule.content() {
+        RuleContent::Http(content) => content.document.as_ref().map(|document| &document.package),
+        RuleContent::Socket(content) => Some(&content.package),
+    }
+}
+
+struct RuleProtocolBinding<'a> {
+    package: &'a ProtocolPackageRef,
+    direction: ProtocolDirection,
+    condition: &'a ConditionTree,
+    actions: &'a [UnifiedAction],
+}
+
+fn rule_protocol_binding(rule: &RuleDefinition) -> AppResult<Option<RuleProtocolBinding<'_>>> {
+    let (package, condition, actions) = match rule.content() {
+        RuleContent::Http(content) => {
+            let Some(document) = &content.document else {
+                return Ok(None);
+            };
+            (
+                &document.package,
+                &content.condition,
+                content.actions.as_slice(),
+            )
+        }
+        RuleContent::Socket(content) => (
+            &content.package,
+            &content.condition,
+            content.actions.as_slice(),
+        ),
+    };
+    let direction = rule
+        .stage()
+        .direction()
+        .ok_or_else(|| portability_error("协议 Document 规则必须绑定写出方向。"))?;
+    Ok(Some(RuleProtocolBinding {
+        package,
+        direction,
+        condition,
+        actions,
+    }))
 }
 
 fn required_description<'a>(

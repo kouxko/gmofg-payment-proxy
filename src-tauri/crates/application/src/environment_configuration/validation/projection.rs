@@ -43,17 +43,11 @@ impl ValidationProjection {
     ) -> AppResult<Self> {
         validate_domain_graph(&candidate, checkpoint)?;
         let mut packages = BTreeMap::new();
-        for package in
-            candidate
-                .workspace
-                .listeners
-                .iter()
-                .flat_map(|listener| listener.package_refs())
-                .chain(
-                    candidate.workspace.rules.iter().filter_map(
-                        crate::environment_configuration::rules::RuleTemplate::package_ref,
-                    ),
-                )
+        for package in candidate
+            .workspace
+            .listeners
+            .iter()
+            .flat_map(|listener| listener.package_refs())
         {
             ensure_running(checkpoint)?;
             let package_ref = ProtocolPackageRef {
@@ -66,6 +60,21 @@ impl ValidationProjection {
                 })?,
             };
             packages.insert((package.id.clone(), package.version.clone()), package_ref);
+        }
+        for package in candidate
+            .workspace
+            .rules
+            .iter()
+            .filter_map(crate::environment_configuration::rules::RuleTemplate::package_ref)
+        {
+            ensure_running(checkpoint)?;
+            packages.insert(
+                (
+                    package.id.as_str().to_owned(),
+                    package.version.as_str().to_owned(),
+                ),
+                package.clone(),
+            );
         }
         let mut dns = BTreeMap::new();
         let mut tls = BTreeMap::new();
@@ -254,10 +263,8 @@ fn validate_domain_graph(
     }
     for rule in &candidate.workspace.rules {
         ensure_running(checkpoint)?;
-        if rule.existing_rule_id().is_none()
-            && let Some(http) = rule.as_http()
-        {
-            http.validate_domain()?;
+        if rule.existing_rule_id().is_none() {
+            rule.validate_domain()?;
         }
     }
 

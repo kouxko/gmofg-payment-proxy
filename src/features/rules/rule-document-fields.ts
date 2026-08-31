@@ -1,29 +1,27 @@
 import type {
   Condition,
-  ProtocolRuleFieldActionCapability,
-  ProtocolRuleFieldCapability,
-  ProtocolRuleFieldOperatorCapability,
-  RuleLocalDocumentActionKind,
+  RuleDocumentActionCapability,
   RuleLocalDocumentPredicateKind,
   RuleLocalDocumentTypeCapability,
   RuleLocalDocumentValueType,
   UnifiedAction,
 } from "@/generated/rust-types";
+import type { DocumentSchemaField } from "./rule-document-schema";
 
-export type DocumentEditorField = Omit<ProtocolRuleFieldCapability, "type" | "operators" | "actions"> & {
+export type DocumentEditorField = Omit<DocumentSchemaField, "type"> & {
   type: RuleLocalDocumentValueType;
   predicates: RuleLocalDocumentPredicateKind[];
-  actions: RuleLocalDocumentActionKind[];
+  actions: RuleDocumentActionCapability[];
 };
 
 export function documentEditorFields(
-  schemaFields: ProtocolRuleFieldCapability[],
-  documentConditions: Extract<Condition, { source: "document" }>[],
+  schemaFields: DocumentSchemaField[],
+  documentConditions: Extract<Condition, { source: "document" | "document_pattern" }>[],
   actions: UnifiedAction[],
   localTypes: RuleLocalDocumentTypeCapability[],
 ): DocumentEditorField[] {
-  const fields = new Map(schemaFields.map((field) => [field.name, schemaField(field)]));
   const capabilities = capabilityMap(localTypes);
+  const fields = new Map(schemaFields.map((field) => [field.name, schemaField(field)] as const));
   for (const condition of documentConditions) {
     if (fields.has(condition.path)) continue;
     const type = conditionValueType(condition);
@@ -40,13 +38,13 @@ export function documentEditorFields(
 }
 
 export function ruleLocalFields(
-  documentConditions: Extract<Condition, { source: "document" }>[],
+  documentConditions: Extract<Condition, { source: "document" | "document_pattern" }>[],
   actions: UnifiedAction[],
-  schemaFields: ProtocolRuleFieldCapability[],
+  schemaFields: DocumentSchemaField[],
   localTypes: RuleLocalDocumentTypeCapability[],
 ): DocumentEditorField[] {
-  const schema = new Map(schemaFields.map((field) => [field.name, schemaField(field)]));
   const capabilities = capabilityMap(localTypes);
+  const schema = new Map(schemaFields.map((field) => [field.name, schemaField(field)] as const));
   const local = new Map<string, DocumentEditorField>();
   for (const condition of documentConditions) {
     const type = conditionValueType(condition);
@@ -66,25 +64,8 @@ export function ruleLocalFields(
   return [...local.values()];
 }
 
-function schemaField(field: ProtocolRuleFieldCapability): DocumentEditorField {
-  return {
-    ...field,
-    predicates: field.operators.map(schemaPredicate),
-    actions: field.actions.map(schemaAction),
-  };
-}
-
-function schemaPredicate(value: ProtocolRuleFieldOperatorCapability): RuleLocalDocumentPredicateKind {
-  switch (value) {
-    case "equals": return "equals";
-  }
-}
-
-function schemaAction(value: ProtocolRuleFieldActionCapability): RuleLocalDocumentActionKind {
-  switch (value) {
-    case "set_field": return "set";
-    case "clear_field": return "clear";
-  }
+function schemaField(field: DocumentSchemaField): DocumentEditorField {
+  return field;
 }
 
 function capabilityMap(localTypes: RuleLocalDocumentTypeCapability[]) {
@@ -92,10 +73,10 @@ function capabilityMap(localTypes: RuleLocalDocumentTypeCapability[]) {
 }
 
 function localField(path: string, type: RuleLocalDocumentValueType, capability: RuleLocalDocumentTypeCapability): DocumentEditorField {
-  return { name: path, label: path || "/", type, predicates: capability.predicates, actions: capability.actions };
+  return { name: path, label: path || "/", type, itemTemplate: false, predicates: capability.predicates, actions: capability.actions };
 }
 
-function conditionValueType(condition: Extract<Condition, { source: "document" }>): RuleLocalDocumentValueType {
+function conditionValueType(condition: Extract<Condition, { source: "document" | "document_pattern" }>): RuleLocalDocumentValueType {
   return condition.predicate.type === "null_equal" ? "null" : condition.predicate.type;
 }
 

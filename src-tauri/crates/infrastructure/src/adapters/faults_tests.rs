@@ -247,9 +247,9 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
                 )
             });
         let domain_stage = match stage {
-            MessageStage::TlsHandshake => intercept_proxy_domain::MessageStage::TlsHandshake,
-            MessageStage::Request => intercept_proxy_domain::MessageStage::Request,
-            MessageStage::Response => intercept_proxy_domain::MessageStage::Response,
+            MessageStage::TlsHandshake => intercept_proxy_domain::RuleStage::TlsHandshake,
+            MessageStage::Request => intercept_proxy_domain::RuleStage::ProxyToUpstream,
+            MessageStage::Response => intercept_proxy_domain::RuleStage::ProxyToApp,
             MessageStage::Terminal => {
                 panic!(
                     "{} default unexpectedly targets a terminal event",
@@ -257,24 +257,32 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
                 )
             }
         };
-        let conditions = vec![intercept_proxy_domain::Condition::NthHit {
-            count: u64::from(definition.view.default_nth_hit),
-        }];
-        let draft = intercept_proxy_domain::RuleDraft {
-            expected_revision: None,
+        let draft = intercept_proxy_domain::RuleDefinitionDraft {
             name: definition.view.name.clone(),
-            description: definition.view.behavior_text.clone(),
             enabled: true,
-            priority: u32::try_from(definition.view.default_priority)
-                .expect("non-negative default priority"),
-            created_order: 1,
-            channel: Some(intercept_proxy_domain::ChannelId::new("alpha").unwrap()),
+            priority: definition.view.default_priority,
+            listener_id: intercept_proxy_domain::ListenerId::new(),
             stage: domain_stage,
-            conditions,
-            actions: vec![action],
             one_shot: definition.view.default_one_shot,
+            content: intercept_proxy_domain::RuleContent::Http(
+                intercept_proxy_domain::HttpRuleContent {
+                    description: definition.view.behavior_text.clone(),
+                    condition: intercept_proxy_domain::ConditionTree::Leaf(
+                        intercept_proxy_domain::Condition::NthHit {
+                            count: u64::from(definition.view.default_nth_hit),
+                        },
+                    ),
+                    actions: vec![match action {
+                        intercept_proxy_domain::HttpAction::Terminal(action) => {
+                            intercept_proxy_domain::UnifiedAction::Terminal(action)
+                        }
+                        action => intercept_proxy_domain::UnifiedAction::Http(action),
+                    }],
+                    document: None,
+                },
+            ),
         };
-        intercept_proxy_domain::validate_rule_draft(&draft).unwrap_or_else(|error| {
+        intercept_proxy_domain::RuleDefinition::create(draft, 1).unwrap_or_else(|error| {
             panic!(
                 "{} default does not produce a valid domain rule: {error}",
                 definition.view.template_id

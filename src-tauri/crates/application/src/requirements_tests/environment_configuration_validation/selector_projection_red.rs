@@ -64,15 +64,23 @@ async fn persisted_joint_http_shape(
     store: &InMemoryWorkspaceStore,
 ) -> (ProxyWorkspace, serde_json::Value) {
     let mut value: serde_json::Value = serde_json::from_slice(FULL_SHAPE).unwrap();
-    value["workspace"]["rules"][0]["document"] = serde_json::json!({
-        "package": {"id": "au-eftex", "version": "1.1.0"},
-        "conditions": [{
-            "operator": "equals",
-            "field": "/amount",
-            "value": 1000
-        }],
-        "actions": [{"type": "record_match"}]
-    });
+    value["workspace"]["rules"][0]["content"]["value"]["document"] =
+        serde_json::json!({"package": {"id": "au-eftex", "version": "1.1.0"}});
+    value["workspace"]["rules"][0]["content"]["value"]["condition"]["children"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({
+            "operator":"leaf",
+            "children":{
+                "source":"document",
+                "path":"/amount",
+                "predicate":{"type":"number","value":{"operator":"equal","value":1000}}
+            }
+        }));
+    value["workspace"]["rules"][0]["content"]["value"]["actions"]
+        .as_array_mut()
+        .unwrap()
+        .push(serde_json::json!({"source":"record_match"}));
     let typed =
         crate::parse_environment_configuration_candidate_v1(&serde_json::to_vec(&value).unwrap())
             .unwrap();
@@ -306,7 +314,8 @@ async fn existing_protocol_rule_package_mismatch_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["rules"][14]["package"]["version"] = serde_json::json!("1.2.0");
+    candidate["workspace"]["rules"][14]["content"]["value"]["package"]["version"] =
+        serde_json::json!("1.2.0");
 
     assert_existing_domain_code(
         store,
@@ -399,8 +408,8 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
         serde_json::json!(original_socket.rule_id());
     candidate["workspace"]["rules"][0]["name"] = serde_json::json!("Joint HTTP updated");
     candidate["workspace"]["rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
-    candidate["workspace"]["rules"][0]["actions"] =
-        serde_json::json!([{"Delay": {"milliseconds": 7}}]);
+    candidate["workspace"]["rules"][0]["content"]["value"]["actions"] =
+        serde_json::json!([{"source":"http","value":{"Delay": {"milliseconds": 7}}}]);
     let capture = Arc::new(CapturingBaseline::default());
     let report = validate_existing(store, capture.clone(), candidate).await;
 

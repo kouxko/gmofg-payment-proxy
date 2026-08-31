@@ -107,7 +107,20 @@ async fn builds_and_invokes_application_without_tauri() {
     else {
         panic!("HTTP rule context expected");
     };
-    assert_eq!(stages[0].new_rule_draft.draft.name, "新规则");
+    let draft = &stages[0].new_rule_draft;
+    assert_eq!(draft.listener_id, listener_id);
+    assert_eq!(
+        draft.stage,
+        intercept_proxy_application::RuleStage::TlsHandshake
+    );
+    let intercept_proxy_application::RuleContent::Http(http_draft_content) = &draft.content else {
+        panic!("HTTP structural draft expected");
+    };
+    assert!(matches!(
+        http_draft_content.condition,
+        intercept_proxy_application::ConditionTree::All(ref children) if children.is_empty()
+    ));
+    assert!(http_draft_content.actions.is_empty());
 
     host.shutdown().await.expect("shutdown UI-neutral host");
     assert!(host.shutdown_completed());

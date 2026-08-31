@@ -175,9 +175,10 @@ impl ListenerRuntimePort for TrackingRuntime {
 
     async fn replace_rule_definitions(
         &self,
+        _workspaces: &dyn intercept_proxy_application::WorkspaceRepositoryPort,
         _workspace: ProxyWorkspace,
         _listener_id: ListenerId,
-    ) -> AppResult<()> {
+    ) -> AppResult<ProxyWorkspace> {
         unreachable!("not used by disconnect cleanup")
     }
 

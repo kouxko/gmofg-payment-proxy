@@ -1,6 +1,5 @@
 use std::{
     net::{Ipv4Addr, SocketAddr},
-    path::PathBuf,
     sync::Arc,
     time::Duration,
 };
@@ -13,13 +12,13 @@ use intercept_proxy_application::{
     ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
 };
 use intercept_proxy_domain::{
-    ListenerDataPlane, ListenerId, ProtocolDocumentRuleDefinition, ProtocolPackageRef,
-    ProxyListener, ProxyWorkspace, ScriptedSocketProcessing, SocketDownstreamSecurity,
-    SocketEndpoint, SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+    ListenerDataPlane, ListenerId, ProtocolPackageRef, ProxyListener, ProxyWorkspace,
+    RuleDefinition, ScriptedSocketProcessing, SocketDownstreamSecurity, SocketEndpoint,
+    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
     SocketRelaySettings, SocketRelayTopology, SocketTopology, WorkspaceId,
 };
 use intercept_proxy_package_contract::PackageManifest;
-use intercept_proxy_product_api::{InterceptProxyProfile, ProductProfile};
+use intercept_proxy_product_api::InterceptProxyProfile;
 use parking_lot::Mutex;
 use serde_json::json;
 use tokio::{net::TcpListener, time::timeout};
@@ -29,8 +28,7 @@ use crate::{
     ExternalPackageServer, SqliteStore, WorkspaceRecord,
     adapters::{
         CaptureRepositoryAdapter, ExternalPackageRegistryAdapter, ExternalPackageServerConfig,
-        FileSelection, NativeFileDialog, PackageTransportConfig, RuleRepositoryAdapter,
-        WorkspaceBodyCodecResolver,
+        PackageTransportConfig, RuleRepositoryAdapter, WorkspaceBodyCodecResolver,
         bundle::{ListenerRuntimePipelineAssembly, configure_listener_runtime_pipeline},
         common::decode_workspace_record,
     },
@@ -41,19 +39,6 @@ pub(super) const TEST_TIMEOUT: Duration = Duration::from_secs(5);
 #[path = "support/peer.rs"]
 mod peer;
 use peer::TestExternalPeer;
-
-#[derive(Debug)]
-struct RuntimeNoDialog;
-
-impl NativeFileDialog for RuntimeNoDialog {
-    fn choose_open_file(&self, _: &str) -> AppResult<Option<PathBuf>> {
-        Ok(None)
-    }
-
-    fn choose_save_file(&self, _: &str, _: &str) -> AppResult<Option<FileSelection>> {
-        Ok(None)
-    }
-}
 
 #[derive(Debug)]
 struct ListenerUsage {
@@ -117,11 +102,7 @@ impl ExternalRuntimeHarness {
             &runtime,
             ListenerRuntimePipelineAssembly {
                 product: &product,
-                rules: Arc::new(RuleRepositoryAdapter::new(
-                    Arc::clone(&store),
-                    Arc::new(RuntimeNoDialog),
-                    product.channels(),
-                )),
+                rules: Arc::new(RuleRepositoryAdapter::new(Arc::clone(&store))),
                 sessions: Arc::clone(&sessions),
                 breakpoints: Arc::new(BreakpointCoordinator::default()),
                 events: Arc::new(EventHub::new(16)),
@@ -320,14 +301,20 @@ fn external_listener(
 
 pub(super) fn external_workspace(
     listener: ProxyListener,
-    rules: Vec<ProtocolDocumentRuleDefinition>,
+    rules: Vec<RuleDefinition>,
 ) -> ProxyWorkspace {
+    let high_water = rules
+        .iter()
+        .map(RuleDefinition::created_order)
+        .max()
+        .unwrap_or(0);
     let mut workspace = ProxyWorkspace {
         name: "External E2E".into(),
         listeners: vec![listener],
+        rule_created_order_high_water: high_water,
         ..ProxyWorkspace::default()
     };
-    workspace.replace_document_runtime_rules(rules).unwrap();
+    workspace.rule_definitions = rules;
     workspace
 }
 

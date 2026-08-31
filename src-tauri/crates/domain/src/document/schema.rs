@@ -1,4 +1,4 @@
-use super::{DocumentValueType, JsonPointer};
+use super::{DocumentMatchPath, DocumentMatchToken, DocumentValueType, JsonPointer};
 use crate::{DomainError, ErrorCode};
 use serde::{Deserialize, Serialize};
 use specta::Type;
@@ -90,6 +90,40 @@ impl DocumentSchemaNode {
             };
         }
         Ok(current)
+    }
+    /// Resolves every schema node selected by a condition-only wildcard path.
+    #[must_use]
+    pub fn resolve_match_path(&self, path: &DocumentMatchPath) -> Vec<&Self> {
+        let mut current = vec![self];
+        for token in path.tokens() {
+            let mut next = Vec::new();
+            for node in current {
+                match (token, node) {
+                    (DocumentMatchToken::Wildcard, Self::Object { properties, .. }) => {
+                        next.extend(properties.values());
+                    }
+                    (DocumentMatchToken::Wildcard, Self::Array { items, .. }) => {
+                        next.push(items.as_ref());
+                    }
+                    (DocumentMatchToken::Exact(token), Self::Object { properties, .. }) => {
+                        if let Some(child) = properties.get(token) {
+                            next.push(child);
+                        }
+                    }
+                    (DocumentMatchToken::Exact(token), Self::Array { items, .. })
+                        if valid_array_index(token) =>
+                    {
+                        next.push(items.as_ref());
+                    }
+                    (DocumentMatchToken::Wildcard | DocumentMatchToken::Exact(_), _) => {}
+                }
+            }
+            if next.is_empty() {
+                return next;
+            }
+            current = next;
+        }
+        current
     }
     /// Returns whether this schema node accepts the given JSON value kind.
     #[must_use]

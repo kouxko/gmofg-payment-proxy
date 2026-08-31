@@ -43,6 +43,8 @@ use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
 mod joint_document;
 pub(super) use joint_document::{JointDocumentEvaluation, JointHttpRuleRuntime};
+mod runtime_rule_bundle;
+use runtime_rule_bundle::{RuntimeRuleBundle, RuntimeRuleBundleBaseline};
 
 /// 读取当前安装实例在证书管理页签发的服务端叶子证书。
 ///
@@ -74,12 +76,8 @@ struct RunningListener {
     task: JoinHandle<()>,
     listen_address: String,
     fault: Arc<RwLock<Option<String>>>,
-    /// Immutable configuration identity used by this task. Keeping the snapshot makes runtime
-    /// ownership explicit and prevents later Workspace edits from silently changing live traffic.
-    workspace: ProxyWorkspace,
+    rule_bundle: RuntimeRuleBundle,
     socket_service: Option<Arc<SocketRelayService>>,
-    external_socket_snapshot: Option<Arc<external_relay::ExternalSocketRuntimeSnapshot>>,
-    http_protocol_snapshot: Option<Arc<http_protocol_pipeline::HttpProtocolRuntimeSnapshot>>,
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -180,6 +178,14 @@ impl ListenerRuntimeAdapter {
         F: FnOnce() -> AppResult<T> + Send + 'static,
     {
         self.document_rule_compiler.compile(compile).await
+    }
+
+    fn listener_rule_transaction(&self, listener_id: ListenerId) -> Arc<tokio::sync::Mutex<()>> {
+        self.environment_apply_resource_gates.gate(
+            &super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                listener_id.as_uuid(),
+            ),
+        )
     }
 
     pub(super) fn joint_http_rules(&self) -> Arc<JointHttpRuleRuntime> {
@@ -458,7 +464,7 @@ mod start;
 mod tls_material;
 
 use document_rule_compiler::DocumentRuleCompiler;
-pub use document_rules::ProtocolDocumentRuleConnectionFactory;
+pub use document_rules::DocumentProgramFactory;
 pub(crate) use external_relay::{
     ExternalSocketPackageProvider,
     RuntimeExternalSocketPackageBinding as ExternalSocketPackageBinding,

@@ -231,7 +231,7 @@ async fn condition_error_preserves_the_complete_application_error() {
         program(
             rule_id,
             ConditionTree::Leaf(Condition::Http {
-                field: intercept_proxy_domain::MatchField::PathOrRequestType,
+                field: intercept_proxy_domain::MatchField::RequestTarget,
                 operator: intercept_proxy_domain::MatchOperator::Equals("/".into()),
             }),
         ),

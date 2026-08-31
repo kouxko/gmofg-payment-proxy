@@ -306,7 +306,7 @@ pub enum EnvironmentStatusCode {
     ExistingRuleIdPackageMismatch,
     ExistingRuleIdStageMismatch,
     HttpRuleInvalid,
-    ProtocolDocumentRuleInvalid,
+    UnifiedRuleInvalid,
     WeakNetworkWireInvalid,
     WeakNetworkValueInvalid,
     MaterialAliasDuplicate,

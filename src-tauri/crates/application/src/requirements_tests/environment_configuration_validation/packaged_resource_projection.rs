@@ -50,7 +50,7 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         "mode":"scripted",
         "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
     });
-    value["workspace"]["rules"][14]["package"] =
+    value["workspace"]["rules"][14]["content"]["value"]["package"] =
         serde_json::json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
     value["materials"] = serde_json::json!({"certificates":[],"secrets":[]});
 

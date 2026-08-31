@@ -1,19 +1,7 @@
 //! 外部 Socket Relay processor 的合同测试。
 
-use std::sync::Arc;
-
-use async_trait::async_trait;
-use intercept_proxy_domain::{
-    Document, DocumentValue, ErrorCode, JsonPointer, ListenerId, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolDocumentRuleProgram, ProtocolRuleStage, SocketTopology,
-};
-use intercept_proxy_exchange::SocketContext;
-use intercept_proxy_package_contract::{
-    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult as PackageFrameResult,
-    PackageManifest, PackageRpcError,
-};
-use parking_lot::Mutex;
+use intercept_proxy_domain::ErrorCode;
+use intercept_proxy_package_contract::{PackageManifest, PackageRpcError};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -108,85 +96,6 @@ fn non_rpc_error_diagnostic_is_uncorrelated_and_supports_downstream_direction() 
     assert_eq!(diagnostic.remote_data_summary, None);
 }
 
-#[path = "tests/production_joint.rs"]
-mod production_joint;
-
-#[derive(Debug, Default)]
-struct FakeExternalRpc {
-    calls: Mutex<Vec<&'static str>>,
-    encoded_document: Mutex<Option<Document>>,
-    fail_encode: bool,
-}
-
-impl FakeExternalRpc {
-    fn record_method(&self, method: &'static str) {
-        self.calls.lock().push(method);
-    }
-}
-
-#[async_trait]
-impl ExternalPackageRpc for FakeExternalRpc {
-    async fn frame(
-        &self,
-        direction: ProtocolDirection,
-        request: FrameParams,
-    ) -> Result<PackageFrameResult, PackageTransportError> {
-        self.record_method(match direction {
-            ProtocolDirection::Upstream => "hooks.upstream.frame",
-            ProtocolDirection::Downstream => "hooks.downstream.frame",
-        });
-        Ok(PackageFrameResult::complete(request.buffer.bytes().len()).unwrap())
-    }
-
-    async fn decode(
-        &self,
-        direction: ProtocolDirection,
-        _request: DecodeParams,
-    ) -> Result<Document, PackageTransportError> {
-        self.record_method(match direction {
-            ProtocolDirection::Upstream => "hooks.upstream.decode",
-            ProtocolDirection::Downstream => "hooks.downstream.decode",
-        });
-        Ok(serde_json::from_value(json!({"message_type": "0200"})).unwrap())
-    }
-
-    async fn encode(
-        &self,
-        direction: ProtocolDirection,
-        request: EncodeParams,
-    ) -> Result<String, PackageTransportError> {
-        self.record_method(match direction {
-            ProtocolDirection::Upstream => "hooks.upstream.encode",
-            ProtocolDirection::Downstream => "hooks.downstream.encode",
-        });
-        if self.fail_encode {
-            return Err(PackageTransportError::Remote {
-                request_id: "phase11-encode-1".into(),
-                method: "hooks.upstream.encode",
-                error: PackageRpcError::new(
-                    -32_411,
-                    "encode rejected",
-                    ErrorCode::BodyEncodeFailed,
-                ),
-            });
-        }
-        *self.encoded_document.lock() = Some(request.document.clone());
-        Ok("ZW5jb2RlZA==".to_owned())
-    }
-
-    async fn display(
-        &self,
-        direction: ProtocolDirection,
-        _request: DisplayParams,
-    ) -> Result<String, PackageTransportError> {
-        self.record_method(match direction {
-            ProtocolDirection::Upstream => "document.upstream.display",
-            ProtocolDirection::Downstream => "document.downstream.display",
-        });
-        Ok("<p>ok</p>".to_owned())
-    }
-}
-
 fn registration() -> PackageManifest {
     serde_json::from_value(json!({
         "api": 1,
@@ -222,68 +131,10 @@ fn registration() -> PackageManifest {
     .unwrap()
 }
 
-fn observation_metadata() -> SocketObservationMetadata {
-    SocketObservationMetadata {
-        workspace_id: "test-workspace".to_owned(),
-        listener_id: listener_id().to_string(),
-    }
-}
-
-fn listener_id() -> ListenerId {
-    ListenerId::from_uuid(Uuid::from_u128(10))
-}
-
 fn connection() -> SocketConnectionIdentity {
     SocketConnectionIdentity {
         runtime_epoch: Uuid::from_u128(1),
         connection_id: Uuid::from_u128(2),
         peer_addr: "127.0.0.1:12345".parse().unwrap(),
     }
-}
-
-fn rules(registration: &PackageManifest) -> ProtocolDocumentRuleConnectionFactory {
-    let package = registration.package().identity().clone();
-    let upstream = registration.document().upstream().schema().unwrap().clone();
-    let downstream = registration
-        .document()
-        .downstream()
-        .schema()
-        .unwrap()
-        .clone();
-    let rule = ProtocolDocumentRuleDefinition::new_named_for_stage(
-        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(44)),
-        "set amount".to_owned(),
-        true,
-        10,
-        1,
-        listener_id(),
-        package.clone(),
-        ProtocolRuleStage::ProxyToUpstream,
-        vec![ProtocolDocumentPredicate::Equals {
-            field: JsonPointer::property("message_type"),
-            value: DocumentValue::String("0200".to_owned()),
-        }],
-        vec![ProtocolDocumentOperation::SetField {
-            field: JsonPointer::property("amount"),
-            value: DocumentValue::integer(42).unwrap(),
-        }],
-    )
-    .unwrap();
-    let program = |stage, schema, rules| {
-        Arc::new(
-            ProtocolDocumentRuleProgram::new_for_stage(
-                listener_id(),
-                package.clone(),
-                schema,
-                stage,
-                rules,
-            )
-            .unwrap(),
-        )
-    };
-    ProtocolDocumentRuleConnectionFactory::new(
-        &program(ProtocolRuleStage::ProxyToUpstream, upstream, vec![rule]),
-        &program(ProtocolRuleStage::ProxyToApp, downstream, Vec::new()),
-    )
-    .unwrap()
 }

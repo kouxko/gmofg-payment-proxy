@@ -11,7 +11,6 @@ const paths = {
   unifiedRule: "src-tauri/crates/domain/src/unified_rule.rs",
   ruleTypes: "src-tauri/crates/domain/src/rule/types.rs",
   unifiedExecution: "src-tauri/crates/domain/src/unified_rule_execution.rs",
-  protocolDocumentRule: "src-tauri/crates/domain/src/protocol_document_rule.rs",
   externalRelay: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
   uiModel: "src/features/rules/rule-definition-model.ts",
   generated: "src/generated/rust-types.ts",
@@ -38,7 +37,6 @@ function append(file, text) {
 test("canonical repository passes", () => assert.equal(run(root).status, 0));
 for (const [name, mutate] of [
   ["unified legacy enum", append(paths.unifiedRule, "\nenum Restored { AppToProxy }\n")],
-  ["protocol legacy enum", append(paths.protocolDocumentRule, "\nenum Restored { UpstreamToProxy }\n")],
   ["four-stage factory", append(paths.externalRelay, "\nstruct Restored { first_rules: usize }\n")],
   ["legacy UI copy", append(paths.uiModel, "\nconst restored = 'app_to_proxy';\n")],
   ["generated legacy wire", append(paths.generated, "\nexport type Restored = \"upstream_to_proxy\";\n")],

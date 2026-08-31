@@ -2,7 +2,6 @@ use crate::{
     ChannelId, DomainError, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch,
     TerminalIdentity,
 };
-use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use specta::Type;
@@ -19,15 +18,35 @@ pub const MAX_TRAFFIC_CHUNK_BYTES: u64 = 1024 * 1024;
 pub enum MatchField {
     TerminalIp,
     CertificateFingerprint,
-    PathOrRequestType,
-    JsonPath(String),
+    /// Exact HTTP method token.
+    Method,
+    /// Request origin-form target: path plus optional query.
+    RequestTarget,
+    /// One case-insensitive HTTP header name written as a single-segment pointer.
+    Header(String),
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum MatchOperator {
     Equals(String),
     Contains(String),
-    Regex(String),
+    StartsWith(String),
+    EndsWith(String),
+    Wildcard(String),
+}
+
+/// Borrowed raw HTTP header used by the pure Domain matcher.
+#[derive(Clone, Copy, Debug)]
+pub struct HttpHeader<'a> {
+    pub name: &'a [u8],
+    pub value: &'a [u8],
+}
+
+impl<'a> HttpHeader<'a> {
+    #[must_use]
+    pub const fn new(name: &'a [u8], value: &'a [u8]) -> Self {
+        Self { name, value }
+    }
 }
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -155,39 +174,6 @@ impl HttpAction {
     }
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct RuleDraft {
-    pub expected_revision: Option<Revision>,
-    pub name: String,
-    pub description: String,
-    pub enabled: bool,
-    pub priority: u32,
-    pub created_order: u64,
-    pub channel: Option<ChannelId>,
-    pub stage: MessageStage,
-    pub conditions: Vec<crate::Condition>,
-    pub actions: Vec<HttpAction>,
-    pub one_shot: bool,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-pub struct Rule {
-    pub id: RuleId,
-    pub revision: Revision,
-    pub name: String,
-    pub description: String,
-    pub enabled: bool,
-    pub priority: u32,
-    pub created_order: u64,
-    pub channel: Option<ChannelId>,
-    pub stage: MessageStage,
-    pub conditions: Vec<crate::Condition>,
-    pub actions: Vec<HttpAction>,
-    pub one_shot: bool,
-    pub hit_count: u64,
-    pub last_hit_at: Option<DateTime<Utc>>,
-}
-
 #[derive(Clone, Copy, Debug, Deserialize, Eq, Ord, PartialEq, PartialOrd, Serialize, Type)]
 pub struct RuleRevisionSignature {
     pub rule_id: RuleId,
@@ -201,12 +187,12 @@ pub struct RuleSetSignature {
 
 impl RuleSetSignature {
     #[must_use]
-    pub fn from_rules(rules: &[Rule]) -> Self {
+    pub fn from_definitions(rules: &[crate::RuleDefinition]) -> Self {
         let mut entries = rules
             .iter()
             .map(|rule| RuleRevisionSignature {
-                rule_id: rule.id,
-                revision: rule.revision,
+                rule_id: rule.rule_id(),
+                revision: rule.revision(),
             })
             .collect::<Vec<_>>();
         entries.sort_unstable();
@@ -219,18 +205,21 @@ pub struct RuleRuntimeSnapshot {
     pub collection_id: Option<Uuid>,
     pub collection_revision: u64,
     pub signature: RuleSetSignature,
-    pub rules: Vec<Rule>,
+    pub rules: Vec<crate::RuleDefinition>,
     pub execution_order: Vec<RuleId>,
 }
 
 impl RuleRuntimeSnapshot {
     #[must_use]
-    pub fn new(rules: Vec<Rule>) -> Self {
+    pub fn new(rules: Vec<crate::RuleDefinition>) -> Self {
         Self::with_collection_revision(0, rules)
     }
 
     #[must_use]
-    pub fn with_collection_revision(collection_revision: u64, rules: Vec<Rule>) -> Self {
+    pub fn with_collection_revision(
+        collection_revision: u64,
+        rules: Vec<crate::RuleDefinition>,
+    ) -> Self {
         Self::with_collection_identity(None, collection_revision, rules)
     }
 
@@ -238,12 +227,12 @@ impl RuleRuntimeSnapshot {
     pub fn with_collection_identity(
         collection_id: Option<Uuid>,
         collection_revision: u64,
-        rules: Vec<Rule>,
+        rules: Vec<crate::RuleDefinition>,
     ) -> Self {
         Self {
             collection_id,
             collection_revision,
-            signature: RuleSetSignature::from_rules(&rules),
+            signature: RuleSetSignature::from_definitions(&rules),
             rules,
             execution_order: Vec::new(),
         }
@@ -253,52 +242,16 @@ impl RuleRuntimeSnapshot {
     pub fn with_collection_identity_and_order(
         collection_id: Option<Uuid>,
         collection_revision: u64,
-        rules: Vec<Rule>,
+        rules: Vec<crate::RuleDefinition>,
         execution_order: Vec<RuleId>,
     ) -> Self {
         Self {
             collection_id,
             collection_revision,
-            signature: RuleSetSignature::from_rules(&rules),
+            signature: RuleSetSignature::from_definitions(&rules),
             rules,
             execution_order,
         }
-    }
-}
-
-impl Rule {
-    pub fn create(draft: RuleDraft) -> Result<Self, DomainError> {
-        super::validate_rule_draft(&draft)?;
-        Ok(Self {
-            id: RuleId::new(),
-            revision: Revision::INITIAL,
-            name: draft.name,
-            description: draft.description,
-            enabled: draft.enabled,
-            priority: draft.priority,
-            created_order: draft.created_order,
-            channel: draft.channel,
-            stage: draft.stage,
-            conditions: draft.conditions,
-            actions: draft.actions,
-            one_shot: draft.one_shot,
-            hit_count: 0,
-            last_hit_at: None,
-        })
-    }
-
-    pub(super) fn apply_draft(&mut self, draft: RuleDraft) {
-        self.name = draft.name;
-        self.description = draft.description;
-        self.enabled = draft.enabled;
-        self.priority = draft.priority;
-        self.created_order = draft.created_order;
-        self.channel = draft.channel;
-        self.stage = draft.stage;
-        self.conditions = draft.conditions;
-        self.actions = draft.actions;
-        self.one_shot = draft.one_shot;
-        self.revision = self.revision.next();
     }
 }
 
@@ -308,8 +261,9 @@ pub struct MatchContext<'a> {
     pub channel: ChannelId,
     pub stage: MessageStage,
     pub terminal: &'a TerminalIdentity,
-    pub path_or_request_type: Option<&'a str>,
-    pub json_body: Option<&'a Value>,
+    pub method: Option<&'a str>,
+    pub request_target: Option<&'a str>,
+    pub headers: &'a [HttpHeader<'a>],
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]

@@ -249,7 +249,6 @@ pub(super) fn fixture_with_workspaces(
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
             breakpoint_validation: ports.clone(),
-            rules: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -345,7 +344,12 @@ impl ListenerRuntimePort for TrackingRuntime {
         })
     }
 
-    async fn replace_rule_definitions(&self, _: ProxyWorkspace, _: ListenerId) -> AppResult<()> {
+    async fn replace_rule_definitions(
+        &self,
+        _: &dyn WorkspaceRepositoryPort,
+        _: ProxyWorkspace,
+        _: ListenerId,
+    ) -> AppResult<ProxyWorkspace> {
         unused()
     }
 

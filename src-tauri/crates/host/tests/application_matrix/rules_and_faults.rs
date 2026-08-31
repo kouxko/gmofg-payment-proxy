@@ -100,27 +100,51 @@ async fn exercise_unified_rule_lifecycle(
     let RuleEditorContentContext::Http { stages } = editor_context.content else {
         panic!("HTTP rule context expected");
     };
-    let mut input = stages
+    let structure = stages
         .into_iter()
         .find(|stage| stage.stage == RuleStage::ProxyToUpstream)
         .expect("proxy-to-upstream rule stage")
         .new_rule_draft;
-    input.draft.name = "无 UI 集成规则".into();
-    let RuleContent::Http(http_content) = &mut input.draft.content else {
+    let intercept_proxy_application::RuleNewDefinitionDraft {
+        listener_id,
+        stage,
+        mut content,
+    } = structure;
+    let RuleContent::Http(http_content) = &mut content else {
         panic!("HTTP rule draft expected");
     };
     http_content.description = "Application facade matrix".into();
     http_content.condition = intercept_proxy_application::ConditionTree::Leaf(
         application
-            .rule_definition_condition_draft(
-                intercept_proxy_application::RuleConditionKind::NthHit,
+            .rule_definition_nth_hit_condition_draft(
+                intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
+            )
+            .expect("explicit positive nth-hit condition"),
+    );
+    http_content.actions = vec![intercept_proxy_application::UnifiedAction::from(
+        application
+            .rule_definition_action_draft(
+                intercept_proxy_application::RuleHttpActionDraftInput {
+                    kind: RuleActionKind::Delay,
+                    parameters_json: Some(r#"{"milliseconds":100}"#.into()),
+                },
                 MessageStage::Request,
             )
-            .expect("Rust-owned NthHit condition"),
-    );
-    http_content.actions = vec![intercept_proxy_application::UnifiedAction::from(application
-        .rule_definition_action_draft(RuleActionKind::Delay, MessageStage::Request)
-        .expect("Rust-owned delay action"))];
+            .expect("explicit delay action"),
+    )];
+    let input = intercept_proxy_application::RuleDefinitionSaveInput {
+        rule_id: None,
+        expected_revision: None,
+        draft: intercept_proxy_application::RuleDefinitionDraft {
+            name: "无 UI 集成规则".into(),
+            enabled: true,
+            priority: 17,
+            listener_id,
+            stage,
+            one_shot: false,
+            content,
+        },
+    };
     let saved_rule = application
         .rule_definition_save(input)
         .await

@@ -10,6 +10,7 @@ use crate::{
     ListenerRuntimeState, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsEvidenceViewModel, ListenerUpstreamTlsTestViewModel, ProxyListener,
     ProxyWorkspace, SocketRelaySecurity, SocketTopology, SocketTransportMode, UiTone,
+    WorkspaceRepositoryPort,
 };
 
 #[derive(Debug, Default)]
@@ -85,10 +86,11 @@ impl ListenerRuntimePort for InMemoryListenerRuntime {
 
     async fn replace_rule_definitions(
         &self,
-        _workspace: ProxyWorkspace,
+        workspaces: &dyn WorkspaceRepositoryPort,
+        workspace: ProxyWorkspace,
         _listener_id: ListenerId,
-    ) -> AppResult<()> {
-        Ok(())
+    ) -> AppResult<ProxyWorkspace> {
+        workspaces.save(workspace).await
     }
 
     async fn test_upstream_tls(

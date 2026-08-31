@@ -1,0 +1,40 @@
+Phase18 logical scope
+=====================
+
+Baseline:
+  30d0f69e0e2fed745fbee2a1dc49271517e76d41
+
+Included repository areas:
+  .github/workflows/windows-release.yml
+  .gitignore
+  docs/architecture/data-flow.md
+  docs/architecture/rules-and-protocol-packages.md
+  docs/user-operation-guide.md
+  docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md
+  docs/testing/evidence/README.md
+  docs/testing/evidence/2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/
+  package.json
+  scripts/build-macos-universal.mjs
+  scripts/check-*.mjs and task-specific checker tests changed by this phase
+  scripts/e2e_external_packages.py
+  scripts/e2e_macos_mounted_release.py
+  scripts/sign-macos-app.mjs
+  scripts/stage-package-sidecar.mjs
+  scripts/verify-macos-universal.mjs
+  src-tauri/Cargo.toml
+  src-tauri/tauri.conf.json
+  src-tauri/crates/{domain,application,infrastructure,host,proxy}/ affected source and tests
+  src-tauri/src/{commands,mcp}/ affected source, fixtures and tests
+  src/features/rules/ affected source and tests
+  src/features/shared/http-protocol-body.tsx
+  src/generated/rust-types.ts
+  test-support/emulator-proxy-gate/
+  test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/
+
+Explicitly excluded:
+  docs/README.md
+  docs/tasks/pending/2026-08-31/
+  .task-manager.lock/
+  target artifacts from Git staging
+
+The scope is path-based and content hashes are intentionally not part of this evidence.

@@ -43,7 +43,10 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
         3
     );
     assert_eq!(defs["documentValue"]["oneOf"].as_array().unwrap().len(), 6);
-    assert_eq!(defs["documentAction"]["oneOf"].as_array().unwrap().len(), 3);
+    assert_eq!(
+        defs["documentMutation"]["oneOf"].as_array().unwrap().len(),
+        4
+    );
     assert_eq!(
         defs["weakNetwork"]["properties"]["burst_loss"]["oneOf"]
             .as_array()
@@ -73,26 +76,18 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
     );
     assert!(defs["workspace"]["properties"]["http_rules"].is_null());
     assert!(defs["workspace"]["properties"]["protocol_rules"].is_null());
-    assert_eq!(defs["rule"]["oneOf"].as_array().unwrap().len(), 2);
+    assert_eq!(defs["ruleContent"]["oneOf"].as_array().unwrap().len(), 2);
+    assert_eq!(defs["conditionTree"]["oneOf"].as_array().unwrap().len(), 3);
     assert_eq!(
-        defs["httpRule"]["properties"]["stage"]["enum"],
+        defs["rule"]["properties"]["stage"]["enum"],
         json!(["proxy_to_upstream", "proxy_to_app", "tls_handshake"])
     );
     assert!(
-        !defs["httpRule"]["required"]
+        !defs["rule"]["required"]
             .as_array()
             .unwrap()
-            .contains(&json!("document"))
+            .contains(&json!("existing_rule_id"))
     );
-    for rule in ["httpRule", "socketRule"] {
-        assert!(
-            !defs[rule]["required"]
-                .as_array()
-                .unwrap()
-                .contains(&json!("existing_rule_id")),
-            "{rule}.existing_rule_id must be optional"
-        );
-    }
 }
 
 #[test]

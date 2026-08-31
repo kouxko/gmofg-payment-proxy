@@ -5,22 +5,20 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
 import { RulesView } from "./rules-view";
-import { localDocumentTypes, testListener, withOptionalHttpDocument, withSecondHttpStage, withSocketFields } from "./rules-view-test-fixtures";
+import { documentCondition, httpCondition, httpListener, httpRule, localDocumentTypes, socketListener, socketRule, withOptionalHttpDocument, withSecondHttpStage, withSocketFields } from "./rules-view-test-fixtures";
+import { selectHttpAction, selectHttpMethodEquals } from "./rules-view-test-interactions";
 
 const commandMocks = vi.hoisted(() => ({
   workspaceList: vi.fn(), workspaceGet: vi.fn(), ruleDefinitionList: vi.fn(),
   ruleDefinitionGet: vi.fn(), ruleEditorContext: vi.fn(), ruleDefinitionSave: vi.fn(),
   ruleDefinitionToggle: vi.fn(), ruleDefinitionDelete: vi.fn(), ruleParseDocumentValue: vi.fn(),
   ruleDefinitionCopy: vi.fn(), ruleDefinitionCreateFromExchangeObservation: vi.fn(),
-  ruleDefinitionConditionDraft: vi.fn(), ruleDefinitionActionDraft: vi.fn(),
+  ruleDefinitionHttpConditionDraft: vi.fn(), ruleDefinitionNthHitConditionDraft: vi.fn(), ruleDefinitionActionDraft: vi.fn(),
   ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
   ruleDefinitionDocumentCommonActionDraft: vi.fn(),
 }));
 
-const navigationState = vi.hoisted(() => ({
-  searchParams: new URLSearchParams(),
-  navigate: vi.fn(),
-}));
+const navigationState = vi.hoisted(() => ({ searchParams: new URLSearchParams(), navigate: vi.fn() }));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   appErrorViewModel: () => undefined,
@@ -33,63 +31,36 @@ vi.mock("@/features/shell/workspace-navigation", () => ({
   useWorkspaceNavigation: () => navigationState,
 }));
 
-const httpListener = testListener("http-listener", "HTTP Listener", "http");
-const socketListener = testListener("socket-listener", "Socket Listener", "socket");
-const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, field: "PathOrRequestType" as const, operator: { Equals: "/" } } };
-const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
-const lifecycle = { hit_count: 0, last_hit_at: null };
-
-function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
-  return {
-    rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
-    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", one_shot: false, lifecycle,
-    content: { type: "http", value: {
-      description: "headers and body", condition: httpCondition, actions: [{ source: "record_match" }], document: null,
-    } },
-    ...overrides,
-  };
-}
-
-function socketRule(): RuleDefinition_Serialize {
-  return {
-    rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
-    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", one_shot: false, lifecycle,
-    content: { type: "socket", value: {
-      package: { id: "iso8583", version: "1.0.0" },
-      condition: documentCondition(), actions: [{ source: "record_match" }],
-    } },
-  };
-}
 
 const httpContext: RuleEditorContext = {
   listener_id: httpListener.id,
   local_document_types: localDocumentTypes,
+  document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
   content: { type: "http", value: { stages: [{
     stage: "proxy_to_upstream",
-    http: { stage: "request", match_field_kinds: ["path_or_request_type", "json_path"], actions: [{ kind: "set_header", terminal: false, traffic_direction: null }] },
+    http: { stage: "request", match_fields: [
+      { kind: "method", operators: ["equals"], selector: null }, { kind: "request_target", operators: ["equals", "contains", "wildcard"], selector: null }, { kind: "header", operators: ["equals", "contains"], selector: "header_name_pointer" },
+    ], actions: [{ kind: "set_header", terminal: false, traffic_direction: null, parameters_required: true }] },
     package: { id: "iso8583", version: "1.0.0" },
     document_fields: [], document_common_actions: ["record_match"],
-    new_rule_draft: { rule_id: null, expected_revision: null, draft: {
-      name: "新建 HTTP 规则", enabled: true, priority: 100, listener_id: httpListener.id,
-      stage: "proxy_to_upstream", one_shot: false, content: { type: "http", value: {
-        description: "", condition: httpCondition, actions: [{ source: "record_match" }],
+    new_rule_draft: { listener_id: httpListener.id,
+      stage: "proxy_to_upstream", content: { type: "http", value: {
+        description: "", condition: httpCondition, actions: [],
         document: { package: { id: "iso8583", version: "1.0.0" } },
-      } },
-    } },
+      } } },
   }] } },
 };
 
 const socketContext: RuleEditorContext = {
   listener_id: socketListener.id,
   local_document_types: localDocumentTypes,
+  document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
   content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, stages: [{
-    stage: "proxy_to_app", fields: [], common_actions: ["record_match"],
-    new_rule_draft: { rule_id: null, expected_revision: null, draft: {
-      name: "新建 Socket 规则", enabled: true, priority: 100, listener_id: socketListener.id,
-      stage: "proxy_to_app", one_shot: false, content: { type: "socket", value: {
-        package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [{ source: "record_match" }],
-      } },
-    } },
+    stage: "proxy_to_app", document_fields: [], common_actions: ["record_match"],
+    new_rule_draft: { listener_id: socketListener.id,
+      stage: "proxy_to_app", content: { type: "socket", value: {
+        package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [],
+      } } },
   }] } },
 };
 
@@ -113,19 +84,23 @@ describe("unified rule workspace", () => {
       rule_id: null,
       expected_revision: null,
       draft: {
-        ...httpContext.content.value.stages[0].new_rule_draft.draft,
         name: "Mock /checkout",
         enabled: false,
+        priority: 10,
+        listener_id: httpContext.content.value.stages[0].new_rule_draft.listener_id,
+        stage: httpContext.content.value.stages[0].new_rule_draft.stage,
+        one_shot: false,
         content: {
           type: "http",
           value: {
-            ...httpContext.content.value.stages[0].new_rule_draft.draft.content.value,
+            ...httpContext.content.value.stages[0].new_rule_draft.content.value,
             actions: [{ source: "terminal", value: { MockResponse: { status: 201, headers: [["content-type", "application/json"]], body_bytes: [123, 125] } } }],
           },
         },
       },
     });
-    commandMocks.ruleDefinitionConditionDraft.mockResolvedValue({ source: "http", field: "PathOrRequestType", operator: { Equals: "" } });
+    commandMocks.ruleDefinitionHttpConditionDraft.mockResolvedValue({ source: "http", field: "RequestTarget", operator: { Equals: "/" } });
+    commandMocks.ruleDefinitionNthHitConditionDraft.mockResolvedValue({ source: "nth_hit", count: 1 });
     commandMocks.ruleDefinitionActionDraft.mockResolvedValue({ SetHeader: { name: "x-proxy-test", value: "" } });
     commandMocks.ruleParseDocumentValue.mockResolvedValue(0);
     commandMocks.ruleDefinitionDocumentConditionDraft.mockImplementation(async (path, type, predicate, raw) => {
@@ -143,7 +118,7 @@ describe("unified rule workspace", () => {
     render(<RulesView />);
     expect(await screen.findByRole("heading", { name: "规则" })).toBeVisible();
     expect(screen.getAllByTestId("rule-stage-heading").map((item) => item.textContent)).toEqual([
-      "Proxy → Upstream", "Proxy → App", "TLS 握手",
+      "Proxy → Server", "Proxy → App", "TLS 握手",
     ]);
     expect(screen.getByRole("button", { name: "新建规则" })).toBeVisible();
     expect(screen.queryByText("Body 报文规则")).not.toBeInTheDocument();
@@ -176,13 +151,22 @@ describe("unified rule workspace", () => {
     await user.click(await screen.findByRole("button", { name: "新建规则" }));
     await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
     await user.click(await screen.findByRole("option", { name: "HTTP Listener · HTTP" }));
-    await user.click(await screen.findByRole("button", { name: "Proxy → Upstream" }));
-    await user.clear(screen.getByRole("textbox", { name: "规则名称" }));
+    await user.click(await screen.findByRole("button", { name: "Proxy → Server" }));
     await user.type(screen.getByRole("textbox", { name: "规则名称" }), "Combined rule");
+    await user.type(screen.getByRole("textbox", { name: "阶段内优先级" }), "10");
+    await user.click(screen.getByRole("button", { name: /新规则是否启用/ }));
+    await user.click(await screen.findByRole("option", { name: "启用" }));
+    await user.click(screen.getByRole("button", { name: /新规则是否单次/ }));
+    await user.click(await screen.findByRole("option", { name: "持续" }));
+    await user.click(screen.getByRole("button", { name: "进入规则编辑器" }));
     await user.click(screen.getByRole("button", { name: "保存规则" }));
     await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
       rule_id: null, expected_revision: null,
-      draft: expect.objectContaining({ listener_id: httpListener.id, stage: "proxy_to_upstream", content: expect.objectContaining({ type: "http" }) }),
+      draft: expect.objectContaining({
+        name: "Combined rule", enabled: true, priority: 10, one_shot: false,
+        listener_id: httpListener.id, stage: "proxy_to_upstream",
+        content: { type: "http", value: expect.objectContaining({ actions: [] }) },
+      }),
     })));
   });
 
@@ -222,15 +206,17 @@ describe("unified rule workspace", () => {
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
-    await user.click(await screen.findByRole("button", { name: "添加条件：字段" }));
-    await user.click(await screen.findByRole("button", { name: "添加动作：Set Header" }));
+    await selectHttpMethodEquals(user);
+    await user.type(screen.getByRole("textbox", { name: "HTTP 匹配值" }), "POST");
+    await user.click(await screen.findByRole("button", { name: "创建 HTTP 条件" }));
+    await selectHttpAction(user, "Set Header", '{"name":"x-proxy-test","value":""}');
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
-    expect(commandMocks.ruleDefinitionConditionDraft).toHaveBeenCalledWith("field", "request");
-    expect(commandMocks.ruleDefinitionActionDraft).toHaveBeenCalledWith("set_header", "request");
+    expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledWith("method", null, "equals", "POST", "request");
+    expect(commandMocks.ruleDefinitionActionDraft).toHaveBeenCalledWith({ kind: "set_header", parameters_json: '{"name":"x-proxy-test","value":""}' }, "request");
     expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "PathOrRequestType", operator: { Equals: "" } } }] },
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "RequestTarget", operator: { Equals: "/" } } }] },
         actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-proxy-test", value: "" } } }],
       }) } }),
     }));
@@ -241,18 +227,20 @@ describe("unified rule workspace", () => {
     const secondRule = httpRule({ rule_id: "http-rule-b", revision: 7, name: "HTTP second", created_order: 8 });
     commandMocks.ruleDefinitionList.mockResolvedValue([httpRule(), secondRule]);
     commandMocks.ruleDefinitionGet.mockImplementation(async (id: string) => id === secondRule.rule_id ? secondRule : httpRule());
-    commandMocks.ruleDefinitionConditionDraft.mockReturnValue(new Promise((resolve) => { finishOldRequest = resolve; }));
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { finishOldRequest = resolve; }));
     const user = userEvent.setup();
     render(<RulesView />);
 
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
-    await user.click(await screen.findByRole("button", { name: "添加条件：字段" }));
+    await selectHttpMethodEquals(user);
+    await user.type(screen.getByRole("textbox", { name: "HTTP 匹配值" }), "POST");
+    await user.click(await screen.findByRole("button", { name: "创建 HTTP 条件" }));
     await user.click(screen.getByRole("button", { name: "关闭规则编辑器" }));
     await user.click(screen.getByRole("button", { name: /HTTP second/ }));
     expect(await screen.findByDisplayValue("HTTP second")).toBeVisible();
 
     await act(async () => {
-      finishOldRequest({ source: "http", field: "PathOrRequestType", operator: { Equals: "old" } });
+      finishOldRequest({ source: "http", field: "RequestTarget", operator: { Equals: "old" } });
       await Promise.resolve();
     });
     expect(screen.getByDisplayValue("HTTP second")).toBeVisible();
@@ -266,27 +254,30 @@ describe("unified rule workspace", () => {
   it("merges out-of-order condition and action factory responses into the latest draft", async () => {
     let finishCondition!: (value: unknown) => void;
     let finishAction!: (value: unknown) => void;
-    commandMocks.ruleDefinitionConditionDraft.mockReturnValue(new Promise((resolve) => { finishCondition = resolve; }));
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { finishCondition = resolve; }));
     commandMocks.ruleDefinitionActionDraft.mockReturnValue(new Promise((resolve) => { finishAction = resolve; }));
     const user = userEvent.setup();
     render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await selectHttpMethodEquals(user);
 
     act(() => {
-      fireEvent.click(screen.getByRole("button", { name: "添加条件：字段" }));
-      fireEvent.click(screen.getByRole("button", { name: "添加动作：Set Header" }));
+      fireEvent.change(screen.getByRole("textbox", { name: "HTTP 匹配值" }), { target: { value: "POST" } });
+      fireEvent.click(screen.getByRole("button", { name: "创建 HTTP 条件" }));
     });
+    await selectHttpAction(user, "Set Header", '{"name":"x-latest","value":"1"}');
+    await waitFor(() => expect(commandMocks.ruleDefinitionActionDraft).toHaveBeenCalled());
     await act(async () => {
       finishAction({ SetHeader: { name: "x-latest", value: "1" } });
       await Promise.resolve();
-      finishCondition({ source: "http", field: "PathOrRequestType", operator: { Equals: "/pay" } });
+      finishCondition({ source: "http", field: "RequestTarget", operator: { Equals: "/pay" } });
       await Promise.resolve();
     });
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
     expect(commandMocks.ruleDefinitionSave).toHaveBeenLastCalledWith(expect.objectContaining({
       draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({
-        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "PathOrRequestType", operator: { Equals: "/pay" } } }] },
+        condition: { operator: "all", children: [httpCondition, { operator: "leaf", children: { source: "http", field: "RequestTarget", operator: { Equals: "/pay" } } }] },
         actions: [{ source: "record_match" }, { source: "http", value: { SetHeader: { name: "x-latest", value: "1" } } }],
       }) } }),
     }));
@@ -381,7 +372,7 @@ describe("unified rule workspace", () => {
     commandMocks.ruleParseDocumentValue.mockResolvedValue("merchant-7");
     const user = userEvent.setup(); render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /Socket document/ }));
-    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/merchant/id");
+    await user.type(screen.getByLabelText("手动 Document 条件路径"), "/merchant/id");
     await user.click(screen.getByRole("button", { name: /规则本地类型/ }));
     await user.click(await screen.findByRole("option", { name: "string" }));
     await user.click(screen.getByRole("button", { name: /规则本地谓词/ }));
@@ -401,7 +392,7 @@ describe("unified rule workspace", () => {
   it("uses Rust capabilities for an existing null rule-local field", async () => {
     const existing = socketRule();
     existing.content.value.condition = { operator: "leaf", children: { source: "document", path: "/nullable", predicate: { type: "null_equal" } } };
-    const context = { ...socketContext, local_document_types: localDocumentTypes.map((capability) => capability.value_type === "null" ? { ...capability, predicates: ["equals" as const], actions: ["clear" as const] } : capability) };
+    const context = { ...socketContext, local_document_types: localDocumentTypes.map((capability) => capability.value_type === "null" ? { ...capability, predicates: ["equals" as const], actions: [{ kind: "clear" as const, target_kind: "node" as const, target_value_type: "null" as const, operand_value_type: null }] } : capability) };
     commandMocks.ruleDefinitionList.mockResolvedValue([existing]); commandMocks.ruleDefinitionGet.mockResolvedValue(existing); commandMocks.ruleEditorContext.mockResolvedValue(context);
     const user = userEvent.setup(); render(<RulesView />);
     await user.click(await screen.findByRole("button", { name: /Socket document/ }));
@@ -412,7 +403,7 @@ describe("unified rule workspace", () => {
     const empty = socketRule(); empty.content.value.condition = { operator: "leaf", children: { source: "nth_hit", count: 1 } }; empty.content.value.actions = [];
     commandMocks.ruleDefinitionList.mockResolvedValue([empty]); commandMocks.ruleDefinitionGet.mockResolvedValue(empty);
     const user = userEvent.setup(); render(<RulesView />); await user.click(await screen.findByRole("button", { name: /Socket document/ }));
-    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/items"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "string" }));
+    await user.type(screen.getByLabelText("手动 Document 条件路径"), "/items"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "string" }));
     const value = screen.getByLabelText("规则本地值"); await user.type(value, '"first"'); await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "insert" }));
     await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" })); await user.clear(value); await user.type(value, '"last"');
     await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "append" })); await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
@@ -422,8 +413,8 @@ describe("unified rule workspace", () => {
   });
   it("persists the first Rust-factory Clear-only rule-local metadata leaf with its selected type", async () => {
     const empty = socketRule(); empty.content.value.condition = { operator: "leaf", children: { source: "nth_hit", count: 1 } }; empty.content.value.actions = []; commandMocks.ruleDefinitionList.mockResolvedValue([empty]); commandMocks.ruleDefinitionGet.mockResolvedValue(empty);
-    commandMocks.ruleEditorContext.mockResolvedValue({ ...socketContext, local_document_types: [{ value_type: "boolean", predicates: [], actions: ["clear"] }] }); const user = userEvent.setup(); render(<RulesView />); await user.click(await screen.findByRole("button", { name: /Socket document/ }));
-    await user.type(screen.getByLabelText("规则本地 RFC 6901 路径"), "/enabled"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "boolean" })); await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "clear" })); await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
+    commandMocks.ruleEditorContext.mockResolvedValue({ ...socketContext, local_document_types: [{ value_type: "boolean", predicates: [], actions: [{ kind: "clear", target_kind: "node", target_value_type: "boolean", operand_value_type: null }] }] }); const user = userEvent.setup(); render(<RulesView />); await user.click(await screen.findByRole("button", { name: /Socket document/ }));
+    await user.type(screen.getByLabelText("手动 Document 条件路径"), "/enabled"); await user.click(screen.getByRole("button", { name: /规则本地类型/ })); await user.click(await screen.findByRole("option", { name: "boolean" })); await user.click(screen.getByRole("button", { name: /规则本地动作/ })); await user.click(await screen.findByRole("option", { name: "clear" })); await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
     const save = screen.getByRole("button", { name: "保存规则" }); await waitFor(() => expect(save).toBeEnabled()); await user.click(save);
     expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("/enabled", "boolean", "clear", null, null); expect(commandMocks.ruleDefinitionSave.mock.calls.at(-1)?.[0].draft.content.value.actions).toEqual([{ source: "document", value: { type: "clear", path: "/enabled", value_type: "boolean" } }]);
   });
@@ -476,7 +467,7 @@ describe("unified rule workspace", () => {
 
   it("switches only to a compatible stage and preserves the complete HTTP payload", async () => {
     const retainedContent = {
-      description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, field: "PathOrRequestType" as const, operator: { Equals: "/pay" } } },
+      description: "preserve me", condition: { operator: "leaf" as const, children: { source: "http" as const, field: "RequestTarget" as const, operator: { Equals: "/pay" } } },
       actions: [{ source: "http" as const, value: { SetHeader: { name: "x-test", value: "1" } } }], document: null,
     };
     const retainedLifecycle = { one_shot: true, hit_count: 7, last_hit_at: "2026-08-28T00:00:00Z" };

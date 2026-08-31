@@ -1,13 +1,22 @@
-import type { ProxyListener, RuleEditorContext } from "@/generated/rust-types";
+import type { ProxyListener, RuleDefinition_Serialize, RuleDocumentActionCapability, RuleEditorContext, RuleLocalDocumentValueType } from "@/generated/rust-types";
+
+function localActions(valueType: RuleLocalDocumentValueType): RuleDocumentActionCapability[] {
+  return [
+    { kind: "set", target_kind: "node", target_value_type: valueType, operand_value_type: valueType },
+    { kind: "clear", target_kind: "node", target_value_type: valueType, operand_value_type: null },
+    { kind: "insert", target_kind: "array", target_value_type: "array", operand_value_type: valueType },
+    { kind: "append", target_kind: "array", target_value_type: "array", operand_value_type: valueType },
+  ];
+}
 
 export const localDocumentTypes = [
-  { value_type: "string", predicates: ["equals", "contains", "starts_with", "ends_with"], actions: ["set", "clear", "insert", "append"] },
-  { value_type: "number", predicates: ["equals", "less", "less_equal", "greater", "greater_equal"], actions: ["set", "clear", "insert", "append"] },
-  { value_type: "boolean", predicates: ["equals"], actions: ["set", "clear", "insert", "append"] },
-  { value_type: "null", predicates: ["equals"], actions: ["set", "clear", "insert", "append"] },
-  { value_type: "object", predicates: [], actions: ["set", "clear", "insert", "append"] },
-  { value_type: "array", predicates: [], actions: ["set", "clear", "insert", "append"] },
-] as RuleEditorContext["local_document_types"];
+  { value_type: "string", predicates: ["equals", "contains", "starts_with", "ends_with"], actions: localActions("string") },
+  { value_type: "number", predicates: ["equals", "less", "less_equal", "greater", "greater_equal"], actions: localActions("number") },
+  { value_type: "boolean", predicates: ["equals"], actions: localActions("boolean") },
+  { value_type: "null", predicates: ["equals"], actions: localActions("null") },
+  { value_type: "object", predicates: [], actions: localActions("object") },
+  { value_type: "array", predicates: [], actions: localActions("array") },
+] satisfies RuleEditorContext["local_document_types"];
 
 export function testListener(id: string, name: string, kind: "http" | "socket"): ProxyListener {
   return {
@@ -19,6 +28,29 @@ export function testListener(id: string, name: string, kind: "http" | "socket"):
   } as ProxyListener;
 }
 
+export const httpListener = testListener("http-listener", "HTTP Listener", "http");
+export const socketListener = testListener("socket-listener", "Socket Listener", "socket");
+export const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, field: "RequestTarget" as const, operator: { Equals: "/" } } };
+export const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
+const lifecycle = { hit_count: 0, last_hit_at: null };
+
+export function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
+  return {
+    rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
+    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", one_shot: false, lifecycle,
+    content: { type: "http", value: { description: "headers and body", condition: httpCondition, actions: [{ source: "record_match" }], document: null } },
+    ...overrides,
+  };
+}
+
+export function socketRule(): RuleDefinition_Serialize {
+  return {
+    rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
+    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", one_shot: false, lifecycle,
+    content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [{ source: "record_match" }] } },
+  };
+}
+
 export function withOptionalHttpDocument(context: RuleEditorContext): RuleEditorContext {
   const stage = context.content.type === "http" ? context.content.value.stages[0] : undefined;
   if (!stage) throw new Error("HTTP context fixture is invalid");
@@ -26,7 +58,10 @@ export function withOptionalHttpDocument(context: RuleEditorContext): RuleEditor
     ...context,
     content: { type: "http", value: { stages: [{
       ...stage,
-      document_fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
+      document_fields: [{ path: "/amount", label: "Amount", value_type: "number", item_template: false, predicates: ["equals"], actions: [
+        { kind: "set", target_kind: "node", target_value_type: "number", operand_value_type: "number" },
+        { kind: "clear", target_kind: "node", target_value_type: "number", operand_value_type: null },
+      ] }],
     }] } },
   } as unknown as RuleEditorContext;
 }
@@ -38,7 +73,10 @@ export function withSocketFields(context: RuleEditorContext): RuleEditorContext 
     ...context,
     content: { type: "socket", value: { ...context.content.value, stages: [{
       ...stage,
-      fields: [{ name: "/amount", label: "Amount", type: "number", operators: ["equals"], actions: ["set_field", "clear_field"] }],
+      document_fields: [{ path: "/amount", label: "Amount", value_type: "number", item_template: false, predicates: ["equals"], actions: [
+        { kind: "set", target_kind: "node", target_value_type: "number", operand_value_type: "number" },
+        { kind: "clear", target_kind: "node", target_value_type: "number", operand_value_type: null },
+      ] }],
     }] } },
   } as RuleEditorContext;
 }
@@ -56,12 +94,12 @@ export function withSecondHttpStage(
       stage: "proxy_to_app",
       http: {
         stage: "response",
-        match_field_kinds: ["path_or_request_type", "json_path"],
-        actions: actionKinds.map((kind) => ({ kind, terminal: false, traffic_direction: null })),
+        match_fields: stage.http?.match_fields ?? [],
+        actions: actionKinds.map((kind) => ({ kind, terminal: false, traffic_direction: null, parameters_required: true })),
       },
       new_rule_draft: {
         ...stage.new_rule_draft,
-        draft: { ...stage.new_rule_draft.draft, stage: "proxy_to_app" },
+        stage: "proxy_to_app",
       },
     }] } },
   };

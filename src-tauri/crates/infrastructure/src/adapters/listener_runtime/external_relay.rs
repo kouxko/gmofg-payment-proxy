@@ -14,7 +14,7 @@ use intercept_proxy_runtime::{
     SocketObservationMetadata, SocketProcessingFailure, SocketProtocolCapabilityFactory,
 };
 
-use super::ProtocolDocumentRuleConnectionFactory;
+use super::DocumentProgramFactory;
 use capabilities::{ExternalDecode, ExternalDisplay, ExternalFrame};
 
 mod capabilities;
@@ -33,9 +33,10 @@ pub(super) use diagnostics::trace_external_rpc_failure;
 /// 同一次 Listener 启动快照派生的双方向 capability factory。
 pub(super) struct ExternalSocketCapabilityFactoryAdapter {
     binding: ExternalSocketPackageBinding,
-    rules: ProtocolDocumentRuleConnectionFactory,
+    rules: DocumentProgramFactory,
     observation: SocketObservationMetadata,
     pipeline: Arc<dyn PipelinePorts>,
+    listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl ExternalSocketCapabilityFactoryAdapter {
@@ -49,6 +50,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
             rules: snapshot.rules.clone(),
             observation,
             pipeline,
+            listener_transaction: Arc::clone(&snapshot.listener_transaction),
         }
     }
 
@@ -82,8 +84,9 @@ impl ExternalSocketCapabilityFactoryAdapter {
                 binding.protocol_direction,
                 Arc::clone(&observed),
                 Arc::clone(&prepared),
-                self.rules.direction_programs(binding.protocol_direction),
+                self.rules.clone(),
                 package.clone(),
+                Arc::clone(&self.listener_transaction),
             )),
             Box::new(joint_socket::PreparedSocketEncode::<D>::new(prepared)),
         );

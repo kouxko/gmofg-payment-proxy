@@ -62,7 +62,11 @@ failIf(/rpc_timeout|max_in_flight|Semaphore|retry_|replay_|Busy/.test(code.sidec
 failIf(/rhai|manifest\.toml|protocol\.rhai|display\.rhai/.test(code.sidecar), "Phase8 Sidecar runtime must not reuse Rhai/TOML");
 failIf(/pub\s+fn\s+(?:test_export_json|call_export|invoke_export)/u.test(code.sidecar), "Sidecar runtime must not expose an arbitrary export invocation API");
 failIf(!phase9Active && /std::env|args\(|listen|connect|spawn|Command|WebSocket|registration_deadline|heartbeat/u.test(code.sidecarBin), "generic Phase8 executable must not invent Phase9 process or transport lifecycle");
-failIf(source.tauriConfig.includes("intercept-proxy-package-sidecar"), "Phase8 must not add the generic Sidecar to Tauri externalBin before packaging lifecycle is implemented");
+const tauri = JSON.parse(source.tauriConfig);
+failIf(
+  JSON.stringify(tauri.bundle?.externalBin) !== JSON.stringify(["binaries/intercept-proxy-package-sidecar"]),
+  "Tauri externalBin must bundle the generic Sidecar through the current packaging lifecycle",
+);
 
 failIf(!source.phase8Test.includes("required_exports_are_prechecked_without_calling_package_code"), "Phase8 tests must prove export precheck does not trial-call hooks");
 failIf(!source.phase8Test.includes("relative_esm_modules_are_evaluated_once_and_exports_are_cached"), "Phase8 tests must prove relative ESM one-time evaluation and cached exports");

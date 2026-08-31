@@ -145,11 +145,12 @@ export const commands = {
 	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
 	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
-	ruleDefinitionConditionDraft: (kind: RuleConditionKind, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_condition_draft", { kind, stage })),
-	ruleDefinitionActionDraft: (kind: RuleActionKind, stage: MessageStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { kind, stage })),
+	ruleDefinitionNthHitConditionDraft: (input: RuleNthHitConditionDraftInput) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_nth_hit_condition_draft", { input })),
+	ruleDefinitionHttpConditionDraft: (fieldKind: RuleMatchFieldKind, selector: string | null, operatorKind: RuleMatchOperatorKind, value: string, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_http_condition_draft", { fieldKind, selector, operatorKind, value, stage })),
+	ruleDefinitionActionDraft: (input: RuleHttpActionDraftInput, stage: MessageStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { input, stage })),
 	ruleDefinitionDocumentConditionDraft: (path: string, valueType: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_condition_draft", { path, valueType, predicate, raw })),
 	ruleDefinitionDocumentActionDraft: (path: string, valueType: RuleLocalDocumentValueType, action: RuleLocalDocumentActionKind, raw: string | null, index: number | null) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_action_draft", { path, valueType, action, raw, index })),
-	ruleDefinitionDocumentCommonActionDraft: (action: ProtocolRuleCommonActionCapability) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_common_action_draft", { action })),
+	ruleDefinitionDocumentCommonActionDraft: (action: RuleCommonActionCapability) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_common_action_draft", { action })),
 	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
 	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
 	ruleDefinitionSave: (input: RuleDefinitionSaveInput) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_save", { input })),
@@ -663,6 +664,12 @@ export type Condition =
 path: JsonPointer;
 /**  Strict predicate. */
 predicate: DocumentPredicate } |
+/**  A typed Document predicate whose condition-only path may contain `*` segments. */
+{ source: "document_pattern";
+/**  Condition-only match path. */
+path: DocumentMatchPath;
+/**  Strict predicate applied with ANY semantics to expanded values. */
+predicate: DocumentPredicate } |
 /**  Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree. */
 { source: "http";
 /**  Typed HTTP field. */
@@ -771,6 +778,13 @@ export type DisplayParams = {
 
 /**  Identity-free, owned recursive JSON document. */
 export type Document = DocumentValue;
+
+/**
+ *  Condition-only RFC 6901 path whose `*` token selects exactly one object/array level.
+ *
+ *  Mutation APIs deliberately continue to accept only [`JsonPointer`].
+ */
+export type DocumentMatchPath = string;
 
 /**  Strict Document mutation primitives shared by HTTP and Socket rules. */
 export type DocumentMutation =
@@ -1206,7 +1220,7 @@ export type HttpProtocolBodyViewModel = {
 	/**  由 Rust 在 Encode 输出 UTF-8 门禁后生成。 */
 	written_text: string,
 	document: Document,
-	stages: HttpProtocolRuleStageViewModel[],
+	stages: HttpRuleStageViewModel[],
 	display: HttpProtocolDisplayViewModel,
 };
 
@@ -1223,19 +1237,11 @@ export type HttpProtocolFailureKind = "input_not_utf8" | "decode_failed" | "rule
 export type HttpProtocolFailureViewModel = {
 	package: ProtocolPackageRef,
 	direction: ProtocolDirection,
-	stage: ProtocolRuleStage | null,
+	stage: RuleStage | null,
 	kind: HttpProtocolFailureKind,
 	code: string,
 	detail: string,
 	origin_body: number[],
-};
-
-/**  当前 HTTP 方向内一段独立规则程序的真实命中结果。 */
-export type HttpProtocolRuleStageViewModel = {
-	stage: ProtocolRuleStage,
-	matched_rule_ids: ProtocolDocumentRuleId[],
-	document: Document,
-	display: HttpProtocolDisplayViewModel,
 };
 
 export type HttpRuleContent = {
@@ -1245,13 +1251,21 @@ export type HttpRuleContent = {
 	document: HttpDocumentRuleContent | null,
 };
 
-export type HttpRuleEditorStage = {
+export type HttpRuleEditorStageViewModel = {
 	stage: RuleStage,
 	http: RuleStageCapabilityViewModel | null,
 	package: ProtocolPackageRef | null,
-	document_fields: ProtocolRuleFieldCapability[],
-	document_common_actions: ProtocolRuleCommonActionCapability[],
-	new_rule_draft: RuleDefinitionSaveInput,
+	document_fields: RuleDocumentSchemaFieldCapability[],
+	document_common_actions: RuleCommonActionCapability[],
+	new_rule_draft: RuleNewDefinitionDraft,
+};
+
+/**  当前 HTTP 方向内一段独立规则程序的真实命中结果。 */
+export type HttpRuleStageViewModel = {
+	stage: RuleStage,
+	matched_rule_ids: string[],
+	document: Document,
+	display: HttpProtocolDisplayViewModel,
 };
 
 export type JitterScope = "BeforeMessage" | "PerChunk";
@@ -1491,9 +1505,15 @@ export type ListenerUpstreamTlsTestViewModel = {
 	ui_tone: UiTone,
 };
 
-export type MatchField = "TerminalIp" | "CertificateFingerprint" | "PathOrRequestType" | { JsonPath: string };
+export type MatchField = "TerminalIp" | "CertificateFingerprint" |
+/**  Exact HTTP method token. */
+"Method" |
+/**  Request origin-form target: path plus optional query. */
+"RequestTarget" |
+/**  One case-insensitive HTTP header name written as a single-segment pointer. */
+{ Header: string };
 
-export type MatchOperator = ({ Equals: string }) & { Contains?: never; Regex?: never } | ({ Contains: string }) & { Equals?: never; Regex?: never } | ({ Regex: string }) & { Contains?: never; Equals?: never };
+export type MatchOperator = ({ Equals: string }) & { Contains?: never; EndsWith?: never; StartsWith?: never; Wildcard?: never } | ({ Contains: string }) & { EndsWith?: never; Equals?: never; StartsWith?: never; Wildcard?: never } | ({ StartsWith: string }) & { Contains?: never; EndsWith?: never; Equals?: never; Wildcard?: never } | ({ EndsWith: string }) & { Contains?: never; Equals?: never; StartsWith?: never; Wildcard?: never } | ({ Wildcard: string }) & { Contains?: never; EndsWith?: never; Equals?: never; StartsWith?: never };
 
 export type McpInfoViewModel = {
 	available: boolean,
@@ -1793,14 +1813,8 @@ export type PathMtuProfile = {
 /**  超过路径 MTU 时的处理语义。 */
 export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
 
-/**  协议 Document 在 App 与 Server 之间相对于代理的稳定数据方向。 */
-export type ProtocolDirection =
-/**  App 到 Server，或 `LocalResponder` 的请求方向。 */
-"upstream" |
-/**  Server 到 App，或 `LocalResponder` 的响应方向。 */
-"downstream";
-
-export type ProtocolDocumentRuleId = string;
+/**  Typed package Document direction relative to the proxy. */
+export type ProtocolDirection = "upstream" | "downstream";
 
 /**  协议包两个方向与公共 Display 的完整能力投影。 */
 export type ProtocolPackageCapabilitiesViewModel = {
@@ -2041,31 +2055,6 @@ export type ProtocolPackageVersionViewModel = {
 	installed_at: string,
 };
 
-export type ProtocolRuleCommonActionCapability = "record_match";
-
-export type ProtocolRuleFieldActionCapability = "set_field" | "clear_field";
-
-export type ProtocolRuleFieldCapability = {
-	name: string,
-	label: string,
-	type: ProtocolPackageSchemaFieldTypeViewModel,
-	operators: ProtocolRuleFieldOperatorCapability[],
-	actions: ProtocolRuleFieldActionCapability[],
-};
-
-export type ProtocolRuleFieldOperatorCapability = "equals";
-
-/**
- *  协议 Document 经过 App、Proxy、Server 边界时可独立配置的处理阶段。
- *
- *  阶段只表达处理位置，不表示连接、传输协议或可共享的运行时状态。
- */
-export type ProtocolRuleStage =
-/**  代理即将把报文发送给上游服务。 */
-"proxy_to_upstream" |
-/**  代理即将把报文返回给应用。 */
-"proxy_to_app";
-
 export type ProxyListener = {
 	id: ListenerId,
 	name: string,
@@ -2118,11 +2107,12 @@ export type RuleActionCapabilityViewModel = {
 	kind: RuleActionKind,
 	terminal: boolean,
 	traffic_direction: RuleTrafficDirection | null,
+	parameters_required: boolean,
 };
 
 export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
-export type RuleConditionKind = "field" | "nth_hit";
+export type RuleCommonActionCapability = "record_match";
 
 export type RuleContent = { type: "http"; value: HttpRuleContent } | { type: "socket"; value: SocketRuleContent };
 
@@ -2174,10 +2164,25 @@ export type RuleDefinition_Serialize = {
 	content: RuleContent,
 };
 
+export type RuleDocumentActionCapability = {
+	kind: RuleLocalDocumentActionKind,
+	target_kind: RuleDocumentActionTargetKind,
+	target_value_type: RuleLocalDocumentValueType,
+	operand_value_type: RuleLocalDocumentValueType | null,
+};
+
+export type RuleDocumentActionTargetKind = "node" | "array";
+
 export type RuleDocumentChangeViewModel = {
 	rule_id: RuleId,
 	matched: boolean,
 	operations: RuleDocumentOperationViewModel[],
+};
+
+export type RuleDocumentConditionPathCapability = {
+	wildcard_token: string,
+	wildcard_matches_exactly_one_level: boolean,
+	multiple_matches_use_any: boolean,
 };
 
 export type RuleDocumentOperationKindViewModel = "record_match" | "set" | "clear" | "insert" | "append";
@@ -2187,11 +2192,20 @@ export type RuleDocumentOperationViewModel = {
 	path: string | null,
 };
 
+export type RuleDocumentSchemaFieldCapability = {
+	path: string,
+	label: string,
+	value_type: RuleLocalDocumentValueType,
+	item_template: boolean,
+	predicates: RuleLocalDocumentPredicateKind[],
+	actions: RuleDocumentActionCapability[],
+};
+
 export type RuleEditorContentContext = { type: "http"; value: {
-	stages: HttpRuleEditorStage[],
+	stages: HttpRuleEditorStageViewModel[],
 } } | { type: "socket"; value: {
 	package: ProtocolPackageRef,
-	stages: SocketRuleEditorStage[],
+	stages: SocketRuleEditorStageViewModel[],
 } };
 
 /**  Rust-authoritative editor contract for one Listener. */
@@ -2199,6 +2213,12 @@ export type RuleEditorContext = {
 	listener_id: ListenerId,
 	content: RuleEditorContentContext,
 	local_document_types: RuleLocalDocumentTypeCapability[],
+	document_condition_path: RuleDocumentConditionPathCapability,
+};
+
+export type RuleHttpActionDraftInput = {
+	kind: RuleActionKind,
+	parameters_json: string | null,
 };
 
 export type RuleId = string;
@@ -2216,19 +2236,39 @@ export type RuleLocalDocumentPredicateKind = "equals" | "contains" | "starts_wit
 export type RuleLocalDocumentTypeCapability = {
 	value_type: RuleLocalDocumentValueType,
 	predicates: RuleLocalDocumentPredicateKind[],
-	actions: RuleLocalDocumentActionKind[],
+	actions: RuleDocumentActionCapability[],
 };
 
 export type RuleLocalDocumentValueType = "string" | "number" | "boolean" | "null" | "object" | "array";
 
-export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
+export type RuleMatchFieldCapabilityViewModel = {
+	kind: RuleMatchFieldKind,
+	operators: RuleMatchOperatorKind[],
+	selector: RuleMatchSelectorKind | null,
+};
+
+export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "method" | "request_target" | "header";
+
+export type RuleMatchOperatorKind = "equals" | "contains" | "starts_with" | "ends_with" | "wildcard";
+
+export type RuleMatchSelectorKind = "header_name_pointer";
+
+export type RuleNewDefinitionDraft = {
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleContent,
+};
+
+export type RuleNthHitConditionDraftInput = {
+	count: number,
+};
 
 export type RuleStage = "proxy_to_upstream" | "proxy_to_app" | "tls_handshake";
 
 /**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
 export type RuleStageCapabilityViewModel = {
 	stage: MessageStage,
-	match_field_kinds: RuleMatchFieldKind[],
+	match_fields: RuleMatchFieldCapabilityViewModel[],
 	actions: RuleActionCapabilityViewModel[],
 };
 
@@ -2418,11 +2458,11 @@ export type SocketRuleContent = {
 	actions: UnifiedAction[],
 };
 
-export type SocketRuleEditorStage = {
+export type SocketRuleEditorStageViewModel = {
 	stage: RuleStage,
-	fields: ProtocolRuleFieldCapability[],
-	common_actions: ProtocolRuleCommonActionCapability[],
-	new_rule_draft: RuleDefinitionSaveInput,
+	document_fields: RuleDocumentSchemaFieldCapability[],
+	common_actions: RuleCommonActionCapability[],
+	new_rule_draft: RuleNewDefinitionDraft,
 };
 
 /**  Socket 运行时所有内存队列和单次 OS read 的显式资源合同。 */

@@ -61,7 +61,7 @@ pub(crate) use lifecycle::{EnvironmentApplyWorker, EnvironmentCandidateRegistry}
 use listener::ListenerTemplate;
 use materials::EnvironmentMaterials;
 pub(crate) use preview::candidate_preview_snapshot;
-use rules::{HttpRuleTemplate, ProtocolDocumentRuleTemplate, RuleTemplate};
+use rules::RuleTemplate;
 pub use terminal::{
     DiagnosticSeverity, EnvironmentDiagnostic, EnvironmentDiagnosticScope, EnvironmentStatusCode,
     EnvironmentTerminalResult,

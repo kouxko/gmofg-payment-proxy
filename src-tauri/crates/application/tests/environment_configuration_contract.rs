@@ -34,8 +34,68 @@ fn workspace_rules_mut(value: &mut Value) -> &mut Vec<Value> {
 fn first_rule_mut<'a>(value: &'a mut Value, rule_type: &str) -> &'a mut Value {
     workspace_rules_mut(value)
         .iter_mut()
-        .find(|rule| rule["type"] == rule_type)
+        .find(|rule| rule["content"]["type"] == rule_type)
         .unwrap()
+}
+
+fn document_predicate(value: Value) -> Value {
+    match value {
+        Value::String(value) => json!({
+            "type": "string", "value": { "operator": "equal", "value": value }
+        }),
+        Value::Number(value) => json!({
+            "type": "number", "value": { "operator": "equal", "value": value }
+        }),
+        Value::Bool(value) => json!({ "type": "boolean", "value": { "equal": value } }),
+        Value::Null => json!({ "type": "null_equal" }),
+        value => json!({
+            "type": "string",
+            "value": { "operator": "equal", "value": value.to_string() }
+        }),
+    }
+}
+
+#[test]
+fn rules_use_authoritative_recursive_condition_tree_and_unified_actions_wire() {
+    let mut value = full_shape_value();
+    workspace_rules_mut(&mut value)[0] = json!({
+        "name": "Nested request rule",
+        "enabled": true,
+        "priority": 10,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "one_shot": false,
+        "content": {
+            "type": "http",
+            "value": {
+                "description": "authoritative tree",
+                "condition": {
+                    "operator": "any",
+                    "children": [
+                        {
+                            "operator": "leaf",
+                            "children": {
+                                "source": "http",
+                                "field": "Method",
+                                "operator": { "Equals": "POST" }
+                            }
+                        },
+                        {
+                            "operator": "leaf",
+                            "children": {
+                                "source": "nth_hit",
+                                "count": 2
+                            }
+                        }
+                    ]
+                },
+                "actions": [{ "source": "http", "value": "Pause" }],
+                "document": null
+            }
+        }
+    });
+
+    parse(&value).expect("environment wire accepts the authoritative rule tree directly");
 }
 
 #[test]
@@ -189,13 +249,14 @@ fn protocol_document_values_use_native_recursive_json_and_reject_unsafe_integers
         json!({"nested": "value"}),
     ] {
         let mut value = full_shape_value();
-        first_rule_mut(&mut value, "socket")["conditions"][0]["value"] = valid;
+        first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["children"][0]["children"]
+            ["predicate"] = document_predicate(valid);
         parse(&value).expect("native recursive JSON Document value is canonical");
     }
 
     let mut value = full_shape_value();
-    first_rule_mut(&mut value, "socket")["conditions"][0]["value"] =
-        json!(9_007_199_254_740_992_u64);
+    first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["children"][0]["children"]
+        ["predicate"] = document_predicate(json!(9_007_199_254_740_992_u64));
     assert!(parse(&value).is_err(), "unsafe Document integer accepted");
 }
 
@@ -226,7 +287,7 @@ fn existing_rule_id_may_not_be_reused_twice_in_one_candidate() {
         let mut value: Value = serde_json::from_slice(EXISTING_TARGET).unwrap();
         let duplicate = workspace_rules(&value)
             .iter()
-            .find(|rule| rule["type"] == rule_type)
+            .find(|rule| rule["content"]["type"] == rule_type)
             .unwrap()
             .clone();
         workspace_rules_mut(&mut value).push(duplicate);
@@ -283,9 +344,10 @@ fn canonical_fixture_contains_every_terminal_action_variant_once() {
     let fixture = full_shape_value();
     let actions = workspace_rules(&fixture)
         .iter()
-        .filter(|rule| rule["type"] == "http")
-        .flat_map(|rule| rule["actions"].as_array().unwrap())
-        .filter_map(|action| action.get("Terminal"))
+        .filter(|rule| rule["content"]["type"] == "http")
+        .flat_map(|rule| rule["content"]["value"]["actions"].as_array().unwrap())
+        .filter(|action| action["source"] == "terminal")
+        .map(|action| &action["value"])
         .map(|terminal| match terminal {
             Value::String(name) => name.as_str(),
             Value::Object(object) => object.keys().next().unwrap().as_str(),

@@ -3,33 +3,31 @@
 use std::sync::Arc;
 
 use intercept_proxy_application::{AppError, AppResult};
-#[cfg(test)]
-use intercept_proxy_domain::{ConditionTree, DomainError, ErrorCode, ProtocolDocumentRuleProgram};
 use intercept_proxy_domain::{
-    DocumentSchemaNode, ListenerId, ProtocolDirection, ProtocolPackageRef, ProtocolRuleStage,
-    ProxyListener, ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, SocketRuleContent,
-    SocketTopology, UnifiedRuleProgram, validate_unified_actions_schema,
+    DocumentSchemaNode, ListenerId, ProtocolDirection, ProtocolPackageRef, ProxyListener,
+    ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, SocketRuleContent, SocketTopology,
+    UnifiedRuleProgram, validate_unified_actions_schema,
 };
 use parking_lot::RwLock;
 
 #[derive(Clone)]
-pub struct ProtocolDocumentRuleConnectionFactory {
-    programs: Arc<RwLock<ProtocolDocumentRulePrograms>>,
+pub struct DocumentProgramFactory {
+    programs: Arc<RwLock<DocumentPrograms>>,
 }
 
 #[derive(Clone)]
-struct ProtocolDocumentRulePrograms {
+struct DocumentPrograms {
     listener_id: ListenerId,
     package: ProtocolPackageRef,
     proxy_to_upstream: Arc<UnifiedRuleProgram>,
     proxy_to_app: Arc<UnifiedRuleProgram>,
 }
 
-impl std::fmt::Debug for ProtocolDocumentRuleConnectionFactory {
+impl std::fmt::Debug for DocumentProgramFactory {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         let programs = self.programs.read();
         formatter
-            .debug_struct("ProtocolDocumentRuleConnectionFactory")
+            .debug_struct("DocumentProgramFactory")
             .field("listener_id", &programs.listener_id)
             .field("package", &programs.package)
             .field(
@@ -41,51 +39,15 @@ impl std::fmt::Debug for ProtocolDocumentRuleConnectionFactory {
     }
 }
 
-impl ProtocolDocumentRuleConnectionFactory {
-    #[cfg(test)]
+impl DocumentProgramFactory {
     pub(crate) fn new(
-        proxy_to_upstream: &ProtocolDocumentRuleProgram,
-        proxy_to_app: &ProtocolDocumentRuleProgram,
-    ) -> Result<Self, DomainError> {
-        let programs = [proxy_to_upstream, proxy_to_app];
-        let expected = [
-            ProtocolRuleStage::ProxyToUpstream,
-            ProtocolRuleStage::ProxyToApp,
-        ];
-        for (program, stage) in programs.iter().zip(expected) {
-            if program.stage() != stage {
-                return Err(binding_error(
-                    "factory.stage",
-                    "规则 Program 处理阶段不正确",
-                ));
-            }
-            if program.listener_id() != proxy_to_upstream.listener_id()
-                || program.package() != proxy_to_upstream.package()
-            {
-                return Err(binding_error(
-                    "factory.binding",
-                    "两个处理阶段必须绑定同一入口和协议包",
-                ));
-            }
-        }
-        Ok(Self {
-            programs: Arc::new(RwLock::new(ProtocolDocumentRulePrograms {
-                listener_id: proxy_to_upstream.listener_id(),
-                package: proxy_to_upstream.package().clone(),
-                proxy_to_upstream: Arc::new(unify_legacy_program(proxy_to_upstream)?),
-                proxy_to_app: Arc::new(unify_legacy_program(proxy_to_app)?),
-            })),
-        })
-    }
-
-    pub(crate) fn new_unified(
         listener_id: ListenerId,
         package: ProtocolPackageRef,
         proxy_to_upstream: Arc<UnifiedRuleProgram>,
         proxy_to_app: Arc<UnifiedRuleProgram>,
     ) -> Self {
         Self {
-            programs: Arc::new(RwLock::new(ProtocolDocumentRulePrograms {
+            programs: Arc::new(RwLock::new(DocumentPrograms {
                 listener_id,
                 package,
                 proxy_to_upstream,
@@ -105,64 +67,30 @@ impl ProtocolDocumentRuleConnectionFactory {
         }
     }
 
-    #[cfg(test)]
-    pub(crate) fn program(&self, stage: ProtocolRuleStage) -> Arc<UnifiedRuleProgram> {
-        let programs = self.programs.read();
-        match stage {
-            ProtocolRuleStage::ProxyToUpstream => Arc::clone(&programs.proxy_to_upstream),
-            ProtocolRuleStage::ProxyToApp => Arc::clone(&programs.proxy_to_app),
-        }
-    }
-
     pub(crate) fn replace(&self, replacement: &Self) {
         *self.programs.write() = replacement.programs.read().clone();
     }
-}
-
-#[cfg(test)]
-fn binding_error(field: &str, message: &str) -> DomainError {
-    DomainError::new(ErrorCode::RuleInvalid, "协议 Document 运行时绑定不一致")
-        .with_field_error(field, message)
-}
-
-#[cfg(test)]
-fn unify_legacy_program(
-    program: &ProtocolDocumentRuleProgram,
-) -> Result<UnifiedRuleProgram, DomainError> {
-    UnifiedRuleProgram::new(
-        program
-            .rules()
-            .iter()
-            .map(|rule| {
-                RuleProgramEntry::new(
-                    intercept_proxy_domain::RuleId::from_uuid(rule.rule_id().as_uuid()),
-                    rule.priority(),
-                    rule.created_order(),
-                    ConditionTree::from_document_conditions(rule.conditions().iter().cloned()),
-                    rule.actions().iter().cloned().map(Into::into).collect(),
-                )
-            })
-            .collect::<Result<Vec<_>, _>>()?,
-    )
 }
 
 pub(super) fn compile_document_rules(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
     package: &ProtocolPackageRef,
-    upstream_schema: &DocumentSchemaNode,
-    downstream_schema: &DocumentSchemaNode,
+    upstream_schema: Option<&DocumentSchemaNode>,
+    downstream_schema: Option<&DocumentSchemaNode>,
     topology: &SocketTopology,
-) -> AppResult<ProtocolDocumentRuleConnectionFactory> {
-    let compile = |stage: ProtocolRuleStage| {
+) -> AppResult<DocumentProgramFactory> {
+    let compile = |stage: RuleStage| {
         validate_rule_direction(stage, topology)?;
-        let schema = match stage.direction() {
-            ProtocolDirection::Upstream => upstream_schema,
-            ProtocolDirection::Downstream => downstream_schema,
-        };
-        let expected_stage = match stage {
-            ProtocolRuleStage::ProxyToUpstream => RuleStage::ProxyToUpstream,
-            ProtocolRuleStage::ProxyToApp => RuleStage::ProxyToApp,
+        let schema = match stage {
+            RuleStage::ProxyToUpstream => upstream_schema,
+            RuleStage::ProxyToApp => downstream_schema,
+            RuleStage::TlsHandshake => {
+                return Err(AppError::new(
+                    "PROTOCOL_RULE_DIRECTION_INVALID",
+                    "协议报文规则不支持 TLS 握手阶段。",
+                ));
+            }
         };
         let mut entries = Vec::new();
         for definition in &workspace.rule_definitions {
@@ -174,7 +102,7 @@ pub(super) fn compile_document_rules(
             else {
                 continue;
             };
-            if definition.listener_id() != listener.id || definition.stage() != expected_stage {
+            if definition.listener_id() != listener.id || definition.stage() != stage {
                 continue;
             }
             if rule_package != package {
@@ -184,8 +112,10 @@ pub(super) fn compile_document_rules(
                 )
                 .entity(definition.rule_id().to_string()));
             }
-            condition.validate_document_schema(schema)?;
-            validate_unified_actions_schema(actions, schema)?;
+            if let Some(schema) = schema {
+                condition.validate_document_schema(schema)?;
+                validate_unified_actions_schema(actions, schema)?;
+            }
             entries.push(RuleProgramEntry::new(
                 definition.rule_id(),
                 definition.priority(),
@@ -198,21 +128,18 @@ pub(super) fn compile_document_rules(
             .map(Arc::new)
             .map_err(AppError::from)
     };
-    Ok(ProtocolDocumentRuleConnectionFactory::new_unified(
+    Ok(DocumentProgramFactory::new(
         listener.id,
         package.clone(),
-        compile(ProtocolRuleStage::ProxyToUpstream)?,
-        compile(ProtocolRuleStage::ProxyToApp)?,
+        compile(RuleStage::ProxyToUpstream)?,
+        compile(RuleStage::ProxyToApp)?,
     ))
 }
 
-fn validate_rule_direction(stage: ProtocolRuleStage, topology: &SocketTopology) -> AppResult<()> {
+fn validate_rule_direction(stage: RuleStage, topology: &SocketTopology) -> AppResult<()> {
     match topology {
         SocketTopology::LocalResponder(_)
-            if !matches!(
-                stage,
-                ProtocolRuleStage::ProxyToUpstream | ProtocolRuleStage::ProxyToApp
-            ) =>
+            if !matches!(stage, RuleStage::ProxyToUpstream | RuleStage::ProxyToApp) =>
         {
             Err(AppError::new(
                 "PROTOCOL_RULE_DIRECTION_INVALID",
@@ -220,5 +147,72 @@ fn validate_rule_direction(stage: ProtocolRuleStage, topology: &SocketTopology) 
             ))
         }
         SocketTopology::Relay(_) | SocketTopology::LocalResponder(_) => Ok(()),
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use intercept_proxy_domain::{
+        Condition, ConditionTree, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
+        ProtocolPackageId, ProtocolPackageVersion, RuleDefinition, RuleDefinitionDraft,
+        StringOperator, StringPredicate, UnifiedAction,
+    };
+
+    use super::*;
+
+    #[test]
+    fn absent_socket_schema_keeps_root_condition_and_root_set_capability() {
+        let listener = ProxyListener::default();
+        let package = ProtocolPackageRef {
+            id: ProtocolPackageId::new("schema-free-socket").unwrap(),
+            version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+        };
+        let definition = RuleDefinition::create(
+            RuleDefinitionDraft {
+                name: "schema-free socket root".into(),
+                enabled: true,
+                priority: 1,
+                listener_id: listener.id,
+                stage: RuleStage::ProxyToUpstream,
+                one_shot: false,
+                content: RuleContent::Socket(SocketRuleContent {
+                    package: package.clone(),
+                    condition: ConditionTree::Leaf(Condition::Document {
+                        path: JsonPointer::root(),
+                        predicate: DocumentPredicate::String(StringPredicate {
+                            operator: StringOperator::Equal,
+                            value: "before".into(),
+                        }),
+                    }),
+                    actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                        path: JsonPointer::root(),
+                        value: DocumentValue::String("after".into()),
+                    })],
+                }),
+            },
+            1,
+        )
+        .unwrap();
+        let workspace = ProxyWorkspace {
+            rule_definitions: vec![definition],
+            ..ProxyWorkspace::default()
+        };
+
+        let programs = compile_document_rules(
+            &workspace,
+            &listener,
+            &package,
+            None,
+            None,
+            &SocketTopology::default(),
+        )
+        .unwrap();
+
+        assert_eq!(
+            programs.direction_programs(ProtocolDirection::Upstream)[0]
+                .rules()
+                .len(),
+            1
+        );
     }
 }

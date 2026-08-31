@@ -3,12 +3,12 @@ use intercept_proxy_domain::{
     ConditionTree, HttpDocumentRuleContent, HttpRuleContent, SocketRuleContent, UnifiedAction,
 };
 
-fn document_tree(conditions: Vec<ProtocolDocumentPredicate>) -> ConditionTree {
-    ConditionTree::from_document_conditions(conditions)
+fn document_tree(conditions: Vec<ConditionTree>) -> ConditionTree {
+    ConditionTree::All(conditions)
 }
 
-fn document_actions(actions: Vec<ProtocolDocumentOperation>) -> Vec<UnifiedAction> {
-    actions.into_iter().map(UnifiedAction::from).collect()
+fn document_actions(actions: Vec<UnifiedAction>) -> Vec<UnifiedAction> {
+    actions
 }
 
 fn http_tree(conditions: Vec<intercept_proxy_domain::Condition>) -> ConditionTree {
@@ -103,12 +103,7 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
 #[tokio::test]
 async fn unified_document_save_enforces_direction_decode_and_encode_capabilities() {
     for (case, decode, encode, actions) in [
-        (
-            "decode",
-            false,
-            true,
-            vec![ProtocolDocumentOperation::RecordMatch],
-        ),
+        ("decode", false, true, vec![UnifiedAction::RecordMatch]),
         (
             "encode",
             true,

@@ -7,8 +7,8 @@ use specta::Type;
 
 use super::{
     BreakpointId, ChannelId, DisabledReason, Document, MessageStage, PageRequest,
-    ProtocolDocumentRuleId, ProtocolPackageRef, ProtocolRuleStage, Revision, RuleId, RuntimeEpoch,
-    SessionId, SortDirection, UiTone,
+    ProtocolPackageRef, Revision, RuleId, RuleStage, RuntimeEpoch, SessionId, SortDirection,
+    UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -124,9 +124,9 @@ pub enum HttpProtocolDisplayFallbackReason {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 当前 HTTP 方向内一段独立规则程序的真实命中结果。
-pub struct HttpProtocolRuleStageViewModel {
-    pub stage: ProtocolRuleStage,
-    pub matched_rule_ids: Vec<ProtocolDocumentRuleId>,
+pub struct HttpRuleStageViewModel {
+    pub stage: RuleStage,
+    pub matched_rule_ids: Vec<RuleId>,
     pub document: Document,
     pub display: HttpProtocolDisplayViewModel,
 }
@@ -144,7 +144,7 @@ pub struct HttpProtocolBodyViewModel {
     /// 由 Rust 在 Encode 输出 UTF-8 门禁后生成。
     pub written_text: String,
     pub document: Document,
-    pub stages: Vec<HttpProtocolRuleStageViewModel>,
+    pub stages: Vec<HttpRuleStageViewModel>,
     pub display: HttpProtocolDisplayViewModel,
 }
 
@@ -165,7 +165,7 @@ pub enum HttpProtocolFailureKind {
 pub struct HttpProtocolFailureViewModel {
     pub package: ProtocolPackageRef,
     pub direction: intercept_proxy_domain::ProtocolDirection,
-    pub stage: Option<ProtocolRuleStage>,
+    pub stage: Option<RuleStage>,
     pub kind: HttpProtocolFailureKind,
     pub code: String,
     pub detail: String,

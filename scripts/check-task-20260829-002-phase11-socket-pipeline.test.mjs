@@ -16,16 +16,13 @@ const files = [
   "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/tests.rs",
-  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/tests/production_joint.rs",
   "src/generated/rust-types.ts",
   "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
   "src-tauri/crates/infrastructure/src/adapters/bundle.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime/support.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime.rs",
-  "src-tauri/crates/domain/src/workspace/runtime_projection.rs",
-  "src-tauri/crates/infrastructure/src/adapters/rules.rs",
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
   "src-tauri/crates/proxy/src/socket_relay/handler_support.rs",
-  "src-tauri/crates/domain/src/workspace/unified_projection.rs",
 ];
 function sandbox() {
   const target = fs.mkdtempSync(path.join(os.tmpdir(), "phase11-socket-"));
@@ -58,19 +55,25 @@ for (const [name, mutate] of [
   ["canonical base64 removed", replace(files[4], "CanonicalBase64::from_bytes(&original_input)", "CanonicalBase64::from_bytes(&[])")],
   ["actor encode removed", replace(files[5], "joint.encode().await", "unreachable!()")],
   ["retry added", replace(files[3], "//! Socket Document", "fn retry_with_queue_capacity() {}\n//! Socket Document")],
-  ["unchanged test removed", replace(files[8], "production_joint_pipeline_preserves_unchanged_bytes_without_encode_rpc", "missing_unchanged")],
-  ["changed test removed", replace(files[8], "production_joint_pipeline_changes_document_before_encode_rpc", "missing_changed")],
-  ["typed failure test removed", replace(files[8], "production_joint_pipeline_encode_failure_preserves_typed_identity", "missing_typed_failure")],
-  ["HTTP field added to Socket adapter", replace(files[9], "\tactions: UnifiedAction[]", "\theaders: string[]\n\tactions: UnifiedAction[]")],
-  ["actor rollback test removed", replace(files[10], "socket_encode_failure_rolls_back_lifecycle_before_successful_commit", "missing_actor_rollback")],
-  ["production assembly removed", replace(files[11], "ListenerRuntimePipelineAssembly", "MissingPipelineAssembly")],
-  ["runtime fixture bypasses production assembly", replace(files[12], "configure_listener_runtime_pipeline", "configure_test_pipeline")],
-  ["real SQLite transaction test removed", replace(files[13], "production_socket_pipeline_rolls_back_failure_and_commits_each_write_stage_once", "missing_real_transaction")],
-  ["Workspace projection regresses to HTTP only", replace(files[14], "pub fn runtime_rules", "pub fn missing_runtime_rules")],
-  ["repository snapshot regresses to HTTP only", replace(files[15], "workspace.runtime_rules()?", "workspace.http_runtime_rules()?")],
-  ["Socket actor uses listener epoch", replace(files[16], "runtime_epoch: run.workspace_runtime_epoch", "runtime_epoch: run.listener_run_epoch")],
-  ["Socket NthHit projection removed", replace(files[14], "actor_owned_socket_conditions(&content.condition)?", "Vec::new()")],
-  ["Relay stages collapse to one stage", replace(files[13], "ProtocolRuleStage::ProxyToApp,", "ProtocolRuleStage::ProxyToUpstream,")],
+  ["unchanged production assertion removed", replace(files[12], "assert!(harness.peer().encode_methods().is_empty())", "assert!(false)")],
+  ["changed production assertion removed", replace(files[12], 'assert_eq!(harness.peer().encode_methods(), ["hooks.upstream.encode"])', "assert!(false)")],
+  ["typed Encode failure trigger removed", replace(files[12], "harness.peer().fail_encode_once()", "missing_fail_encode_once()")],
+  ["HTTP field added to Socket adapter", replace(files[8], "\tactions: UnifiedAction[]", "\theaders: string[]\n\tactions: UnifiedAction[]")],
+  ["actor rollback test removed", replace(files[9], "socket_encode_failure_rolls_back_lifecycle_before_successful_commit", "missing_actor_rollback")],
+  ["production assembly removed", replace(files[10], "ListenerRuntimePipelineAssembly", "MissingPipelineAssembly")],
+  ["runtime fixture bypasses production assembly", replace(files[11], "configure_listener_runtime_pipeline", "configure_test_pipeline")],
+  ["real SQLite transaction test removed", replace(files[12], "production_socket_pipeline_rolls_back_failure_and_commits_each_write_stage_once", "missing_real_transaction")],
+  ["actor hot replace removed", replace(files[5], "current.counters.retain", "current.counters.clear")],
+  ["actor lifecycle checkpoint removed", replace(files[5], "let checkpoint = current.clone()", "let checkpoint = RuleRuntime::default()")],
+  ["RuleDefinition actor owner removed", replace(files[13], "rules: &[RuleDefinition]", "rules: &[LegacyRule]")],
+  ["Socket actor uses listener epoch", replace(files[14], "runtime_epoch: run.workspace_runtime_epoch", "runtime_epoch: run.listener_run_epoch")],
+  ["Socket typed NthHit forwarding removed", replace(files[13], "joint.gate(rule.rule_id().as_uuid(), nth_attempt)?", "joint.gate(rule.rule_id().as_uuid(), 1)?")],
+  ["actor lifecycle delta removed", replace(files[13], "rule.lifecycle_delta_for_successful_match", "legacy_lifecycle_delta")],
+  ["legacy RuleEngine re-enters actor", replace(files[5], "mod evaluation;", "mod evaluation;\nstruct RuleEngine;")],
+  ["legacy gate re-enters evaluation", replace(files[13], "use chrono::Utc;", "use chrono::Utc;\nfn evaluate_with_condition_gate_in_order() {}")],
+  ["legacy runtime_rules re-enters actor", replace(files[5], "mod evaluation;", "mod evaluation;\nfn runtime_rules() {}")],
+  ["legacy lifecycle replacement re-enters evaluation", replace(files[13], "use chrono::Utc;", "use chrono::Utc;\nfn replace_runtime_rule_lifecycle() {}")],
+  ["Relay stages collapse to one stage", replace(files[12], "RuleStage::ProxyToApp,", "RuleStage::ProxyToUpstream,")],
 ]) {
   test(`fails closed for ${name}`, () => {
     const target = sandbox();
@@ -78,3 +81,14 @@ for (const [name, mutate] of [
     assert.notEqual(run(target).status, 0);
   });
 }
+
+test("fails closed when Phase11 Cargo discovery drifts", () => {
+  const target = sandbox();
+  const result = spawnSync(process.execPath, [checker], {
+    cwd: target,
+    encoding: "utf8",
+    env: { ...process.env, PHASE11_CHECKER_TEST_MODE: "sandbox", PHASE11_DISCOVERY_COUNT: "0" },
+  });
+  assert.notEqual(result.status, 0);
+  assert.match(result.stderr, /expected 1 Phase11 production test/u);
+});

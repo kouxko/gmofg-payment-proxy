@@ -3,7 +3,7 @@
 use std::{sync::Arc, time::SystemTime};
 
 use async_trait::async_trait;
-use intercept_proxy_domain::{Document, ProtocolDirection, ProtocolPackageRef, UnifiedRuleProgram};
+use intercept_proxy_domain::{Document, ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_exchange::{Direction, Encode, Error, Rules, Socket, SocketContext};
 use intercept_proxy_runtime::{
     ChannelId, ConnectionContext, PipelinePorts, SocketConnectionIdentity, SocketPayloadDirection,
@@ -28,8 +28,9 @@ pub(super) struct JointSocketRules {
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     prepared: Arc<Mutex<Option<SocketContext>>>,
-    programs: [Arc<UnifiedRuleProgram>; 1],
+    programs: super::DocumentProgramFactory,
     package: ProtocolPackageRef,
+    listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl JointSocketRules {
@@ -42,8 +43,9 @@ impl JointSocketRules {
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
         prepared: Arc<Mutex<Option<SocketContext>>>,
-        programs: [Arc<UnifiedRuleProgram>; 1],
+        programs: super::DocumentProgramFactory,
         package: ProtocolPackageRef,
+        listener_transaction: Arc<tokio::sync::Mutex<()>>,
     ) -> Self {
         Self {
             pipeline,
@@ -55,6 +57,7 @@ impl JointSocketRules {
             prepared,
             programs,
             package,
+            listener_transaction,
         }
     }
 }
@@ -78,6 +81,8 @@ impl Rules for JointSocketRules {
             ProtocolDirection::Upstream => SocketPayloadDirection::AppToUpstream,
             ProtocolDirection::Downstream => SocketPayloadDirection::UpstreamToApp,
         };
+        let listener_transaction = Arc::clone(&self.listener_transaction).lock_owned().await;
+        let direction_programs = self.programs.direction_programs(self.direction);
         let evaluation = JointDocumentEvaluation::new_external_socket(
             document.clone(),
             observed.document,
@@ -85,8 +90,9 @@ impl Rules for JointSocketRules {
             Arc::clone(&self.rpc),
             self.direction,
             self.package.clone(),
-            self.programs.iter().cloned(),
-        );
+            direction_programs,
+        )
+        .with_listener_transaction(listener_transaction);
         let encoded = self
             .pipeline
             .apply_socket_policy(&context, payload_direction, Box::new(evaluation))
@@ -131,3 +137,7 @@ impl<D: Direction> Encode<Socket, D> for PreparedSocketEncode<D> {
         })
     }
 }
+
+#[cfg(test)]
+#[path = "joint_socket_tests.rs"]
+mod tests;

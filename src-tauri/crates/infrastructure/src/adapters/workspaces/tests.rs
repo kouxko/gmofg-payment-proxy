@@ -3,10 +3,10 @@ use intercept_proxy_application::{
 };
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
-    CertificateReference, CertificateReferenceId, CertificateReferenceKind, ChannelId, Condition,
+    CertificateReference, CertificateReferenceId, CertificateReferenceKind, Condition,
     DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings, HttpAction,
-    HttpListenerSettings, ListenerDataPlane, ListenerId, MessageStage, ProxyListener,
-    Revision as DomainRevision, Rule, RuleId, UpstreamTlsSettings, WeakNetworkProfile,
+    HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener, Revision as DomainRevision,
+    UpstreamTlsSettings, WeakNetworkProfile,
 };
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -99,8 +99,8 @@ fn copy_identity_remaps_nested_ids_and_references() {
     assert_eq!(workspace.revision, DomainRevision::INITIAL);
     assert_ne!(workspace.listeners[0].id, original.listeners[0].id);
     assert_ne!(
-        workspace.http_runtime_rules().unwrap()[0].id,
-        original.http_runtime_rules().unwrap()[0].id
+        workspace.rule_definitions[0].rule_id(),
+        original.rule_definitions[0].rule_id()
     );
     assert_ne!(
         workspace.android_network_profiles[0].id,
@@ -119,13 +119,7 @@ fn copy_identity_remaps_nested_ids_and_references() {
         http.downstream_tls.server_identity,
         Some(workspace.certificate_references[0].id)
     );
-    assert_eq!(
-        workspace.http_runtime_rules().unwrap()[0]
-            .channel
-            .as_ref()
-            .map(ChannelId::as_str),
-        Some(listener.id.to_string().as_str())
-    );
+    assert_eq!(workspace.rule_definitions[0].listener_id(), listener.id);
     assert_eq!(
         workspace.android_network_profiles[0].proxy_routes[0].listener_id,
         listener.id
@@ -222,24 +216,32 @@ fn referenced_workspace() -> ProxyWorkspace {
             weak_network: WeakNetworkProfile::default(),
         }],
     };
-    workspace
-        .replace_http_runtime_rules(vec![Rule {
-            id: RuleId::new(),
-            revision: DomainRevision::INITIAL,
-            name: "Rule".into(),
-            description: String::new(),
-            enabled: true,
-            priority: 1,
-            created_order: 1,
-            channel: Some(ChannelId::new(listener_id.to_string()).expect("channel")),
-            stage: MessageStage::Request,
-            conditions: vec![Condition::NthHit { count: 1 }],
-            actions: vec![HttpAction::Delay { milliseconds: 1 }],
-            one_shot: false,
-            hit_count: 0,
-            last_hit_at: None,
-        }])
-        .unwrap();
+    workspace.rule_definitions.push(
+        intercept_proxy_domain::RuleDefinition::create(
+            intercept_proxy_domain::RuleDefinitionDraft {
+                name: "Rule".into(),
+                enabled: true,
+                priority: 1,
+                listener_id,
+                stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
+                one_shot: false,
+                content: intercept_proxy_domain::RuleContent::Http(
+                    intercept_proxy_domain::HttpRuleContent {
+                        description: String::new(),
+                        condition: intercept_proxy_domain::ConditionTree::Leaf(Condition::NthHit {
+                            count: 1,
+                        }),
+                        actions: vec![intercept_proxy_domain::UnifiedAction::Http(
+                            HttpAction::Delay { milliseconds: 1 },
+                        )],
+                        document: None,
+                    },
+                ),
+            },
+            1,
+        )
+        .unwrap(),
+    );
     workspace.validate().expect("valid referenced workspace");
     workspace
 }

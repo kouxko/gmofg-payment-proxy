@@ -1,0 +1,69 @@
+import process from "node:process";
+import { spawnSync } from "node:child_process";
+import { cpSync, mkdirSync, mkdtempSync, rmSync } from "node:fs";
+import os from "node:os";
+import path from "node:path";
+
+if (process.platform !== "darwin") {
+  console.error("macOS Universal packaging requires macOS");
+  process.exit(2);
+}
+
+function run(command, args) {
+  const result = spawnSync(command, args, { stdio: "inherit" });
+  if (result.status !== 0) process.exit(result.status ?? 1);
+}
+
+for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
+  run(process.execPath, ["scripts/stage-package-sidecar.mjs", target]);
+}
+const universalSidecar =
+  "src-tauri/binaries/intercept-proxy-package-sidecar-universal-apple-darwin";
+run("lipo", [
+  "-create",
+  "src-tauri/binaries/intercept-proxy-package-sidecar-aarch64-apple-darwin",
+  "src-tauri/binaries/intercept-proxy-package-sidecar-x86_64-apple-darwin",
+  "-output",
+  universalSidecar,
+]);
+run("chmod", ["755", universalSidecar]);
+run("lipo", [universalSidecar, "-verify_arch", "arm64", "x86_64"]);
+run("pnpm", [
+  "exec",
+  "tauri",
+  "build",
+  "--target",
+  "universal-apple-darwin",
+  "--bundles",
+  "app",
+  "--features",
+  "macos-universal-vendored-openssl",
+]);
+run(process.execPath, ["scripts/sign-macos-app.mjs"]);
+const app = path.resolve(
+  "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app",
+);
+const dmgDirectory = path.resolve(
+  "src-tauri/target/universal-apple-darwin/release/bundle/dmg",
+);
+const dmg = path.join(dmgDirectory, "Intercept Proxy_1.0.0_universal.dmg");
+const dmgSource = mkdtempSync(path.join(os.tmpdir(), "intercept-proxy-dmg-"));
+try {
+  cpSync(app, path.join(dmgSource, "Intercept Proxy.app"), { recursive: true });
+  mkdirSync(dmgDirectory, { recursive: true });
+  rmSync(dmg, { force: true });
+  run("diskutil", [
+    "image",
+    "create",
+    "from",
+    "--format",
+    "UDZO",
+    "--volumeName",
+    "Intercept Proxy",
+    dmgSource,
+    dmg,
+  ]);
+} finally {
+  rmSync(dmgSource, { recursive: true, force: true });
+}
+run(process.execPath, ["scripts/verify-macos-universal.mjs"]);

@@ -4,9 +4,9 @@ import { Alert, Chip, Tabs } from "@heroui/react";
 import type {
   Document,
   HttpProtocolDisplayFallbackReason,
-  HttpProtocolRuleStageViewModel,
+  HttpRuleStageViewModel,
   MessageContentViewModel,
-  ProtocolRuleStage,
+  RuleStage,
 } from "@/generated/rust-types";
 import { ProtocolSafeDisplay } from "./protocol-safe-display";
 import { HttpBodyViewer } from "./http-inspection";
@@ -27,7 +27,7 @@ function DocumentView({ document }: { document: Document }) {
 function ProtocolView({
   document,
   display,
-}: Pick<HttpProtocolRuleStageViewModel, "document" | "display">) {
+}: Pick<HttpRuleStageViewModel, "document" | "display">) {
   if (display.kind === "untrusted_html") {
     return <ProtocolSafeDisplay html={display.html} />;
   }
@@ -57,7 +57,7 @@ function ProtocolBodyText({ label, text }: { label: string; text: string }) {
   );
 }
 
-const STAGE_LABELS: Record<ProtocolRuleStage, string> = {
+const STAGE_LABELS: Partial<Record<RuleStage, string>> = {
   proxy_to_upstream: "代理 → 上游服务",
   proxy_to_app: "代理 → 应用",
 };

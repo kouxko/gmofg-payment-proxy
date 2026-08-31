@@ -31,6 +31,7 @@ pub trait PipelinePorts: HandshakePolicy {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &HttpRequestMetadata,
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(Vec::new())
@@ -38,6 +39,7 @@ pub trait PipelinePorts: HandshakePolicy {
     async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &HttpRequestMetadata,
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(Vec::new())
@@ -57,6 +59,27 @@ pub trait PipelinePorts: HandshakePolicy {
     }
     async fn connection_closed(&self, _context: &ConnectionContext, _result: &Result<()>) {}
     async fn runtime_fault(&self, _epoch: Uuid, _channel: ChannelId, _error: &ProxyError) {}
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct HttpRequestMetadata {
+    pub method: String,
+    pub request_target: String,
+}
+
+impl HttpRequestMetadata {
+    pub fn from_method_and_uri(method: &Method, uri: &Uri) -> Result<Self> {
+        let request_target = uri.path_and_query().ok_or_else(|| {
+            ProxyError::new(
+                crate::ErrorCode::ConfigInvalid,
+                "HTTP request URI has no path-and-query target",
+            )
+        })?;
+        Ok(Self {
+            method: method.as_str().to_owned(),
+            request_target: request_target.as_str().to_owned(),
+        })
+    }
 }
 
 #[derive(Debug, Default)]

@@ -1,10 +1,11 @@
 use std::collections::BTreeMap;
 
 use intercept_proxy_domain::{
-    BooleanPredicate, Condition, ConditionTree, Document, DocumentMutation, DocumentNumber,
-    DocumentPredicate, DocumentSchemaNode, DocumentValue, DocumentValueType, JsonPointer,
-    NumberOperator, NumberPredicate, RuleId, RuleProgramEntry, StringOperator, StringPredicate,
-    TerminalAction, UnifiedAction, UnifiedRuleProgram,
+    BooleanPredicate, Condition, ConditionTree, Document, DocumentMatchPath, DocumentMutation,
+    DocumentNumber, DocumentPredicate, DocumentSchemaNode, DocumentValue, DocumentValueType,
+    JsonPointer, NumberOperator, NumberPredicate, RuleId, RuleProgramEntry, StringOperator,
+    StringPredicate, TerminalAction, UnifiedAction, UnifiedRuleProgram,
+    validate_unified_actions_schema,
 };
 use uuid::Uuid;
 
@@ -240,6 +241,101 @@ fn schema_declared_paths_validate_and_undeclared_paths_keep_rule_local_type() {
         undeclared.document_path_types(),
         BTreeMap::from([(path("/custom"), DocumentValueType::String)])
     );
+}
+
+#[test]
+fn schema_rejects_document_pattern_predicate_type_at_array_item_wildcard() {
+    let schema = DocumentSchemaNode::Object {
+        title: None,
+        properties: BTreeMap::from([(
+            "items".into(),
+            DocumentSchemaNode::Array {
+                title: None,
+                items: Box::new(DocumentSchemaNode::String { title: None }),
+            },
+        )]),
+    };
+    let condition = ConditionTree::Leaf(Condition::DocumentPattern {
+        path: DocumentMatchPath::parse("/items/*").expect("valid wildcard path"),
+        predicate: DocumentPredicate::Number(NumberPredicate {
+            operator: NumberOperator::Equal,
+            value: DocumentNumber::new(1.0).expect("number"),
+        }),
+    });
+
+    condition
+        .validate_document_schema(&schema)
+        .expect_err("array item schema is string, so a number predicate must be rejected");
+}
+
+#[test]
+fn schema_rejects_clear_value_type_that_disagrees_with_declared_path() {
+    let schema = DocumentSchemaNode::Object {
+        title: None,
+        properties: BTreeMap::from([("name".into(), DocumentSchemaNode::String { title: None })]),
+    };
+    let actions = [UnifiedAction::Document(DocumentMutation::Clear {
+        path: path("/name"),
+        value_type: DocumentValueType::Number,
+    })];
+
+    validate_unified_actions_schema(&actions, &schema)
+        .expect_err("Clear metadata type must agree with the declared schema path");
+}
+
+#[test]
+fn schema_enforces_insert_append_array_target_and_nested_item_type() {
+    let schema = DocumentSchemaNode::Object {
+        title: None,
+        properties: BTreeMap::from([
+            ("name".into(), DocumentSchemaNode::String { title: None }),
+            (
+                "matrix".into(),
+                DocumentSchemaNode::Array {
+                    title: None,
+                    items: Box::new(DocumentSchemaNode::Array {
+                        title: None,
+                        items: Box::new(DocumentSchemaNode::Number { title: None }),
+                    }),
+                },
+            ),
+        ]),
+    };
+    let number = || DocumentValue::Number(DocumentNumber::new(1.0).expect("number"));
+
+    validate_unified_actions_schema(
+        &[UnifiedAction::Document(DocumentMutation::Insert {
+            path: path("/name"),
+            index: 0,
+            value: DocumentValue::String("invalid target".into()),
+        })],
+        &schema,
+    )
+    .expect_err("Insert target declared as a string must be rejected");
+    validate_unified_actions_schema(
+        &[UnifiedAction::Document(DocumentMutation::Append {
+            path: path("/name"),
+            value: DocumentValue::String("invalid target".into()),
+        })],
+        &schema,
+    )
+    .expect_err("Append target declared as a string must be rejected");
+    validate_unified_actions_schema(
+        &[UnifiedAction::Document(DocumentMutation::Append {
+            path: path("/matrix"),
+            value: number(),
+        })],
+        &schema,
+    )
+    .expect_err("nested array target requires one complete array item operand");
+    validate_unified_actions_schema(
+        &[UnifiedAction::Document(DocumentMutation::Append {
+            path: path("/matrix"),
+            value: DocumentValue::Array(vec![number()]),
+        })],
+        &schema,
+    )
+    .expect("nested array target accepts an operand matching its array item schema");
 }
 
 #[test]

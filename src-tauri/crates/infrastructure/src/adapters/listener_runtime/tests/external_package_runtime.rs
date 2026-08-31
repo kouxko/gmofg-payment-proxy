@@ -5,9 +5,9 @@
 
 use intercept_proxy_application::{ExternalPackageApplicationPort, ListenerRuntimePort};
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentValue, JsonPointer, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolRuleStage, RuleContent,
+    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
+    NumberOperator, NumberPredicate, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
+    SocketRuleContent, UnifiedAction,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::{TcpListener, TcpStream};
@@ -300,53 +300,68 @@ async fn socket_roundtrip(listener: std::net::SocketAddr, request: [u8; 3]) -> V
     response
 }
 
+fn document_number(value: i64) -> intercept_proxy_domain::DocumentNumber {
+    let DocumentValue::Number(value) = DocumentValue::integer(value).unwrap() else {
+        unreachable!("integer factory must create a number")
+    };
+    value
+}
+
 fn two_stage_one_shot_rules(
     listener: &intercept_proxy_domain::ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
-) -> Vec<ProtocolDocumentRuleDefinition> {
+) -> Vec<RuleDefinition> {
     [
         (
-            ProtocolRuleStage::ProxyToUpstream,
+            RuleStage::ProxyToUpstream,
             10,
             1,
-            vec![ProtocolDocumentPredicate::Equals {
-                field: JsonPointer::parse("/payload/1").unwrap(),
-                value: DocumentValue::integer(i64::from(b'a')).unwrap(),
-            }],
+            JsonPointer::parse("/payload/1").unwrap(),
+            i64::from(b'a'),
             JsonPointer::parse("/payload/1").unwrap(),
             b'x',
         ),
         (
-            ProtocolRuleStage::ProxyToApp,
+            RuleStage::ProxyToApp,
             20,
             2,
-            vec![ProtocolDocumentPredicate::Equals {
-                field: JsonPointer::parse("/payload/1").unwrap(),
-                value: DocumentValue::integer(i64::from(b'x')).unwrap(),
-            }],
+            JsonPointer::parse("/payload/1").unwrap(),
+            i64::from(b'x'),
             JsonPointer::parse("/payload/2").unwrap(),
             b'y',
         ),
     ]
     .into_iter()
-    .map(|(stage, priority, order, conditions, field, value)| {
-        ProtocolDocumentRuleDefinition::new_named_for_stage(
-            ProtocolDocumentRuleId::new(),
-            format!("production {stage:?}"),
-            true,
-            priority,
-            order,
-            listener.id,
-            package.clone(),
-            stage,
-            conditions,
-            vec![ProtocolDocumentOperation::SetField {
-                field,
-                value: DocumentValue::integer(i64::from(value)).unwrap(),
-            }],
-        )
-        .unwrap()
-    })
+    .map(
+        |(stage, priority, order, condition_path, condition_value, field, value)| {
+            RuleDefinition::create(
+                RuleDefinitionDraft {
+                    name: format!("production {stage:?}"),
+                    enabled: true,
+                    priority,
+                    listener_id: listener.id,
+                    stage,
+                    one_shot: false,
+                    content: RuleContent::Socket(SocketRuleContent {
+                        package: package.clone(),
+                        condition: ConditionTree::Leaf(Condition::Document {
+                            path: condition_path,
+                            predicate: DocumentPredicate::Number(NumberPredicate {
+                                operator: NumberOperator::Equal,
+                                value: document_number(condition_value),
+                            }),
+                        }),
+                        actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                            path: field,
+                            value: DocumentValue::integer(i64::from(value)).unwrap(),
+                        })],
+                    }),
+                },
+                order,
+            )
+            .unwrap()
+        },
+    )
     .collect()
 }
 

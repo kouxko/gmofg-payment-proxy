@@ -41,9 +41,10 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
 #[test]
 fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_binding() {
     use intercept_proxy_domain::{
-        ProtocolDirection, ProtocolDocumentOperation, ProtocolDocumentRuleDefinition,
-        ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+        Condition, ConditionTree, DocumentPredicate, ProtocolPackageId, ProtocolPackageRef,
+        ProtocolPackageVersion, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
         ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
+        SocketRuleContent, StringOperator, StringPredicate, UnifiedAction,
     };
 
     let package = ProtocolPackageRef {
@@ -63,32 +64,36 @@ fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_b
             package: package.clone(),
         }),
     ));
-    let rule_id = ProtocolDocumentRuleId::new();
-    let mut rule = ProtocolDocumentRuleDefinition::new(
-        rule_id,
-        true,
-        -7,
+    let rule = RuleDefinition::create(
+        RuleDefinitionDraft {
+            name: "copy fixture".into(),
+            enabled: false,
+            priority: -7,
+            listener_id: old_listener_id,
+            stage: RuleStage::ProxyToUpstream,
+            one_shot: false,
+            content: RuleContent::Socket(SocketRuleContent {
+                package,
+                condition: ConditionTree::Leaf(Condition::Document {
+                    path: intercept_proxy_domain::JsonPointer::property("trace_id"),
+                    predicate: DocumentPredicate::String(StringPredicate {
+                        operator: StringOperator::Equal,
+                        value: "phase5".into(),
+                    }),
+                }),
+                actions: vec![UnifiedAction::RecordMatch],
+            }),
+        },
         42,
-        old_listener_id,
-        package,
-        ProtocolDirection::Upstream,
-        vec![intercept_proxy_domain::ProtocolDocumentPredicate::Equals {
-            field: intercept_proxy_domain::JsonPointer::property("trace_id"),
-            value: intercept_proxy_domain::DocumentValue::String("phase5".into()),
-        }],
-        vec![ProtocolDocumentOperation::RecordMatch],
     )
     .unwrap();
-    rule.toggle(rule.revision(), false).unwrap();
+    let rule_id = rule.rule_id();
     workspace.rule_created_order_high_water = rule.created_order();
-    workspace
-        .replace_document_runtime_rules(vec![rule])
-        .unwrap();
+    workspace.rule_definitions = vec![rule];
 
     remap_workspace_identity(&mut workspace).unwrap();
 
-    let remapped_rules = workspace.document_runtime_rules().unwrap();
-    let remapped = &remapped_rules[0];
+    let remapped = &workspace.rule_definitions[0];
     assert_ne!(remapped.rule_id(), rule_id);
     assert_eq!(
         remapped.revision(),

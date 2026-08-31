@@ -1,7 +1,4 @@
-use crate::{
-    Condition, ConditionTree, DomainError, HttpAction, MessageStage, RuleDraft, UnifiedAction,
-    validate_rule_draft,
-};
+use crate::{Condition, ConditionTree, DomainError, HttpAction, MessageStage, UnifiedAction};
 
 use super::{HttpRuleContent, RuleDefinition, RuleStage, rule_binding_error};
 
@@ -28,21 +25,7 @@ pub(super) fn validate_http_runtime_content(
         RuleStage::ProxyToApp => MessageStage::Response,
         RuleStage::TlsHandshake => MessageStage::TlsHandshake,
     };
-    let priority = u32::try_from(definition.priority)
-        .map_err(|_| rule_binding_error("priority", "HTTP 规则优先级不能为负数"))?;
-    validate_rule_draft(&RuleDraft {
-        expected_revision: Some(definition.revision),
-        name: definition.name.clone(),
-        description: content.description.clone(),
-        enabled: definition.enabled,
-        priority,
-        created_order: definition.created_order,
-        channel: None,
-        stage,
-        conditions,
-        actions,
-        one_shot: definition.one_shot,
-    })
+    crate::validate_http_rule(stage, &content.condition, &actions)
 }
 
 fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<Condition>) {
@@ -53,7 +36,11 @@ fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<Condition>) {
             }
         }
         ConditionTree::Leaf(condition @ Condition::Http { .. }) => output.push(condition.clone()),
-        ConditionTree::Leaf(Condition::Document { .. } | Condition::NthHit { .. }) => {}
+        ConditionTree::Leaf(
+            Condition::Document { .. }
+            | Condition::DocumentPattern { .. }
+            | Condition::NthHit { .. },
+        ) => {}
     }
 }
 

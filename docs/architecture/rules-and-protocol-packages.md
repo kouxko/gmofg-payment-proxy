@@ -30,10 +30,21 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
 不能依赖前端隐藏非法选项。
 
+HTTP 条件只有一套当前合同：Method、request target、Header、终端 IP 和证书指纹。request target 是
+请求入口捕获的原始 `/path?query`；同一 transaction 把这份不可变请求元数据传给请求与响应两个阶段，
+响应阶段不得从 status line 重建目标，也不得加入 scheme、host、port 或规范化。Header selector 是
+单层 `/name`，名称按 ASCII 大小写不敏感，重复字段按 ANY 匹配。Method 只支持 Equals；其他字符串
+字段由 Rust capability 声明 Equals、Contains、StartsWith、EndsWith、Wildcard。
+
+Document 条件路径使用 RFC 6901 扩展：完整 token `*` 只展开一个 object/array 层，多个结果按 ANY
+判断。Schema 只提供递归路径选择能力，手动路径始终由同一 Rust factory 校验；无 Schema 时不生成
+前端默认字段。Document mutation 继续只接受精确 RFC 6901 路径。旧 `PathOrRequestType`、HTTP
+`JsonPath` field 和 Regex operator 已物理删除，不存在 alias、fallback 或双执行路径。
+
 每个 Listener/epoch 使用不可变规则快照，规则排序为：
 
 ```text
-(priority 升序, created_order 升序, rule_id 升序)
+(priority 升序, rule_id 升序)
 ```
 
 NthHit counter 由 actor 唯一持有。统一 Document gate 返回 typed condition evaluation；普通 HTTP 条件
@@ -52,7 +63,7 @@ Proxy -> App:    working Document 条件 -> 有序 action -> Encode -> write
 ```
 
 每个方向开始时从 Decode 结果创建私有 working Document。规则按
-`(priority, created_order, rule_id)` 顺序执行；每条 condition 读取当前 working state，命中的 action
+`(priority, rule_id)` 顺序执行；`created_order` 仅用于编辑历史展示，不参与运行时排序。每条 condition 读取当前 working state，命中的 action
 立即更新它并供后序规则条件观察。方向完成后只 Encode 一次。Document、普通 HTTP action、Encode
 与 actor delta 作为一个事务提交，全部成功才一次提交 lifecycle，任一步失败都回滚。
 

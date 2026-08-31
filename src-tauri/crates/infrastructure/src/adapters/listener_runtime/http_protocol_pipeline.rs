@@ -4,19 +4,11 @@
 //! Decode、Display、Rules、Encode 由 Exchange Pipeline 按固定顺序分别调用。每个 capability
 //! 只进入 Sidecar JSON-RPC 的一个固定阶段方法，避免旧组合 processor 隐藏或重复执行阶段。
 
-use std::{
-    collections::BTreeMap,
-    fmt,
-    sync::{
-        Arc,
-        atomic::{AtomicU64, Ordering},
-    },
-};
+use std::{fmt, sync::Arc};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    BodyCodecKind, DocumentSchemaNode, HttpBodyProcessing, ProtocolDirection, ProtocolRuleStage,
-    ProxyListener, ProxyWorkspace,
+    BodyCodecKind, HttpBodyProcessing, ProtocolDirection, ProxyListener, ProxyWorkspace,
 };
 use intercept_proxy_exchange::{Direction, Downstream, Error, Upstream};
 use intercept_proxy_package_contract::PackageKind;
@@ -45,9 +37,9 @@ pub(super) struct HttpProtocolRuntimeSnapshot {
     request_codec: BodyCodecKind,
     response_codec: BodyCodecKind,
     programs: Arc<RwLock<HttpDocumentRulePrograms>>,
-    rule_generation: Arc<AtomicU64>,
     metadata: HttpObservationMetadata,
     joint_rules: Arc<JointHttpRuleRuntime>,
+    listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
 impl fmt::Debug for HttpProtocolRuntimeSnapshot {
@@ -70,6 +62,11 @@ impl HttpProtocolRuntimeSnapshot {
     #[cfg(test)]
     pub(super) fn joint_runtime(&self) -> Arc<JointHttpRuleRuntime> {
         Arc::clone(&self.joint_rules)
+    }
+
+    #[cfg(test)]
+    pub(super) fn rule_count(&self, direction: ProtocolDirection) -> usize {
+        self.programs.read().program(direction).rules().len()
     }
 
     pub(super) async fn prepare_async(
@@ -111,32 +108,26 @@ impl HttpProtocolRuntimeSnapshot {
         let workspace_for_compile = workspace.clone();
         let listener_for_compile = listener.clone();
         let package_for_compile = package.clone();
-        let fallback_schema = DocumentSchemaNode::Object {
-            title: None,
-            properties: BTreeMap::new(),
-        };
         let upstream_schema = binding
             .registration()
             .document()
             .upstream()
             .schema()
-            .unwrap_or(&fallback_schema)
-            .clone();
+            .cloned();
         let downstream_schema = binding
             .registration()
             .document()
             .downstream()
             .schema()
-            .unwrap_or(&fallback_schema)
-            .clone();
+            .cloned();
         let programs = adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
                     &workspace_for_compile,
                     &listener_for_compile,
                     &package_for_compile,
-                    &upstream_schema,
-                    &downstream_schema,
+                    upstream_schema.as_ref(),
+                    downstream_schema.as_ref(),
                 )
             })
             .await?;
@@ -145,35 +136,34 @@ impl HttpProtocolRuntimeSnapshot {
             request_codec: http.request_body_codec,
             response_codec: http.response_body_codec,
             programs: Arc::new(RwLock::new(programs)),
-            rule_generation: Arc::new(AtomicU64::new(0)),
             metadata: HttpObservationMetadata {
                 workspace_id: workspace.id.to_string(),
                 listener_id: listener.id.to_string(),
             },
             joint_rules: Arc::clone(&adapter.joint_http_rules),
+            listener_transaction: adapter.environment_apply_resource_gates.gate(
+                &super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
+                    listener.id.as_uuid(),
+                ),
+            ),
         })))
     }
 
-    pub(super) async fn replace_document_rules(
+    pub(super) async fn compile_replacement(
         &self,
         adapter: &ListenerRuntimeAdapter,
         workspace: &ProxyWorkspace,
         listener: &ProxyListener,
-    ) -> AppResult<()> {
+    ) -> AppResult<HttpDocumentRulePrograms> {
         let intercept_proxy_domain::ListenerDataPlane::Http(http) = &listener.data_plane else {
-            return Ok(());
+            return Ok(self.programs.read().clone());
         };
         let HttpBodyProcessing::Protocol { package } = &http.body_processing else {
-            return Ok(());
+            return Ok(self.programs.read().clone());
         };
-        let generation = self.rule_generation.fetch_add(1, Ordering::AcqRel) + 1;
         let workspace = workspace.clone();
         let listener = listener.clone();
         let package = package.clone();
-        let fallback_schema = DocumentSchemaNode::Object {
-            title: None,
-            properties: BTreeMap::new(),
-        };
         let Some(binding) = &self.external else {
             return Err(AppError::new(
                 "EXTERNAL_PACKAGE_NOT_FOUND",
@@ -187,42 +177,38 @@ impl HttpProtocolRuntimeSnapshot {
                 .document()
                 .upstream()
                 .schema()
-                .unwrap_or(&fallback_schema)
-                .clone(),
+                .cloned(),
             binding
                 .registration()
                 .document()
                 .downstream()
                 .schema()
-                .unwrap_or(&fallback_schema)
-                .clone(),
+                .cloned(),
         );
-        let replacement = adapter
+        adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
                     &workspace,
                     &listener,
                     &package,
-                    &upstream_schema,
-                    &downstream_schema,
+                    upstream_schema.as_ref(),
+                    downstream_schema.as_ref(),
                 )
             })
-            .await?;
-        if self.rule_generation.load(Ordering::Acquire) == generation {
-            *self.programs.write() = replacement;
-        }
-        Ok(())
+            .await
+    }
+
+    pub(super) fn publish_replacement(&self, replacement: HttpDocumentRulePrograms) {
+        *self.programs.write() = replacement;
     }
 
     fn build<D: Direction>(
         &self,
         connection: &HttpConnectionIdentity,
         direction: ProtocolDirection,
-        stage: ProtocolRuleStage,
         response: bool,
     ) -> Result<HttpDirectionCapabilities<D>, Error> {
         if let Some(binding) = &self.external {
-            let programs = self.programs.read();
             return Ok(external_http::build_capabilities(
                 Arc::clone(&self.joint_rules),
                 connection,
@@ -234,7 +220,8 @@ impl HttpProtocolRuntimeSnapshot {
                     self.request_codec
                 },
                 binding,
-                [programs.program(stage)],
+                Arc::clone(&self.programs),
+                Arc::clone(&self.listener_transaction),
             ));
         }
         Err(Error::new(
@@ -252,23 +239,13 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Upstream>, Error> {
-        self.build(
-            &connection,
-            ProtocolDirection::Upstream,
-            ProtocolRuleStage::ProxyToUpstream,
-            false,
-        )
+        self.build(&connection, ProtocolDirection::Upstream, false)
     }
 
     fn create_downstream(
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Downstream>, Error> {
-        self.build(
-            &connection,
-            ProtocolDirection::Downstream,
-            ProtocolRuleStage::ProxyToApp,
-            true,
-        )
+        self.build(&connection, ProtocolDirection::Downstream, true)
     }
 }

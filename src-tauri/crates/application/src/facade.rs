@@ -7,8 +7,6 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use chrono::Utc;
 
-#[cfg(test)]
-use crate::RuleRepositoryPort;
 use crate::{
     AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
     BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
@@ -40,8 +38,6 @@ mod protocol_package_portability;
 pub use protocol_package_portability::validate_portable_protocol_bindings;
 mod protocol_packages;
 mod protocol_rule_values;
-#[cfg(test)]
-mod protocol_rules;
 mod rule_capabilities;
 mod rules;
 mod secrets;
@@ -64,8 +60,6 @@ pub struct Application {
     sessions: Arc<dyn SessionQueryPort>,
     breakpoints: Arc<BreakpointCoordinator>,
     breakpoint_validation: Arc<dyn BreakpointValidationPort>,
-    #[cfg(test)]
-    rules: Arc<dyn RuleRepositoryPort>,
     faults: Arc<dyn FaultServicePort>,
     certificates: Arc<dyn CertificateServicePort>,
     settings: Arc<dyn SettingsRepositoryPort>,
@@ -123,8 +117,6 @@ pub struct ApplicationDependencies {
     pub sessions: Arc<dyn SessionQueryPort>,
     pub breakpoints: Arc<BreakpointCoordinator>,
     pub breakpoint_validation: Arc<dyn BreakpointValidationPort>,
-    #[cfg(test)]
-    pub rules: Arc<dyn RuleRepositoryPort>,
     pub faults: Arc<dyn FaultServicePort>,
     pub certificates: Arc<dyn CertificateServicePort>,
     pub settings: Arc<dyn SettingsRepositoryPort>,
@@ -185,8 +177,6 @@ impl Application {
             sessions: dependencies.sessions,
             breakpoints: dependencies.breakpoints,
             breakpoint_validation: dependencies.breakpoint_validation,
-            #[cfg(test)]
-            rules: dependencies.rules,
             faults: dependencies.faults,
             certificates: dependencies.certificates,
             settings: dependencies.settings,

@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase18-final-unified-release-automation",
+  "executed_at": "2026-09-01 00:54:25 +08:00",
+  "timezone": "Asia/Shanghai",
+  "baseline_head": "30d0f69e0e2fed745fbee2a1dc49271517e76d41",
+  "result": "PASS",
+  "status": "AUTOMATED_VERIFIED_MANUAL_ACCEPTANCE_PENDING",
+  "code_checkpoint_ready": true,
+  "review": {
+    "reviewer": "APPROVED",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  },
+  "automated_tests": {
+    "frontend": 571,
+    "domain": 101,
+    "application": 477,
+    "infrastructure": 519,
+    "host": 31,
+    "package_runtime": 22,
+    "phase18_checker": 17,
+    "affected_checkers": 30,
+    "bindings_mutations": 6,
+    "zero_test_targets_counted": 0
+  },
+  "packaging": {
+    "command": "pnpm build:macos:universal",
+    "session": "3171",
+    "exit_code": 0,
+    "app_path": "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app",
+    "dmg_path": "src-tauri/target/universal-apple-darwin/release/bundle/dmg/Intercept Proxy_1.0.0_universal.dmg",
+    "main_binary_bytes": 111655488,
+    "sidecar_bytes": 29443472,
+    "dmg_bytes": 59666432,
+    "main_architectures": ["x86_64", "arm64"],
+    "sidecar_architectures": ["x86_64", "arm64"],
+    "bundle_identifier": "com.interceptproxy.desktop",
+    "app_codesign_strict": "PASS",
+    "mounted_dmg_app_verification": "PASS",
+    "dmg_detach": "PASS"
+  },
+  "cleanup": {
+    "app_processes": "ABSENT",
+    "sidecar_processes": "ABSENT",
+    "ports_8765_17653": "RELEASED"
+  },
+  "raw_stdout": "UNAVAILABLE_NOT_PERSISTED",
+  "not_run": [
+    "GUI/computer-use",
+    "network and system permission prompts",
+    "Windows runtime and CI",
+    "Android device or emulator",
+    "Developer ID signing and notarization",
+    "push",
+    "external CI",
+    "release"
+  ],
+  "excluded_paths": [
+    "docs/README.md",
+    "docs/tasks/pending/2026-08-31/"
+  ]
+}

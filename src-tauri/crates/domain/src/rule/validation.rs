@@ -1,25 +1,25 @@
-use regex::Regex;
-
-use crate::{Condition, DomainError, ErrorCode, JsonPath, MessageStage};
+use crate::{Condition, ConditionTree, DomainError, ErrorCode, JsonPath, MessageStage};
 
 use super::{
     HttpAction, MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES,
-    MatchField, MatchOperator, RuleDraft, TerminalAction, TrafficDirection,
+    MatchField, TerminalAction, TrafficDirection, validate_http_condition,
 };
 
-/// 完整校验规则草稿，并一次返回所有可定位的字段错误。
-pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
+pub(crate) fn validate_http_rule(
+    stage: MessageStage,
+    condition: &ConditionTree,
+    actions: &[HttpAction],
+) -> Result<(), DomainError> {
     let mut error = DomainError::new(ErrorCode::RuleInvalid, "规则配置非法");
-    if draft.name.trim().is_empty() {
-        error = error.with_field_error("name", "规则名称不能为空");
-    }
-    if draft.actions.is_empty() {
+    if actions.is_empty() {
         error = error.with_field_error("actions", "至少配置一个动作");
     }
-    validate_conditions(draft, &mut error);
-    validate_total_delay(draft, &mut error);
-    validate_actions(draft, &mut error);
-    validate_tls_conditions(draft, &mut error);
+    let mut conditions = Vec::new();
+    collect_conditions(condition, &mut conditions);
+    validate_conditions(&conditions, &mut error);
+    validate_total_delay(actions, &mut error);
+    validate_actions(stage, actions, &mut error);
+    validate_tls_conditions(stage, &conditions, &mut error);
 
     if error.field_errors.is_empty() {
         Ok(())
@@ -28,35 +28,47 @@ pub fn validate_rule_draft(draft: &RuleDraft) -> Result<(), DomainError> {
     }
 }
 
-fn validate_conditions(draft: &RuleDraft, error: &mut DomainError) {
-    for (index, condition) in draft.conditions.iter().enumerate() {
+fn collect_conditions<'a>(tree: &'a ConditionTree, output: &mut Vec<&'a Condition>) {
+    match tree {
+        ConditionTree::All(children) | ConditionTree::Any(children) => {
+            for child in children {
+                collect_conditions(child, output);
+            }
+        }
+        ConditionTree::Leaf(condition) => output.push(condition),
+    }
+}
+
+fn validate_conditions(conditions: &[&Condition], error: &mut DomainError) {
+    for (index, condition) in conditions.iter().enumerate() {
         match condition {
-            Condition::Http {
-                field: MatchField::JsonPath(path),
-                ..
-            } if JsonPath::parse(path).is_err() => push_field_error(
-                error,
-                format!("conditions.{index}.path"),
-                "JSON 字段路径非法",
-            ),
-            Condition::Http {
-                operator: MatchOperator::Regex(pattern),
-                ..
-            } if Regex::new(pattern).is_err() => {
-                push_field_error(error, format!("conditions.{index}.regex"), "正则表达式非法");
+            Condition::Http { field, operator } => {
+                if let Err(condition_error) = validate_http_condition(field, operator) {
+                    for (field, messages) in *condition_error.field_errors {
+                        for message in messages {
+                            push_field_error(
+                                error,
+                                format!("conditions.{index}.{field}"),
+                                &message,
+                            );
+                        }
+                    }
+                }
             }
             Condition::NthHit { count: 0 } => push_field_error(
                 error,
                 format!("conditions.{index}.nth_hit"),
                 "第 N 次命中必须大于 0",
             ),
-            Condition::Http { .. } | Condition::NthHit { .. } | Condition::Document { .. } => {}
+            Condition::NthHit { .. }
+            | Condition::Document { .. }
+            | Condition::DocumentPattern { .. } => {}
         }
     }
 }
 
-fn validate_total_delay(draft: &RuleDraft, error: &mut DomainError) {
-    let total_delay = draft.actions.iter().fold(0_u64, |total, action| {
+fn validate_total_delay(actions: &[HttpAction], error: &mut DomainError) {
+    let total_delay = actions.iter().fold(0_u64, |total, action| {
         total.saturating_add(match action {
             HttpAction::Delay { milliseconds } => *milliseconds,
             HttpAction::Jitter {
@@ -71,9 +83,13 @@ fn validate_total_delay(draft: &RuleDraft, error: &mut DomainError) {
     }
 }
 
-fn validate_tls_conditions(draft: &RuleDraft, error: &mut DomainError) {
-    if draft.stage == MessageStage::TlsHandshake
-        && draft.conditions.iter().any(|condition| {
+fn validate_tls_conditions(
+    stage: MessageStage,
+    conditions: &[&Condition],
+    error: &mut DomainError,
+) {
+    if stage == MessageStage::TlsHandshake
+        && conditions.iter().any(|condition| {
             !matches!(
                 condition,
                 Condition::Http {
@@ -91,9 +107,8 @@ fn validate_tls_conditions(draft: &RuleDraft, error: &mut DomainError) {
     }
 }
 
-fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
-    let terminal_positions = draft
-        .actions
+fn validate_actions(stage: MessageStage, actions: &[HttpAction], error: &mut DomainError) {
+    let terminal_positions = actions
         .iter()
         .enumerate()
         .filter_map(|(index, action)| action.is_terminal().then_some(index))
@@ -101,13 +116,13 @@ fn validate_actions(draft: &RuleDraft, error: &mut DomainError) {
     if terminal_positions.len() > 1
         || terminal_positions
             .first()
-            .is_some_and(|&index| index + 1 != draft.actions.len())
+            .is_some_and(|&index| index + 1 != actions.len())
     {
         push_field_error(error, "actions", "终止动作必须唯一且位于动作列表末尾");
     }
 
-    for (index, action) in draft.actions.iter().enumerate() {
-        validate_action_compatibility(draft.stage, error, index, action);
+    for (index, action) in actions.iter().enumerate() {
+        validate_action_compatibility(stage, error, index, action);
         validate_action_limits(error, index, action);
         validate_action_content(error, index, action);
     }

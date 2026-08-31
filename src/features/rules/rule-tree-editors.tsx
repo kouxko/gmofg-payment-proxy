@@ -1,10 +1,11 @@
+import { useState } from "react";
 import { Button } from "@heroui/react";
 import type {
   Condition,
   ConditionTree,
-  ProtocolRuleFieldCapability,
   UnifiedAction,
 } from "@/generated/rust-types";
+import type { DocumentSchemaField } from "./rule-document-schema";
 
 type MetadataNode = {
   name: string;
@@ -14,7 +15,7 @@ type MetadataNode = {
   children: Map<string, MetadataNode>;
 };
 
-type MetadataField = Pick<ProtocolRuleFieldCapability, "name" | "label"> & { type: string };
+type MetadataField = Pick<DocumentSchemaField, "name" | "label" | "type" | "itemTemplate">;
 
 export function DocumentMetadataTree({
   fields,
@@ -22,7 +23,7 @@ export function DocumentMetadataTree({
   readonlyPaths = new Set(fields.map((field) => field.name)),
   localFields = fields.filter((field) => !readonlyPaths.has(field.name)),
 }: {
-  fields: ProtocolRuleFieldCapability[];
+  fields: DocumentSchemaField[];
   localFields?: MetadataField[];
   condition: ConditionTree;
   readonlyPaths?: ReadonlySet<string>;
@@ -31,14 +32,16 @@ export function DocumentMetadataTree({
   const schemaFields = fields.filter((field) => readonlyPaths.has(field.name));
   const schemaRoot = buildMetadataTree(schemaFields, true);
   const localRoot = buildMetadataTree(localFields, false);
+  const hasSchemaMetadata = schemaRoot.field != null || schemaRoot.children.size > 0;
+  const hasLocalMetadata = localRoot.field != null || localRoot.children.size > 0;
   return (
     <section className="space-y-2" aria-labelledby="document-metadata-heading">
       <h5 className="text-sm font-medium" id="document-metadata-heading">Document metadata tree</h5>
-      {schemaRoot.children.size === 0 && localRoot.children.size === 0 ? (
+      {!hasSchemaMetadata && !hasLocalMetadata ? (
         <p className="text-xs text-[var(--telemetry-muted)]">当前规则没有 Schema 路径；新路径只由用户明确输入后加入。</p>
       ) : <div className="space-y-2">
-        {schemaRoot.children.size > 0 && <MetadataTree label="Schema metadata tree" root={schemaRoot} counts={counts} />}
-        {localRoot.children.size > 0 && <MetadataTree label="Rule-local metadata tree" root={localRoot} counts={counts} />}
+        {hasSchemaMetadata && <MetadataTree label="Schema metadata tree" root={schemaRoot} counts={counts} />}
+        {hasLocalMetadata && <MetadataTree label="Rule-local metadata tree" root={localRoot} counts={counts} />}
       </div>}
     </section>
   );
@@ -46,13 +49,15 @@ export function DocumentMetadataTree({
 
 function MetadataTree({ label, root, counts }: { label: string; root: MetadataNode; counts: Map<string, number> }) {
   return <ul aria-label={label} className="space-y-1" role="tree">
-    {[...root.children.values()].map((node) => <MetadataTreeNode counts={counts} key={node.path} node={node} />)}
+    {root.field
+      ? <MetadataTreeNode counts={counts} node={root} />
+      : [...root.children.values()].map((node) => <MetadataTreeNode counts={counts} key={node.path} node={node} />)}
   </ul>;
 }
 
 function MetadataTreeNode({ node, counts }: { node: MetadataNode; counts: Map<string, number> }) {
   const numeric = /^\d+$/.test(node.name);
-  const label = numeric && node.readOnly ? "Array items" : node.field?.label ?? (numeric ? `Array index ${node.name}` : node.name);
+  const label = node.field?.itemTemplate ? "Array items template (*)" : node.field?.label ?? (numeric ? `Array index ${node.name}` : node.name);
   const type = node.field?.type;
   return (
     <li aria-label={`${label} ${type ?? "group"}${node.readOnly ? " 只读" : ""}`} aria-selected="false" data-readonly={node.readOnly ? "true" : "false"} role="treeitem">
@@ -70,16 +75,46 @@ function MetadataTreeNode({ node, counts }: { node: MetadataNode; counts: Map<st
   );
 }
 
-export function ConditionTreeEditor({ tree, onChange }: { tree: ConditionTree; onChange: (tree: ConditionTree) => void }) {
+export function ConditionTreeEditor({
+  tree,
+  onChange,
+  onInsertRequest,
+}: {
+  tree: ConditionTree;
+  onChange: (tree: ConditionTree) => void;
+  onInsertRequest?: (targetPath: number[], subgroup: "all" | "any" | null) => void;
+}) {
+  const [targetPath, setTargetPath] = useState<number[]>([]);
   return (
     <section className="space-y-2" aria-labelledby="condition-tree-heading">
       <h5 className="text-sm font-medium" id="condition-tree-heading">递归条件树</h5>
-      <ConditionNode node={tree} onChange={onChange} />
+      <ConditionNode
+        node={tree}
+        onChange={onChange}
+        onInsertRequest={onInsertRequest}
+        onTargetPathChange={setTargetPath}
+        path={[]}
+        targetPath={targetPath}
+      />
     </section>
   );
 }
 
-function ConditionNode({ node, onChange }: { node: ConditionTree; onChange: (node: ConditionTree) => void }) {
+function ConditionNode({
+  node,
+  onChange,
+  onInsertRequest,
+  onTargetPathChange,
+  path,
+  targetPath,
+}: {
+  node: ConditionTree;
+  onChange: (node: ConditionTree) => void;
+  onInsertRequest?: (targetPath: number[], subgroup: "all" | "any" | null) => void;
+  onTargetPathChange: (path: number[]) => void;
+  path: number[];
+  targetPath: number[];
+}) {
   if (node.operator === "leaf") {
     return (
       <div className="rounded-md border border-[var(--telemetry-line)] p-2 text-xs">
@@ -92,22 +127,34 @@ function ConditionNode({ node, onChange }: { node: ConditionTree; onChange: (nod
     );
   }
   const groupLabel = node.operator === "all" ? "AND 条件组" : "OR 条件组";
+  const groupName = path.length === 0 ? `${groupLabel} 根` : `${groupLabel} ${path.map((index) => index + 1).join(".")}`;
+  const selected = samePath(path, targetPath);
   return (
-    <fieldset className="space-y-2 rounded-md border border-[var(--telemetry-line)] p-2">
+    <fieldset aria-label={groupName} className="space-y-2 rounded-md border border-[var(--telemetry-line)] p-2" data-insertion-target={selected ? "true" : "false"}>
       <legend className="px-1 text-xs font-medium">{groupLabel}</legend>
+      {onInsertRequest && <Button aria-label={`选择 ${groupName} 为添加目标`} size="sm" variant="ghost" onPress={() => onTargetPathChange(path)}>{selected ? "当前添加目标" : "选择为添加目标"}</Button>}
+      {onInsertRequest && selected && <div className="flex flex-wrap gap-1">
+        <Button size="sm" variant="outline" onPress={() => onInsertRequest(path, null)}>在目标组添加条件</Button>
+        <Button size="sm" variant="outline" onPress={() => onInsertRequest(path, "all")}>在目标组添加 AND 子组</Button>
+        <Button size="sm" variant="outline" onPress={() => onInsertRequest(path, "any")}>在目标组添加 OR 子组</Button>
+      </div>}
       <Button size="sm" variant="ghost" onPress={() => onChange({ ...node, operator: node.operator === "all" ? "any" : "all" })}>
         切换为 {node.operator === "all" ? "OR" : "AND"}
       </Button>
       <div className="space-y-2 pl-3">
         {node.children.map((child, index) => (
           <div className="flex items-start gap-1" key={index}>
-            <div className="min-w-0 flex-1"><ConditionNode node={child} onChange={(next) => onChange({ ...node, children: node.children.map((item, itemIndex) => itemIndex === index ? next : item) })} /></div>
+            <div className="min-w-0 flex-1"><ConditionNode node={child} onChange={(next) => onChange({ ...node, children: node.children.map((item, itemIndex) => itemIndex === index ? next : item) })} onInsertRequest={onInsertRequest} onTargetPathChange={onTargetPathChange} path={[...path, index]} targetPath={targetPath} /></div>
             {node.children.length > 1 && <Button aria-label={`删除条件节点 ${index + 1}`} size="sm" variant="ghost" onPress={() => onChange({ ...node, children: node.children.filter((_, itemIndex) => itemIndex !== index) })}>删除</Button>}
           </div>
         ))}
       </div>
     </fieldset>
   );
+}
+
+function samePath(left: number[], right: number[]): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 export function OrderedActionList({
@@ -162,7 +209,7 @@ function buildMetadataTree(fields: MetadataField[], readOnly: boolean): Metadata
 function documentConditionCounts(tree: ConditionTree): Map<string, number> {
   const counts = new Map<string, number>();
   visitConditions(tree, (condition) => {
-    if (condition.source === "document") counts.set(condition.path, (counts.get(condition.path) ?? 0) + 1);
+    if (condition.source === "document" || condition.source === "document_pattern") counts.set(condition.path, (counts.get(condition.path) ?? 0) + 1);
   });
   return counts;
 }
@@ -173,13 +220,13 @@ function visitConditions(tree: ConditionTree, visit: (condition: Condition) => v
 }
 
 function conditionLabel(condition: Condition): string {
-  if (condition.source === "document") return `${condition.path || "/"} · ${condition.predicate.type}`;
+  if (condition.source === "document" || condition.source === "document_pattern") return `${condition.path || "/"} · ${condition.predicate.type}`;
   if (condition.source === "nth_hit") return `第 ${condition.count} 次命中`;
   return "HTTP 字段条件";
 }
 
-function pointerTokens(pointer: string): string[] {
-  if (pointer === "") return ["/"];
+export function pointerTokens(pointer: string): string[] {
+  if (pointer === "") return [];
   return pointer.slice(1).split("/").map((token) => token.replaceAll("~1", "/").replaceAll("~0", "~"));
 }
 

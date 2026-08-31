@@ -4,19 +4,19 @@ mod document_factory;
 mod validation;
 
 use super::{
-    Application, protocol_packages::ensure_external_description,
-    rule_capabilities::stage_capability,
+    Application,
+    protocol_packages::ensure_external_description,
+    rule_capabilities::{action_capability, stage_capability},
 };
 use crate::{
-    AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStage, ListenerDataPlane, ListenerId,
-    MessageStage, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
-    ProtocolPackageRef, ProtocolRuleCommonActionCapability, ProtocolRuleFieldActionCapability,
-    ProtocolRuleFieldCapability, ProtocolRuleFieldOperatorCapability, ProtocolRuleStage,
-    ProxyListener, RuleAction as AppRuleAction, RuleActionKind, RuleCondition as AppRuleCondition,
-    RuleConditionKind, RuleContent, RuleDefinitionDraft, RuleDefinitionSaveInput,
-    RuleEditorContentContext, RuleEditorContext, RuleLocalDocumentActionKind,
-    RuleLocalDocumentPredicateKind, RuleLocalDocumentValueType, RuleMatchField, RuleMatchOperator,
-    RuleStage, RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStage, SocketTopology,
+    AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStageViewModel, ListenerDataPlane,
+    ListenerId, MessageStage, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
+    ProtocolPackageRef, ProxyListener, RuleAction as AppRuleAction, RuleCommonActionCapability,
+    RuleContent, RuleDocumentConditionPathCapability, RuleEditorContentContext, RuleEditorContext,
+    RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
+    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind, RuleNewDefinitionDraft,
+    RuleNthHitConditionDraftInput, RuleStage, RuleTerminalAction, SocketPayloadProcessing,
+    SocketRuleEditorStageViewModel, SocketTopology, document_schema_field_capabilities,
     local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
@@ -78,6 +78,11 @@ impl Application {
             listener_id,
             content,
             local_document_types: local_document_type_capabilities(),
+            document_condition_path: RuleDocumentConditionPathCapability {
+                wildcard_token: "*".into(),
+                wildcard_matches_exactly_one_level: true,
+                multiple_matches_use_any: true,
+            },
         })
     }
 
@@ -104,27 +109,74 @@ impl Application {
 
     pub fn rule_definition_document_common_action_draft(
         &self,
-        action: ProtocolRuleCommonActionCapability,
+        action: RuleCommonActionCapability,
     ) -> UnifiedAction {
         match action {
-            ProtocolRuleCommonActionCapability::RecordMatch => UnifiedAction::RecordMatch,
+            RuleCommonActionCapability::RecordMatch => UnifiedAction::RecordMatch,
         }
     }
 
-    pub fn rule_definition_condition_draft(
+    pub fn rule_definition_nth_hit_condition_draft(
         &self,
-        kind: RuleConditionKind,
+        input: RuleNthHitConditionDraftInput,
+    ) -> AppResult<Condition> {
+        let _ = self;
+        if input.count == 0 {
+            return Err(AppError::new("RULE_INVALID", "第 N 次命中必须是正整数。"));
+        }
+        Ok(Condition::NthHit { count: input.count })
+    }
+
+    pub fn rule_definition_http_condition_draft(
+        &self,
+        field_kind: RuleMatchFieldKind,
+        selector: Option<&str>,
+        operator_kind: RuleMatchOperatorKind,
+        value: &str,
         stage: MessageStage,
     ) -> AppResult<Condition> {
-        Ok(domain_condition(self.rule_condition_draft(kind, stage)))
+        let capability = stage_capability(stage)
+            .match_fields
+            .into_iter()
+            .find(|capability| capability.kind == field_kind)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "匹配字段与当前规则阶段不兼容。"))?;
+        if !capability.operators.contains(&operator_kind) {
+            return Err(AppError::new(
+                "RULE_INVALID",
+                "匹配操作符与所选字段不兼容。",
+            ));
+        }
+        let field = match field_kind {
+            RuleMatchFieldKind::TerminalIp => MatchField::TerminalIp,
+            RuleMatchFieldKind::CertificateFingerprint => MatchField::CertificateFingerprint,
+            RuleMatchFieldKind::Method => MatchField::Method,
+            RuleMatchFieldKind::RequestTarget => MatchField::RequestTarget,
+            RuleMatchFieldKind::Header => MatchField::Header(
+                selector
+                    .ok_or_else(|| AppError::new("RULE_INVALID", "Header 条件需要 /name。"))?
+                    .to_owned(),
+            ),
+        };
+        let operator = match operator_kind {
+            RuleMatchOperatorKind::Equals => MatchOperator::Equals(value.to_owned()),
+            RuleMatchOperatorKind::Contains => MatchOperator::Contains(value.to_owned()),
+            RuleMatchOperatorKind::StartsWith => MatchOperator::StartsWith(value.to_owned()),
+            RuleMatchOperatorKind::EndsWith => MatchOperator::EndsWith(value.to_owned()),
+            RuleMatchOperatorKind::Wildcard => MatchOperator::Wildcard(value.to_owned()),
+        };
+        intercept_proxy_domain::validate_http_condition(&field, &operator)?;
+        Ok(Condition::Http { field, operator })
     }
 
     pub fn rule_definition_action_draft(
         &self,
-        kind: RuleActionKind,
+        input: RuleHttpActionDraftInput,
         stage: MessageStage,
     ) -> AppResult<DomainRuleAction> {
-        domain_action(self.rule_action_draft(kind, stage)?)
+        let capability = action_capability(stage, input.kind)
+            .ok_or_else(|| AppError::new("RULE_INVALID", "动作与当前规则阶段不兼容。"))?;
+        let action = parse_app_action(input, capability.terminal, capability.parameters_required)?;
+        domain_action(action)
     }
 
     async fn rule_package_description(
@@ -156,23 +208,33 @@ impl Application {
     }
 }
 
-pub(super) fn domain_condition(condition: AppRuleCondition) -> Condition {
-    match condition {
-        AppRuleCondition::Field { field, operator } => Condition::Http {
-            field: match field {
-                RuleMatchField::TerminalIp => MatchField::TerminalIp,
-                RuleMatchField::CertificateFingerprint => MatchField::CertificateFingerprint,
-                RuleMatchField::PathOrRequestType => MatchField::PathOrRequestType,
-                RuleMatchField::JsonPath { path } => MatchField::JsonPath(path),
-            },
-            operator: match operator {
-                RuleMatchOperator::Equals { value } => MatchOperator::Equals(value),
-                RuleMatchOperator::Contains { value } => MatchOperator::Contains(value),
-                RuleMatchOperator::Regex { pattern } => MatchOperator::Regex(pattern),
-            },
-        },
-        AppRuleCondition::NthHit { count } => Condition::NthHit { count },
-    }
+fn parse_app_action(
+    input: RuleHttpActionDraftInput,
+    terminal: bool,
+    parameters_required: bool,
+) -> AppResult<AppRuleAction> {
+    let mut value = if parameters_required {
+        let parameters = input
+            .parameters_json
+            .ok_or_else(|| AppError::new("RULE_INVALID", "当前动作需要显式参数。"))?;
+        serde_json::from_str::<serde_json::Map<String, serde_json::Value>>(&parameters)
+            .map_err(|_| AppError::new("RULE_INVALID", "动作参数必须是 JSON 对象。"))?
+    } else {
+        if input.parameters_json.is_some() {
+            return Err(AppError::new("RULE_INVALID", "无参数动作不能提交参数。"));
+        }
+        serde_json::Map::new()
+    };
+    let kind = serde_json::to_value(input.kind)
+        .map_err(|_| AppError::new("RULE_INVALID", "动作类型无法序列化。"))?;
+    value.insert("type".into(), kind);
+    let value = if terminal {
+        serde_json::json!({ "type": "terminal", "action": value })
+    } else {
+        serde_json::Value::Object(value)
+    };
+    serde_json::from_value(value)
+        .map_err(|_| AppError::new("RULE_INVALID", "动作参数与动作类型不匹配。"))
 }
 
 pub(super) fn domain_action(action: AppRuleAction) -> AppResult<DomainRuleAction> {
@@ -288,7 +350,7 @@ fn domain_terminal_action(action: RuleTerminalAction) -> DomainTerminalAction {
 fn http_stages(
     listener_id: ListenerId,
     description: Option<&ProtocolPackageDescriptionViewModel>,
-) -> Vec<HttpRuleEditorStage> {
+) -> Vec<HttpRuleEditorStageViewModel> {
     [
         RuleStage::TlsHandshake,
         RuleStage::ProxyToUpstream,
@@ -309,7 +371,8 @@ fn http_stages(
         });
         let document_fields = document
             .as_ref()
-            .map(|value| value.fields.clone())
+            .and_then(|value| value.schema.as_ref())
+            .map(document_schema_field_capabilities)
             .unwrap_or_default();
         let document_common_actions = document
             .as_ref()
@@ -318,29 +381,21 @@ fn http_stages(
         let embedded_document = document.as_ref().map(|_| HttpDocumentRuleContent {
             package: package.clone().expect("document stage has a package"),
         });
-        Some(HttpRuleEditorStage {
+        Some(HttpRuleEditorStageViewModel {
             stage,
             http,
             package,
             document_fields,
             document_common_actions,
-            new_rule_draft: RuleDefinitionSaveInput {
-                rule_id: None,
-                expected_revision: None,
-                draft: RuleDefinitionDraft {
-                    name: "新规则".into(),
-                    enabled: true,
-                    priority: 100,
-                    listener_id,
-                    stage,
-                    one_shot: false,
-                    content: RuleContent::Http(HttpRuleContent {
-                        description: String::new(),
-                        condition: ConditionTree::All(Vec::new()),
-                        actions: vec![UnifiedAction::RecordMatch],
-                        document: embedded_document,
-                    }),
-                },
+            new_rule_draft: RuleNewDefinitionDraft {
+                listener_id,
+                stage,
+                content: RuleContent::Http(HttpRuleContent {
+                    description: String::new(),
+                    condition: ConditionTree::All(Vec::new()),
+                    actions: Vec::new(),
+                    document: embedded_document,
+                }),
             },
         })
     })
@@ -351,7 +406,7 @@ fn socket_stages(
     listener_id: ListenerId,
     description: &ProtocolPackageDescriptionViewModel,
     local_responder: bool,
-) -> Vec<SocketRuleEditorStage> {
+) -> Vec<SocketRuleEditorStageViewModel> {
     let _ = local_responder;
     let stages: &[RuleStage] = &[RuleStage::ProxyToUpstream, RuleStage::ProxyToApp];
     stages
@@ -359,26 +414,22 @@ fn socket_stages(
         .filter_map(|&stage| {
             document_capability(description, stage).map(|catalog| (stage, catalog))
         })
-        .map(|(stage, catalog)| SocketRuleEditorStage {
+        .map(|(stage, catalog)| SocketRuleEditorStageViewModel {
             stage,
-            fields: catalog.fields.clone(),
+            document_fields: catalog
+                .schema
+                .as_ref()
+                .map(document_schema_field_capabilities)
+                .unwrap_or_default(),
             common_actions: catalog.common_actions.clone(),
-            new_rule_draft: RuleDefinitionSaveInput {
-                rule_id: None,
-                expected_revision: None,
-                draft: RuleDefinitionDraft {
-                    name: "新规则".into(),
-                    enabled: true,
-                    priority: 100,
-                    listener_id,
-                    stage,
-                    one_shot: false,
-                    content: RuleContent::Socket(SocketRuleContent {
-                        package: description.package.clone(),
-                        condition: ConditionTree::All(Vec::new()),
-                        actions: vec![UnifiedAction::RecordMatch],
-                    }),
-                },
+            new_rule_draft: RuleNewDefinitionDraft {
+                listener_id,
+                stage,
+                content: RuleContent::Socket(SocketRuleContent {
+                    package: description.package.clone(),
+                    condition: ConditionTree::All(Vec::new()),
+                    actions: Vec::new(),
+                }),
             },
         })
         .collect()
@@ -394,74 +445,21 @@ fn http_capability(stage: RuleStage) -> crate::RuleStageCapabilityViewModel {
 
 #[derive(Clone)]
 struct DocumentCapability {
-    fields: Vec<ProtocolRuleFieldCapability>,
-    common_actions: Vec<ProtocolRuleCommonActionCapability>,
+    schema: Option<DocumentSchemaNode>,
+    common_actions: Vec<RuleCommonActionCapability>,
 }
 
 fn document_capability(
     description: &ProtocolPackageDescriptionViewModel,
     stage: RuleStage,
 ) -> Option<DocumentCapability> {
-    let protocol_stage = match stage {
-        RuleStage::ProxyToUpstream => ProtocolRuleStage::ProxyToUpstream,
-        RuleStage::ProxyToApp => ProtocolRuleStage::ProxyToApp,
-        RuleStage::TlsHandshake => {
-            return None;
-        }
+    let schema = match stage {
+        RuleStage::ProxyToUpstream => &description.upstream_schema,
+        RuleStage::ProxyToApp => &description.downstream_schema,
+        RuleStage::TlsHandshake => return None,
     };
-    let schema = match protocol_stage.direction() {
-        intercept_proxy_domain::ProtocolDirection::Upstream => &description.upstream_schema,
-        intercept_proxy_domain::ProtocolDirection::Downstream => &description.downstream_schema,
-    };
-    let actions = vec![
-        ProtocolRuleFieldActionCapability::SetField,
-        ProtocolRuleFieldActionCapability::ClearField,
-    ];
-    let mut fields = Vec::new();
-    if let Some(schema) = schema {
-        collect_document_schema_fields(&schema.root, "", &actions, &mut fields);
-    }
     Some(DocumentCapability {
-        fields,
-        common_actions: vec![ProtocolRuleCommonActionCapability::RecordMatch],
+        schema: schema.as_ref().map(|schema| schema.root.clone()),
+        common_actions: vec![RuleCommonActionCapability::RecordMatch],
     })
-}
-
-fn collect_document_schema_fields(
-    schema: &DocumentSchemaNode,
-    path: &str,
-    actions: &[ProtocolRuleFieldActionCapability],
-    output: &mut Vec<ProtocolRuleFieldCapability>,
-) {
-    let field_type = match schema {
-        DocumentSchemaNode::String { .. } => crate::ProtocolPackageSchemaFieldTypeViewModel::String,
-        DocumentSchemaNode::Number { .. } => crate::ProtocolPackageSchemaFieldTypeViewModel::Number,
-        DocumentSchemaNode::Boolean { .. } => {
-            crate::ProtocolPackageSchemaFieldTypeViewModel::Boolean
-        }
-        DocumentSchemaNode::Object { properties, .. } => {
-            for (name, child) in properties {
-                collect_document_schema_fields(
-                    child,
-                    &format!("{path}/{}", name.replace('~', "~0").replace('/', "~1")),
-                    actions,
-                    output,
-                );
-            }
-            crate::ProtocolPackageSchemaFieldTypeViewModel::Object
-        }
-        DocumentSchemaNode::Array { items, .. } => {
-            collect_document_schema_fields(items, &format!("{path}/0"), actions, output);
-            crate::ProtocolPackageSchemaFieldTypeViewModel::Array
-        }
-    };
-    if !path.is_empty() {
-        output.push(ProtocolRuleFieldCapability {
-            name: path.to_owned(),
-            label: schema.title().unwrap_or(path).to_owned(),
-            field_type,
-            operators: vec![ProtocolRuleFieldOperatorCapability::Equals],
-            actions: actions.to_vec(),
-        });
-    }
 }

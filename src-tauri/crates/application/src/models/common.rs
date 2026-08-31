@@ -3,19 +3,18 @@ use specta::Type;
 use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
-    BodyCodecKind, CertificateReference, CertificateReferenceId, CertificateReferenceKind,
-    ChannelId, Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate,
-    DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
-    ForwardProxyAuthentication, HttpBodyProcessing, HttpListenerSettings, JsonPointer,
-    ListenerDataPlane, ListenerId, MitmSettings, ProtocolDirection, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleDraft,
-    ProtocolDocumentRuleId, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    ProtocolRuleStage, ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition,
-    RuleDefinitionDraft, RuleStage, ScriptedSocketProcessing, SecretReference,
-    SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketEndpoint,
-    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
-    SocketRelaySettings, SocketRelayTopology, SocketTopology, SocketUpstreamTlsSettings,
-    UnifiedAction, UpstreamTlsSettings, WorkspaceId,
+    BodyCodecKind, BooleanPredicate, CertificateReference, CertificateReferenceId,
+    CertificateReferenceKind, ChannelId, Condition, ConditionTree, Document, DocumentMutation,
+    DocumentPredicate, DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings,
+    FixedServerSettings, ForwardProxyAuthentication, HttpBodyProcessing, HttpListenerSettings,
+    JsonPointer, ListenerDataPlane, ListenerId, MitmSettings, NumberOperator, NumberPredicate,
+    ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
+    ScriptedSocketProcessing, SecretReference, SocketDownstreamSecurity,
+    SocketDownstreamTlsSettings, SocketEndpoint, SocketLocalResponderTopology,
+    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
+    SocketTopology, SocketUpstreamTlsSettings, StringOperator, StringPredicate, UnifiedAction,
+    UpstreamTlsSettings, WorkspaceId,
 };
 
 /// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。

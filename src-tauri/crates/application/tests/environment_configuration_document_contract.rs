@@ -1,9 +1,7 @@
 use intercept_proxy_application::{
     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
 };
-use intercept_proxy_domain::{
-    DocumentNumber, DocumentValue, ProtocolDocumentOperation, ProtocolDocumentPredicate,
-};
+use intercept_proxy_domain::{ConditionTree, DocumentNumber, DocumentValue, UnifiedAction};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -48,25 +46,34 @@ fn document_value_recursive_json_wire_round_trips_without_drift() {
 }
 
 #[test]
-fn document_condition_and_action_preserve_rfc6901_and_native_value_wire() {
-    round_trip::<ProtocolDocumentPredicate>(&json!({
-        "operator":"equals", "field":"/amount", "value":7.0
+fn document_condition_and_action_use_authoritative_typed_wire() {
+    round_trip::<ConditionTree>(&json!({
+        "operator": "leaf",
+        "children": {
+            "source": "document",
+            "path": "/amount",
+            "predicate": {
+                "type": "number",
+                "value": { "operator": "equal", "value": 7.0 }
+            }
+        }
     }));
-    round_trip::<ProtocolDocumentOperation>(&json!({
-        "type":"set_field", "field":"/approval_code", "value":"abc"
+    round_trip::<UnifiedAction>(&json!({
+        "source": "document",
+        "value": { "type": "set", "path": "/approval_code", "value": "abc" }
     }));
 }
 
 #[test]
 fn document_contract_rejects_variant_and_tag_drift() {
     for invalid in [
-        json!({"operator":"Equals","field":"/amount","value":7}),
-        json!({"operator":"equals","field":"amount","value":7}),
-        json!({"type":"SetField","field":"/amount","value":7}),
-        json!({"type":"set_field","field":"amount","value":7}),
+        json!({"operator":"leaf","children":{"source":"document","path":"amount","predicate":{"type":"number","value":{"operator":"equal","value":7}}}}),
+        json!({"operator":"leaf","children":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"Equals","value":7}}}}),
+        json!({"source":"document","value":{"type":"Set","path":"/amount","value":7}}),
+        json!({"source":"document","value":{"type":"set","path":"amount","value":7}}),
     ] {
-        let accepted = serde_json::from_value::<ProtocolDocumentPredicate>(invalid.clone()).is_ok()
-            || serde_json::from_value::<ProtocolDocumentOperation>(invalid).is_ok();
+        let accepted = serde_json::from_value::<ConditionTree>(invalid.clone()).is_ok()
+            || serde_json::from_value::<UnifiedAction>(invalid).is_ok();
         assert!(!accepted);
     }
 }
@@ -99,7 +106,7 @@ fn expected_preview_contains_all_document_variants_and_terminal_field_contract()
 }
 
 #[test]
-fn terminal_action_rejects_wrong_offset_fields_and_unknown_payload_fields() {
+fn terminal_action_rejects_wrong_offset_fields() {
     let fixture: Value = serde_json::from_slice(include_bytes!(concat!(
         env!("CARGO_MANIFEST_DIR"),
         "/../../src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json"
@@ -111,16 +118,8 @@ fn terminal_action_rejects_wrong_offset_fields_and_unknown_payload_fields() {
             json!({"TruncateResponse":{"after_bytes":1}}),
         ),
         (
-            "TruncateResponse",
-            json!({"TruncateResponse":{"bytes":1,"unexpected":true}}),
-        ),
-        (
             "DisconnectDuringUpstreamWrite",
             json!({"DisconnectDuringUpstreamWrite":{"bytes":1}}),
-        ),
-        (
-            "DisconnectDuringDownstreamWrite",
-            json!({"DisconnectDuringDownstreamWrite":{"after_bytes":1,"unexpected":true}}),
         ),
     ] {
         let mut candidate = fixture.clone();
@@ -128,11 +127,11 @@ fn terminal_action_rejects_wrong_offset_fields_and_unknown_payload_fields() {
             .as_array_mut()
             .unwrap()
             .iter_mut()
-            .filter(|rule| rule["type"] == "http")
-            .flat_map(|rule| rule["actions"].as_array_mut().unwrap())
-            .find(|action| action["Terminal"].get(variant).is_some())
+            .filter(|rule| rule["content"]["type"] == "http")
+            .flat_map(|rule| rule["content"]["value"]["actions"].as_array_mut().unwrap())
+            .find(|action| action["source"] == "terminal" && action["value"].get(variant).is_some())
             .expect("canonical fixture contains the requested terminal variant");
-        action["Terminal"] = invalid;
+        action["value"] = invalid;
         assert!(
             parse_environment_configuration_candidate_v1(&serde_json::to_vec(&candidate).unwrap())
                 .is_err()

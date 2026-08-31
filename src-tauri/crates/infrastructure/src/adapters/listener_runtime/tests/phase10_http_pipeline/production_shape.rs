@@ -1,5 +1,12 @@
 use super::*;
 
+pub(super) fn http_request_metadata() -> intercept_proxy_runtime::http::HttpRequestMetadata {
+    intercept_proxy_runtime::http::HttpRequestMetadata {
+        method: "POST".into(),
+        request_target: "/phase10".into(),
+    }
+}
+
 #[derive(Debug)]
 struct FixedHttpProvider(RuntimeExternalSocketPackageBinding);
 
@@ -18,7 +25,15 @@ pub(super) async fn prepared_external_snapshot_for(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
 ) -> Arc<HttpProtocolRuntimeSnapshot> {
-    let registration = http_registration();
+    prepared_external_snapshot_for_registration(rpc, workspace, listener, http_registration()).await
+}
+
+pub(super) async fn prepared_external_snapshot_for_registration(
+    rpc: Arc<RecordingHttpRpc>,
+    workspace: &ProxyWorkspace,
+    listener: &ProxyListener,
+    registration: PackageManifest,
+) -> Arc<HttpProtocolRuntimeSnapshot> {
     let adapter = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     adapter.set_external_package_provider(Arc::new(FixedHttpProvider(
         RuntimeExternalSocketPackageBinding::new(registration, rpc),
@@ -87,7 +102,7 @@ async fn production_snapshot_compiles_recursive_or_with_insert_and_append() {
         ..ProxyWorkspace::default()
     };
 
-    let runtime_rules = workspace.http_runtime_rules().unwrap();
+    let runtime_rules = workspace.rule_definitions.clone();
     let identity = HttpConnectionIdentity {
         runtime_epoch: Uuid::from_u128(991),
         connection_id: Uuid::from_u128(992),
@@ -170,7 +185,7 @@ async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
         snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity_and_order(
             Some(Uuid::from_u128(993)),
             7,
-            workspace.http_runtime_rules().unwrap(),
+            workspace.rule_definitions.clone(),
             workspace.http_runtime_rule_execution_order(),
         )),
         commit_attempts: AtomicUsize::new(0),
@@ -191,8 +206,8 @@ async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
 
     assert_eq!(repository.commit_attempts.load(Ordering::SeqCst), 2);
     let committed = repository.snapshot.lock().clone();
-    assert_eq!(committed.rules[0].hit_count, 1);
-    assert!(!committed.rules[0].enabled);
+    assert_eq!(committed.rules[0].lifecycle().hit_count, 1);
+    assert!(!committed.rules[0].enabled());
 }
 
 pub(super) async fn execute_nth_http_attempt(
@@ -217,7 +232,7 @@ pub(super) async fn execute_nth_http_attempt(
     )
     .unwrap();
     pipeline
-        .apply_request_policy(&connection, &mut message)
+        .apply_request_policy(&connection, &http_request_metadata(), &mut message)
         .await
         .unwrap();
     message
@@ -275,7 +290,7 @@ impl RequestClassifier for Phase10RequestClassifier {
     }
 }
 
-fn actor_context(
+pub(super) fn actor_context(
     snapshot: &HttpProtocolRuntimeSnapshot,
     identity: &HttpConnectionIdentity,
 ) -> ConnectionContext {
@@ -312,7 +327,7 @@ pub(super) fn actor_pipeline(
     .with_joint_http_rules(snapshot.joint_runtime())
 }
 
-fn phase10_http_context() -> HttpContext {
+pub(super) fn phase10_http_context() -> HttpContext {
     HttpContext {
         header: "POST / HTTP/1.1\r\nContent-Type: application/json; charset=utf-8\r\n\r\n".into(),
         body: r#"{"value":"old"}"#.into(),
@@ -326,18 +341,21 @@ async fn production_snapshot_uses_shared_provider_for_both_directions_and_joint_
     let listener = phase10_listener();
     let rule = set_string_rule(
         &listener,
-        ProtocolDocumentRuleId::from_uuid(Uuid::from_u128(903)),
-        ProtocolRuleStage::ProxyToUpstream,
+        RuleId::from_uuid(Uuid::from_u128(903)),
+        RuleStage::ProxyToUpstream,
         1,
         "value",
-        vec![ProtocolDocumentPredicate::Equals {
-            field: JsonPointer::property("value"),
-            value: DocumentValue::String("old".into()),
-        }],
+        vec![ConditionTree::Leaf(Condition::Document {
+            path: JsonPointer::property("value"),
+            predicate: DocumentPredicate::String(StringPredicate {
+                operator: StringOperator::Equal,
+                value: "old".into(),
+            }),
+        })],
         "new",
     );
     let workspace = workspace_with_http_rules(&listener, vec![rule]);
-    let runtime_rules = workspace.http_runtime_rules().unwrap();
+    let runtime_rules = workspace.rule_definitions.clone();
     let identity = HttpConnectionIdentity {
         runtime_epoch: Uuid::from_u128(901),
         connection_id: Uuid::from_u128(902),
@@ -356,10 +374,10 @@ async fn production_snapshot_uses_shared_provider_for_both_directions_and_joint_
         .await;
 }
 
-async fn assert_production_changed_commit(
+pub(super) async fn assert_production_changed_commit(
     listener: &ProxyListener,
     workspace: &ProxyWorkspace,
-    runtime_rules: Vec<intercept_proxy_domain::Rule>,
+    runtime_rules: Vec<intercept_proxy_domain::RuleDefinition>,
     identity: &HttpConnectionIdentity,
     expected_body: &'static [u8],
 ) {
@@ -390,21 +408,21 @@ async fn assert_production_changed_commit(
     )
     .unwrap();
     pipeline
-        .apply_request_policy(&connection, &mut message)
+        .apply_request_policy(&connection, &http_request_metadata(), &mut message)
         .await
         .unwrap();
     assert_eq!(message.body, Bytes::from_static(expected_body));
     assert_eq!(rpc.encode_calls.load(Ordering::SeqCst), 1);
     assert_eq!(repository.commit_attempts.load(Ordering::SeqCst), 1);
     let committed = repository.snapshot.lock().clone();
-    assert_eq!(committed.rules[0].hit_count, 1);
-    assert!(committed.rules[0].enabled);
+    assert_eq!(committed.rules[0].lifecycle().hit_count, 1);
+    assert!(committed.rules[0].enabled());
 }
 
 async fn assert_production_encode_failure_rolls_back(
     listener: &ProxyListener,
     workspace: &ProxyWorkspace,
-    runtime_rules: Vec<intercept_proxy_domain::Rule>,
+    runtime_rules: Vec<intercept_proxy_domain::RuleDefinition>,
     identity: HttpConnectionIdentity,
 ) {
     let context = phase10_http_context();
@@ -443,7 +461,11 @@ async fn assert_production_encode_failure_rolls_back(
     let original_message = failing_message.clone();
     let before = failing_repository.snapshot.lock().clone();
     let error = failing_pipeline
-        .apply_request_policy(&failing_connection, &mut failing_message)
+        .apply_request_policy(
+            &failing_connection,
+            &http_request_metadata(),
+            &mut failing_message,
+        )
         .await
         .unwrap_err();
     assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");

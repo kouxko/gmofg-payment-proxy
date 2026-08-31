@@ -70,8 +70,32 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
 
 #[tokio::test]
 async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
-    let mut rule = view_to_domain_rule(one_shot_delay_rule()).expect("rule");
-    rule.conditions.clear();
+    let rule = intercept_proxy_domain::RuleDefinition::create(
+        intercept_proxy_domain::RuleDefinitionDraft {
+            name: "one-shot socket transaction".into(),
+            enabled: true,
+            priority: 1,
+            listener_id: intercept_proxy_domain::ListenerId::from_uuid(Uuid::from_u128(0x7472)),
+            stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
+            one_shot: true,
+            content: intercept_proxy_domain::RuleContent::Socket(
+                intercept_proxy_domain::SocketRuleContent {
+                    package: intercept_proxy_domain::ProtocolPackageRef {
+                        id: intercept_proxy_domain::ProtocolPackageId::new("socket-transaction")
+                            .expect("package id"),
+                        version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0")
+                            .expect("package version"),
+                    },
+                    condition: intercept_proxy_domain::ConditionTree::Leaf(
+                        intercept_proxy_domain::Condition::NthHit { count: 1 },
+                    ),
+                    actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
+                },
+            ),
+        },
+        1,
+    )
+    .expect("rule");
     let rules = Arc::new(SocketTransactionRules {
         snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
         commit_attempts: AtomicUsize::new(0),
@@ -98,8 +122,8 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
         .expect_err("Encode failure must fail before lifecycle commit");
     assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
     assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
-    assert!(rules.snapshot.lock().rules[0].enabled);
-    assert_eq!(rules.snapshot.lock().rules[0].hit_count, 0);
+    assert!(rules.snapshot.lock().rules[0].enabled());
+    assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 0);
 
     let encoded = pipeline
         .apply_socket_policy(
@@ -111,6 +135,6 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
         .expect("successful Encode commits the joint lifecycle transaction");
     assert_eq!(encoded.data, b"encoded");
     assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 1);
-    assert!(!rules.snapshot.lock().rules[0].enabled);
-    assert_eq!(rules.snapshot.lock().rules[0].hit_count, 1);
+    assert!(!rules.snapshot.lock().rules[0].enabled());
+    assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 1);
 }

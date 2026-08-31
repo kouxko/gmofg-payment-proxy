@@ -5,8 +5,6 @@ use super::{
     ProxyResult, UiTone, Utc, Uuid, breakpoint_content_view, encode_body, message_method,
     message_target, proxy_message,
 };
-#[cfg(test)]
-use super::{DomainMessageStage, Rule};
 
 pub(super) fn apply_breakpoint_decision(
     body_codec: &dyn BodyCodec,
@@ -85,53 +83,6 @@ pub(super) fn apply_breakpoint_decision(
         }
     }
     Ok(actions)
-}
-
-#[cfg(test)]
-pub(super) fn view_to_domain_rule(
-    view: intercept_proxy_application::RuleViewModel,
-) -> ProxyResult<Rule> {
-    let draft = view.draft;
-    let stage = match draft.stage {
-        Some(AppMessageStage::Request) => DomainMessageStage::Request,
-        Some(AppMessageStage::Response) => DomainMessageStage::Response,
-        Some(AppMessageStage::TlsHandshake) => DomainMessageStage::TlsHandshake,
-        _ => {
-            return Err(ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                "rule has an invalid stage",
-            ));
-        }
-    };
-    let conditions = draft
-        .conditions
-        .iter()
-        .map(crate::adapters::rules::condition_to_domain)
-        .collect();
-    let actions = draft
-        .actions
-        .iter()
-        .map(crate::adapters::rules::action_to_domain)
-        .collect::<std::result::Result<Vec<_>, _>>()
-        .map_err(|error| ProxyError::new(ErrorCode::ConfigInvalid, error.to_string()))?;
-    Ok(Rule {
-        id: intercept_proxy_domain::RuleId::from_uuid(view.summary.rule_id),
-        revision: intercept_proxy_domain::Revision::new(view.summary.revision),
-        name: draft.name,
-        description: draft.description,
-        enabled: draft.enabled,
-        priority: u32::try_from(draft.priority).map_err(|_| {
-            ProxyError::new(ErrorCode::ConfigInvalid, "rule priority cannot be negative")
-        })?,
-        created_order: view.summary.creation_order,
-        channel: draft.channel,
-        stage,
-        conditions,
-        actions,
-        one_shot: draft.one_shot,
-        hit_count: view.summary.hit_count,
-        last_hit_at: view.summary.last_hit_at,
-    })
 }
 
 pub(super) fn breakpoint_detail(

@@ -8,30 +8,18 @@
 use std::collections::BTreeMap;
 
 use crate::{
-    AndroidNetworkProfile, CertificateReferenceId, ChannelId, Condition, ConditionTree,
-    DocumentMutation, DocumentPredicate, DomainError, ErrorCode, HttpAction,
-    HttpDocumentRuleContent, ListenerId, MessageStage, ProtocolDocumentOperation,
-    ProtocolDocumentPredicate, ProtocolDocumentRuleDefinition, ProtocolDocumentRuleId,
-    ProtocolRuleStage, Revision, Rule, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId,
-    RuleStage, SocketRuleContent, UnifiedAction, WorkspaceId,
+    AndroidNetworkProfile, CertificateReferenceId, DomainError, ErrorCode, ListenerId, Revision,
+    RuleContent, RuleDefinition, RuleId, RuleStage, WorkspaceId,
 };
 use serde::{Deserialize, Serialize};
 use specta::Type;
-use uuid::Uuid;
 
 mod listener_model;
-mod runtime_projection;
 mod socket_topology;
-mod unified_projection;
 mod validation;
 
 pub use listener_model::*;
 pub use socket_topology::*;
-use unified_projection::{
-    legacy_http_parts, message_stage_from_rule, restore_document_rule, rule_stage_from_protocol,
-    runtime_priority, unified_http_actions, unified_http_tree, unified_persistence_error,
-    unified_socket_content,
-};
 pub use validation::{is_valid_socket_host, is_valid_upstream_origin};
 use validation::{push_field_error, unique_ids, validate_listener, validate_workspace_references};
 
@@ -94,161 +82,58 @@ impl Default for ProxyWorkspace {
 }
 
 impl ProxyWorkspace {
-    pub fn replace_http_runtime_rules(&mut self, rules: Vec<Rule>) -> Result<(), DomainError> {
-        let mut preserved = self
-            .rule_definitions
-            .iter()
-            .filter(|definition| match definition.content() {
-                RuleContent::Socket(_) => true,
-                RuleContent::Http(content) => content.document.is_some(),
-            })
-            .cloned()
-            .collect::<Vec<_>>();
-        for rule in rules {
-            let listener_id = listener_id_from_channel(rule.channel.as_ref())?;
-            let existing = self
-                .rule_definitions
-                .iter()
-                .find(|definition| definition.rule_id() == rule.id)
-                .cloned();
-            let document = existing
-                .as_ref()
-                .and_then(|definition| match definition.content() {
-                    RuleContent::Http(content) => content.document.clone(),
-                    RuleContent::Socket(_) => None,
-                });
-            let stage = existing.as_ref().map_or_else(
-                || rule_stage_from_message(rule.stage),
-                RuleDefinition::stage,
-            );
-            let priority = existing.as_ref().map_or_else(
-                || {
-                    i32::try_from(rule.priority).map_err(|_| {
-                        unified_persistence_error("priority", "HTTP 规则 priority 超出统一规则范围")
-                    })
-                },
-                |definition| Ok(definition.priority()),
-            )?;
-            preserved.retain(|definition| definition.rule_id() != rule.id);
-            preserved.push(RuleDefinition::restore(
-                rule.id,
-                crate::RuleDefinitionDraft {
-                    name: rule.name,
-                    enabled: rule.enabled,
-                    priority,
-                    listener_id,
-                    stage,
-                    one_shot: rule.one_shot,
-                    content: RuleContent::Http(crate::HttpRuleContent {
-                        description: rule.description,
-                        condition: unified_http_tree(rule.conditions),
-                        actions: unified_http_actions(rule.actions),
-                        document,
-                    }),
-                },
-                crate::RuleDefinitionRestoreSnapshot {
-                    revision: rule.revision,
-                    created_order: rule.created_order,
-                    lifecycle: crate::RuleLifecycle {
-                        hit_count: rule.hit_count,
-                        last_hit_at: rule.last_hit_at,
-                    },
-                },
-            )?);
-        }
-        crate::sort_rule_definitions(&mut preserved);
-        self.rule_created_order_high_water = self.rule_created_order_high_water.max(
-            preserved
-                .iter()
-                .map(RuleDefinition::created_order)
-                .max()
-                .unwrap_or(0),
-        );
-        self.rule_definitions = preserved;
-        Ok(())
+    pub fn http_runtime_rule_execution_order(&self) -> Vec<RuleId> {
+        self.runtime_rule_execution_order_for(|definition| {
+            matches!(definition.content(), RuleContent::Http(_))
+        })
     }
 
-    pub fn document_runtime_rules(
+    pub fn runtime_rule_execution_order(&self) -> Vec<RuleId> {
+        self.runtime_rule_execution_order_for(|_| true)
+    }
+
+    fn runtime_rule_execution_order_for(
         &self,
-    ) -> Result<Vec<ProtocolDocumentRuleDefinition>, DomainError> {
-        let mut rules = Vec::new();
-        for definition in &self.rule_definitions {
-            let document = match definition.content() {
-                RuleContent::Http(content) => content.document.clone(),
-                RuleContent::Socket(content) => Some(HttpDocumentRuleContent {
-                    package: content.package.clone(),
-                }),
-            };
-            if let Some(document) = document {
-                rules.push(restore_document_rule(definition, document)?);
-            }
-        }
-        Ok(rules)
-    }
-
-    /// Replaces the document projection while keeping the unified collection authoritative.
-    ///
-    /// HTTP definitions retain their HTTP conditions/actions and only replace the embedded
-    /// document portion. Socket definitions are rebuilt from the document projection.
-    pub fn replace_document_runtime_rules(
-        &mut self,
-        rules: Vec<ProtocolDocumentRuleDefinition>,
-    ) -> Result<(), DomainError> {
+        include: impl Fn(&RuleDefinition) -> bool,
+    ) -> Vec<RuleId> {
         let mut definitions = self
             .rule_definitions
             .iter()
-            .filter(|definition| match definition.content() {
-                RuleContent::Http(content) => content.document.is_none(),
-                RuleContent::Socket(_) => false,
-            })
-            .cloned()
+            .filter(|definition| include(definition))
             .collect::<Vec<_>>();
+        definitions.sort_by_key(|definition| {
+            let direction = match definition.stage() {
+                RuleStage::ProxyToUpstream => 0,
+                RuleStage::ProxyToApp => 1,
+                RuleStage::TlsHandshake => 2,
+            };
+            (direction, definition.priority(), definition.rule_id())
+        });
+        definitions
+            .into_iter()
+            .map(RuleDefinition::rule_id)
+            .collect()
+    }
 
-        for rule in rules {
-            let rule_id = RuleId::from_uuid(rule.rule_id().as_uuid());
-            let existing_http = self.rule_definitions.iter().find_map(|definition| {
-                (definition.rule_id() == rule_id).then(|| match definition.content() {
-                    RuleContent::Http(content) => Some(content.clone()),
-                    RuleContent::Socket(_) => None,
-                })?
-            });
-            let document = HttpDocumentRuleContent {
-                package: rule.package().clone(),
-            };
-            let content = if let Some(mut http) = existing_http {
-                http.document = Some(document);
-                RuleContent::Http(http)
-            } else {
-                unified_socket_content(&rule, document.package)
-            };
-            definitions.push(RuleDefinition::restore(
-                rule_id,
-                RuleDefinitionDraft {
-                    name: rule.name().to_owned(),
-                    enabled: rule.enabled(),
-                    priority: rule.priority(),
-                    listener_id: rule.listener_id(),
-                    stage: rule_stage_from_protocol(rule.stage()),
-                    one_shot: false,
-                    content,
-                },
+    pub fn reset_runtime_rule_hit_metadata(&mut self) -> Result<bool, DomainError> {
+        let mut changed = false;
+        for definition in &mut self.rule_definitions {
+            if definition.lifecycle().hit_count == 0 && definition.lifecycle().last_hit_at.is_none()
+            {
+                continue;
+            }
+            changed = true;
+            *definition = RuleDefinition::restore(
+                definition.rule_id(),
+                definition.to_draft(),
                 crate::RuleDefinitionRestoreSnapshot {
-                    revision: rule.revision(),
-                    created_order: rule.created_order(),
+                    revision: definition.revision(),
+                    created_order: definition.created_order(),
                     lifecycle: crate::RuleLifecycle::default(),
                 },
-            )?);
+            )?;
         }
-        crate::sort_rule_definitions(&mut definitions);
-        self.rule_created_order_high_water = self.rule_created_order_high_water.max(
-            definitions
-                .iter()
-                .map(RuleDefinition::created_order)
-                .max()
-                .unwrap_or(0),
-        );
-        self.rule_definitions = definitions;
-        Ok(())
+        Ok(changed)
     }
 
     /// 聚合全部字段错误，保证任何 Host 都得到相同校验结果。
@@ -326,23 +211,6 @@ impl ProxyWorkspace {
         values.revision = revision;
         *self = values;
         Ok(revision)
-    }
-}
-
-fn listener_id_from_channel(channel: Option<&ChannelId>) -> Result<ListenerId, DomainError> {
-    let channel = channel.ok_or_else(|| {
-        unified_persistence_error("listener_id", "HTTP 规则必须绑定单个 Listener")
-    })?;
-    Uuid::parse_str(channel.as_str())
-        .map(ListenerId::from_uuid)
-        .map_err(|_| unified_persistence_error("listener_id", "HTTP 规则 Listener ID 无效"))
-}
-
-const fn rule_stage_from_message(stage: MessageStage) -> RuleStage {
-    match stage {
-        MessageStage::Request => RuleStage::ProxyToUpstream,
-        MessageStage::Response => RuleStage::ProxyToApp,
-        MessageStage::TlsHandshake => RuleStage::TlsHandshake,
     }
 }
 

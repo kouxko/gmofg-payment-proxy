@@ -28,11 +28,9 @@ The deterministic matrix covers:
 13. byte-for-byte Shift-JIS D48 preservation before and during the VPN impairment, with live TUN,
     SOCKS and injected-delay counters embedded into the same report.
 
-Request-stage scenarios match the request path. Response-stage rules deliberately match the
-fixture's `$.scenario` JSON field: the current formal `PathOrRequestType` field evaluates the
-response start-line target (the HTTP status token) at response stage, so it cannot represent the
-original request path. The gate records this product boundary instead of injecting a test-only
-request-path context.
+Request- and response-stage scenarios match the same associated request target (`/path?query`).
+The transaction carries that immutable request metadata into both stages; response matching never
+re-parses the HTTP response status line as a request target.
 
 Run:
 

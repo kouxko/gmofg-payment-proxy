@@ -194,7 +194,7 @@ fn configuration_conditions(
         .filter(|value| !value.is_empty())
     {
         conditions.push(Condition::Http {
-            field: MatchField::PathOrRequestType,
+            field: MatchField::RequestTarget,
             operator: MatchOperator::Contains(target.clone()),
         });
     }

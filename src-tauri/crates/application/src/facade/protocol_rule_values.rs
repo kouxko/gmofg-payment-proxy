@@ -5,7 +5,7 @@
 
 use std::collections::BTreeMap;
 
-use intercept_proxy_domain::{DocumentValue, MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES};
+use intercept_proxy_domain::{DocumentValue, MAX_DOCUMENT_RULE_STRING_BYTES};
 
 use crate::{AppError, AppResult, ProtocolPackageSchemaFieldTypeViewModel};
 
@@ -27,7 +27,7 @@ pub fn parse_protocol_rule_value(
 }
 
 fn parse_string(raw: &str) -> AppResult<DocumentValue> {
-    if raw.len() > MAX_PROTOCOL_DOCUMENT_RULE_STRING_BYTES {
+    if raw.len() > MAX_DOCUMENT_RULE_STRING_BYTES {
         return Err(value_too_large("文本值不能超过 16 KiB UTF-8 字节。"));
     }
     Ok(DocumentValue::String(raw.to_owned()))

@@ -5,8 +5,9 @@
 
 use super::Application;
 use crate::{
-    MessageStage, RuleActionCapabilityViewModel, RuleActionKind, RuleMatchFieldKind,
-    RuleStageCapabilityViewModel, RuleTrafficDirection,
+    MessageStage, RuleActionCapabilityViewModel, RuleActionKind, RuleMatchFieldCapabilityViewModel,
+    RuleMatchFieldKind, RuleMatchOperatorKind, RuleMatchSelectorKind, RuleStageCapabilityViewModel,
+    RuleTrafficDirection,
 };
 
 impl Application {
@@ -33,22 +34,43 @@ pub(super) fn action_capability(
         .find(|capability| capability.kind == kind)
 }
 
-#[cfg(test)]
-pub(super) fn match_field_supported(stage: MessageStage, kind: RuleMatchFieldKind) -> bool {
-    stage_capability(stage).match_field_kinds.contains(&kind)
-}
-
 pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewModel {
     use RuleActionKind as Action;
     use RuleMatchFieldKind as Field;
 
-    let match_field_kinds = match stage {
-        MessageStage::TlsHandshake => vec![Field::CertificateFingerprint],
-        MessageStage::Request | MessageStage::Response => vec![
-            Field::TerminalIp,
+    use RuleMatchOperatorKind as Operator;
+    let string_operators = vec![
+        Operator::Equals,
+        Operator::Contains,
+        Operator::StartsWith,
+        Operator::EndsWith,
+        Operator::Wildcard,
+    ];
+    let capability = |kind, operators, selector| RuleMatchFieldCapabilityViewModel {
+        kind,
+        operators,
+        selector,
+    };
+    let match_fields = match stage {
+        MessageStage::TlsHandshake => vec![capability(
             Field::CertificateFingerprint,
-            Field::PathOrRequestType,
-            Field::JsonPath,
+            string_operators.clone(),
+            None,
+        )],
+        MessageStage::Request | MessageStage::Response => vec![
+            capability(Field::TerminalIp, string_operators.clone(), None),
+            capability(
+                Field::CertificateFingerprint,
+                string_operators.clone(),
+                None,
+            ),
+            capability(Field::Method, vec![Operator::Equals], None),
+            capability(Field::RequestTarget, string_operators.clone(), None),
+            capability(
+                Field::Header,
+                string_operators,
+                Some(RuleMatchSelectorKind::HeaderNamePointer),
+            ),
         ],
         MessageStage::Terminal => Vec::new(),
     };
@@ -97,7 +119,7 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
     };
     RuleStageCapabilityViewModel {
         stage,
-        match_field_kinds,
+        match_fields,
         actions: kinds
             .into_iter()
             .map(|(kind, terminal)| RuleActionCapabilityViewModel {
@@ -106,7 +128,33 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
                     .flatten(),
                 kind,
                 terminal,
+                parameters_required: action_parameters_required(kind),
             })
             .collect(),
+    }
+}
+
+const fn action_parameters_required(kind: RuleActionKind) -> bool {
+    use RuleActionKind as Action;
+    match kind {
+        Action::Pause | Action::RejectTlsHandshake | Action::DisconnectBeforeUpstream => false,
+        Action::SetJsonField
+        | Action::ReplaceBodyText
+        | Action::SetHeader
+        | Action::Delay
+        | Action::Jitter
+        | Action::Throttle
+        | Action::Intermittent
+        | Action::CustomHttpStatus
+        | Action::UpstreamConnectTimeout
+        | Action::UpstreamWriteTimeout
+        | Action::UpstreamReadTimeout
+        | Action::DropUpstreamResponse
+        | Action::MockResponse
+        | Action::InvalidJson
+        | Action::IncorrectContentLength
+        | Action::TruncateResponse
+        | Action::DisconnectDuringUpstreamWrite
+        | Action::DisconnectDuringDownstreamWrite => true,
     }
 }

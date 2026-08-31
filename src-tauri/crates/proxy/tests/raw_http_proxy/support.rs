@@ -55,6 +55,7 @@ impl PipelinePorts for RecordingPorts {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
         message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         self.bodies.lock().unwrap().push(message.passthrough_body());
@@ -188,6 +189,7 @@ impl PipelinePorts for ResponseFaultPorts {
     async fn apply_response_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(self.0.clone())
@@ -214,6 +216,7 @@ impl PipelinePorts for ClosedResultPorts {
     async fn apply_request_policy(
         &self,
         _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(self.request_actions.clone())

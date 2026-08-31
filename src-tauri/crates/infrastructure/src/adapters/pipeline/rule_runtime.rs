@@ -8,8 +8,9 @@ use chrono::Utc;
 use intercept_proxy_application::{
     AppError, EventHub, RuleSummaryViewModel, UiEventPayload, UiTone,
 };
-use intercept_proxy_domain::{HttpAction, MessageStage, Rule};
+use intercept_proxy_domain::{HttpAction, MessageStage, RuleContent, RuleDefinition, RuleStage};
 use intercept_proxy_product_api::BodyCodec;
+use intercept_proxy_runtime::http::HttpRequestMetadata;
 use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
     TLS_HANDSHAKE_POLICY_TIMEOUT,
@@ -22,10 +23,7 @@ mod actor;
 
 use actor::{Command, EvaluationInput, Reply, RuleActorSender};
 
-use super::{
-    JointDocumentEvaluation, RuntimeRuleRepository,
-    message_projection::{decode_json, message_target},
-};
+use super::{JointDocumentEvaluation, RuntimeRuleRepository};
 
 pub(super) const MAILBOX_CAPACITY: usize = 64;
 #[derive(Debug)]
@@ -81,6 +79,7 @@ impl RuleRuntimeService {
         &self,
         context: &ConnectionContext,
         stage: MessageStage,
+        request: &HttpRequestMetadata,
         message: Option<&Message>,
         body_codec: Arc<dyn BodyCodec>,
         joint_document: Option<JointDocumentEvaluation>,
@@ -88,9 +87,8 @@ impl RuleRuntimeService {
         let input = EvaluationInput {
             context: context.clone(),
             stage,
-            json: message.and_then(|message| decode_json(body_codec.as_ref(), &message.body).ok()),
-            target: message
-                .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
+            method: Some(request.method.clone()),
+            request_target: Some(request.request_target.clone()),
             joint_document,
             socket_joint: None,
             message: message.cloned(),
@@ -109,8 +107,8 @@ impl RuleRuntimeService {
             EvaluationInput {
                 context: context.clone(),
                 stage,
-                json: None,
-                target: None,
+                method: None,
+                request_target: None,
                 joint_document: None,
                 socket_joint: Some(joint),
                 message: None,
@@ -119,29 +117,6 @@ impl RuleRuntimeService {
             None,
         )
         .await
-    }
-
-    #[cfg(test)]
-    pub(super) async fn evaluate_with_enqueue_notification(
-        &self,
-        context: &ConnectionContext,
-        stage: MessageStage,
-        message: Option<&Message>,
-        body_codec: &dyn BodyCodec,
-        enqueued: oneshot::Sender<()>,
-    ) -> ProxyResult<EvaluatedRules> {
-        let input = EvaluationInput {
-            context: context.clone(),
-            stage,
-            json: message.and_then(|message| decode_json(body_codec, &message.body).ok()),
-            target: message
-                .and_then(|message| message_target(&message.start_line).map(str::to_owned)),
-            joint_document: None,
-            socket_joint: None,
-            message: None,
-            body_codec: None,
-        };
-        self.submit(input, Some(enqueued)).await
     }
 
     async fn submit(
@@ -176,8 +151,8 @@ impl RuleRuntimeService {
                 input: Box::new(EvaluationInput {
                     context: context.clone(),
                     stage: MessageStage::TlsHandshake,
-                    json: None,
-                    target: None,
+                    method: None,
+                    request_target: None,
                     joint_document: None,
                     socket_joint: None,
                     message: None,
@@ -273,12 +248,6 @@ impl RuleRuntimeService {
             );
         }
     }
-
-    #[cfg(test)]
-    pub(super) fn registry_counts(&self) -> (usize, usize) {
-        let actors = self.actors.lock();
-        (actors.active_epochs.len(), actors.senders.len())
-    }
 }
 
 fn publish_repository_error(events: &EventHub, epoch: Uuid, error: &AppError) {
@@ -300,7 +269,7 @@ fn unavailable(epoch: Uuid) -> ProxyError {
 
 fn matched_rule_summaries(
     evaluation: &intercept_proxy_domain::RuleEvaluation,
-    rules: &[Rule],
+    rules: &[RuleDefinition],
     channel_labels: &BTreeMap<String, String>,
 ) -> Vec<RuleSummaryViewModel> {
     evaluation
@@ -310,7 +279,7 @@ fn matched_rule_summaries(
         .filter_map(|trace| {
             rules
                 .iter()
-                .find(|rule| rule.id == trace.rule_id)
+                .find(|rule| rule.rule_id() == trace.rule_id)
                 .map(|rule| rule_summary(rule, channel_labels))
         })
         .collect()
@@ -331,34 +300,34 @@ fn rule_trace_text(evaluation: &intercept_proxy_domain::RuleEvaluation) -> Vec<S
         .collect()
 }
 
-fn rule_summary(rule: &Rule, channel_labels: &BTreeMap<String, String>) -> RuleSummaryViewModel {
+fn rule_summary(
+    rule: &RuleDefinition,
+    channel_labels: &BTreeMap<String, String>,
+) -> RuleSummaryViewModel {
+    let (condition_count, action_count) = match rule.content() {
+        RuleContent::Http(content) => (content.condition.leaf_count(), content.actions.len()),
+        RuleContent::Socket(content) => (content.condition.leaf_count(), content.actions.len()),
+    };
+    let listener = rule.listener_id().to_string();
     RuleSummaryViewModel {
-        rule_id: rule.id.as_uuid(),
-        revision: rule.revision.get(),
-        name: rule.name.clone(),
-        enabled: rule.enabled,
-        priority: i32::try_from(rule.priority).unwrap_or(i32::MAX),
-        creation_order: rule.created_order,
-        channel_text: rule.channel.as_ref().map_or_else(
-            || "全部".into(),
-            |channel| {
-                channel_labels
-                    .get(channel.as_str())
-                    .cloned()
-                    .unwrap_or_else(|| channel.to_string())
-            },
-        ),
-        stage_text: match rule.stage {
-            MessageStage::Request => "请求",
-            MessageStage::Response => "响应",
-            MessageStage::TlsHandshake => "TLS 握手",
+        rule_id: rule.rule_id().as_uuid(),
+        revision: rule.revision().get(),
+        name: rule.name().to_owned(),
+        enabled: rule.enabled(),
+        priority: rule.priority(),
+        creation_order: rule.created_order(),
+        channel_text: channel_labels.get(&listener).cloned().unwrap_or(listener),
+        stage_text: match rule.stage() {
+            RuleStage::ProxyToUpstream => "请求",
+            RuleStage::ProxyToApp => "响应",
+            RuleStage::TlsHandshake => "TLS 握手",
         }
         .into(),
-        match_summary: format!("{} 个条件", rule.conditions.len()),
-        action_summary: format!("{} 个动作", rule.actions.len()),
-        hit_count: rule.hit_count,
-        last_hit_at: rule.last_hit_at,
-        ui_tone: if rule.enabled {
+        match_summary: format!("{condition_count} 个条件"),
+        action_summary: format!("{action_count} 个动作"),
+        hit_count: rule.lifecycle().hit_count,
+        last_hit_at: rule.lifecycle().last_hit_at,
+        ui_tone: if rule.enabled() {
             UiTone::Positive
         } else {
             UiTone::Neutral

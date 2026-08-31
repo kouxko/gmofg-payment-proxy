@@ -386,7 +386,6 @@ pub(super) fn application_with_proxy_ports(
             sessions: ports.clone(),
             breakpoints: Arc::new(BreakpointCoordinator::default()),
             breakpoint_validation: ports.clone(),
-            rules: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
