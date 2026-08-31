@@ -1,7 +1,7 @@
 //! v4 可移植文档中的协议包文件载荷。
 //!
 //! 这里只验证 JSON wire 自身可以安全、确定地交给恢复层：身份唯一、路径规范、Base64
-//! 规范且资源有界。Manifest、Schema、Rhai 和完整的跨平台路径冲突检查仍由
+//! 规范且资源有界。Manifest、Schema、JavaScript 和完整的跨平台路径冲突检查仍由
 //! infrastructure 调用协议脚本恢复/编译器完成，Application 不复制第二套解析器。
 
 use std::{cmp::Ordering, collections::HashSet};
@@ -227,7 +227,7 @@ mod tests {
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
             },
             files: vec![PortableProtocolPackageFile {
-                path: "manifest.toml".into(),
+                path: "manifest.json".into(),
                 contents_base64: STANDARD.encode(b"manifest"),
             }],
         }
@@ -265,7 +265,7 @@ mod tests {
         assert!(validate_portable_packages(&[duplicate]).is_err());
 
         let unknown = serde_json::json!({
-            "path": "manifest.toml",
+            "path": "manifest.json",
             "contents_base64": STANDARD.encode(b"manifest"),
             "sha256": "not-supported"
         });
@@ -274,7 +274,7 @@ mod tests {
 
     #[test]
     fn unsafe_paths_and_duplicate_identities_are_rejected() {
-        for path in ["/manifest.toml", "../manifest.toml", "a\\b", "C:manifest"] {
+        for path in ["/manifest.json", "../manifest.json", "a\\b", "C:manifest"] {
             let mut value = package();
             value.files[0].path = path.into();
             assert!(validate_portable_packages(&[value]).is_err(), "{path}");
@@ -315,7 +315,7 @@ mod tests {
         let mut value = package();
         value.files = (0..=MAX_PORTABLE_PACKAGE_FILES)
             .map(|index| PortableProtocolPackageFile {
-                path: format!("{index:04}.rhai"),
+                path: format!("{index:04}.js"),
                 contents_base64: String::new(),
             })
             .collect();

@@ -22,7 +22,7 @@ function detail() {
       name: "ISO 8583 v2",
       host_api: 1,
       kind: "socket" as const,
-      package_source: { type: "internal", built_in: false },
+      package_source: { type: "external", online: true },
       enabled: true,
       validation: { state: "valid" as const },
       installed_at: "2026-08-15T00:00:00Z",
@@ -44,7 +44,27 @@ function detail() {
       } },
     },
     usages: [],
-    external: null,
+    external: {
+      local_process: false,
+      remote_address: "127.0.0.1:49152",
+      connection_id: "018f6fc0-65d8-7d90-b25b-392f6d9b9481",
+      first_connected_at: "2026-08-20T08:00:00Z",
+      last_connected_at: "2026-08-20T09:00:00Z",
+      registration_fingerprint_sha256: "ab".repeat(32),
+      upstream_methods: {
+        frame: "hooks.upstream.frame",
+        decode: "hooks.upstream.decode",
+        encode: "hooks.upstream.encode",
+        display: "document.upstream.display",
+      },
+      downstream_methods: {
+        frame: "hooks.downstream.frame",
+        decode: "hooks.downstream.decode",
+        encode: "hooks.downstream.encode",
+        display: "document.downstream.display",
+      },
+      recent_error: null,
+    },
   };
 }
 

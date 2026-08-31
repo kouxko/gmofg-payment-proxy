@@ -15,6 +15,7 @@ const paths = {
   registry: "src-tauri/crates/infrastructure/src/adapters/external_package_registry/mod.rs",
   relay: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract.rs",
   capabilities: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+  jointDocument: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
   protocolExchange: "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
   processing: "src-tauri/crates/proxy/src/socket_relay/processing.rs",
   socketDiagnostics: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics.rs",
@@ -34,7 +35,7 @@ const active = [transport, code.server, code.registry, code.relay, code.capabili
 failIf(/method\s*:\s*String/.test(active), "active package transport must not own a dynamic method String");
 failIf(/rpc_timeout|max_in_flight|Semaphore|Self::Busy|Busy\s*=>|Self::Retry|Retry\s*=>|Self::Replay|Replay\s*=>|retry_|replay_/.test(transport), "new hook transport must not expose timeout/max-in-flight/Busy/retry/replay policy");
 failIf(!code.transport.includes("validate_against_buffer_len"), "frame response must be validated against the sent buffer");
-failIf(!code.capabilities.includes("CanonicalBase64::from_bytes") || !code.capabilities.includes("try_into()"), "active Socket adapter must enforce canonical Base64 in both directions");
+failIf(!code.capabilities.includes("CanonicalBase64::from_bytes") || !code.jointDocument.includes("CanonicalBase64::try_from"), "active Socket adapter must enforce canonical Base64 in both directions");
 for (const method of ["upstream_frame", "downstream_frame", "upstream_decode", "downstream_decode", "upstream_encode", "downstream_encode", "upstream_display", "downstream_display"]) failIf(!code.transport.includes(`fn ${method}`), `missing fixed typed client method ${method}`);
 failIf(/ExternalPackageClient|ExternalPackageConnectionConfig|ExternalPackageConnectionError/.test(code.infrastructureRoot), "legacy dynamic transport must not be re-exported");
 failIf(/\bExternalPackageRegistration\b|\bExternalFrameRequest\b|\bExternalDecodeRequest\b|\bExternalEncodeRequest\b|\bExternalDisplayRequest\b|\.call\s*\(/.test(active), "active runtime still consumes a legacy dynamic DTO or call path");
@@ -52,12 +53,7 @@ failIf(!source.server.includes("config.websocket_message_bytes()") || !source.tr
 
 const inventory = JSON.parse(await read("test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json"));
 const allowlist = inventory.legacy_internal_allowlist ?? [];
-failIf(allowlist.length !== 1, "legacy allowlist must be narrow and exact");
-const entry = allowlist[0];
-if (entry) {
-  failIf(entry.file !== "src-tauri/crates/protocol-scripting/src/lib.rs" || entry.symbol !== "parse_protocol_manifest" || entry.owning_phase !== "Phase13" || typeof entry.reason !== "string" || entry.reason.length < 24, "legacy allowlist must use exact file, symbol, reason and owning phase");
-  if (entry.file === "src-tauri/crates/protocol-scripting/src/lib.rs") failIf(!(await read(entry.file)).includes(entry.symbol), `${entry.file}#${entry.symbol}: stale legacy allowlist entry`);
-}
+failIf(allowlist.length !== 0, "legacy allowlist must remain empty after Phase 13");
 
 function discover(args) {
   const result = spawnSync("cargo", args, { encoding: "utf8" });

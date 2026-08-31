@@ -36,8 +36,6 @@ pkcs8 = { version = "=0.11.0", features = ["encryption", "pem", "std"] }
 parking_lot = "0.12.5"
 rcgen = { version = "=0.14.8", default-features = false, features = ["crypto", "ring", "pem", "x509-parser"] }
 ring = "0.17.14"
-# `internals` 仅用于精确遍历固定版本 AST 中的 import/禁止调用；不暴露到 crate 公共 API。
-rhai = { version = "=1.25.1", default-features = false, features = ["std", "sync", "internals", "only_i64", "no_float", "no_time", "no_closure", "no_custom_syntax"] }
 rmcp = { version = "=3.1.3", default-features = false, features = ["server", "transport-streamable-http-server"] }
 rustls = { version = "=0.23.42", default-features = false, features = ["ring", "tls12", "logging"] }
 rustls-native-certs = "=0.8.4"
@@ -61,7 +59,6 @@ tokio-openssl = "=0.6.5"
 tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
 tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
-toml = { version = "=1.1.3", default-features = false, features = ["parse", "serde"] }
 tower-service = "0.3.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }

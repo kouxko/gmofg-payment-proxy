@@ -15,7 +15,7 @@ export function version(
     name: "ISO 8583 长名称协议包",
     host_api: 1,
     kind: "socket",
-    package_source: { type: "internal", built_in: false },
+    package_source: { type: "external", online: true },
     enabled: value === "2.0.0",
     validation: { state: "valid" },
     installed_at: "2026-08-14T08:00:00Z",

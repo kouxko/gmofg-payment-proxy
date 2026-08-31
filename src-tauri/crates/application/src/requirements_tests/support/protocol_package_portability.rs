@@ -12,7 +12,6 @@ pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
     pub(in crate::requirements_tests) installed_preflight_calls: AtomicUsize,
     pub(in crate::requirements_tests) replace_calls: AtomicUsize,
     pub(in crate::requirements_tests) reset_calls: AtomicUsize,
-    pub(in crate::requirements_tests) compiler_validate_calls: AtomicUsize,
     pub(in crate::requirements_tests) compiler_describe_calls: AtomicUsize,
     pub(in crate::requirements_tests) fail_commit: AtomicBool,
     pub(in crate::requirements_tests) fail_preflight: AtomicBool,
@@ -40,7 +39,6 @@ impl FakeProtocolPackagePortability {
             installed_preflight_calls: AtomicUsize::new(0),
             replace_calls: AtomicUsize::new(0),
             reset_calls: AtomicUsize::new(0),
-            compiler_validate_calls: AtomicUsize::new(0),
             compiler_describe_calls: AtomicUsize::new(0),
             fail_commit: AtomicBool::new(false),
             fail_preflight: AtomicBool::new(false),
@@ -100,7 +98,16 @@ impl FakeProtocolPackagePortability {
 }
 
 #[async_trait]
-impl ProtocolPackageStorePort for FakeProtocolPackagePortability {
+impl ExternalPackageApplicationPort for FakeProtocolPackagePortability {
+    async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel> {
+        Ok(ExternalPackageServiceStatusViewModel {
+            websocket_url: "ws://127.0.0.1:8765/packages".into(),
+            fixed_path: "/packages".into(),
+            online_connection_count: 0,
+            state: ExternalPackageServiceStateViewModel::Listening,
+            authentication_enabled: false,
+        })
+    }
     async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
         Ok(Vec::new())
     }
@@ -110,37 +117,6 @@ impl ProtocolPackageStorePort for FakeProtocolPackagePortability {
         _: &ProtocolPackageRef,
     ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
         Ok(None)
-    }
-
-    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
-        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
-    }
-
-    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
-    }
-}
-
-#[async_trait]
-impl ProtocolPackageCompilerPort for FakeProtocolPackagePortability {
-    async fn compile_fresh(
-        &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<ProtocolPackageCompilationReceipt> {
-        self.compiler_validate_calls.fetch_add(1, Ordering::SeqCst);
-        let description = self
-            .descriptions
-            .lock()
-            .get(package)
-            .cloned()
-            .ok_or_else(|| {
-                AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试协议包未安装或无法恢复。")
-            })?;
-        Ok(ProtocolPackageCompilationReceipt {
-            package: description.package,
-            host_api: 1,
-            compatible: true,
-        })
     }
 
     async fn describe(
@@ -155,6 +131,93 @@ impl ProtocolPackageCompilerPort for FakeProtocolPackagePortability {
             .ok_or_else(|| {
                 AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "测试协议包没有对应编译描述。")
             })
+    }
+
+    async fn detail(&self, _: &ProtocolPackageRef) -> AppResult<ExternalPackageDetailViewModel> {
+        unused()
+    }
+
+    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
+        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
+    }
+
+    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        Err(AppError::new("TEST_READ_ONLY", "测试替身只读。"))
+    }
+
+    async fn restart(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
+    async fn disconnect(&self, _: &ProtocolPackageRef) -> AppResult<()> {
+        unused()
+    }
+
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        if self.block_backup_baseline.load(Ordering::SeqCst) {
+            self.backup_baseline_entered.notify_one();
+            self.continue_backup_baseline.notified().await;
+        }
+        Ok(self
+            .application_packages
+            .lock()
+            .iter()
+            .map(|package| ApplicationBackupProtocolPackageBaseline {
+                package: package.package.clone(),
+                enabled: package.enabled,
+                generation: uuid::Uuid::nil(),
+            })
+            .collect())
+    }
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
+        if self.block_application_export.load(Ordering::SeqCst) {
+            self.application_export_entered.notify_one();
+            self.continue_application_export.notified().await;
+        }
+        Ok(self.application_packages.lock().clone())
+    }
+    async fn preflight_application_packages(
+        &self,
+        packages: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        self.preflight_calls.fetch_add(1, Ordering::SeqCst);
+        if self.block_preflight.load(Ordering::SeqCst) {
+            self.preflight_entered.notify_one();
+            self.continue_preflight.notified().await;
+        }
+        self.descriptions_for(packages, |package| &package.package)
+    }
+    async fn preflight_installed_packages(
+        &self,
+        packages: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        self.installed_preflight_calls
+            .fetch_add(1, Ordering::SeqCst);
+        self.descriptions_for(packages, |package| package)
+    }
+    async fn replace_application_bundle(
+        &self,
+        _: Vec<PortableApplicationProtocolPackage>,
+        document: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        self.replace_calls.fetch_add(1, Ordering::SeqCst);
+        if self.fail_commit.load(Ordering::SeqCst) {
+            return Err(AppError::new(
+                "ATOMIC_COMMIT_FAILED",
+                "测试注入：替换失败。",
+            ));
+        }
+        self.configuration_store.replace_all(document).await
+    }
+    async fn reset_application_bundle(
+        &self,
+        document: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        self.reset_calls.fetch_add(1, Ordering::SeqCst);
+        self.configuration_store.reset_all(document).await
     }
 }
 
@@ -198,81 +261,5 @@ impl ProtocolPackageUsageQueryPort for FakeProtocolPackagePortability {
 
     async fn usage_counts(&self) -> AppResult<Vec<ProtocolPackageUsageCount>> {
         Ok(Vec::new())
-    }
-}
-
-#[async_trait]
-impl ProtocolPackagePortabilityPort for FakeProtocolPackagePortability {
-    async fn application_backup_baseline(
-        &self,
-    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
-        if self.block_backup_baseline.load(Ordering::SeqCst) {
-            self.backup_baseline_entered.notify_one();
-            self.continue_backup_baseline.notified().await;
-        }
-        Ok(self
-            .application_packages
-            .lock()
-            .iter()
-            .map(|package| ApplicationBackupProtocolPackageBaseline {
-                package: package.package.clone(),
-                enabled: package.enabled,
-                generation: uuid::Uuid::nil(),
-            })
-            .collect())
-    }
-
-    async fn export_application_packages(
-        &self,
-    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
-        if self.block_application_export.load(Ordering::SeqCst) {
-            self.application_export_entered.notify_one();
-            self.continue_application_export.notified().await;
-        }
-        Ok(self.application_packages.lock().clone())
-    }
-
-    async fn preflight_application_packages(
-        &self,
-        packages: &[PortableApplicationProtocolPackage],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        self.preflight_calls.fetch_add(1, Ordering::SeqCst);
-        if self.block_preflight.load(Ordering::SeqCst) {
-            self.preflight_entered.notify_one();
-            self.continue_preflight.notified().await;
-        }
-        self.descriptions_for(packages, |package| &package.package)
-    }
-
-    async fn preflight_installed_packages(
-        &self,
-        packages: &[ProtocolPackageRef],
-    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        self.installed_preflight_calls
-            .fetch_add(1, Ordering::SeqCst);
-        self.descriptions_for(packages, |package| package)
-    }
-
-    async fn replace_application_bundle(
-        &self,
-        _: Vec<PortableApplicationProtocolPackage>,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        self.replace_calls.fetch_add(1, Ordering::SeqCst);
-        if self.fail_commit.load(Ordering::SeqCst) {
-            return Err(AppError::new(
-                "ATOMIC_COMMIT_FAILED",
-                "测试注入：替换失败。",
-            ));
-        }
-        self.configuration_store.replace_all(document).await
-    }
-
-    async fn reset_application_bundle(
-        &self,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        self.reset_calls.fetch_add(1, Ordering::SeqCst);
-        self.configuration_store.reset_all(document).await
     }
 }

@@ -153,8 +153,5 @@ function optionLabel(option: ListenerProtocolPackageOptionViewModel): string {
 }
 
 function sourceLabel(option: ListenerProtocolPackageOptionViewModel): string {
-  if (option.package_source.type === "external") {
-    return option.package_source.online ? "外部 · 在线" : "外部 · 离线";
-  }
-  return option.package_source.built_in ? "内置示例" : "内部安装";
+  return option.package_source.online ? "外部 · 在线" : "外部 · 离线";
 }

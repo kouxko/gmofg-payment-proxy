@@ -2,7 +2,7 @@
 //!
 //! Tauri/WebView 不提交路径或文件字节。平台对话框返回的本机路径在本适配器内受限读取，
 //! 随后在本边界执行严格 ZIP/Manifest/resources 校验；提交后由本地 Sidecar
-//! 进程主动连接统一 `/packages` WebSocket 注册，不进入旧 TOML/Rhai 导入路径。
+//! 进程主动连接统一 `/packages` WebSocket 注册，不进入旧 JSON/JavaScript 导入路径。
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -22,8 +22,8 @@ use crate::AtomicFileExporter;
 
 use super::external_package_registry::application_description;
 use super::{
-    ExternalPackageRegistryAdapter, LocalPackageSupervisor, NativeFileDialog,
-    ProtocolPackageRepositoryAdapter, common::infra,
+    ExternalPackageRegistryAdapter, LocalPackageSupervisor, NativeFileDialog, PackageArchiveLimits,
+    common::infra,
 };
 use crate::sqlite::external_packages::StoredLocalPackageInstallOutcome;
 
@@ -37,7 +37,6 @@ fn invalid_token() -> AppError {
 /// 把宿主原生文件选择器与协议包注册表组合成 Application 导入端口。
 #[derive(Debug)]
 pub struct ProtocolPackageImportAdapter {
-    repository: Arc<ProtocolPackageRepositoryAdapter>,
     registry: Arc<ExternalPackageRegistryAdapter>,
     dialog: Arc<dyn NativeFileDialog>,
     files: AtomicFileExporter,
@@ -54,12 +53,10 @@ struct PendingLocalPackage {
 impl ProtocolPackageImportAdapter {
     #[must_use]
     pub fn new(
-        repository: Arc<ProtocolPackageRepositoryAdapter>,
         registry: Arc<ExternalPackageRegistryAdapter>,
         dialog: Arc<dyn NativeFileDialog>,
     ) -> Self {
         Self {
-            repository,
             registry,
             dialog,
             files: AtomicFileExporter,
@@ -79,15 +76,9 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         let Some(path) = self.dialog.choose_open_file("protocol_package_zip")? else {
             return Ok(None);
         };
-        let bytes = infra(
-            self.files
-                .read_bounded(&path, self.repository.max_archive_bytes()),
-        )?;
-        let archive = read_package_zip(
-            std::io::Cursor::new(&bytes),
-            self.repository.archive_limits(),
-        )
-        .map_err(AppError::from)?;
+        let bytes = infra(self.files.read_bounded(&path, 8 * 1024 * 1024))?;
+        let archive = read_package_zip(std::io::Cursor::new(&bytes), &PackageArchiveLimits)
+            .map_err(AppError::from)?;
         let manifest = archive.manifest().clone();
         let disposition = match self
             .registry

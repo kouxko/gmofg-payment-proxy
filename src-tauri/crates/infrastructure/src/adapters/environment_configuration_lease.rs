@@ -5,15 +5,12 @@ use intercept_proxy_application::{
     AndroidControlPort, AndroidRuntimeOwnerState, AndroidRuntimeOwnerViewModel, AppError,
     AppResult, EnvironmentApplyGenerations, EnvironmentApplyLease, EnvironmentApplyLeasePort,
     EnvironmentApplyLeaseRequest, EnvironmentValidatedApplyBaseline, ListenerRuntimePort,
-    ListenerRuntimeState, ProtocolPackageStorePort,
+    ListenerRuntimeState,
 };
 use tokio::sync::{Mutex as AsyncMutex, OwnedMutexGuard};
 use uuid::Uuid;
 
-use super::{
-    EnvironmentApplyResourceGateRegistry, ExternalPackageRegistryAdapter,
-    ProtocolPackageRepositoryAdapter,
-};
+use super::{EnvironmentApplyResourceGateRegistry, ExternalPackageRegistryAdapter};
 use crate::SqliteExecutor;
 
 mod package;
@@ -95,7 +92,6 @@ pub struct EnvironmentApplyLeaseAdapter {
 pub(crate) struct EnvironmentApplyRuntimeAdapter {
     pub(super) listeners: Arc<dyn ListenerRuntimePort>,
     pub(super) android: Arc<dyn AndroidControlPort>,
-    pub(super) packages: Arc<ProtocolPackageRepositoryAdapter>,
     pub(super) external_packages: Arc<ExternalPackageRegistryAdapter>,
     sqlite: SqliteExecutor,
     pub(super) resource_gates: Arc<EnvironmentApplyResourceGateRegistry>,
@@ -105,7 +101,6 @@ impl EnvironmentApplyRuntimeAdapter {
     pub(crate) fn new(
         listeners: Arc<dyn ListenerRuntimePort>,
         android: Arc<dyn AndroidControlPort>,
-        packages: Arc<ProtocolPackageRepositoryAdapter>,
         external_packages: Arc<ExternalPackageRegistryAdapter>,
         sqlite: SqliteExecutor,
         resource_gates: Arc<EnvironmentApplyResourceGateRegistry>,
@@ -113,7 +108,6 @@ impl EnvironmentApplyRuntimeAdapter {
         Self {
             listeners,
             android,
-            packages,
             external_packages,
             sqlite,
             resource_gates,
@@ -180,18 +174,17 @@ impl EnvironmentApplyLeaseRuntime for EnvironmentApplyRuntimeAdapter {
                         format!("{}:{:?}:{}", owner.epoch, owner.state, owner.serial),
                     )
                 }));
-        let internal = ProtocolPackageStorePort::list(self.packages.as_ref()).await?;
         let external = self
             .external_packages
             .environment_apply_projections()
             .await?;
-        observed.package = self.resource_gates.reconcile_exact_package_projections(
-            internal.into_iter().chain(external).map(|package| {
-                let fingerprint = serde_json::to_string(&package)
-                    .expect("typed package projection serialization cannot fail");
-                (package.package, fingerprint)
-            }),
-        );
+        observed.package =
+            self.resource_gates
+                .reconcile_exact_package_projections(external.into_iter().map(|package| {
+                    let fingerprint = serde_json::to_string(&package)
+                        .expect("typed package projection serialization cannot fail");
+                    (package.package, fingerprint)
+                }));
         Ok(observed)
     }
 

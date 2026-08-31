@@ -49,9 +49,9 @@ describe("protocol package import boundary model", () => {
     expect(presentImportError({
       code: "MANIFEST_INVALID",
       message: "Manifest 无效",
-      field_errors: { manifest: ["manifest.toml:2:3", "manifest.toml:2:3", ""] },
+      field_errors: { manifest: ["manifest.json:2:3", "manifest.json:2:3", ""] },
       diagnostic: {
-        file: "manifest.toml",
+        file: "manifest.json",
         field: "hooks.upstream.receive.frame",
         line: 2,
         column: 3,
@@ -61,7 +61,7 @@ describe("protocol package import boundary model", () => {
       code: "MANIFEST_INVALID",
       message: "Manifest 无效",
       details: [
-        "manifest.toml:2:3",
+        "manifest.json:2:3",
         "字段：hooks.upstream.receive.frame",
         "入口：frame",
       ],

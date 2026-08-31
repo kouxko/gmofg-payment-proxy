@@ -200,7 +200,7 @@ pub(in crate::requirements_tests) fn portable_protocol_package(
     PortableApplicationProtocolPackage {
         package,
         files: vec![PortableProtocolPackageFile {
-            path: "manifest.toml".into(),
+            path: "manifest.json".into(),
             contents_base64: "bWFuaWZlc3Q=".into(),
         }],
         enabled,

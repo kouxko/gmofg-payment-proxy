@@ -12,21 +12,11 @@ impl crate::SecretProtector for ListenerRuntimeTestProtector {
 }
 
 pub(super) fn test_listener_runtime(store: Arc<SqliteStore>) -> ListenerRuntimeAdapter {
-    let protocol_packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-        Arc::clone(&store),
-    ));
-    test_listener_runtime_with_packages(store, protocol_packages)
-}
-
-fn test_listener_runtime_with_packages(
-    store: Arc<SqliteStore>,
-    protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
-) -> ListenerRuntimeAdapter {
     let protected_secrets = Arc::new(ProtectedSecretAdapter::new(
         Arc::clone(&store),
         Arc::new(ListenerRuntimeTestProtector),
     ));
-    ListenerRuntimeAdapter::new(store, protected_secrets, protocol_packages)
+    ListenerRuntimeAdapter::new(store, protected_secrets)
 }
 
 include!("tests/certificate_policy.rs");
@@ -41,15 +31,7 @@ include!("tests/environment_apply_gate_revision16.rs");
 
 #[path = "tests/external_package_runtime.rs"]
 mod external_package_runtime_tests;
-#[path = "tests/http_protocol_pipeline.rs"]
-mod http_protocol_pipeline_tests;
-#[path = "tests/local_responder_runtime.rs"]
-mod local_responder_runtime_tests;
 #[path = "tests/phase10_http_pipeline.rs"]
 mod phase10_http_pipeline_tests;
 #[path = "tests/runtime_epoch_aba.rs"]
 mod runtime_epoch_aba_tests;
-#[path = "tests/scripted_relay_runtime.rs"]
-mod scripted_relay_runtime_tests;
-#[path = "tests/scripted_snapshot.rs"]
-mod scripted_snapshot_tests;

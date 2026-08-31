@@ -20,33 +20,19 @@ use intercept_proxy_domain::{
 };
 use intercept_proxy_exchange::{Direction, Downstream, Error, Upstream};
 use intercept_proxy_package_contract::PackageKind;
-#[cfg(test)]
-use intercept_proxy_protocol_scripting::{
-    DirectionExecutionPlan, ProtocolDirection as LegacyProtocolDirection,
-    ProtocolDirectionExecutor, ProtocolPackageKind,
-};
 use intercept_proxy_runtime::{
     HttpConnectionIdentity, HttpDirectionCapabilities, HttpObservationMetadata,
     HttpProtocolCapabilityFactory,
 };
-#[cfg(test)]
-use parking_lot::Mutex;
 use parking_lot::RwLock;
-
-#[cfg(test)]
-use crate::adapters::protocol_packages::runtime_snapshot::RuntimeProtocolPackageSnapshot;
 
 use super::{ListenerRuntimeAdapter, external_relay::RuntimeExternalSocketPackageBinding};
 
 mod external_http;
-#[cfg(test)]
-mod legacy_http;
 mod programs;
 pub(super) use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
 #[cfg(test)]
 pub(super) use external_http::decode_http_body_for_package;
-#[cfg(test)]
-pub(super) use legacy_http::{SharedExecutor, run_stage};
 use programs::{HttpDocumentRulePrograms, compile_programs};
 
 /// Listener 启动时冻结的协议包与规则集合。
@@ -55,16 +41,12 @@ use programs::{HttpDocumentRulePrograms, compile_programs};
 /// capability 共享该版本对应的在线 Sidecar actor，连接级 Document 只在 joint runtime 暂存。
 #[derive(Clone)]
 pub(super) struct HttpProtocolRuntimeSnapshot {
-    #[cfg(test)]
-    package: Option<RuntimeProtocolPackageSnapshot>,
     external: Option<RuntimeExternalSocketPackageBinding>,
     request_codec: BodyCodecKind,
     response_codec: BodyCodecKind,
     programs: Arc<RwLock<HttpDocumentRulePrograms>>,
     rule_generation: Arc<AtomicU64>,
     metadata: HttpObservationMetadata,
-    #[cfg(test)]
-    listener_id: intercept_proxy_domain::ListenerId,
     joint_rules: Arc<JointHttpRuleRuntime>,
 }
 
@@ -75,18 +57,7 @@ impl fmt::Debug for HttpProtocolRuntimeSnapshot {
             .field(
                 "package",
                 &self.external.as_ref().map_or_else(
-                    || {
-                        #[cfg(test)]
-                        {
-                            self.package
-                                .as_ref()
-                                .map(|package| format!("{:?}", package.compiled().package()))
-                        }
-                        #[cfg(not(test))]
-                        {
-                            None
-                        }
-                    },
+                    || None,
                     |binding| Some(format!("{:?}", binding.registration().package().identity())),
                 ),
             )
@@ -99,16 +70,6 @@ impl HttpProtocolRuntimeSnapshot {
     #[cfg(test)]
     pub(super) fn joint_runtime(&self) -> Arc<JointHttpRuleRuntime> {
         Arc::clone(&self.joint_rules)
-    }
-
-    #[cfg(test)]
-    pub(super) fn take_joint_evaluation(
-        &self,
-        connection: &HttpConnectionIdentity,
-        response: bool,
-    ) -> Option<JointDocumentEvaluation> {
-        self.joint_rules
-            .take_identity(connection.runtime_epoch, connection.connection_id, response)
     }
 
     pub(super) async fn prepare_async(
@@ -180,8 +141,6 @@ impl HttpProtocolRuntimeSnapshot {
             })
             .await?;
         Ok(Some(Arc::new(Self {
-            #[cfg(test)]
-            package: None,
             external: Some(binding),
             request_codec: http.request_body_codec,
             response_codec: http.response_body_codec,
@@ -191,55 +150,6 @@ impl HttpProtocolRuntimeSnapshot {
                 workspace_id: workspace.id.to_string(),
                 listener_id: listener.id.to_string(),
             },
-            #[cfg(test)]
-            listener_id: listener.id,
-            joint_rules: Arc::clone(&adapter.joint_http_rules),
-        })))
-    }
-
-    #[cfg(test)]
-    pub(super) fn prepare(
-        adapter: &ListenerRuntimeAdapter,
-        workspace: &ProxyWorkspace,
-        listener: &ProxyListener,
-    ) -> AppResult<Option<Arc<Self>>> {
-        let intercept_proxy_domain::ListenerDataPlane::Http(http) = &listener.data_plane else {
-            return Ok(None);
-        };
-        let HttpBodyProcessing::Protocol { package } = &http.body_processing else {
-            return Ok(None);
-        };
-        let frozen = adapter
-            .protocol_packages
-            .freeze_for_listener_start(package)?;
-        if frozen.compiled().kind() != ProtocolPackageKind::Http {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_KIND_MISMATCH",
-                "HTTP Body 必须绑定 HTTP 协议包。",
-            )
-            .entity(listener.id.to_string()));
-        }
-        let programs = compile_programs(
-            workspace,
-            listener,
-            package,
-            frozen.compiled().schema(LegacyProtocolDirection::Upstream),
-            frozen
-                .compiled()
-                .schema(LegacyProtocolDirection::Downstream),
-        )?;
-        Ok(Some(Arc::new(Self {
-            package: Some(frozen),
-            external: None,
-            request_codec: http.request_body_codec,
-            response_codec: http.response_body_codec,
-            programs: Arc::new(RwLock::new(programs)),
-            rule_generation: Arc::new(AtomicU64::new(0)),
-            metadata: HttpObservationMetadata {
-                workspace_id: workspace.id.to_string(),
-                listener_id: listener.id.to_string(),
-            },
-            listener_id: listener.id,
             joint_rules: Arc::clone(&adapter.joint_http_rules),
         })))
     }
@@ -264,45 +174,29 @@ impl HttpProtocolRuntimeSnapshot {
             title: None,
             properties: BTreeMap::new(),
         };
-        let (upstream_schema, downstream_schema) = if let Some(binding) = &self.external {
-            (
-                binding
-                    .registration()
-                    .document()
-                    .upstream()
-                    .schema()
-                    .unwrap_or(&fallback_schema)
-                    .clone(),
-                binding
-                    .registration()
-                    .document()
-                    .downstream()
-                    .schema()
-                    .unwrap_or(&fallback_schema)
-                    .clone(),
+        let Some(binding) = &self.external else {
+            return Err(AppError::new(
+                "EXTERNAL_PACKAGE_NOT_FOUND",
+                "HTTP 协议包统一注册绑定不存在。",
             )
-        } else {
-            #[cfg(test)]
-            {
-                let compiled = self
-                    .package
-                    .as_ref()
-                    .expect("legacy HTTP snapshot has a compiled package")
-                    .compiled();
-                (
-                    compiled.schema(LegacyProtocolDirection::Upstream).clone(),
-                    compiled.schema(LegacyProtocolDirection::Downstream).clone(),
-                )
-            }
-            #[cfg(not(test))]
-            {
-                return Err(AppError::new(
-                    "EXTERNAL_PACKAGE_NOT_FOUND",
-                    "HTTP 协议包统一注册绑定不存在。",
-                )
-                .entity(listener.id.to_string()));
-            }
+            .entity(listener.id.to_string()));
         };
+        let (upstream_schema, downstream_schema) = (
+            binding
+                .registration()
+                .document()
+                .upstream()
+                .schema()
+                .unwrap_or(&fallback_schema)
+                .clone(),
+            binding
+                .registration()
+                .document()
+                .downstream()
+                .schema()
+                .unwrap_or(&fallback_schema)
+                .clone(),
+        );
         let replacement = adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
@@ -343,40 +237,9 @@ impl HttpProtocolRuntimeSnapshot {
                 [programs.program(stage)],
             ));
         }
-        #[cfg(test)]
-        {
-            let package = self
-                .package
-                .as_ref()
-                .expect("legacy HTTP snapshot has a compiled package");
-            let legacy_direction = match direction {
-                ProtocolDirection::Upstream => LegacyProtocolDirection::Upstream,
-                ProtocolDirection::Downstream => LegacyProtocolDirection::Downstream,
-            };
-            let executor = ProtocolDirectionExecutor::new(
-                package.compiled(),
-                DirectionExecutionPlan::new(legacy_direction),
-                connection.connection_id.to_string(),
-                self.listener_id.to_string(),
-                package.runtime_limits(),
-            )
-            .map_err(|error| legacy_http::protocol_error(&error))?;
-            let executor = Arc::new(Mutex::new(executor));
-            let programs = self.programs.read();
-            Ok(legacy_http::build_capabilities(
-                Arc::clone(&self.joint_rules),
-                connection,
-                response,
-                &executor,
-                [programs.program(stage)],
-            ))
-        }
-        #[cfg(not(test))]
-        {
-            Err(Error::new(
-                "EXTERNAL_PACKAGE_NOT_FOUND\nHTTP 协议包统一注册绑定不存在",
-            ))
-        }
+        Err(Error::new(
+            "EXTERNAL_PACKAGE_NOT_FOUND\nHTTP 协议包统一注册绑定不存在",
+        ))
     }
 }
 

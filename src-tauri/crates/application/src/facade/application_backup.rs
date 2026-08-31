@@ -39,10 +39,7 @@ impl Application {
 
         let settings = self.settings.get().await?;
         let certificate_materials = self.export_certificate_materials(&workspaces).await?;
-        let protocol_packages = self
-            .protocol_package_portability
-            .export_application_packages()
-            .await?;
+        let protocol_packages = self.external_packages.export_application_packages().await?;
         validate_configuration_package_references(&workspaces, &protocol_packages, true)?;
         let mut files = BTreeMap::new();
         let package_references = protocol_packages

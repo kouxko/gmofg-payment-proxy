@@ -2,8 +2,10 @@
 
 use async_trait::async_trait;
 use intercept_proxy_application::{
-    AppError, AppResult, ExternalPackageApplicationPort, ExternalPackageDetailViewModel,
-    ExternalPackageServiceStatusViewModel, ProtocolPackageDescriptionViewModel,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
+    ApplicationConfigurationDocument, ExternalPackageApplicationPort,
+    ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
+    PortableApplicationProtocolPackage, ProtocolPackageDescriptionViewModel,
     ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::ProtocolPackageRef;
@@ -195,5 +197,74 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
                 format!("外部协议包删除任务异常终止：{error}"),
             )
         })?
+    }
+
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        let packages = self.list().await?;
+        if packages.is_empty() {
+            Ok(Vec::new())
+        } else {
+            Err(AppError::new(
+                "APPLICATION_BACKUP_EXTERNAL_PACKAGES_UNSUPPORTED",
+                "当前备份格式不接受外部软件包；请先人工清理旧备份引用。",
+            ))
+        }
+    }
+
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
+        self.application_backup_baseline().await.map(|_| Vec::new())
+    }
+
+    async fn preflight_application_packages(
+        &self,
+        packages: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        if packages.is_empty() {
+            Ok(Vec::new())
+        } else {
+            Err(AppError::new(
+                "APPLICATION_BACKUP_EXTERNAL_PACKAGES_UNSUPPORTED",
+                "旧协议包备份数据不兼容当前外部软件包注册表，请人工清理。",
+            ))
+        }
+    }
+
+    async fn preflight_installed_packages(
+        &self,
+        packages: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        let mut descriptions = Vec::with_capacity(packages.len());
+        for package in packages {
+            descriptions.push(self.describe(package).await?);
+        }
+        Ok(descriptions)
+    }
+
+    async fn replace_application_bundle(
+        &self,
+        packages: Vec<PortableApplicationProtocolPackage>,
+        _document: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        self.preflight_application_packages(&packages)
+            .await
+            .map(|_| ())
+    }
+
+    async fn reset_application_bundle(
+        &self,
+        _document: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        if self.list().await?.is_empty() {
+            Ok(())
+        } else {
+            Err(AppError::new(
+                "APPLICATION_RESET_EXTERNAL_PACKAGES_PRESENT",
+                "清除配置前必须先删除全部外部软件包。",
+            ))
+        }
     }
 }

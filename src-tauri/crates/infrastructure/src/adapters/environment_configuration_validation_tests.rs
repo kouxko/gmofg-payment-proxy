@@ -12,10 +12,12 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, ExternalPackageApplicationPort, ExternalPackageDetailViewModel,
-    ExternalPackageServiceStatusViewModel, ProtocolPackageDescriptionViewModel,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
+    ApplicationConfigurationDocument, ExternalPackageApplicationPort,
+    ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
+    PortableApplicationProtocolPackage, ProtocolPackageDescriptionViewModel,
     ProtocolPackageKindViewModel, ProtocolPackageRef, ProtocolPackageSourceViewModel,
-    ProtocolPackageStorePort, ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
+    ProtocolPackageValidationViewModel, ProtocolPackageVersionViewModel,
 };
 use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageVersion};
 use intercept_proxy_runtime::{SocketTlsIdentity, SocketUpstreamTransport};
@@ -36,33 +38,8 @@ use rcgen::{
 
 #[derive(Debug, Default)]
 struct ProjectionPorts {
-    internal: Mutex<Option<ProtocolPackageVersionViewModel>>,
     external: Mutex<Option<ProtocolPackageVersionViewModel>>,
-    internal_gets: AtomicUsize,
     external_gets: AtomicUsize,
-}
-
-#[async_trait]
-impl ProtocolPackageStorePort for ProjectionPorts {
-    async fn list(&self) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
-        panic!("package validation must not list")
-    }
-
-    async fn get(
-        &self,
-        _: &ProtocolPackageRef,
-    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
-        self.internal_gets.fetch_add(1, Ordering::SeqCst);
-        Ok(self.internal.lock().unwrap().clone())
-    }
-
-    async fn set_enabled(&self, _: &ProtocolPackageRef, _: bool) -> AppResult<()> {
-        panic!("package validation must not mutate")
-    }
-
-    async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
-        panic!("package validation must not mutate")
-    }
 }
 
 #[async_trait]
@@ -109,6 +86,39 @@ impl ExternalPackageApplicationPort for ProjectionPorts {
     async fn delete(&self, _: &ProtocolPackageRef) -> AppResult<()> {
         panic!("package validation must not mutate")
     }
+
+    async fn application_backup_baseline(
+        &self,
+    ) -> AppResult<Vec<ApplicationBackupProtocolPackageBaseline>> {
+        panic!("not requested")
+    }
+    async fn export_application_packages(
+        &self,
+    ) -> AppResult<Vec<PortableApplicationProtocolPackage>> {
+        panic!("not requested")
+    }
+    async fn preflight_application_packages(
+        &self,
+        _: &[PortableApplicationProtocolPackage],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        panic!("not requested")
+    }
+    async fn preflight_installed_packages(
+        &self,
+        _: &[ProtocolPackageRef],
+    ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
+        panic!("not requested")
+    }
+    async fn replace_application_bundle(
+        &self,
+        _: Vec<PortableApplicationProtocolPackage>,
+        _: ApplicationConfigurationDocument,
+    ) -> AppResult<()> {
+        panic!("not requested")
+    }
+    async fn reset_application_bundle(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
+        panic!("not requested")
+    }
 }
 
 #[derive(Debug)]
@@ -122,11 +132,7 @@ impl ListenerMitmAuthorityProvider for UnusedInstallationRoot {
 }
 
 fn adapter(ports: Arc<ProjectionPorts>) -> EnvironmentConfigurationValidationAdapter {
-    EnvironmentConfigurationValidationAdapter::new(
-        ports.clone(),
-        ports,
-        Arc::new(UnusedInstallationRoot),
-    )
+    EnvironmentConfigurationValidationAdapter::new(ports, Arc::new(UnusedInstallationRoot))
 }
 
 fn package() -> ProtocolPackageRef {
@@ -166,7 +172,6 @@ async fn package_validation_is_exact_get_only_and_rejects_offline_external() {
         .unwrap_err();
 
     assert_eq!(error.view_model.code, "EXTERNAL_PACKAGE_OFFLINE");
-    assert_eq!(ports.internal_gets.load(Ordering::SeqCst), 1);
     assert_eq!(ports.external_gets.load(Ordering::SeqCst), 1);
 }
 

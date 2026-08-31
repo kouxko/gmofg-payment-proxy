@@ -28,7 +28,7 @@
       "canonical_golden_round_trips_every_request_result_and_error_shape"
     ]
   },
-  "generated_sha256": "413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123",
+  "generated_sha256": "438619b59a181d573aecf0426a80426ffbcb3f6f1537827c1684b8510a0af329",
   "mcp_snapshot_sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe",
   "generated_required_fragments": [
     "export type PackageManifest =",

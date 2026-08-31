@@ -18,12 +18,12 @@ const files = [
   "src-tauri/crates/infrastructure/src/adapters/external_package_registry/mod.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
-  "src-tauri/crates/protocol-scripting/src/lib.rs",
   "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
   "src-tauri/crates/proxy/src/socket_relay/processing.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs",
   "test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
 ];
 
 function sandbox() {
@@ -71,10 +71,14 @@ for (const [name, mutate, expected] of [
   ["FrameResult buffer validation", replace(files[0], "validate_against_buffer_len", "unchecked_buffer_len"), /validated against/i],
   ["missing production import callsite", replace(files[2], /read_package_zip/g, "read_legacy_zip"), /active import/i],
   ["missing production dependency", replace(files[3], "intercept-proxy-package-runtime", "removed-package-runtime"), /must depend/i],
-  ["canonical Base64 decode", replace(files[9], "try_into()", "parse_unchecked()"), /canonical Base64/i],
+  ["canonical Base64 decode", replace(files[15], "CanonicalBase64::try_from", "CanonicalBase64::from_unchecked"), /canonical Base64/i],
   ["fixed ZIP root", replace(files[5], /display\.js/g, "view.js"), /display\.js/i],
-  ["wide allowlist", replace(files[15], '"symbol": "parse_protocol_manifest"', '"symbol": "parse_protocol"'), /narrow and exact|exact file/i],
-  ["stale allowlist", replace(files[10], "parse_protocol_manifest", "parse_legacy_manifest"), /stale legacy/i],
+  ["restored legacy allowlist", (target) => {
+    const file = path.join(target, files[14]);
+    const inventory = JSON.parse(fs.readFileSync(file, "utf8"));
+    inventory.legacy_internal_allowlist = [{ file: "legacy.rs", symbol: "parse", owning_phase: "Phase13", reason: "must not return" }];
+    fs.writeFileSync(file, `${JSON.stringify(inventory, null, 2)}\n`);
+  }, /remain empty/i],
   ["unbounded ZIP entry read", replace(files[5], ".take(limits.max_file_bytes().saturating_add(1))", ".take(u64::MAX)"), /bounded actual-byte/i],
   ["dropped stable package code", replace(files[9], ".with_external_package_call", ".without_external_package_call"), /stable package error code/i],
   ["registration-only websocket ceiling", replace(files[6], "config.websocket_message_bytes()", "config.registration_websocket_message_bytes()"), /wire ceiling/i],

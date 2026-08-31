@@ -355,10 +355,10 @@ for (const [name, source] of documents) {
 const templateApi = await readFile(path.join(repositoryRoot, "templates/socket-protocol/API.md"), "utf8");
 const templateAuthoring = await readFile(path.join(repositoryRoot, "templates/socket-protocol/AUTHORING.md"), "utf8");
 for (const [name, source] of [["API.md", templateApi], ["AUTHORING.md", templateAuthoring]]) {
-  for (const required of ["[document.upstream]", "[document.downstream]", "[hooks.upstream]", "[hooks.downstream]"]) {
+  for (const required of ["manifest.json", "protocol.js", "display.js", "Sidecar"]) {
     if (!source.includes(required)) failures.push(`templates/socket-protocol/${name}: missing ${required}`);
   }
-  if (/^\s*script\s*=/mu.test(source)) failures.push(`templates/socket-protocol/${name}: legacy script field is forbidden`);
+  if (/^\s*script\s*=/mu.test(source) || /\[(?:document|hooks)\.(?:upstream|downstream)\]/u.test(source)) failures.push(`templates/socket-protocol/${name}: legacy TOML contract is forbidden`);
 }
 
 if (failures.length > 0) {

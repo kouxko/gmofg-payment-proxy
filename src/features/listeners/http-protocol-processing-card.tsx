@@ -60,9 +60,7 @@ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange
   }
 
   function optionText(option: ListenerProtocolPackageOptionViewModel): string {
-    const source = option.package_source.type === "external"
-      ? option.package_source.online ? "外部 · 在线" : "外部 · 离线"
-      : option.package_source.built_in ? "内置示例" : "内部安装";
+    const source = option.package_source.online ? "外部 · 在线" : "外部 · 离线";
     return `${option.name} · ${option.package.version} · ${source}`;
   }
 

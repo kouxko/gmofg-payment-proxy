@@ -45,7 +45,6 @@ async fn direct_listener_gates_never_touch_protocol_package_ports() {
             .unwrap();
 
         assert_eq!(services.get_calls.load(Ordering::SeqCst), 0);
-        assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
         assert_eq!(services.describe_calls.load(Ordering::SeqCst), 0);
         assert_eq!(services.usage_calls.load(Ordering::SeqCst), 0);
     }
@@ -78,7 +77,6 @@ async fn http_protocol_listener_save_requires_an_installed_http_package() {
         .listener_save(workspace.id, workspace.revision.get(), listener, Vec::new())
         .await
         .unwrap();
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 2);
     assert_eq!(services.describe_calls.load(Ordering::SeqCst), 2);
 }
 
@@ -142,10 +140,10 @@ async fn http_protocol_listener_rejects_missing_and_socket_packages_before_save(
     }
 }
 
-/// `LocalResponder` 启动前仍 fresh compile 精确包版本；通过门禁后与其他 Listener 一样
+/// `LocalResponder` 启动前仍读取精确外部包描述；通过门禁后与其他 Listener 一样
 /// 进入 runtime，并把持久化 enabled 状态与实际运行态一起提交。
 #[tokio::test]
-async fn local_responder_reaches_runtime_after_fresh_script_validation() {
+async fn local_responder_reaches_runtime_after_fresh_package_description() {
     let (application, services, workspaces, runtime) = fixture();
     let package = pkg("iso-8583", "1.0.0");
     let listener_id = configure_relay(&services, &workspaces, &package).await;
@@ -167,7 +165,7 @@ async fn local_responder_reaches_runtime_after_fresh_script_validation() {
         )
         .await
         .unwrap();
-    let before_start_compile_calls = services.compile_calls.load(Ordering::SeqCst);
+    let before_start_describe_calls = services.describe_calls.load(Ordering::SeqCst);
     let status = application
         .listener_start(workspace.id, workspace.revision.get(), listener_id)
         .await
@@ -175,8 +173,8 @@ async fn local_responder_reaches_runtime_after_fresh_script_validation() {
 
     assert_eq!(status.state, ListenerRuntimeState::Running);
     assert_eq!(
-        services.compile_calls.load(Ordering::SeqCst),
-        before_start_compile_calls + 1
+        services.describe_calls.load(Ordering::SeqCst),
+        before_start_describe_calls + 1
     );
     assert_eq!(runtime.statuses().await.unwrap(), vec![status]);
     assert!(workspaces.get(workspace.id).await.unwrap().listeners[0].enabled);

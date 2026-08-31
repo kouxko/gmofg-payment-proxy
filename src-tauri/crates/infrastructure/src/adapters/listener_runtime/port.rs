@@ -91,14 +91,13 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 ),
             )
             .await;
-        let (socket_snapshot, external_socket_snapshot, http_snapshot) = self
+        let (external_socket_snapshot, http_snapshot) = self
             .running
             .lock()
             .await
             .get(&listener_id)
-            .map_or((None, None, None), |running| {
+            .map_or((None, None), |running| {
                 (
-                    running.scripted_snapshot.clone(),
                     running.external_socket_snapshot.clone(),
                     running.http_protocol_snapshot.clone(),
                 )
@@ -111,11 +110,6 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 AppError::new("LISTENER_NOT_FOUND", "入口配置不存在。")
                     .entity(listener_id.to_string())
             })?;
-        if let Some(snapshot) = socket_snapshot {
-            snapshot
-                .replace_document_rules(self, &workspace, listener)
-                .await?;
-        }
         if let Some(snapshot) = external_socket_snapshot {
             snapshot
                 .replace_document_rules(self, &workspace, listener)
@@ -229,8 +223,7 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                     .map_err(|error| upstream_tls_test_error(listener.id, &error))?;
                 socket_probe_view(&listener, result)
             }
-            PreparedListenerRuntime::ExternalScriptedSocket { .. }
-            | PreparedListenerRuntime::ScriptedSocket { .. } => Err(AppError::new(
+            PreparedListenerRuntime::ExternalScriptedSocket { .. } => Err(AppError::new(
                 "LISTENER_CONNECTION_TEST_UNSUPPORTED",
                 "Scripted Socket 运行计划不能直接作为上游探测服务。",
             )

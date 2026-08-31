@@ -99,8 +99,6 @@ pub use environment_configuration::EnvironmentCommitFaultPoint;
 pub(crate) use environment_configuration::EnvironmentConfigurationCommitAdapter;
 pub use executor::{IntoSqlitePersistence, SqliteExecutor, open_sqlite_persistence};
 pub(crate) mod external_packages;
-mod portable_configuration;
-pub(crate) mod protocol_packages;
 mod schema;
 
 /// 当前数据库格式版本。版本 100 是产品 1.00 的正式兼容基线。

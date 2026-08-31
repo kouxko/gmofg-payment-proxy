@@ -25,69 +25,6 @@ fn fixture() -> (
 }
 
 #[tokio::test]
-async fn enable_recompiles_every_time_before_writing_the_enabled_bit() {
-    let (application, services, _, _) = fixture();
-    let target = package("iso-8583", "1.0.0");
-    services.insert(record(target.clone(), false));
-
-    let first = application
-        .protocol_package_enable(target.clone())
-        .await
-        .unwrap();
-    let second = application
-        .protocol_package_enable(target.clone())
-        .await
-        .unwrap();
-
-    assert!(first.enabled && second.enabled);
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 2);
-    assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 2);
-    assert!(services.record(&target).unwrap().enabled);
-    assert!(
-        services
-            .exact_calls
-            .lock()
-            .iter()
-            .all(|item| item == &target)
-    );
-}
-
-#[tokio::test]
-async fn enable_rejects_incompatible_or_wrong_version_receipts_without_mutation() {
-    let (application, services, _, _) = fixture();
-    let target = package("iso-8583", "1.0.0");
-    let other = package("iso-8583", "2.0.0");
-    services.insert(record(target.clone(), false));
-
-    for receipt in [
-        ProtocolPackageCompilationReceipt {
-            package: target.clone(),
-            host_api: 1,
-            compatible: false,
-        },
-        ProtocolPackageCompilationReceipt {
-            package: other,
-            host_api: 1,
-            compatible: true,
-        },
-        ProtocolPackageCompilationReceipt {
-            package: target.clone(),
-            host_api: 2,
-            compatible: true,
-        },
-    ] {
-        services.set_compilation_result(target.clone(), Ok(receipt));
-        let error = application
-            .protocol_package_enable(target.clone())
-            .await
-            .unwrap_err();
-        assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_API_INCOMPATIBLE");
-        assert!(!services.record(&target).unwrap().enabled);
-    }
-    assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 0);
-}
-
-#[tokio::test]
 async fn enable_failure_paths_never_partially_enable_the_package() {
     let (application, services, _, _) = fixture();
     let target = package("tlv", "1.0.0");
@@ -103,10 +40,9 @@ async fn enable_failure_paths_never_partially_enable_the_package() {
         ),
         "STORE_READ_FAILED"
     );
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
     services.failures.lock().get = None;
 
-    services.failures.lock().compile = Some(AppError::new("SCRIPT_INVALID", "compile"));
+    services.failures.lock().describe = Some(AppError::new("PACKAGE_DESCRIBE_FAILED", "describe"));
     assert_eq!(
         error_code(
             &application
@@ -114,10 +50,11 @@ async fn enable_failure_paths_never_partially_enable_the_package() {
                 .await
                 .unwrap_err()
         ),
-        "SCRIPT_INVALID"
+        "PACKAGE_DESCRIBE_FAILED"
     );
     assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 0);
-    services.failures.lock().compile = None;
+    services.failures.lock().describe = None;
+    services.set_description(target.clone(), strict_description(target.clone()));
 
     services.failures.lock().set_enabled = Some(AppError::new("STORE_WRITE_FAILED", "write"));
     assert_eq!(
@@ -133,33 +70,11 @@ async fn enable_failure_paths_never_partially_enable_the_package() {
 }
 
 #[tokio::test]
-async fn disable_blocks_every_non_stopped_runtime_state_and_allows_stopped_references() {
-    let active_states = [
-        ListenerRuntimeState::Starting,
-        ListenerRuntimeState::Running,
-        ListenerRuntimeState::Stopping,
-        ListenerRuntimeState::Faulted,
-    ];
-    for state in active_states {
-        let (application, services, _, _) = fixture();
-        let target = package("iso-8583", "1.0.0");
-        services.insert(record(target.clone(), true));
-        services.set_usages(
-            target.clone(),
-            vec![usage(WorkspaceId::new(), ListenerId::new(), state)],
-        );
-        let error = application
-            .protocol_package_disable(target.clone())
-            .await
-            .unwrap_err();
-        assert_eq!(error_code(&error), "PROTOCOL_PACKAGE_RUNTIME_IN_USE");
-        assert!(services.record(&target).unwrap().enabled);
-        assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 0);
-    }
-
+async fn disable_preserves_stopped_references() {
     let (application, services, _, _) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), true));
+    services.set_description(target.clone(), strict_description(target.clone()));
     let stopped = usage(
         WorkspaceId::new(),
         ListenerId::new(),
@@ -192,7 +107,7 @@ async fn disable_and_delete_match_only_the_exact_id_and_version() {
         vec![usage(
             WorkspaceId::new(),
             ListenerId::new(),
-            ListenerRuntimeState::Running,
+            ListenerRuntimeState::Stopped,
         )],
     );
     services.set_usages(
@@ -281,7 +196,6 @@ async fn lifecycle_commands_reject_a_missing_exact_version_before_other_ports() 
             Some("iso-8583@9.0.0")
         );
     }
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
     assert_eq!(services.usage_calls.load(Ordering::SeqCst), 0);
     assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 0);
     assert_eq!(services.delete_calls.load(Ordering::SeqCst), 0);
@@ -292,6 +206,7 @@ async fn commands_recheck_usage_after_an_earlier_detail_snapshot() {
     let (application, services, _, _) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), true));
+    services.set_description(target.clone(), strict_description(target.clone()));
     services.push_usage_response(Ok(Vec::new()));
     let detail = application
         .protocol_package_detail(target.clone())
@@ -304,21 +219,21 @@ async fn commands_recheck_usage_after_an_earlier_detail_snapshot() {
         vec![usage(
             WorkspaceId::new(),
             ListenerId::new(),
-            ListenerRuntimeState::Running,
+            ListenerRuntimeState::Stopped,
         )],
     );
-    let disable = application
+    let disabled = application
         .protocol_package_disable(target.clone())
         .await
-        .unwrap_err();
-    assert_eq!(error_code(&disable), "PROTOCOL_PACKAGE_RUNTIME_IN_USE");
+        .unwrap();
+    assert!(!disabled.enabled);
     let delete = application
         .protocol_package_delete(target.clone())
         .await
         .unwrap_err();
     assert_eq!(error_code(&delete), "PROTOCOL_PACKAGE_REFERENCE_IN_USE");
     assert_eq!(services.usage_calls.load(Ordering::SeqCst), 3);
-    assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 0);
+    assert_eq!(services.set_enabled_calls.load(Ordering::SeqCst), 1);
     assert_eq!(services.delete_calls.load(Ordering::SeqCst), 0);
 }
 
@@ -409,7 +324,7 @@ async fn usage_and_store_failures_propagate_without_partial_state() {
 }
 
 #[tokio::test]
-async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_start() {
+async fn disabled_or_description_failure_is_rejected_before_listener_runtime_start() {
     let (application, services, _, runtime) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), false));
@@ -445,8 +360,10 @@ async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_s
     assert!(runtime.statuses().await.unwrap().is_empty());
 
     services.insert(record(target.clone(), true));
-    services.failures.lock().compile =
-        Some(AppError::new("SCRIPT_INVALID", "fresh compile failed"));
+    services.failures.lock().describe = Some(AppError::new(
+        "PACKAGE_DESCRIBE_FAILED",
+        "description failed",
+    ));
     let error = application
         .listener_start(
             workspace.id,
@@ -455,7 +372,7 @@ async fn disabled_or_fresh_compile_failure_is_rejected_before_listener_runtime_s
         )
         .await
         .unwrap_err();
-    assert_eq!(error_code(&error), "SCRIPT_INVALID");
+    assert_eq!(error_code(&error), "PACKAGE_DESCRIBE_FAILED");
     assert!(
         error
             .view_model

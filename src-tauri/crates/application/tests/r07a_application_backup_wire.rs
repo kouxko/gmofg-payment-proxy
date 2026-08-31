@@ -131,10 +131,10 @@ fn application_json_rejects_removed_metadata_extractors_recursively() {
 #[test]
 fn application_json_rejects_noncanonical_relative_references() {
     for path in [
-        "/protocol-packages/sample/1.0.0/manifest.toml",
-        "protocol-packages/sample/1.0.0/../manifest.toml",
-        "protocol-packages\\sample\\1.0.0\\manifest.toml",
-        "C:/protocol-packages/sample/1.0.0/manifest.toml",
+        "/protocol-packages/sample/1.0.0/manifest.json",
+        "protocol-packages/sample/1.0.0/../manifest.json",
+        "protocol-packages\\sample\\1.0.0\\manifest.json",
+        "C:/protocol-packages/sample/1.0.0/manifest.json",
     ] {
         let mut value = valid_document();
         value["protocol_packages"][0]["files"][0] = json!(path);
@@ -148,7 +148,7 @@ fn application_json_rejects_noncanonical_relative_references() {
 fn application_json_requires_exact_protocol_identity_directory() {
     let mut value = valid_document();
     value["protocol_packages"][0]["files"][0] =
-        json!("protocol-packages/other/1.0.0/manifest.toml");
+        json!("protocol-packages/other/1.0.0/manifest.json");
 
     let error = parse_value(&value).expect_err("mismatched package reference rejected");
 
@@ -162,8 +162,8 @@ fn application_json_requires_exact_protocol_identity_directory() {
 fn application_json_rejects_duplicate_and_unsorted_references() {
     let mut value = valid_document();
     value["protocol_packages"][0]["files"] = json!([
-        "protocol-packages/sample/1.0.0/protocol.rhai",
-        "protocol-packages/sample/1.0.0/manifest.toml"
+        "protocol-packages/sample/1.0.0/protocol.js",
+        "protocol-packages/sample/1.0.0/manifest.json"
     ]);
 
     let error = parse_value(&value).expect_err("unsorted references rejected");
@@ -198,8 +198,8 @@ fn valid_document() -> Value {
             "package": { "id": "sample", "version": "1.0.0" },
             "enabled": true,
             "files": [
-                "protocol-packages/sample/1.0.0/manifest.toml",
-                "protocol-packages/sample/1.0.0/protocol.rhai"
+                "protocol-packages/sample/1.0.0/manifest.json",
+                "protocol-packages/sample/1.0.0/protocol.js"
             ]
         }],
         "portable_materials": [{

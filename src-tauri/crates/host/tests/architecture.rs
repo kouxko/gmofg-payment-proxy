@@ -13,7 +13,7 @@ use support::{
     resolved_dependencies, rust_sources,
 };
 
-const CORE_CRATES: [(&str, &str); 9] = [
+const CORE_CRATES: [(&str, &str); 8] = [
     ("domain", "intercept-proxy-domain"),
     ("application", "intercept-proxy-application"),
     ("exchange", "intercept-proxy-exchange"),
@@ -21,7 +21,6 @@ const CORE_CRATES: [(&str, &str); 9] = [
     ("proxy", "intercept-proxy-runtime"),
     ("product-api", "intercept-proxy-product-api"),
     ("infrastructure", "intercept-proxy-infrastructure"),
-    ("protocol-scripting", "intercept-proxy-protocol-scripting"),
     ("host", "intercept-proxy-host"),
 ];
 
@@ -64,7 +63,6 @@ fn generic_core_does_not_depend_on_removed_legacy_product_fixture() {
         "intercept-proxy-runtime",
         "intercept-proxy-product-api",
         "intercept-proxy-infrastructure",
-        "intercept-proxy-protocol-scripting",
         "intercept-proxy-host",
     ] {
         let packages = resolved_dependencies(crate_name);

@@ -37,7 +37,6 @@ use zeroize::Zeroizing;
 use crate::CertificateService;
 use crate::SqliteStore;
 
-use super::ProtocolPackageRepositoryAdapter;
 #[cfg(test)]
 use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
@@ -79,7 +78,6 @@ struct RunningListener {
     /// ownership explicit and prevents later Workspace edits from silently changing live traffic.
     workspace: ProxyWorkspace,
     socket_service: Option<Arc<SocketRelayService>>,
-    scripted_snapshot: Option<Arc<scripted_snapshot::ScriptedSocketRuntimeSnapshot>>,
     external_socket_snapshot: Option<Arc<external_relay::ExternalSocketRuntimeSnapshot>>,
     http_protocol_snapshot: Option<Arc<http_protocol_pipeline::HttpProtocolRuntimeSnapshot>>,
 }
@@ -112,7 +110,6 @@ pub struct ListenerRuntimeAdapter {
     mitm_certificate_authority: Option<Arc<dyn ListenerMitmAuthorityProvider>>,
     protected_secrets: Arc<ProtectedSecretAdapter>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
-    protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
     document_rule_compiler: DocumentRuleCompiler,
     joint_http_rules: Arc<JointHttpRuleRuntime>,
     external_package_provider:
@@ -138,11 +135,7 @@ struct StopBarrier {
 
 impl ListenerRuntimeAdapter {
     #[must_use]
-    pub fn new(
-        store: Arc<SqliteStore>,
-        protected_secrets: Arc<ProtectedSecretAdapter>,
-        protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
-    ) -> Self {
+    pub fn new(store: Arc<SqliteStore>, protected_secrets: Arc<ProtectedSecretAdapter>) -> Self {
         Self {
             environment_apply_resource_gates: Arc::new(
                 super::EnvironmentApplyResourceGateRegistry::default(),
@@ -155,7 +148,6 @@ impl ListenerRuntimeAdapter {
             mitm_certificate_authority: None,
             protected_secrets,
             managed_listener_certificates: None,
-            protocol_packages,
             document_rule_compiler: DocumentRuleCompiler::new(4),
             joint_http_rules: Arc::new(JointHttpRuleRuntime::default()),
             external_package_provider: Arc::new(RwLock::new(None)),
@@ -460,8 +452,6 @@ mod http_protocol_pipeline;
 mod lifecycle;
 mod plan;
 mod port;
-mod scripted_relay;
-mod scripted_snapshot;
 mod socket_diagnostics;
 mod socket_plan;
 mod start;

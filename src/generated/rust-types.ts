@@ -1364,7 +1364,7 @@ export type ListenerProtocolPackageOptionViewModel = ListenerProtocolPackageOpti
 export type ListenerProtocolPackageOptionViewModel_Deserialize = {
 	package: ProtocolPackageRef,
 	name: string,
-	/**  选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。 */
+	/**  选择器明确投影已移除的旧来源或当前外部进程，不从其他字段反推来源。 */
 	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
@@ -1381,7 +1381,7 @@ export type ListenerProtocolPackageOptionViewModel_Deserialize = {
 export type ListenerProtocolPackageOptionViewModel_Serialize = {
 	package: ProtocolPackageRef,
 	name: string,
-	/**  选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。 */
+	/**  选择器明确投影已移除的旧来源或当前外部进程，不从其他字段反推来源。 */
 	package_source: ProtocolPackageSourceViewModel,
 	kind: ProtocolPackageKindViewModel,
 	capabilities: ProtocolPackageCapabilitiesViewModel,
@@ -1912,14 +1912,14 @@ export type ProtocolPackageImportToken = string;
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel = ProtocolPackageImportViewModel_Serialize | ProtocolPackageImportViewModel_Deserialize;
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel_Deserialize = {
@@ -1933,7 +1933,7 @@ export type ProtocolPackageImportViewModel_Deserialize = {
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel_Serialize = {
@@ -1978,13 +1978,10 @@ export type ProtocolPackageSchemaViewModel_Serialize = {
 /**
  *  精确协议包版本的执行来源。
  *
- *  内置 Rhai 与外部进程的可用性约束不同，因此使用 closed tagged union 表达，禁止调用方
- *  通过多个可空字段猜测来源。`built_in` 只标识官方起始包；用户导入的 Rhai 包仍属于
- *  `Internal`。外部包的 `online` 是连接状态快照，与用户启用状态相互独立。
+ *  严格 JavaScript ZIP 与官方起始包都由本地或远端外部进程执行。`online` 是连接状态快照，
+ *  与用户启用状态相互独立。
  */
 export type ProtocolPackageSourceViewModel =
-/**  由当前进程中的 Rhai Host 执行。 */
-{ type: "internal"; built_in: boolean } |
 /**  由已注册的第三方进程通过 JSON-RPC 执行。 */
 { type: "external"; online: boolean };
 

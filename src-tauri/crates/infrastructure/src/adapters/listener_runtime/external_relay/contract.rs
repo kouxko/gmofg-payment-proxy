@@ -17,7 +17,7 @@ use intercept_proxy_package_contract::{
     DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
 };
 
-use super::super::{ProtocolDocumentRuleConnectionFactory, scripted_snapshot};
+use super::super::{ProtocolDocumentRuleConnectionFactory, document_rules};
 use crate::adapters::{PackageTransportClient, PackageTransportError};
 
 /// 外部连接的协议入口窄接口。
@@ -195,7 +195,7 @@ impl ExternalSocketRuntimeSnapshot {
         let topology = self.topology.clone();
         let replacement = adapter
             .compile_document_rules_on_blocking_owner(move || {
-                scripted_snapshot::compile_document_rules(
+                document_rules::compile_document_rules(
                     &workspace,
                     &listener,
                     &package,

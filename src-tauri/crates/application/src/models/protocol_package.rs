@@ -60,12 +60,9 @@ pub enum ProtocolPackageValidationViewModel {
 #[serde(tag = "type", rename_all = "snake_case")]
 /// 精确协议包版本的执行来源。
 ///
-/// 内置 Rhai 与外部进程的可用性约束不同，因此使用 closed tagged union 表达，禁止调用方
-/// 通过多个可空字段猜测来源。`built_in` 只标识官方起始包；用户导入的 Rhai 包仍属于
-/// `Internal`。外部包的 `online` 是连接状态快照，与用户启用状态相互独立。
+/// 严格 JavaScript ZIP 与官方起始包都由本地或远端外部进程执行。`online` 是连接状态快照，
+/// 与用户启用状态相互独立。
 pub enum ProtocolPackageSourceViewModel {
-    /// 由当前进程中的 Rhai Host 执行。
-    Internal { built_in: bool },
     /// 由已注册的第三方进程通过 JSON-RPC 执行。
     External { online: bool },
 }
@@ -96,16 +93,14 @@ impl ProtocolPackageSourceViewModel {
     /// 返回该精确版本是否由外部进程执行。
     #[must_use]
     pub const fn is_external(self) -> bool {
-        matches!(self, Self::External { .. })
+        true
     }
 
-    /// 返回外部连接是否在线；内置来源不依赖外部连接，固定返回 `None`。
+    /// 返回外部连接是否在线。
     #[must_use]
     pub const fn external_online(self) -> Option<bool> {
-        match self {
-            Self::Internal { .. } => None,
-            Self::External { online } => Some(online),
-        }
+        let Self::External { online } = self;
+        Some(online)
     }
 }
 
@@ -284,7 +279,7 @@ pub struct ProtocolPackageDescriptionViewModel {
 pub struct ListenerProtocolPackageOptionViewModel {
     pub package: ProtocolPackageRef,
     pub name: String,
-    /// 选择器明确区分内置 Rhai 与外部进程，不从其他字段反推来源。
+    /// 选择器明确投影已移除的旧来源或当前外部进程，不从其他字段反推来源。
     #[serde(rename = "package_source")]
     pub source: ProtocolPackageSourceViewModel,
     pub kind: ProtocolPackageKindViewModel,
@@ -359,7 +354,7 @@ pub struct ProtocolPackageImportPreviewViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 原生文件选择和完整校验成功后的无源码导入结果。
-/// 用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 Rhai 错误均作为
+/// 用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
 /// 稳定 `AppError` 返回，不会构造该类型。
 pub struct ProtocolPackageImportViewModel {
     pub outcome: ProtocolPackageImportOutcomeViewModel,
@@ -375,15 +370,4 @@ pub struct ProtocolPackageImportViewModel {
 pub struct ProtocolPackageExportOutcomeViewModel {
     pub bytes_written: u64,
     pub replaced_existing: bool,
-}
-
-#[derive(Debug, Clone, PartialEq, Eq)]
-/// Compiler port 完整重验后返回的收据。
-///
-/// Application 会再次比较精确身份和 Host API，防止端口误把另一个版本的成功结果用于
-/// 当前启用操作。该内部模型不需要序列化给展示层。
-pub struct ProtocolPackageCompilationReceipt {
-    pub package: ProtocolPackageRef,
-    pub host_api: u32,
-    pub compatible: bool,
 }

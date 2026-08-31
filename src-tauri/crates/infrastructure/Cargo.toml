@@ -18,7 +18,6 @@ intercept-proxy-exchange = { path = "../exchange" }
 intercept-proxy-product-api = { path = "../product-api" }
 intercept-proxy-package-contract = { path = "../package-contract" }
 intercept-proxy-package-runtime = { path = "../package-runtime" }
-intercept-proxy-protocol-scripting = { path = "../protocol-scripting" }
 intercept-proxy-runtime = { path = "../proxy" }
 p12-keystore.workspace = true
 pkcs8.workspace = true

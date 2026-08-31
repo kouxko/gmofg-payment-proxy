@@ -32,8 +32,8 @@ fn deterministic_valid_fixture_reads_exact_references() {
             .collect::<Vec<_>>(),
         [
             "portable-materials/server-identity.pem",
-            "protocol-packages/sample/1.0.0/manifest.toml",
-            "protocol-packages/sample/1.0.0/protocol.rhai",
+            "protocol-packages/sample/1.0.0/manifest.json",
+            "protocol-packages/sample/1.0.0/protocol.js",
         ]
     );
 }
@@ -48,11 +48,11 @@ fn archive_debug_redacts_configuration_payloads_and_passwords() {
     let zip = build_zip(&[
         stored("application.json", application),
         stored(
-            "protocol-packages/sample/1.0.0/manifest.toml",
+            "protocol-packages/sample/1.0.0/manifest.json",
             b"script-secret-marker",
         ),
         stored(
-            "protocol-packages/sample/1.0.0/protocol.rhai",
+            "protocol-packages/sample/1.0.0/protocol.js",
             b"script-secret-marker",
         ),
         stored(
@@ -88,8 +88,8 @@ fn empty_input_and_empty_zip_are_rejected() {
 #[test]
 fn ordinary_protocol_package_zip_is_rejected() {
     let zip = build_zip(&[
-        stored("manifest.toml", b"api = 1"),
-        stored("protocol.rhai", b"fn frame() {}"),
+        stored("manifest.json", b"api = 1"),
+        stored("protocol.js", b"fn frame() {}"),
     ]);
 
     assert_code(&zip, Code::UnknownTopLevel);
@@ -98,7 +98,7 @@ fn ordinary_protocol_package_zip_is_rejected() {
 #[test]
 fn archive_without_application_json_is_rejected() {
     let zip = build_zip(&[stored(
-        "protocol-packages/sample/1.0.0/manifest.toml",
+        "protocol-packages/sample/1.0.0/manifest.json",
         b"api = 1",
     )]);
 
@@ -118,9 +118,9 @@ fn traversal_and_absolute_entry_names_are_rejected_without_echoing_them() {
     for path in [
         "../application.json",
         "/application.json",
-        "protocol-packages/sample/../manifest.toml",
+        "protocol-packages/sample/../manifest.json",
         "C:/application.json",
-        "protocol-packages\\sample\\manifest.toml",
+        "protocol-packages\\sample\\manifest.json",
     ] {
         let zip = build_zip(&[stored(path, b"secret-local-path")]);
         let error = ApplicationBackupArchive::read(&zip).expect_err("unsafe path rejected");
@@ -136,7 +136,7 @@ fn symlink_entry_is_rejected() {
     let mut zip = valid_zip();
     patch_unix_mode(
         &mut zip,
-        b"protocol-packages/sample/1.0.0/manifest.toml",
+        b"protocol-packages/sample/1.0.0/manifest.json",
         0o120_777,
     );
 
@@ -170,11 +170,11 @@ fn file_parent_conflict_is_rejected_in_both_orders() {
         vec![
             stored("application.json", &application),
             stored("protocol-packages", b"file"),
-            stored("protocol-packages/sample/1.0.0/manifest.toml", b"child"),
+            stored("protocol-packages/sample/1.0.0/manifest.json", b"child"),
         ],
         vec![
             stored("application.json", &application),
-            stored("protocol-packages/sample/1.0.0/manifest.toml", b"child"),
+            stored("protocol-packages/sample/1.0.0/manifest.json", b"child"),
             stored("protocol-packages", b"file"),
         ],
     ] {
@@ -277,11 +277,11 @@ fn compression_ratio_limit_is_enforced() {
     let zip = build_zip(&[
         stored("application.json", &application),
         deflated(
-            "protocol-packages/sample/1.0.0/manifest.toml",
+            "protocol-packages/sample/1.0.0/manifest.json",
             vec![0; 16 * 1024],
         ),
         stored(
-            "protocol-packages/sample/1.0.0/protocol.rhai",
+            "protocol-packages/sample/1.0.0/protocol.js",
             b"fn frame() {}",
         ),
         stored("portable-materials/server-identity.pem", b"identity"),
@@ -310,7 +310,7 @@ fn invalid_application_json_and_version_are_redacted_to_one_stable_code() {
 fn referenced_payload_must_be_present() {
     let entries = valid_entries()
         .into_iter()
-        .filter(|entry| !entry.name.ends_with("protocol.rhai"))
+        .filter(|entry| !entry.name.ends_with("protocol.js"))
         .collect::<Vec<_>>();
 
     assert_code(&build_zip(&entries), Code::ReferencedFileMissing);
@@ -371,9 +371,9 @@ fn error_codes_have_stable_wire_values() {
 fn valid_entries() -> Vec<Entry> {
     vec![
         stored("application.json", application_json()),
-        stored("protocol-packages/sample/1.0.0/manifest.toml", b"api = 1"),
+        stored("protocol-packages/sample/1.0.0/manifest.json", b"api = 1"),
         stored(
-            "protocol-packages/sample/1.0.0/protocol.rhai",
+            "protocol-packages/sample/1.0.0/protocol.js",
             b"fn frame() {}",
         ),
         stored("portable-materials/server-identity.pem", b"identity"),
@@ -401,8 +401,8 @@ fn application_json_with(workspace: &ProxyWorkspace, password: Option<&str>) -> 
             "package": { "id": "sample", "version": "1.0.0" },
             "enabled": true,
             "files": [
-                "protocol-packages/sample/1.0.0/manifest.toml",
-                "protocol-packages/sample/1.0.0/protocol.rhai"
+                "protocol-packages/sample/1.0.0/manifest.json",
+                "protocol-packages/sample/1.0.0/protocol.js"
             ]
         }],
         "portable_materials": [{

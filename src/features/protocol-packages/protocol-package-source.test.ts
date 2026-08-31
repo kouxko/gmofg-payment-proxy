@@ -11,7 +11,7 @@ describe("protocol package source closed union", () => {
   it("accepts every valid variant and renders every source state", () => {
     const userInstalled = version("1.0.0");
     const builtIn = version("1.0.0", {
-      package_source: { type: "internal", built_in: true },
+      package: { id: "iso8583-ascii-standard", version: "1.0.0" },
     });
     const externalOnline = version("1.0.0", {
       package_source: { type: "external", online: true },
@@ -21,17 +21,15 @@ describe("protocol package source closed union", () => {
     });
 
     expect(isProtocolPackageSource(userInstalled.package_source)).toBe(true);
-    expect(isProtocolPackageSource(builtIn.package_source)).toBe(true);
     expect(isProtocolPackageSource(externalOnline.package_source)).toBe(true);
-    expect(packageSourceText(userInstalled)).toBe("用户安装");
-    expect(packageSourceText(builtIn)).toBe("内置示例");
+    expect(packageSourceText(userInstalled)).toBe("外部 · 在线");
     expect(packageSourceText(externalOnline)).toBe("外部 · 在线");
     expect(packageSourceText(externalOffline)).toBe("外部 · 离线");
-    expect(isBuiltInPackage(builtIn)).toBe(true);
     expect(isBuiltInPackage(userInstalled)).toBe(false);
+    expect(isBuiltInPackage(builtIn)).toBe(true);
     expect(isBuiltInPackage(externalOnline)).toBe(false);
     expect(isExternalPackage(externalOnline)).toBe(true);
-    expect(isExternalPackage(userInstalled)).toBe(false);
+    expect(isExternalPackage(userInstalled)).toBe(true);
   });
 
   it("rejects malformed, extended and unknown variants", () => {

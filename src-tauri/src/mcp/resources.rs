@@ -14,15 +14,11 @@ pub const DIAGNOSTIC_ARCHITECTURE_URI: &str = "intercept-proxy://docs/diagnostic
 pub const TOOL_REFERENCE_URI: &str = "intercept-proxy://docs/tool-reference/1.0";
 pub const VALIDATION_PLAYBOOK_URI: &str = "intercept-proxy://docs/validation-playbook/1.0";
 pub const ISO8583_MANIFEST_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.toml";
-pub const ISO8583_SCHEMA_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/document.toml";
+    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.json";
 pub const ISO8583_PROTOCOL_SOURCE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/protocol.rhai";
+    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/protocol.js";
 pub const ISO8583_DISPLAY_SOURCE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/display.rhai";
-pub const ISO8583_LIBRARY_SOURCE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/libraries/iso8583.rhai";
+    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/display.js";
 pub const ISO8583_ARCHIVE_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/archive.zip";
 
@@ -38,15 +34,11 @@ const DIAGNOSTIC_ARCHITECTURE: &str = include_str!("../../../docs/mcp/diagnostic
 const TOOL_REFERENCE: &str = include_str!("../../../docs/mcp/tool-reference.md");
 const VALIDATION_PLAYBOOK: &str = include_str!("../../../docs/mcp/validation-playbook.md");
 const ISO8583_MANIFEST: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.toml");
-const ISO8583_SCHEMA: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/document.toml");
+    include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.json");
 const ISO8583_PROTOCOL_SOURCE: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/protocol.rhai");
+    include_str!("../../../templates/socket-protocol/iso8583-standard/protocol.js");
 const ISO8583_DISPLAY_SOURCE: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/display.rhai");
-const ISO8583_LIBRARY_SOURCE: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/libraries/iso8583.rhai");
+    include_str!("../../../templates/socket-protocol/iso8583-standard/display.js");
 
 pub fn list() -> Vec<Resource> {
     vec![
@@ -110,19 +102,13 @@ pub fn list() -> Vec<Resource> {
         Resource::new(ISO8583_MANIFEST_URI, "official-iso8583-manifest")
             .with_title("ISO 8583:1987 ASCII Profile manifest")
             .with_description("The exact manifest compiled into the official 1.0.0 template.")
-            .with_mime_type("application/toml"),
-        Resource::new(ISO8583_SCHEMA_URI, "official-iso8583-schema")
-            .with_title("ISO 8583:1987 ASCII Profile Document Schema")
-            .with_mime_type("application/toml"),
+            .with_mime_type("application/json"),
         Resource::new(ISO8583_PROTOCOL_SOURCE_URI, "official-iso8583-protocol-source")
             .with_title("ISO 8583:1987 framing, decode and encode source")
-            .with_mime_type("text/x-rhai"),
+            .with_mime_type("text/javascript"),
         Resource::new(ISO8583_DISPLAY_SOURCE_URI, "official-iso8583-display-source")
             .with_title("ISO 8583:1987 display source")
-            .with_mime_type("text/x-rhai"),
-        Resource::new(ISO8583_LIBRARY_SOURCE_URI, "official-iso8583-library-source")
-            .with_title("ISO 8583:1987 shared source library")
-            .with_mime_type("text/x-rhai"),
+            .with_mime_type("text/javascript"),
         Resource::new(ISO8583_ARCHIVE_URI, "official-iso8583-template-zip")
             .with_title("ISO 8583:1987 ASCII Profile 1.0.0")
             .with_description(
@@ -145,11 +131,9 @@ pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
         DIAGNOSTIC_ARCHITECTURE_URI => Some(("text/markdown", DIAGNOSTIC_ARCHITECTURE)),
         TOOL_REFERENCE_URI => Some(("text/markdown", TOOL_REFERENCE)),
         VALIDATION_PLAYBOOK_URI => Some(("text/markdown", VALIDATION_PLAYBOOK)),
-        ISO8583_MANIFEST_URI => Some(("application/toml", ISO8583_MANIFEST)),
-        ISO8583_SCHEMA_URI => Some(("application/toml", ISO8583_SCHEMA)),
-        ISO8583_PROTOCOL_SOURCE_URI => Some(("text/x-rhai", ISO8583_PROTOCOL_SOURCE)),
-        ISO8583_DISPLAY_SOURCE_URI => Some(("text/x-rhai", ISO8583_DISPLAY_SOURCE)),
-        ISO8583_LIBRARY_SOURCE_URI => Some(("text/x-rhai", ISO8583_LIBRARY_SOURCE)),
+        ISO8583_MANIFEST_URI => Some(("application/json", ISO8583_MANIFEST)),
+        ISO8583_PROTOCOL_SOURCE_URI => Some(("text/javascript", ISO8583_PROTOCOL_SOURCE)),
+        ISO8583_DISPLAY_SOURCE_URI => Some(("text/javascript", ISO8583_DISPLAY_SOURCE)),
         _ => None,
     }
 }

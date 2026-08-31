@@ -21,16 +21,15 @@ use intercept_proxy_product_api::ProductProfile;
 use crate::{InfrastructureError, SecretProtector, SqliteExecutor, SqliteStore};
 
 use super::{
-    AndroidAdbAdapter, CaptureRepositoryAdapter, CertificateServiceAdapter,
-    EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
+    AndroidAdbAdapter, BuiltinProtocolPackageAdapter, CaptureRepositoryAdapter,
+    CertificateServiceAdapter, EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
     EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
     ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
     FaultServiceAdapter, HeaderBodyCodecResolver, ListenerRuntimeAdapter, LocalPackageSupervisor,
     ManagedListenerCertificateAdapter, NativeFileDialog, PackageTransportConfig,
-    ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageRepositoryAdapter,
-    ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
-    RuntimePipelineProductHooks, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
-    WorkspaceRepositoryAdapter,
+    ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageUsageQueryAdapter,
+    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
+    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
 };
 
 #[derive(Debug)]
@@ -44,7 +43,7 @@ pub struct InfrastructureServiceBundle {
     listener_certificates: Arc<ManagedListenerCertificateAdapter>,
     protected_secrets: Arc<ProtectedSecretAdapter>,
     /// 应用级协议包文件、启用位和可重建编译缓存；生命周期约束由 T14 Application 用例接管。
-    protocol_packages: Arc<ProtocolPackageRepositoryAdapter>,
+    builtin_protocol_package: Arc<BuiltinProtocolPackageAdapter>,
     /// 原生文件选择与有界 ZIP 读取；路径和 ZIP 字节不越过 Application 端口。
     protocol_package_import: Arc<ProtocolPackageImportAdapter>,
     /// 汇总全部 Workspace 的精确引用，并与 Listener 运行态合并。
@@ -64,10 +63,6 @@ pub struct InfrastructureServiceBundle {
 
 impl InfrastructureServiceBundle {
     #[must_use]
-    #[expect(
-        clippy::too_many_lines,
-        reason = "the composition root keeps construction order explicit and reviewable"
-    )]
     pub fn new(
         persistence: impl crate::IntoSqlitePersistence,
         protector: Arc<dyn SecretProtector>,
@@ -115,15 +110,6 @@ impl InfrastructureServiceBundle {
             Arc::clone(&protector),
         ));
         let workspaces = Arc::new(WorkspaceRepositoryAdapter::new(sqlite.clone()));
-        let protocol_packages = ProtocolPackageRepositoryAdapter::with_default_limits((
-            sqlite.clone(),
-            Arc::clone(&store),
-        ));
-        let protocol_packages = match builtin_protocol_package {
-            Some(archive) => protocol_packages.with_builtin_archive(archive),
-            None => protocol_packages,
-        };
-        let protocol_packages = Arc::new(protocol_packages);
         let listener_certificates = Arc::new(ManagedListenerCertificateAdapter::new(
             (sqlite.clone(), Arc::clone(&store)),
             protector,
@@ -135,21 +121,20 @@ impl InfrastructureServiceBundle {
         let gates = environment_apply_resource_gates.clone();
         let external_packages = external_packages.with_environment_apply_resource_gates(gates);
         let external_packages = Arc::new(external_packages);
+        let builtin_protocol_package = Arc::new(BuiltinProtocolPackageAdapter::new(
+            builtin_protocol_package,
+            external_packages.clone(),
+        ));
         let protocol_package_import = Arc::new(ProtocolPackageImportAdapter::new(
-            protocol_packages.clone(),
             external_packages.clone(),
             Arc::clone(dialog),
         ));
         let environment_validator = Arc::new(EnvironmentConfigurationValidationAdapter::new(
-            protocol_packages.clone(),
             external_packages.clone(),
             certificates.clone(),
         ));
-        let listener_runtime = ListenerRuntimeAdapter::new(
-            Arc::clone(&store),
-            protected_secrets.clone(),
-            protocol_packages.clone(),
-        );
+        let listener_runtime =
+            ListenerRuntimeAdapter::new(Arc::clone(&store), protected_secrets.clone());
         let gates = environment_apply_resource_gates.clone();
         let listener_runtime = listener_runtime.with_environment_apply_resource_gates(gates);
         let listener_runtime = Arc::new(
@@ -171,7 +156,7 @@ impl InfrastructureServiceBundle {
             listener_runtime,
             listener_certificates,
             protected_secrets,
-            protocol_packages,
+            builtin_protocol_package,
             protocol_package_import,
             protocol_package_usage,
             external_packages,
@@ -192,7 +177,7 @@ impl InfrastructureServiceBundle {
         // 不兼容的持久化记录必须 fail-closed，并保持数据库及 sidecar 原样等待用户处理。
         let workspaces = self.workspaces.list().await?;
         let stored = self.settings.get().await?.stored;
-        self.protocol_packages.ensure_builtin_seeded_async().await?;
+        self.builtin_protocol_package.ensure_seeded().await?;
         if let Err(error) = self
             .certificates
             .synchronize_installation_ca(vec!["localhost".into(), "127.0.0.1".into()])
@@ -348,7 +333,6 @@ impl InfrastructureServiceBundle {
         let apply_runtime = Arc::new(EnvironmentApplyRuntimeAdapter::new(
             self.listener_runtime.clone(),
             android.clone(),
-            self.protocol_packages.clone(),
             self.external_packages.clone(),
             apply_sqlite,
             self.environment_apply_resource_gates.clone(),
@@ -370,12 +354,9 @@ impl InfrastructureServiceBundle {
             }
         });
         let protocol_packages = ProtocolPackageApplicationServices {
-            store: self.protocol_packages.clone(),
-            compiler: self.protocol_packages.clone(),
             importer: self.protocol_package_import,
-            builtin: self.protocol_packages.clone(),
+            builtin: self.builtin_protocol_package,
             usage_query: self.protocol_package_usage,
-            portability: self.protocol_packages,
             external: self.external_packages,
         };
         Ok(Application::new(

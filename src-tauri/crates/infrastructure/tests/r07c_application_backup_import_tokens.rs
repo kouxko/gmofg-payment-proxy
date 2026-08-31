@@ -61,7 +61,7 @@ async fn strict_archive_reconstruction_preserves_raw_payloads_and_reports_canoni
     assert_eq!(candidate.protocol_packages.len(), 1);
     assert_eq!(
         candidate.protocol_packages[0].files[0].path,
-        "manifest.toml"
+        "manifest.json"
     );
     assert_eq!(
         base64::Engine::decode(
@@ -259,7 +259,7 @@ fn import_zip(package_bytes: &[u8], certificate_bytes: &[u8]) -> Vec<u8> {
         "protocol_packages": [{
             "package": { "id": "sample", "version": "1.0.0" },
             "enabled": true,
-            "files": ["protocol-packages/sample/1.0.0/manifest.toml"],
+            "files": ["protocol-packages/sample/1.0.0/manifest.json"],
         }],
         "portable_materials": [{
             "reference_id": uuid::Uuid::from_u128(42),
@@ -277,7 +277,7 @@ fn import_zip(package_bytes: &[u8], certificate_bytes: &[u8]) -> Vec<u8> {
         for (path, bytes) in [
             ("application.json", application.as_slice()),
             (
-                "protocol-packages/sample/1.0.0/manifest.toml",
+                "protocol-packages/sample/1.0.0/manifest.json",
                 package_bytes,
             ),
             ("portable-materials/server-identity.p12", certificate_bytes),

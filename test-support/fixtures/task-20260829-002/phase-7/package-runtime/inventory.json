@@ -21,12 +21,5 @@
       "raw_logical_frame_limit_is_independent_from_encoded_wire_budget"
     ]
   },
-  "legacy_internal_allowlist": [
-    {
-      "file": "src-tauri/crates/protocol-scripting/src/lib.rs",
-      "symbol": "parse_protocol_manifest",
-      "reason": "Installed legacy local packages and built-in templates remain readable until Sidecar, pipeline, and built-in conversion phases remove the Rhai and TOML implementation.",
-      "owning_phase": "Phase13"
-    }
-  ]
+  "legacy_internal_allowlist": []
 }

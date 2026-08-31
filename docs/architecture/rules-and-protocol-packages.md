@@ -1,6 +1,6 @@
 # 规则、Document 与协议包
 
-本文说明统一规则聚合、Document 模型、内置 Rhai 协议包、外部 WebSocket
+本文说明统一规则聚合、Document 模型、严格 JavaScript ZIP 协议包、WebSocket Sidecar
 JSON-RPC 协议包，以及它们在 HTTP/Socket Exchange 中的真实执行顺序。这里描述的是当前源码，
 不是未来扩展设想。
 
@@ -142,41 +142,37 @@ HTTP 联合执行器按 Workspace 明确的 stage execution order 处理同一�
 Document 修改可被后一阶段条件观察。Document、HTTP action 和 Encode 全部成功后才提交 hit/revision/
 one-shot 元数据；任一步失败都丢弃 working message 与 working Document，不留下半提交状态。
 
-## 5. 内置 Rhai 协议包
+## 5. 严格 JavaScript ZIP 协议包
 
 ### 5.1 包结构与 Manifest
 
-内置包以 ZIP 导入，入口文件由严格 `manifest.toml` 声明：
+官方起始包与用户导入包使用同一严格 ZIP 合同，根目录固定包含：
 
 ```text
-manifest.toml
-protocol.rhai
-display.rhai
-上行 Schema TOML
-下行 Schema TOML
-可选的包内 Rhai 模块
+manifest.json
+protocol.js
+display.js
+可选的包内 JavaScript 模块
 ```
 
-Manifest `api` 当前必须为 `1`，包身份是精确 `id + SemVer`。`hooks.upstream` 和
-`hooks.downstream` 各自声明 `decode`、`encode`；两边同时存在 `frame` 时判定为 Socket 包，
-两边都没有 `frame` 时判定为 HTTP 包，只出现一个方向的 frame 会拒绝整包。
+Manifest `api` 当前必须为 `1`，包身份是精确 `id + SemVer`。`protocol.js` 固定导出双方向
+Frame/Decode/Encode，`display.js` 固定导出双方向 Display；HTTP 包使用对应的固定 HTTP exports。
 
-导入链依次执行 ZIP 路径/数量/大小/压缩比校验、Manifest 严格 TOML 解析、Schema 校验、模块
-解析、Rhai 编译和入口签名校验。只有全部成功才产生 `CompiledProtocolPackage`，不存在半安装
-执行状态。
+导入链依次执行 ZIP 路径/数量/大小/压缩比校验、Manifest 严格 JSON 解析、Schema 校验和模块
+路径校验。提交后保存为 enabled 本地包，由独立 Boa Sidecar 加载并在注册前校验全部固定 exports；
+不存在进程内执行、兼容别名、迁移或回退路径。
 
 ### 5.2 沙箱和资源限制
 
-Rhai 固定版本并关闭浮点、时间、闭包和自定义语法等能力。运行时对操作数、调用深度、字符串、
-Blob 和墙钟时间设限，执行支持连接级取消。协议脚本不能直接访问真实 Socket、HTTP、数据库、
-进程或 UI；它只通过受限 Host API 处理当前 Context/Document。
+Boa Sidecar 不注入文件系统、网络、进程、环境变量或原生模块能力。协议脚本只处理固定 RPC 的
+当前输入与 Document；Proxy 拥有 WebSocket 服务、Listener、规则事务和失败观测。
 
 协议包版本不可变。Listener 启动时冻结精确版本和执行限制；运行过程中不会自动升级或回退。
 
 ## 6. 外部 WebSocket JSON-RPC 协议包
 
-外部进程连接设置页公布的 WebSocket 服务，路径固定为 `/packages`。服务端建立连接后只发送一次
-JSON-RPC 2.0 `package.register`；注册返回 API 版本、精确包身份、上下行 Schema 与方法后缀。
+本地或远端软件包进程连接设置页公布的 WebSocket 服务，路径固定为 `/packages`。软件包建立连接后
+主动发送一次无 id JSON-RPC 2.0 `package.register`；Proxy 不回复该通知。
 Host 形成的方法名为：
 
 - `hooks.upstream.<frame|decode|encode>`；
@@ -188,8 +184,8 @@ Host 形成的方法名为：
 结构不匹配会按协议错误处理；超时、并发额度、消息大小、心跳和关闭都有明确上限。外部包断线后
 精确版本变为 offline，引用它的活动 Listener 不会静默切换到内置包或其他版本。
 
-外部包与内置包最终都实现同一组 Frame/Decode/Display/Rules/Encode capability；区别只在能力
-调用发生于进程内 Rhai 还是 WebSocket RPC，Exchange 不维护两套业务流程。
+本地包与远端包最终都实现同一组 Frame/Decode/Display/Rules/Encode capability；能力调用统一经过
+WebSocket RPC，Exchange 不维护第二套业务流程。
 
 ## 7. Display 安全边界
 

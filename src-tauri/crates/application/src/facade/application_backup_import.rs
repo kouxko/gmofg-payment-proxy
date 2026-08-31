@@ -141,7 +141,7 @@ impl Application {
             .map(|package| package.package.clone())
             .collect::<Vec<_>>();
         let descriptions = self
-            .protocol_package_portability
+            .external_packages
             .preflight_application_packages(&document.protocol_packages)
             .await?;
         validate_portable_protocol_bindings(
@@ -202,10 +202,7 @@ impl Application {
             .collect();
         let settings_revision =
             intercept_proxy_domain::Revision::new(self.settings.get().await?.revision);
-        let protocol_packages = self
-            .protocol_package_portability
-            .application_backup_baseline()
-            .await?;
+        let protocol_packages = self.external_packages.application_backup_baseline().await?;
         let listener_certificate_generation = self
             .listener_certificates
             .application_backup_baseline()

@@ -17,8 +17,6 @@ use parking_lot::Mutex;
 use uuid::Uuid;
 
 use super::external_relay::ExternalPackageRpc;
-#[cfg(test)]
-use super::http_protocol_pipeline::{SharedExecutor, run_stage};
 
 #[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
 struct PendingKey {
@@ -88,11 +86,6 @@ pub(crate) struct JointDocumentEvaluation {
 
 #[derive(Clone)]
 enum JointDocumentEncoder {
-    #[cfg(test)]
-    Legacy {
-        origin: Vec<u8>,
-        executor: SharedExecutor,
-    },
     External {
         original_input: String,
         rpc: Arc<dyn ExternalPackageRpc>,
@@ -119,36 +112,6 @@ impl std::fmt::Debug for JointDocumentEvaluation {
 }
 
 impl JointDocumentEvaluation {
-    #[cfg(test)]
-    pub(super) fn new(
-        document: Document,
-        origin: Vec<u8>,
-        executor: SharedExecutor,
-        programs: impl IntoIterator<Item = Arc<ProtocolDocumentRuleProgram>>,
-    ) -> Self {
-        let programs = programs
-            .into_iter()
-            .flat_map(|program| {
-                program
-                    .rules()
-                    .iter()
-                    .map(|rule| {
-                        (
-                            RuleId::from_uuid(rule.rule_id().as_uuid()),
-                            Arc::clone(&program),
-                        )
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .collect();
-        Self {
-            original_document: document.clone(),
-            document,
-            encoder: JointDocumentEncoder::Legacy { origin, executor },
-            programs,
-        }
-    }
-
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_external(
         document: Document,
@@ -241,19 +204,6 @@ impl JointDocumentEvaluation {
 
     pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
         let written = match self.encoder {
-            #[cfg(test)]
-            JointDocumentEncoder::Legacy { origin, executor } => {
-                let written =
-                    run_stage(move || executor.lock().encode_document(&origin, self.document))
-                        .await
-                        .map_err(|error| Error::new(error.to_string()))?;
-                std::str::from_utf8(&written).map_err(|_| {
-                    Error::new(
-                        "HTTP_PROTOCOL_OUTPUT_NOT_UTF8: 测试专用旧执行器 Encode 返回了非 UTF-8 HTTP Body",
-                    )
-                })?;
-                written
-            }
             JointDocumentEncoder::External {
                 original_input,
                 rpc,

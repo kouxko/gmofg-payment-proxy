@@ -19,8 +19,7 @@ use intercept_proxy_runtime::{
 use super::{
     ListenerRuntimeAdapter, helpers::ensure_snapshot_matches,
     http_protocol_pipeline::HttpProtocolRuntimeSnapshot, parse_bind_address,
-    scripted_snapshot::ScriptedSocketRuntimeSnapshot, socket_diagnostics::SocketDiagnosticObserver,
-    socket_plan,
+    socket_diagnostics::SocketDiagnosticObserver, socket_plan,
 };
 
 mod tls;
@@ -49,13 +48,6 @@ pub(super) enum PreparedListenerRuntime {
         snapshot: Arc<super::external_relay::ExternalSocketRuntimeSnapshot>,
         service: Arc<SocketRelayService>,
     },
-    /// Scripted Relay 与 `LocalResponder` 共用冻结快照，但各自装配拓扑专用服务。
-    /// `None` 只保留为反序列化之外的内部防御状态，启动门禁会在 bind 前拒绝它。
-    ScriptedSocket {
-        bind_addr: SocketAddr,
-        snapshot: Arc<ScriptedSocketRuntimeSnapshot>,
-        service: Option<Arc<SocketRelayService>>,
-    },
 }
 impl PreparedListenerRuntime {
     pub(super) const fn bind_addr(&self) -> SocketAddr {
@@ -63,15 +55,7 @@ impl PreparedListenerRuntime {
             Self::HttpForward { bind_addr, .. }
             | Self::HttpFixed { bind_addr, .. }
             | Self::Socket { bind_addr, .. }
-            | Self::ExternalScriptedSocket { bind_addr, .. }
-            | Self::ScriptedSocket { bind_addr, .. } => *bind_addr,
-        }
-    }
-
-    pub(super) fn scripted_snapshot(&self) -> Option<Arc<ScriptedSocketRuntimeSnapshot>> {
-        match self {
-            Self::ScriptedSocket { snapshot, .. } => Some(Arc::clone(snapshot)),
-            _ => None,
+            | Self::ExternalScriptedSocket { bind_addr, .. } => *bind_addr,
         }
     }
 
@@ -89,9 +73,7 @@ impl PreparedListenerRuntime {
             Self::HttpForward { protocol, .. } | Self::HttpFixed { protocol, .. } => {
                 protocol.clone()
             }
-            Self::Socket { .. }
-            | Self::ExternalScriptedSocket { .. }
-            | Self::ScriptedSocket { .. } => None,
+            Self::Socket { .. } | Self::ExternalScriptedSocket { .. } => None,
         }
     }
 }

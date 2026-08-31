@@ -57,13 +57,12 @@ async fn listener_catalog_only_returns_enabled_valid_current_descriptions_in_sta
         Some("Payments")
     );
     assert!(catalog.options[0].capabilities.upstream.encode);
-    assert_eq!(services.describe_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(services.compile_calls.load(Ordering::SeqCst), 0);
-    assert_eq!(services.installed_preflight_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(services.describe_calls.load(Ordering::SeqCst), 3);
+    assert_eq!(services.installed_preflight_calls.load(Ordering::SeqCst), 0);
 }
 
 #[tokio::test]
-async fn listener_catalog_fails_closed_for_store_error_and_hides_compiler_errors() {
+async fn listener_catalog_fails_closed_for_registry_error_and_hides_description_errors() {
     let (application, services, _, _) = fixture();
     services.failures.lock().list = Some(AppError::new("STORE_LIST_FAILED", "list"));
     assert_eq!(
@@ -79,8 +78,8 @@ async fn listener_catalog_fails_closed_for_store_error_and_hides_compiler_errors
     services.failures.lock().list = None;
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target, true));
-    services.failures.lock().installed_preflight = Some(AppError::new(
-        "SENSITIVE_COMPILER_FAILURE",
+    services.failures.lock().describe = Some(AppError::new(
+        "SENSITIVE_DESCRIPTION_FAILURE",
         "must not cross the catalog boundary",
     ));
     let catalog = application
@@ -93,15 +92,13 @@ async fn listener_catalog_fails_closed_for_store_error_and_hides_compiler_errors
 }
 
 #[tokio::test]
-async fn listener_catalog_holds_the_mutation_gate_through_fresh_preflight() {
+async fn listener_catalog_holds_the_mutation_gate_through_fresh_description() {
     let (application, services, _, _) = fixture();
     let application = Arc::new(application);
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), true));
     services.set_description(target.clone(), description(target.clone()));
-    services
-        .block_installed_preflight
-        .store(true, Ordering::SeqCst);
+    services.block_describe.store(true, Ordering::SeqCst);
 
     let catalog_application = application.clone();
     let catalog = tokio::spawn(async move {
@@ -109,7 +106,7 @@ async fn listener_catalog_holds_the_mutation_gate_through_fresh_preflight() {
             .listener_protocol_package_catalog()
             .await
     });
-    services.installed_preflight_entered.notified().await;
+    services.describe_entered.notified().await;
 
     let disable_application = application.clone();
     let disable_target = target.clone();
@@ -125,7 +122,7 @@ async fn listener_catalog_holds_the_mutation_gate_through_fresh_preflight() {
         "目录快照完成前，启停写操作必须等待同一个 mutation gate"
     );
 
-    services.continue_installed_preflight.notify_one();
+    services.continue_describe.notify_one();
     assert_eq!(catalog.await.unwrap().unwrap().options.len(), 1);
     assert!(!disable.await.unwrap().unwrap().enabled);
 }
@@ -338,7 +335,7 @@ async fn native_import_cancellation_success_and_errors_are_forwarded_without_par
 }
 
 #[tokio::test]
-async fn internal_detail_serializes_the_closed_wire_shape_with_no_external_metadata() {
+async fn external_detail_serializes_the_closed_wire_shape_with_external_metadata() {
     let (application, services, _, _) = fixture();
     let target = package("iso-8583", "1.0.0");
     services.insert(record(target.clone(), false));
@@ -365,7 +362,7 @@ async fn internal_detail_serializes_the_closed_wire_shape_with_no_external_metad
         .map(str::to_owned)
         .collect()
     );
-    assert!(value["external"].is_null());
+    assert!(value["external"].is_object());
     assert_eq!(
         value["upstream_schema"]["root"]["properties"]
             .as_object()

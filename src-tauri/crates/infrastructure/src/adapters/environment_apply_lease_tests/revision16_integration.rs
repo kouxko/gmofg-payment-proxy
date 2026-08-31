@@ -143,24 +143,19 @@ async fn runtime_fixture() -> RuntimeFixture {
 
 async fn runtime_fixture_with_builtin(archive: Option<Arc<[u8]>>) -> RuntimeFixture {
     let store = Arc::new(SqliteStore::in_memory().unwrap());
-    let packages = ProtocolPackageRepositoryAdapter::with_default_limits(store.clone());
-    let packages = match archive {
-        Some(archive) => packages.with_builtin_archive(archive),
-        None => packages,
-    };
-    packages.ensure_builtin_seeded_async().await.unwrap();
-    let packages = Arc::new(packages);
-    let secrets = Arc::new(ProtectedSecretAdapter::new(
-        store.clone(),
-        Arc::new(TestProtector),
-    ));
     let gates = Arc::new(EnvironmentApplyResourceGateRegistry::default());
     let external_packages = Arc::new(
         ExternalPackageRegistryAdapter::new(store.clone())
             .with_environment_apply_resource_gates(gates.clone()),
     );
+    let packages = BuiltinProtocolPackageAdapter::new(archive, external_packages.clone());
+    packages.ensure_seeded().await.unwrap();
+    let secrets = Arc::new(ProtectedSecretAdapter::new(
+        store.clone(),
+        Arc::new(TestProtector),
+    ));
     let listener = Arc::new(
-        ListenerRuntimeAdapter::new(store.clone(), secrets, packages.clone())
+        ListenerRuntimeAdapter::new(store.clone(), secrets)
             .with_environment_apply_resource_gates(gates.clone()),
     );
     listener.set_pipeline_ports(Arc::new(NoopPipelinePorts));
@@ -173,7 +168,6 @@ async fn runtime_fixture_with_builtin(archive: Option<Arc<[u8]>>) -> RuntimeFixt
     let runtime = EnvironmentApplyRuntimeAdapter::new(
         listener.clone(),
         android,
-        packages,
         external_packages.clone(),
         SqliteExecutor::new(store.clone()),
         gates,
@@ -229,13 +223,9 @@ async fn listener_start_stop_hidden_aba_advances_without_intermediate_observatio
 async fn android_none_present_none_retains_a_monotonic_tombstone_generation() {
     let fixture = runtime_fixture().await;
     let android = Arc::new(MutableAndroidOwner::default());
-    let packages = Arc::new(ProtocolPackageRepositoryAdapter::with_default_limits(
-        fixture.store.clone(),
-    ));
     let runtime = EnvironmentApplyRuntimeAdapter::new(
         fixture.listener,
         android.clone(),
-        packages,
         fixture.external_packages,
         SqliteExecutor::new(fixture.store),
         Arc::new(EnvironmentApplyResourceGateRegistry::default()),

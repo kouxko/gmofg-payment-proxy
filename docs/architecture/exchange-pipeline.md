@@ -118,7 +118,7 @@ pub trait Encode<P: Protocol, D: Direction> {
 }
 ```
 
-这些 trait 是运行时替换点。实现可以来自 Rust 内建逻辑、Rhai 协议包或外部软件包 RPC，
+这些 trait 是运行时替换点。实现可以来自 Rust 内建逻辑或统一软件包 RPC，
 但 Exchange 只看见单阶段能力，不允许把整条组合处理器伪装成 Decode。
 
 规则链按既定顺序逐条接收前一条输出的 Document。单条协议 Document 规则内部：
@@ -202,7 +202,7 @@ HTTP transport 已经完成 HTTP framing，Context 保存 header/body 文本，�
 
 - Plain：Rust `TextDecode` 把 header/body 放入 `http-text` Document；Display 返回 body；
   空 RulesChain 后由 `TextEncode` 重建 Context。
-- Protocol：绑定精确 HTTP 协议包版本；Decode/Display/Encode 调用独立 Rhai 阶段，
+- Protocol：绑定精确 HTTP 协议包版本；Decode/Display/Encode 调用 Sidecar 固定 RPC，
   RulesChain 顺序执行两个边界阶段的 Document 规则。
 
 HTTP 标准 Header/JSON/故障规则不隐藏在协议 Decode 中。它们由 `PipelinePorts` 在已 framing

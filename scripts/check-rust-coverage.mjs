@@ -16,12 +16,6 @@ const policies = [
     thresholds: { functions: 75, lines: 80, regions: 79 },
   },
   {
-    package: "intercept-proxy-protocol-scripting",
-    required: false,
-    activationFile: resolve(repositoryRoot, "src-tauri/crates/protocol-scripting/Cargo.toml"),
-    thresholds: { functions: 90, lines: 90, regions: 90 },
-  },
-  {
     package: "intercept-proxy-domain",
     required: true,
     filePolicies: [

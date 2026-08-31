@@ -12,7 +12,7 @@ Socket 数据。桌面端使用 Tauri + Next.js，Android Companion 通过按应
 - HTTP 正向 absolute-form 请求与固定 Server 反向转发。
 - 固定 Server 的 HTTP/HTTPS、下游 TLS/mTLS、上游 TLS/mTLS 和双侧 TLS/mTLS。
 - Socket RemoteServer/LocalServer、TCP/TLS/mTLS、按协议转发与透明转发。
-- 内置 Rhai 协议包，以及 Socket 外部 WebSocket JSON-RPC 协议包。
+- 严格 JavaScript ZIP 协议包，由本地或远端 Sidecar 主动连接统一 WebSocket JSON-RPC 接口。
 - Frame、Decode、Document Rules、Encode、Display 的强类型 Pipeline。
 - HTTP 基础规则、协议 Document 规则、断点、Mock、弱网与故障注入。
 - HTTP/Socket 统一规则列表和统一实时抓包列表。
@@ -52,7 +52,8 @@ LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是�
 | `src-tauri/crates/application` | Use Case、ViewModel、端口、事件和能力矩阵 |
 | `src-tauri/crates/exchange` | Exchange、Pipeline、Envelope、Reader/Writer 与方向约束 |
 | `src-tauri/crates/proxy` | HTTP、Socket、TCP/TLS、连接和 Listener runtime |
-| `src-tauri/crates/protocol-scripting` | 协议包校验、Rhai、Frame/Decode/Encode/Display |
+| `src-tauri/crates/package-contract` | 协议包 API 1 Manifest、固定 RPC、FrameResult 与错误 wire |
+| `src-tauri/crates/package-runtime` | 严格 ZIP 校验与独立 Boa Sidecar 可执行程序 |
 | `src-tauri/crates/infrastructure` | SQLite、证书、ADB、协议包、外部包和运行适配器 |
 | `src-tauri/crates/host` | 无 UI 的完整 Rust 组合根与后台任务所有权 |
 | `src-tauri/src` | Tauri Command、AppState、日志、MCP 和桌面生命周期 |
@@ -69,7 +70,7 @@ LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是�
 - [架构总览](docs/architecture/README.md)：推荐阅读顺序与当前架构结论。
 - [Exchange 与 Pipeline](docs/architecture/exchange-pipeline.md)：核心 trait、泛型约束和连接生命周期。
 - [真实数据流](docs/architecture/data-flow.md)：HTTP、Socket、LocalServer、透明转发和错误传播。
-- [规则与协议包](docs/architecture/rules-and-protocol-packages.md)：规则能力矩阵、Document、Rhai 和外部包。
+- [规则与协议包](docs/architecture/rules-and-protocol-packages.md)：规则能力矩阵、Document 与 Sidecar 协议包。
 - [观测与诊断](docs/architecture/runtime-observability.md)：ExchangeObservation、日志、UI 刷新和 MCP。
 - [安全与持久化](docs/architecture/security-and-persistence.md)：TLS/mTLS、SQLite、证书和导入导出。
 - [用户操作说明](docs/user-operation-guide.md)：从 Workspace 到真实交易验证的操作步骤。
