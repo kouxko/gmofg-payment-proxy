@@ -31,6 +31,17 @@
 - TLS 连接要分别验证 TCP 建连、TLS 握手、证书信任和业务报文；下层成功不等于业务成功。
 - App 与服务端使用的协议版本、字符集、长度单位和字段编码必须与所选协议包一致。
 
+### 协议包与规则证据
+
+- HTTP Body Protocol 与 Scripted Socket 都通过精确 `id + version` 的协议包执行；本地包是
+  `manifest.json`、`protocol.js`、`display.js` 严格 ZIP，由 Boa Sidecar 通过 `/packages` 注册。
+- 统一 Document 规则只在 `Proxy -> Server` 和 `Proxy -> App` 两个写出边界运行。App 侧看到连接成功
+  不能证明 Decode、Rules 或 Encode 成功，应按同一 Exchange 时间线核对各阶段。
+- `processed.changes` 是 typed action 摘要；`changes_truncated=true` 只表示有界过程证据不完整。
+  应继续比较 `final_document`、`encoded.context`、`sent.context` 和 App/Server 实际收到的内容。
+- 外部包错误用 `external_package_call.stable_code`、stage、method、request ID 定位；不要让 App 逻辑依赖
+  可变化的远端错误文案，也不要把 Display 回退误判成业务转发失败。
+
 ## AI 应如何给建议
 
 1. 先用 `reproduction_report` 读取精确 Workspace/Listener 的配置、运行状态、转发方式、端点、规则、协议包和复现步骤。
@@ -40,6 +51,10 @@
 5. 给出一个最小修改方案，并补充 1 至 2 个合理替代方案。
 6. 每个方案说明影响范围、风险、回退方法和可观察的验证结果。
 7. 如果证据不足，列出 `has_more`、淘汰范围、采集错误及需要补充的日志/抓包字段，不把猜测写成结论。
+
+没有执行的真实设备、远端、系统权限、人工 App 或 VoiceOver 验证必须写为 `NOT_RUN`，说明缺失条件和
+复测入口。`BLOCKED` 只用于已经被明确外部条件阻塞的必测层；实现违反合同应写 `FAILED`，不能用单元
+测试 PASS 覆盖这些状态。
 
 36 个 MCP 查询工具只提供读取和建议能力；五个环境配置工具可以在分层验证、完整预览和一次性
 confirmation token 后修改一个明确目标 Workspace。它们不会修改 App 源码、应用级 Settings、任意

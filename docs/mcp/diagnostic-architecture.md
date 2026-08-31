@@ -33,11 +33,17 @@
 - `src/features`：Tauri/React 展示与用户操作；不能自行推导另一套业务状态。
 - `examples/external-packages`：第三方 WebSocket 软件包示例及可独立运行的测试客户端。
 
-## 四、Socket 与外部软件包调用链
+## 四、HTTP/Socket 与协议包调用链
 
-`ListenerRuntime` 根据 Workspace 快照创建透明 Socket Exchange 或协议 Socket Exchange；`LocalServer` 是协议模式中的进程内精确 Echo Server。Scripted Socket 绑定精确包版本；内置包走 Rhai，
-external_package 走 `/packages` WebSocket 与 JSON-RPC。Proxy 负责 TCP 分帧和业务连接生命周期，外部包只实现注册时声明的
-`hooks.upstream.*`、`hooks.downstream.*` 与 `document.*.display` 方法。
+`ListenerRuntime` 根据 Workspace 快照创建 HTTP、透明 Socket 或 Scripted Socket Exchange；`LocalServer`
+是 Socket 协议模式中的进程内精确 Echo Server。HTTP Body Protocol 与 Scripted Socket 都绑定精确包
+版本，并通过 `/packages` WebSocket JSON-RPC 调用固定的 `hooks.upstream.*`、`hooks.downstream.*` 和
+`document.*.display` 方法。本地严格 JavaScript ZIP 由应用管理的 Boa Sidecar 主动注册；第三方进程
+使用相同 wire。Proxy 继续拥有 TCP framing、业务连接和规则事务生命周期。
+
+业务流水线按适用数据面执行 Frame → Decode → Display → Rules → Encode。统一规则只在
+`Proxy -> Server` 与 `Proxy -> App` 两个写出边界运行；Encode 失败会回滚 Document、Nth counter、hit
+和 one-shot 生命周期。不存在旧协议规则投影或另一套运行时 counter。
 
 同一故障至少要关联：Workspace ID、Listener ID、runtime epoch、业务 connection ID、可选 exchange ID、精确 package id/version、
 方向、stage、JSON-RPC request ID、抓包 ID。缺少这些字段时，应在对应生产日志处补充结构化字段，而不是把上下文只写进中文描述。
@@ -55,6 +61,14 @@ Android 网络状态与 endpoint、规则、协议包来源/能力/Schema、外�
 输入或写出时，应继续查询 Exchange observation 或 HTTP capture，并自行核对 Workspace、Listener
 与关联 ID；不能把复现报告中没有该字段解释成“没有发生”。
 
+Exchange 的 `processed` 事件提供逐规则 typed operations、`changes_truncated` 与 `final_document`；
+`encoded` 提供 Encode 后 context。`changes_truncated=true` 表示过程摘要触及有界证据预算，不能解释为
+未列出的动作没有发生。判断真实写出必须继续对齐 `sent` 与对端实际接收。
+
+外部调用失败使用 typed `external_package_call` 保存 stage、method、request ID、remote code、stable code
+与有界 remote data 摘要。排障和自动化应优先匹配 stable code；remote message 只用于上下文，不能作为
+稳定分支条件。协议包详情还保留首次/最后连接、最后远端地址和最近稳定错误，进程重启后仍可查询。
+
 ## 六、环境配置结果的证据边界
 
 `environment_candidate_create` 的逐层结果只证明候选在对应时点通过 schema、领域、材料、包投影、
@@ -69,3 +83,13 @@ apply；相反，create 在返回候选前断开会取消创建并清理私有�
 候选 diagnostics、预览和终态只包含稳定状态码、公开 baseline、公开证书元数据和安全引用。私钥、
 密码、confirmation token、保护后字节与原始请求体不进入这些诊断输出。MCP transport 仍是无认证
 明文 HTTP，因此这项输出边界不能防止网络观察者读取客户端提交的输入。
+
+## 七、数据库与验证状态边界
+
+产品 1.00 使用 Schema 100 作为兼容起点，并持久化 external package registration、fingerprint、可选本地
+ZIP、enabled 与连接生命周期。开发期低于该基线的数据库仍有明确 recreate 分支；Schema 100 及以后
+不得清空重建，未知或损坏 Schema 必须 fail closed。
+
+源码、MCP resource 或单元测试 PASS 只证明对应合同。没有执行的真实 App、远端服务、系统权限、人工
+UI 或 VoiceOver 必须记为 `NOT_RUN`，不能用较低层证据替代。环境存在但阻塞时记录 `BLOCKED` 和缺失
+条件；实现违反合同则记录 `FAILED`，不能混写为同一种“未通过”。

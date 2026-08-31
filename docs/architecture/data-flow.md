@@ -8,10 +8,10 @@
 ------------------------------------ upstream ------------------------------------>
 
 App -- read --> Decode --> Document --> Display --> Envelope
-     -- write --> Rules --> Encode ---------------------------> Server
+     -- write --> Proxy -> Server Rules --> Encode -----------> Server
 
 Server -- read --> Decode --> Document --> Display --> Envelope
-        -- write --> Rules --> Encode ------------------------> App
+        -- write --> Proxy -> App Rules --> Encode -----------> App
 
 <---------------------------------- downstream ------------------------------------
 ```
@@ -46,11 +46,11 @@ sequenceDiagram
     T->>T: framing 与 wire policy
     T->>E: HttpContext header body
     E->>E: Decode Display
-    E->>E: Rules Encode
+    E->>E: Proxy -> Server Rules, Encode once
     E->>S: 完整请求
     S-->>E: HTTP 响应
     E->>E: Decode Display
-    E->>E: Rules Encode
+    E->>E: Proxy -> App Rules, Encode once
     E-->>T: 完整响应
     T-->>A: HTTP wire
 ```
@@ -77,12 +77,12 @@ sequenceDiagram
     A->>E: 一个或多个 read chunk
     E->>F: 累计 buffer
     F-->>E: NeedMore 或 Complete
-    E->>E: Decode Display Rules Encode
+    E->>E: Decode Display, Proxy -> Server Rules, Encode once
     E->>S: 一个完整请求 Frame
     S-->>E: 一个或多个 read chunk
     E->>F: 累计 buffer
     F-->>E: 唯一完整响应 Frame
-    E->>E: Decode Display Rules Encode
+    E->>E: Decode Display, Proxy -> App Rules, Encode once
     E-->>A: 一个完整响应 Frame
 ```
 
@@ -104,10 +104,10 @@ sequenceDiagram
     participant E as Exchange
     participant L as LocalServer
     A->>E: 请求 Context
-    E->>E: upstream Decode Display Rules Encode
+    E->>E: upstream Decode Display, Proxy -> Server Rules, Encode once
     E->>L: 写入容量一 channel
     L-->>E: 原样作为 downstream Context
-    E->>E: downstream Decode Display Rules Encode
+    E->>E: downstream Decode Display, Proxy -> App Rules, Encode once
     E-->>A: 本地响应 Context
 ```
 
@@ -153,7 +153,7 @@ flowchart LR
     STORE --> EVENTS[EventHub]
     EVENTS --> BOOT[BootstrapProvider]
     BOOT --> CAPTURE[抓包页面刷新]
-    STORE --> MCP[37 个 MCP 只读查询]
+    STORE --> MCP[36 个 MCP 只读查询]
 ```
 
 业务事件按实际发生顺序追加：
@@ -205,13 +205,13 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 - Document Schema 校验 ID、版本、标题、字段数量、名称唯一性和值类型。
 - 统一规则冻结 Listener、content type 和 Document package/Schema 绑定；stage 可以更新，但目标阶段
   必须重新校验完整 HTTP/Document 内容、条件、动作、资源上限和 revision。
-- HTTP 内容按五个统一阶段校验匹配字段、动作、终止语义和流量方向；`app_to_proxy` 与
-  `upstream_to_proxy` 是 Document-only 阶段，拒绝普通 HTTP 条件和动作。
+- HTTP 内容按 `Proxy -> Server` 与 `Proxy -> App` 两个统一写出阶段校验匹配字段、动作、终止语义和
+  流量方向；Document 与普通 HTTP gate 在同一 actor transaction 中保持各自能力所有权。
 
 ### 9.2 Application
 
 - Use Case 执行乐观锁、确认操作、跨仓储引用和当前 Listener/协议包状态校验。
-- `rule_editor_context` 按五个统一阶段返回合法匹配字段和动作，方向敏感动作带固定方向。
+- `rule_editor_context` 按两个统一写出阶段返回合法匹配字段和动作，方向敏感动作带固定方向。
 - 草稿命令只生成矩阵允许的字段/动作；保存时不依赖 Listener 运行状态，再次调用同一阶段能力
   判断和领域校验。
 - Document capability 绑定 Listener、精确包版本和 Schema，并按目标阶段重新验证，HTTP/Socket

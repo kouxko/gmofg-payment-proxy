@@ -27,7 +27,13 @@ const mermaidDocuments = new Set([
 
 const decisions = new Map([
   ["decisions/ADR-001-http-socket-boundary.md", { status: "Accepted" }],
-  ["decisions/ADR-002-protocol-packages-http.md", { status: "Accepted" }],
+  [
+    "decisions/ADR-002-protocol-packages-http.md",
+    {
+      status: "Superseded by [ADR-009](ADR-009-nested-document-javascript-package-runtime.md) on 2026-08-31",
+      supersededBy: "decisions/ADR-009-nested-document-javascript-package-runtime.md",
+    },
+  ],
   ["decisions/ADR-003-application-zip-ownership.md", { status: "Accepted and implemented" }],
   [
     "decisions/ADR-004-embedded-read-only-mcp.md",
@@ -47,8 +53,9 @@ const decisions = new Map([
   [
     "decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
     {
-      status: "Accepted",
+      status: "Superseded by [ADR-009](ADR-009-nested-document-javascript-package-runtime.md) on 2026-08-31",
       supersedes: "decisions/ADR-006-unified-exchange-observation.md",
+      supersededBy: "decisions/ADR-009-nested-document-javascript-package-runtime.md",
     },
   ],
   [
@@ -56,6 +63,16 @@ const decisions = new Map([
     {
       status: "Accepted; implementation staged",
       supersedes: "decisions/ADR-004-embedded-read-only-mcp.md",
+    },
+  ],
+  [
+    "decisions/ADR-009-nested-document-javascript-package-runtime.md",
+    {
+      status: "Accepted",
+      supersedes: [
+        "decisions/ADR-002-protocol-packages-http.md",
+        "decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
+      ],
     },
   ],
 ]);
@@ -219,21 +236,31 @@ export function validateDecisionPolicy(decisionSources, decisionContracts) {
     }
 
     if (contract.supersedes !== undefined) {
-      const predecessor = decisionContracts.get(contract.supersedes);
-      const predecessorId = adrIdentifier(contract.supersedes);
-      const predecessorFile = path.basename(contract.supersedes);
-      const reverseLink = `- Supersedes: [${predecessorId}](${predecessorFile})`;
-      if (!source.split(/\r?\n/u).includes(reverseLink)) {
-        policyFailures.push(`${name}: missing exact reverse link ${reverseLink}`);
-      }
-      if (predecessor?.supersededBy !== name) {
-        policyFailures.push(`${name}: successor relation is not bidirectional with ${contract.supersedes}`);
+      const predecessors = Array.isArray(contract.supersedes)
+        ? contract.supersedes
+        : [contract.supersedes];
+      const supersedesLine = source.split(/\r?\n/u).find((line) => line.startsWith("- Supersedes: ")) ?? "";
+      for (const predecessorName of predecessors) {
+        const predecessor = decisionContracts.get(predecessorName);
+        const predecessorId = adrIdentifier(predecessorName);
+        const predecessorFile = path.basename(predecessorName);
+        const reverseLink = `[${predecessorId}](${predecessorFile})`;
+        if (!supersedesLine.includes(reverseLink)) {
+          const qualifier = Array.isArray(contract.supersedes) ? "reverse link" : "exact reverse link";
+          policyFailures.push(`${name}: missing ${qualifier} ${reverseLink}`);
+        }
+        if (predecessor?.supersededBy !== name) {
+          policyFailures.push(`${name}: successor relation is not bidirectional with ${predecessorName}`);
+        }
       }
     }
 
     if (contract.supersededBy !== undefined) {
       const successor = decisionContracts.get(contract.supersededBy);
-      if (successor?.supersedes !== name) {
+      const predecessors = Array.isArray(successor?.supersedes)
+        ? successor.supersedes
+        : [successor?.supersedes];
+      if (!predecessors.includes(name)) {
         policyFailures.push(`${name}: superseded relation is not bidirectional with ${contract.supersededBy}`);
       }
     }

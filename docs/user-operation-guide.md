@@ -132,22 +132,25 @@ LocalServer 不配置上游 host、上游 CA 或上游客户端身份。
 
 ## 5. 协议包
 
-“协议包”页面统一显示 HTTP Body 与 Socket 内置包；Socket 外部包在线状态也在此处体现。
+“协议包”页面统一显示 HTTP Body 与 Socket 本地包；远端包在线状态也在此处体现。
 
-### 5.1 内置 Rhai 包
+### 5.1 本地 JavaScript ZIP 包
 
 导入 ZIP 前应确认：
 
-- `manifest.toml`、`protocol.rhai`、`display.rhai` 和上下行 Schema 齐全；
+- `manifest.json`、`protocol.js`、`display.js` 和上下行递归 Schema 齐全；
 - Socket 包上下行都声明 Frame；HTTP 包两边都不声明 Frame；
 - 包 ID + SemVer 是不可变身份，新内容使用新版本；
-- Decode/Encode/Display 函数签名符合当前 API。
+- package API 1 的固定文件与模块路径符合静态合同。
 
-导入会先完成 ZIP、Manifest、Schema、Rhai 和入口签名校验；任一步失败都不会留下半安装包。
+prepare 只校验 ZIP、strict Manifest、递归 Schema 和模块路径。commit 后记录立即为 enabled，独立 Boa
+Sidecar 再加载/求值模块，并在注册前检查 fixed exports 是否存在且 callable。该阶段失败会保留
+installed + enabled 记录并显示 failed/offline，便于诊断；不会自动回滚、重试或切换执行路径。
 
-### 5.2 外部 Socket 包
+### 5.2 远端协议包
 
-外部包连接设置页公布的 loopback WebSocket `/packages`，注册后必须实现：
+远端包连接设置页或配置会公布实际 WebSocket `/packages` 地址；监听范围由 `bind_address` 决定，
+不得假定 loopback。注册后必须实现：
 
 - `hooks.upstream.<frame|decode|encode>`
 - `hooks.downstream.<frame|decode|encode>`
@@ -160,14 +163,15 @@ LocalServer 不配置上游 host、上游 CA 或上游客户端身份。
 
 Display 是协议包生成的 HTML 展示结果。App 会清洗并放入无能力 sandbox iframe：
 
-- 不显示 Document JSON；
+- 递归 Document、规则过程和最终值按 typed evidence 展示；
 - 不执行 script、事件属性、URL 导航或表单；
 - Display 失败时 HTTP 回退 Body、Socket 回退 Hex；
 - Display 失败属于观测失败，不改变已经成功的网络交易。
 
 ## 6. 统一规则页面
 
-HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“阶段”区分。点击一行后在右侧编辑。
+HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“阶段”区分。点击一行会打开模态编辑器；
+加载期间可以安全取消，旧请求返回后不会重新打开已经关闭的编辑器。
 
 ### 6.1 新建方式
 
@@ -179,15 +183,13 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 
 “新建规则”对话框关闭后可以再次打开；选择规则或新建草稿不会自动保存。
 
-### 6.2 HTTP 阶段能力
+### 6.2 阶段能力
 
 编辑器选项由 Rust 返回，保存时领域层再次校验：
 
 | 统一阶段 | 可以配置 | 不能配置 |
 | --- | --- | --- |
-| App → Proxy | 请求 Decode 后的 Document 条件与动作 | HTTP 字段、HTTP 终止动作和响应能力 |
 | Proxy → Server | 请求字段、上行延迟/限速、Mock、上游连接/读写故障，以及入口支持时的 Document | HTTP 响应状态、响应损坏、下行限速 |
-| Server → Proxy | 响应 Decode 后的 Document 条件与动作 | HTTP 字段、HTTP 终止动作和请求能力 |
 | Proxy → App | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连，以及入口支持时的 Document | Mock、上游超时、上行断连 |
 | TLS 握手 | 证书指纹、第 N 次命中、拒绝 TLS 握手 | HTTP/Document 字段和其他内容/网络动作 |
 
@@ -197,7 +199,8 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 - 一条规则最多一个终止动作；
 - 终止动作必须是最后一个动作；
 - 添加终止动作后，“添加动作”禁用；
-- 条件按 AND 匹配，动作按声明顺序执行；
+- 条件使用递归 AND/OR 树；每条规则读取当前 working Document，命中的有序 actions 立即修改它并对
+  后序规则可见，最终只 Encode 一次；
 - 终止动作命中后停止当前规则剩余动作和后续规则。
 
 “Proxy → Server 设置 response code”在概念上不成立，因此请求阶段不会显示自定义 HTTP 状态码；
@@ -205,18 +208,17 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 
 ### 6.3 Document 规则
 
-Document 规则只能选择当前 Listener、精确协议包版本、方向 Schema 中存在的字段。值必须与
-Schema 类型一致，不执行字符串到整数或 Blob 的隐式转换。
+Document 规则可以选择当前 Listener、精确协议包版本与递归 Schema 路径，也可以通过 Rust capability
+显式创建首个规则本地路径。值类型包括 null、boolean、number、string、object 和 array，不做隐式转换。
+Schema array items 只表示元素模板，不会自动生成 index 0；只有显式创建索引后才显示具体 index。
 
-Socket 四阶段依次是：
+Document 规则只在两个写出阶段执行：
 
-1. App → Proxy
-2. Proxy → Server
-3. Server → Proxy
-4. Proxy → App
+1. Proxy → Server
+2. Proxy → App
 
-后一个阶段看到前一个阶段修改后的 Document。一次读取产生一个 Envelope，长连接中的新报文追加
-新事件，不覆盖之前数据。
+每个阶段从 Decode 结果创建私有 working Document；规则条件和 actions 按顺序读取/更新它，前序修改
+对后序规则可见。一次读取产生一个 Envelope，长连接中的新报文追加新事件，不覆盖之前数据。
 
 ## 7. 实时抓包
 
@@ -244,7 +246,12 @@ Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序�
 6. Failed（如有）
 7. Closed
 
-详情显示原始字节/Hex、固定 Display 和失败阶段，不渲染 Document JSON，也不显示无意义的字节
+协议模式详情还显示 received Document、逐规则 typed operation summary、final working Document、
+Encode/result/process evidence 和 stable error code。`changes_truncated=true` 表示逐规则摘要达到观测预算；
+它不代表业务处理、最终 Document 或 Encode 被截断。没有执行的人机、真实设备或外部网络验证必须
+记录为 `NOT_RUN`，不能用单元测试 PASS 替代。
+
+详情显示原始字节/Hex、递归 Document、固定 Display、规则过程和失败阶段，不显示无意义的字节
 上一页/下一页按钮。长连接中 D2 追加在 D1 后面。
 
 “暂停列表滚动”只暂停视图滚动，不暂停网络、规则或记录；“清空当前显示/运行记录”只清理内存
@@ -277,7 +284,7 @@ Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序�
 不校验 Host/Origin、来源 IP、Authorization、API key、Cookie 或其他调用方身份。任何能够连接该端口
 的主机都可以读取公开数据并调用环境配置工具；网络观察者也可能看到提交的私钥、密码和确认令牌。
 
-现有 37 个工具继续只读。完整环境配置使用五步工具合同：
+现有 36 个工具继续只读。完整环境配置使用五步工具合同：
 
 1. 调用 `mcp_environment_capabilities`，确认 IPv4/IPv6 capability、warning、预算和 schema。
 2. 调用 `environment_candidate_create` 提交明确的现有或新 Workspace 目标；等待全部验证层完成并检查
@@ -302,7 +309,7 @@ TLS 可移植材料。它不包含运行时报文、ExchangeObservation 或本�
 导入步骤：
 
 1. 选择 ZIP。
-2. App 有界读取并校验路径、大小、压缩比、Manifest、Schema、Rhai 和证书材料。
+2. App 有界读取并校验路径、大小、压缩比、Manifest、Schema、JavaScript 包和证书材料。
 3. 查看替换预览。
 4. commit 前再次比较 Workspace/Settings revision、包与证书 generation。
 5. 原子替换成功后重启 App。

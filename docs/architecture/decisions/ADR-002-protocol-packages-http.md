@@ -1,13 +1,13 @@
 # ADR-002：HTTP 与 Socket 使用独立协议包，共享字段处理模型
 
-- Status: Accepted
+- Status: Superseded by [ADR-009](ADR-009-nested-document-javascript-package-runtime.md) on 2026-08-31
 - Supersedes: 2026-08-17 Socket-only decision
 - Refined by: [ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
 - Date: 2026-08-19
 - Scope: R12 protocol platform
 
-> 阶段顺序已由 ADR-007 与权威 Exchange/Pipeline 模板修订：Reader 先完成 Decode -> Display 并
-> 固定 Envelope，Writer 再对 Document clone 执行 Rules -> Encode。下方 Decision 保留原始决策语境。
+> 当前递归 Document、两写出阶段和 JavaScript package API 1 合同由 ADR-009 替代。下方内容只保留
+> 原始决策语境，不再指导生产实现。
 
 ## Context
 

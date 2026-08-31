@@ -68,7 +68,7 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 | `application_log_query` | 可选 `level`、`target`、`keyword`、`occurred_from`、`occurred_to`、`before_log_id`、`limit` | object：稳定游标分页的 Rust/Tauri 持久化日志与保留元数据 | `limit` 默认 200，最大 500；返回 `evicted_count` 和容量/字节满、consumer 断开、producer 竞争三个 `queue_dropped_*` 计数。 |
 | `application_log_get` | 必填 `log_id` | object：一条保留的运行日志 | 已淘汰的 ID 返回 `NOT_FOUND`。 |
 | `exchange_observation_query` | 必填 `workspace_id`、`page`；可选 `listener_id` | object：连接级 Exchange 页及保留信息 | `page` 含必填的 `page`、`page_size`，页大小最大 200；分别返回 producer `dropped_events` 与 consumer/store `ignored_events`。 |
-| `exchange_observation_get` | 必填 `exchange_id` | object：一条完整的连接级 Exchange 观察 | 已淘汰的 ID 返回 `NOT_FOUND`。 |
+| `exchange_observation_get` | 必填 `exchange_id` | object：一条完整的连接级 Exchange 观察 | 已淘汰的 ID 返回 `NOT_FOUND`。`processed` 事件包含 typed `changes`、`changes_truncated`、`final_document`；`failed` 可包含稳定的 `external_package_call`。 |
 | `reproduction_report` | 必填 `workspace_id`、`listener_id` | object：`bundle`、有界 `application_logs` 和可复制 `markdown` | 只汇总配置、监听器运行态、结构化诊断、日志与协议包现场；不读取 `ExchangeObservationStore`，也不包含 HTTP 抓包。Exchange 和 HTTP 证据必须分别调用对应查询工具。 |
 | `settings_get` | 无 | object：已保存的全局设置 | 读取持久化投影。 |
 | `workspace_list` | 无 | array：全部工作区摘要 | 不包含完整子项。 |
@@ -113,9 +113,30 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 | `workspace_rule_list` | 必填 `workspace_id` | array：指定已保存工作区的统一规则定义 | 不依赖当前选择。 |
 | `protocol_package_list` | 无 | array：所有已安装不可变协议包版本及使用数 | 安装源文件不在 Application facade 中暴露。 |
 | `protocol_package_catalog` | 无 | object：已启用且已完成能力描述的协议包、方向能力、Schema 和目录校验信息 | 在线不等于能力描述成功。 |
-| `protocol_package_detail` | 必填 `package.id`、`package.version` | object：精确版本的 manifest 投影、方向能力、Schema 与 entry 使用情况 | 不返回安装源文件。 |
+| `protocol_package_detail` | 必填 `package.id`、`package.version` | object：精确版本的 manifest 投影、方向能力、Schema、entry 使用、连接生命周期和最近稳定错误 | 不返回脚本或本机路径；详情可区分 online/enabled/local process，并返回注册 fingerprint、首次/最后连接及最后远端地址。 |
 | `protocol_package_usage` | 必填 `package.id`、`package.version` | array：引用该精确版本的工作区/entry | 版本是不可变身份的一部分。 |
 
 ## 证据组合建议
 
 一次可复现排障通常先调用 `reproduction_report` 固定工作区和监听器上下文，再按故障类型补充 `exchange_observation_query` / `exchange_observation_get`、`http_capture_query` / `http_capture_get` 或 `application_log_query` / `application_log_get`。不要把“工具调用成功”误认为业务请求成功；监听器运行、外部包在线、解码成功、上游响应和完整 Exchange 都是独立证据门。
+
+`processed.changes` 的 operation kind 固定为 `record_match`、`set`、`clear`、`insert`、`append`；
+`changes_truncated=true` 表示过程摘要触及有界容量，不能证明未列出的动作没有执行。判断业务结果还要
+比较 `final_document`、`encoded.context`、`sent.context` 与对端实际接收。外部包失败应优先使用
+`external_package_call.stable_code`、stage、method、request ID 做自动化判断，不能依赖可变 remote message。
+
+## MCP 文档与模板资源
+
+资源 URI 是版本化的只读内容，不是工具调用：
+
+- `intercept-proxy://docs/protocol-package-authoring/1.0`：`protocol-package-authoring`，递归 Document、
+  两写出边界与协议包职责。
+- `intercept-proxy://docs/protocol-package-host-api/1.0`：严格 `manifest.json`、固定 Hook 和错误合同。
+- `intercept-proxy://docs/socket-protocol-package-authoring/1.0`：JavaScript ZIP 与 Socket authoring。
+- `intercept-proxy://docs/external-package-integration-guide/1.0`：`/packages`、`package.register` 和生命周期。
+- `intercept-proxy://templates/iso8583-ascii-standard/1.0.0/{manifest.json,protocol.js,display.js,archive.zip}`：
+  应用拥有的官方 Boa JavaScript 起始包源码与 exact ZIP。
+
+产品 1.00 的持久化兼容起点为 Schema 100。开发期旧 Schema 的 recreate 分支不能用于 Schema 100+
+恢复、升级或验收；未知/损坏版本必须 fail closed。真实 App、外部网络、系统权限或人工 UI 没有执行时
+必须记录 `NOT_RUN`，不能由 MCP 查询或源码测试 PASS 替代。

@@ -32,17 +32,18 @@
 ## 架构决策
 
 - [ADR-001：HTTP 与 Socket 边界](architecture/decisions/ADR-001-http-socket-boundary.md)
-- [ADR-002：HTTP 协议包](architecture/decisions/ADR-002-protocol-packages-http.md)
+- [ADR-002：HTTP 协议包（已被 ADR-009 替代）](architecture/decisions/ADR-002-protocol-packages-http.md)
 - [ADR-003：应用 ZIP 所有权](architecture/decisions/ADR-003-application-zip-ownership.md)
 - [ADR-004：内嵌只读 MCP](architecture/decisions/ADR-004-embedded-read-only-mcp.md)
 - [ADR-005：运行证据与复现报告](architecture/decisions/ADR-005-runtime-evidence-and-reproduction-report.md)
 - [ADR-006：统一 Exchange 观测（已被替代）](architecture/decisions/ADR-006-unified-exchange-observation.md)
-- [ADR-007：Exchange/Pipeline 运行边界](architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md)
+- [ADR-007：Exchange/Pipeline 运行边界（已被 ADR-009 替代）](architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md)
 - [ADR-008：MCP 环境配置合同与分阶段启用](architecture/decisions/ADR-008-mcp-environment-configuration.md)
+- [ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时](architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md)
 
-ADR-006 仅作为决策历史保留；当前实现以 ADR-007 和源码为准。讨论期的 Exchange
-概念代码保存在 [Exchange Pipeline Template](architecture/exchange-pipeline-template/README.md)，它用于解释
-抽象来源，不替代生产源码。
+ADR-002、ADR-006 和 ADR-007 仅作为决策历史保留；当前实现以 ADR-009、当前架构文档和源码为准。
+[Exchange Pipeline Template](architecture/exchange-pipeline-template/README.md) 只保留历史抽象来源，
+不再是 current authority，也不替代生产源码。
 
 ## MCP 与外部包
 

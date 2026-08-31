@@ -230,7 +230,8 @@ fn external_package_guide_explains_connection_runtime_diagnostics_and_read_only_
         "diagnostics_query",
         "exchange_observation_query",
         "protocol_package_detail",
-        "1 MiB",
+        "max_body_bytes",
+        "canonical padded Base64",
         "只读",
     ] {
         assert!(guide.contains(required), "guide is missing {required}");
