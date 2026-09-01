@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-09-01 14:01:52 +08:00`
+- 最后更新时间：`2026-09-01 16:14:52 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -201,6 +201,7 @@ result: "<HTML string>"
 | `2026-09-01 10:26:12 +08:00` | 用户再次明确不考虑兼容性并删除全部 TLS 握手规则能力：领域与应用规则阶段只保留 `ProxyToUpstream`、`ProxyToApp`，物理删除 `TlsHandshake` 规则阶段、`RejectTlsHandshake` 规则动作、对应故障模板、能力、wire、UI、测试和 current 文档；旧数据库可清除，不提供旧阶段/动作解析、迁移、别名、fallback 或额外错误处理。规则页面不再按两个阶段分区，合并为一个规则列表；每张规则卡以“上行”或“下行”标识真实阶段，右侧固定编辑器继续编辑对应阶段。受影响 NDR-JS-03、09、11、12 重新打开并重新验收。 |
 | `2026-09-01 11:25:53 +08:00` | 新一轮实际 App 验收确认三项变更：规则编辑器同组输入框、选择框和按钮必须对齐并使用统一尺寸；无协议 Schema 时 HTTP Body 仍必须允许手工输入 RFC 6901 `/a/b` 路径创建匹配条件，不能只显示“无 Body Document 能力”；断点功能与规则 `Pause` 动作全部物理删除，不保留隐藏入口、兼容 wire、迁移、alias、fallback 或额外错误处理。当前旧构建代理链路继续用隔离数据库同步验证；上述源码完成并重新构建后立即开始第二轮 GUI 与真实 Proxy 链路测试。受影响 NDR-JS-03、09、11、12 再次打开。 |
 | `2026-09-01 13:08:47 +08:00` | 用户授权提交并推送当前任务分支、触发 Windows 候选构建；产品版本为“1.00”，仓库 SemVer 保持 `1.0.0`。用户覆盖 Phase17 的 `<100` fail-closed/no-mutation 合同：唯一有效版本标记 `<100` 时启动默认整库清除并创建全新 Schema 100，不迁移、不兼容、不保留旧数据；Schema 100 原样保留，`>100`、缺少或损坏标记继续 fail-closed。正式标签与 GitHub Release 未获授权，本次只运行 Windows `verify-and-build` 候选 workflow。NDR-JS-10、11、12 重新打开。 |
+| `2026-09-01 16:14:52 +08:00` | 首次 Windows workflow run `33476081904` 的验证 job 与 Android Companion 构建通过，但 Windows installer job 因未执行 Boa Sidecar staging 而缺少 `binaries\\intercept-proxy-package-sidecar-x86_64-pc-windows-msvc.exe`，MSI/NSIS/portable 均未产出。用户要求优先修复 CI，并把复跑收窄为 Windows build-only：不再执行完整 Verify 或 macOS；Android Companion 仅作为 Windows 包声明的必需资源准备，不视为额外平台候选交付。验收为 Windows build job 在 Tauri build 前显式构建并 stage 同一 x86_64-pc-windows-msvc Sidecar，随后产出 MSI、NSIS 与 portable；不创建 tag 或 GitHub Release。本地 Proxy 与历史测试只读继续，发现的问题先记录。 |
 
 旧任务正文中与本节最终合同冲突的初始结论全部失效，不得作为实现依据。
 
@@ -606,8 +607,8 @@ result: "<HTML string>"
 - `PASS`：产品 1.00 / Schema100 候选发布前修复。跨进程启动所有权覆盖 Schema 分类、关闭、复验、`<100` 主文件/WAL/SHM 清除、重开和 Schema100 建表；确定性并发回归 1/1 证明等待实例不会删除前一实例刚创建的 Schema100。SQLite 88/88、Host 有效测试 31/31、workspace all-target/all-feature check 与 strict Clippy、architecture、bindings、typecheck、lint、source-size、fmt、diff 全部通过。
 - `PASS`：`pnpm test:task-20260829-002:phase17`；Node 14/14，Infrastructure `<100` cleanup exact 1/1，Host pre-1.0 cleanup exact 1/1，真实 Release profile 双启动 preserve exact 1/1。checker 先通过 Cargo `--list --format terse` 对三个完整名分别断言唯一发现，再执行 exact；旧名称和零发现均不能作为成功结果。
 - `APPROVED / CODE CHECKPOINT READY`：发布前独立 delta 复核关闭启动竞态、非确定性锁等待证明及 Phase17 零测试假绿，最终 P0/P1/P2=`0/0/0`；Windows workflow 边界复核确认本次仅允许当前分支 `verify-and-build/windows`，不创建 tag 或 GitHub Release。
-
-- `NOT_RUN`：未推送、未触发远程 CI。
+- `FAILED`：GitHub Actions run `33476081904`，head `6dc67297fd3a3f8197a76e3d9526976ff1f9103d`。`android-companion` 与 Windows Verify 成功；`build` 在 `Build MSI and NSIS installers` 失败，Tauri 找不到 `binaries\\intercept-proxy-package-sidecar-x86_64-pc-windows-msvc.exe`。根因是 build job 未复用 Verify job 已有的 `node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc`；只产生 Android Companion artifact，MSI/NSIS/portable 未运行。
+- `IN PROGRESS`：按用户最新要求修复 Windows build job 的 Sidecar staging，并以 `build-only/windows` 复跑；完整 Verify 与 macOS 均不运行，正式 tag 与 GitHub Release 仍未授权。
 
 ## 完成总结
 
