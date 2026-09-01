@@ -142,70 +142,7 @@ async fn seed_two_start_fixture(
         .expect("select unique Workspace through Application");
     let listener = workspace.listeners[0].clone();
     assert!(!listener.enabled, "fixture Listener is explicitly disabled");
-    let RuleEditorContentContext::Http { stages } = application
-        .rule_editor_context(listener.id)
-        .await
-        .expect("load current HTTP rule editor contract")
-        .content
-    else {
-        panic!("HTTP rule context expected");
-    };
-    let structure = stages
-        .into_iter()
-        .find(|stage| stage.stage == RuleStage::ProxyToUpstream)
-        .expect("proxy-to-upstream stage")
-        .new_rule_draft;
-    let intercept_proxy_application::RuleNewDefinitionDraft {
-        listener_id,
-        stage,
-        content,
-    } = structure;
-    let intercept_proxy_application::RuleNewDefinitionContent::Http { .. } = content else {
-        panic!("HTTP rule draft expected");
-    };
-    let description = "phase2 lifecycle fixture".into();
-    let condition = application
-            .rule_definition_http_condition_draft(
-                intercept_proxy_application::RuleMatchFieldKind::Method,
-                None,
-                intercept_proxy_application::RuleMatchOperatorKind::Equals,
-                "GET",
-                stage,
-            )
-            .expect("method condition");
-    let action = UnifiedAction::from(application
-            .rule_definition_action_draft(
-                intercept_proxy_application::RuleHttpActionDraftInput {
-                    kind: RuleActionKind::Delay,
-                    parameters_json: Some(r#"{"milliseconds":100}"#.into()),
-                },
-                RuleStage::ProxyToUpstream,
-            )
-            .expect("explicit delay action"));
-    let input = intercept_proxy_application::RuleDefinitionSaveInput {
-        rule_id: None,
-        expected_revision: None,
-        draft: intercept_proxy_application::RuleDefinitionDraft {
-            name: "phase2-two-start-rule".into(),
-            enabled: true,
-            priority: 29,
-            listener_id,
-            stage,
-            content: RuleContent::Http(intercept_proxy_application::HttpRuleContent {
-                description,
-                condition,
-                action,
-            }),
-        },
-    };
-    let created = application
-        .rule_definition_save(input)
-        .await
-        .expect("save Rule through Application");
-    let toggled = application
-        .rule_definition_toggle(created.rule_id(), created.revision(), false)
-        .await
-        .expect("advance Rule revision through Application");
+    let toggled = save_two_start_rule(application.as_ref(), listener.id).await;
 
     let preview = application
         .protocol_package_import()
@@ -232,6 +169,78 @@ async fn seed_two_start_fixture(
         package,
         package_archive,
     }
+}
+
+async fn save_two_start_rule(
+    application: &intercept_proxy_application::Application,
+    listener_id: intercept_proxy_application::ListenerId,
+) -> intercept_proxy_application::RuleDefinition {
+    let RuleEditorContentContext::Http { stages } = application
+        .rule_editor_context(listener_id)
+        .await
+        .expect("load current HTTP rule editor contract")
+        .content
+    else {
+        panic!("HTTP rule context expected");
+    };
+    let structure = stages
+        .into_iter()
+        .find(|stage| stage.stage == RuleStage::ProxyToUpstream)
+        .expect("proxy-to-upstream stage")
+        .new_rule_draft;
+    let intercept_proxy_application::RuleNewDefinitionDraft {
+        listener_id,
+        stage,
+        content,
+    } = structure;
+    let intercept_proxy_application::RuleNewDefinitionContent::Http { .. } = content else {
+        panic!("HTTP rule draft expected");
+    };
+    let description = "phase2 lifecycle fixture".into();
+    let condition = application
+        .rule_definition_http_condition_draft(
+            intercept_proxy_application::RuleMatchFieldKind::Method,
+            None,
+            intercept_proxy_application::RuleMatchOperatorKind::Equals,
+            "GET",
+            stage,
+        )
+        .expect("method condition");
+    let action = UnifiedAction::from(
+        application
+            .rule_definition_action_draft(
+                intercept_proxy_application::RuleHttpActionDraftInput {
+                    kind: RuleActionKind::Delay,
+                    parameters_json: Some(r#"{"milliseconds":100}"#.into()),
+                },
+                RuleStage::ProxyToUpstream,
+            )
+            .expect("explicit delay action"),
+    );
+    let input = intercept_proxy_application::RuleDefinitionSaveInput {
+        rule_id: None,
+        expected_revision: None,
+        draft: intercept_proxy_application::RuleDefinitionDraft {
+            name: "phase2-two-start-rule".into(),
+            enabled: true,
+            priority: 29,
+            listener_id,
+            stage,
+            content: RuleContent::Http(intercept_proxy_application::HttpRuleContent {
+                description,
+                condition,
+                action,
+            }),
+        },
+    };
+    let created = application
+        .rule_definition_save(input)
+        .await
+        .expect("save Rule through Application");
+    application
+        .rule_definition_toggle(created.rule_id(), created.revision(), false)
+        .await
+        .expect("advance Rule revision through Application")
 }
 
 async fn assert_two_start_fixture_present(

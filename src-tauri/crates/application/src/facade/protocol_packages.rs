@@ -152,7 +152,12 @@ impl Application {
         let version = self.require_protocol_package(&package).await?;
         let description = self.external_packages.describe(&package).await?;
         ensure_external_description(&package, &description)?;
-        let external = Some(self.external_packages.detail(&package).await?);
+        let external = match &version.source {
+            ProtocolPackageSourceViewModel::Managed { .. } => None,
+            ProtocolPackageSourceViewModel::External { .. } => {
+                Some(self.external_packages.detail(&package).await?)
+            }
+        };
         ensure_description_identity(&package, &description)?;
         let usages = self.protocol_package_usage.usages(&package).await?;
         Ok(ProtocolPackageDetailViewModel {

@@ -4,8 +4,8 @@ use crate::{
 };
 use intercept_proxy_domain::{
     BooleanPredicate, Condition, DocumentMatchPath, DocumentMutation, DocumentPredicate,
-    DocumentValue, JsonPointer, NumberOperator, NumberPredicate, StringOperator, StringPredicate,
-    UnifiedAction, MAX_DOCUMENT_RULE_STRING_BYTES,
+    DocumentValue, JsonPointer, MAX_DOCUMENT_RULE_STRING_BYTES, NumberOperator, NumberPredicate,
+    StringOperator, StringPredicate, UnifiedAction,
 };
 
 pub(super) fn condition_draft(
@@ -254,9 +254,40 @@ mod tests {
     #[test]
     fn string_condition_and_action_enforce_the_document_string_limit() {
         let exact = "x".repeat(intercept_proxy_domain::MAX_DOCUMENT_RULE_STRING_BYTES);
-        assert!(condition_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentPredicateKind::Equals, &exact).is_ok());
+        assert!(
+            condition_draft(
+                "/value",
+                RuleLocalDocumentValueType::String,
+                RuleLocalDocumentPredicateKind::Equals,
+                &exact
+            )
+            .is_ok()
+        );
         let oversized = format!("{exact}x");
-        assert_eq!(condition_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentPredicateKind::Equals, &oversized).unwrap_err().view_model.code, "RULE_INVALID");
-        assert_eq!(action_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentActionKind::Set, Some(&oversized), None).unwrap_err().view_model.code, "RULE_INVALID");
+        assert_eq!(
+            condition_draft(
+                "/value",
+                RuleLocalDocumentValueType::String,
+                RuleLocalDocumentPredicateKind::Equals,
+                &oversized
+            )
+            .unwrap_err()
+            .view_model
+            .code,
+            "RULE_INVALID"
+        );
+        assert_eq!(
+            action_draft(
+                "/value",
+                RuleLocalDocumentValueType::String,
+                RuleLocalDocumentActionKind::Set,
+                Some(&oversized),
+                None
+            )
+            .unwrap_err()
+            .view_model
+            .code,
+            "RULE_INVALID"
+        );
     }
 }

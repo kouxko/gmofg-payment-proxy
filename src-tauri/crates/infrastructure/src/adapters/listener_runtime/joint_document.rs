@@ -423,36 +423,36 @@ fn processing_change(
             .find(|rule| rule.rule_id() == rule_id)
             .map_or_else(Vec::new, |rule| {
                 let operation = match rule.action() {
-                        UnifiedAction::RecordMatch => Some(RuleProcessingOperation {
-                            kind: RuleProcessingOperationKind::RecordMatch,
-                            path: None,
-                        }),
-                        UnifiedAction::Document(DocumentMutation::Set { path, .. }) => {
-                            Some(RuleProcessingOperation {
-                                kind: RuleProcessingOperationKind::Set,
-                                path: Some(path.as_str().to_owned()),
-                            })
-                        }
-                        UnifiedAction::Document(DocumentMutation::Clear { path, .. }) => {
-                            Some(RuleProcessingOperation {
-                                kind: RuleProcessingOperationKind::Clear,
-                                path: Some(path.as_str().to_owned()),
-                            })
-                        }
-                        UnifiedAction::Document(DocumentMutation::Insert { path, .. }) => {
-                            Some(RuleProcessingOperation {
-                                kind: RuleProcessingOperationKind::Insert,
-                                path: Some(path.as_str().to_owned()),
-                            })
-                        }
-                        UnifiedAction::Document(DocumentMutation::Append { path, .. }) => {
-                            Some(RuleProcessingOperation {
-                                kind: RuleProcessingOperationKind::Append,
-                                path: Some(path.as_str().to_owned()),
-                            })
-                        }
-                        UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => None,
-                    };
+                    UnifiedAction::RecordMatch => Some(RuleProcessingOperation {
+                        kind: RuleProcessingOperationKind::RecordMatch,
+                        path: None,
+                    }),
+                    UnifiedAction::Document(DocumentMutation::Set { path, .. }) => {
+                        Some(RuleProcessingOperation {
+                            kind: RuleProcessingOperationKind::Set,
+                            path: Some(path.as_str().to_owned()),
+                        })
+                    }
+                    UnifiedAction::Document(DocumentMutation::Clear { path, .. }) => {
+                        Some(RuleProcessingOperation {
+                            kind: RuleProcessingOperationKind::Clear,
+                            path: Some(path.as_str().to_owned()),
+                        })
+                    }
+                    UnifiedAction::Document(DocumentMutation::Insert { path, .. }) => {
+                        Some(RuleProcessingOperation {
+                            kind: RuleProcessingOperationKind::Insert,
+                            path: Some(path.as_str().to_owned()),
+                        })
+                    }
+                    UnifiedAction::Document(DocumentMutation::Append { path, .. }) => {
+                        Some(RuleProcessingOperation {
+                            kind: RuleProcessingOperationKind::Append,
+                            path: Some(path.as_str().to_owned()),
+                        })
+                    }
+                    UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => None,
+                };
                 operation.into_iter().collect()
             })
     } else {

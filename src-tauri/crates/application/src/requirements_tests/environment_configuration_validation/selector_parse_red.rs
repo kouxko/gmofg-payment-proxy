@@ -100,8 +100,8 @@ async fn unsupported_mitm_root_material_preserves_material_role_code() {
 #[tokio::test]
 async fn unsafe_document_integer_is_rejected_as_invalid_schema() {
     let candidate = candidate_json_with(|candidate| {
-        rule_named_mut(candidate, "Protocol Document values")["content"]["value"]["condition"]
-            ["predicate"]["value"]["value"] = serde_json::json!(9_007_199_254_740_992_u64);
+        rule_named_mut(candidate, "Protocol Document values")["content"]["value"]["condition"]["predicate"]
+            ["value"]["value"] = serde_json::json!(9_007_199_254_740_992_u64);
     });
 
     assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;

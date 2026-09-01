@@ -10,7 +10,6 @@ import { deferred, detail, group, version } from "./protocol-packages-test-suppo
 const mocks = vi.hoisted(() => ({
   protocolPackageList: vi.fn(),
   protocolPackageDetail: vi.fn(),
-  protocolPackageRestoreBuiltin: vi.fn(),
   protocolPackageExportBuiltin: vi.fn(),
   toast: vi.fn(),
   useAppEventRefresh: vi.fn(),
@@ -25,7 +24,6 @@ vi.mock("@/generated/rust-types", () => ({
   commands: {
     protocolPackageList: mocks.protocolPackageList,
     protocolPackageDetail: mocks.protocolPackageDetail,
-    protocolPackageRestoreBuiltin: mocks.protocolPackageRestoreBuiltin,
     protocolPackageExportBuiltin: mocks.protocolPackageExportBuiltin,
   },
 }));
@@ -46,19 +44,6 @@ describe("ProtocolPackagesView list", () => {
     mocks.protocolPackageDetail.mockImplementation(async (packageRef) =>
       detail(version(packageRef.version)),
     );
-    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
-      outcome: "reused",
-      version: version("1.0.0", {
-        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        name: "ISO 8583 ASCII 示例",
-        package_source: { type: "external", online: true },
-        enabled: true,
-      }),
-      capabilities: detail().capabilities,
-      kind: detail().kind,
-      upstream_schema: detail().upstream_schema,
-      downstream_schema: detail().downstream_schema,
-    });
     mocks.protocolPackageExportBuiltin.mockResolvedValue({
       path: "/tmp/iso8583-template.wasm",
       bytes_written: 4096,
@@ -86,136 +71,9 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
     pending.resolve([]);
     expect(await screen.findByText("尚未安装协议包")).toBeVisible();
+    expect(screen.queryByRole("button", { name: "恢复 ISO 8583 示例包" })).not.toBeInTheDocument();
     expect(screen.getByText("内置 ISO 8583:1987 ASCII Profile")).toBeVisible();
     expect(screen.getByText(/覆盖主位图、次位图和 DE2–DE128 字段结构/)).toBeVisible();
-  });
-
-  it("restores the built-in ISO example from the empty state, refreshes, and opens the exact version", async () => {
-    const builtInVersion = version("1.0.0", {
-      package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-      name: "ISO 8583 ASCII 示例",
-      package_source: { type: "external", online: true },
-      enabled: true,
-    });
-    const builtInGroup = group({
-      id: "iso8583-ascii-standard",
-      name: "ISO 8583 ASCII 示例",
-      versions: [builtInVersion],
-      reference_count: 0,
-      active_reference_count: 0,
-    });
-    mocks.protocolPackageList.mockResolvedValueOnce([]).mockResolvedValueOnce([builtInGroup]);
-    mocks.protocolPackageDetail.mockResolvedValue(detail(builtInVersion));
-    const user = userEvent.setup();
-    render(<ProtocolPackagesView />);
-
-    await screen.findByText("尚未安装协议包");
-    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
-
-    expect(mocks.protocolPackageRestoreBuiltin).toHaveBeenCalledTimes(1);
-    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2);
-    expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
-    expect(screen.getByRole("status")).toHaveTextContent("官方 ISO 8583 示例已存在并通过重新校验。");
-    expect(screen.getByText("远端调试 · 在线", { selector: "dd" })).toBeVisible();
-  });
-
-  it("does not report success or refresh when the restore command fails", async () => {
-    mocks.protocolPackageRestoreBuiltin.mockRejectedValue({
-      code: "PROTOCOL_PACKAGE_BUILTIN_INVALID",
-      message: "内置资产校验失败",
-      field_errors: {},
-      diagnostic: null,
-    });
-    const user = userEvent.setup();
-    render(<ProtocolPackagesView />);
-
-    await screen.findByText("尚未安装协议包");
-    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
-
-    expect(await screen.findByText("内置示例恢复失败")).toBeVisible();
-    expect(screen.getByText("内置资产校验失败")).toBeVisible();
-    expect(screen.queryByText(/已恢复并启用|已存在并通过/)).not.toBeInTheDocument();
-    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
-
-    await user.click(screen.getByRole("button", { name: "重试" }));
-    await waitFor(() => expect(mocks.protocolPackageRestoreBuiltin).toHaveBeenCalledTimes(2));
-  });
-
-  it("fails closed for a mismatched restore response", async () => {
-    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
-      outcome: "installed",
-      version: version("9.0.0", { package_source: { type: "external", online: true } }),
-    });
-    const user = userEvent.setup();
-    render(<ProtocolPackagesView />);
-
-    await screen.findByText("尚未安装协议包");
-    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" })[0]);
-
-    expect(await screen.findByText("内置示例恢复结果不完整，请刷新列表后重试。")).toBeVisible();
-    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
-  });
-
-  it.each([
-    [null, "内置示例已恢复，但刷新后的协议包列表数据不完整。"],
-    [[], "内置示例已恢复，但列表中未找到官方精确版本。"],
-  ])("reports an exact restore refresh failure for %j", async (refreshed, message) => {
-    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
-      outcome: "installed",
-      version: version("1.0.0", {
-        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        name: "ISO 8583 ASCII 示例",
-        package_source: { type: "external", online: true },
-        enabled: true,
-      }),
-      capabilities: detail().capabilities,
-      kind: detail().kind,
-      upstream_schema: detail().upstream_schema,
-      downstream_schema: detail().downstream_schema,
-    });
-    mocks.protocolPackageList.mockResolvedValueOnce([]).mockResolvedValueOnce(refreshed);
-    const user = userEvent.setup();
-    render(<ProtocolPackagesView />);
-
-    await screen.findByText("尚未安装协议包");
-    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
-
-    expect(await screen.findByText(message)).toBeVisible();
-    expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2);
-    expect(screen.queryByRole("dialog", { name: "ISO 8583 ASCII 示例" })).not.toBeInTheDocument();
-  });
-
-  it("shows the installed notice after restoring a missing built-in example", async () => {
-    const restoredVersion = version("1.0.0", {
-      package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-      name: "ISO 8583 ASCII 示例",
-      package_source: { type: "external", online: true },
-      enabled: true,
-    });
-    const restoredGroup = group({
-      id: "iso8583-ascii-standard",
-      name: "ISO 8583 ASCII 示例",
-      versions: [restoredVersion],
-      reference_count: 0,
-      active_reference_count: 0,
-    });
-    mocks.protocolPackageRestoreBuiltin.mockResolvedValue({
-      outcome: "installed",
-      version: restoredVersion,
-      capabilities: detail().capabilities,
-      kind: detail().kind,
-      upstream_schema: detail().upstream_schema,
-      downstream_schema: detail().downstream_schema,
-    });
-    mocks.protocolPackageList.mockResolvedValueOnce([]).mockResolvedValueOnce([restoredGroup]);
-    const user = userEvent.setup();
-    render(<ProtocolPackagesView />);
-
-    await screen.findByText("尚未安装协议包");
-    await user.click(screen.getAllByRole("button", { name: "恢复 ISO 8583 示例包" }).at(-1)!);
-
-    expect(await screen.findByRole("status")).toHaveTextContent("官方 ISO 8583 示例已恢复并启用。");
-    expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
   });
 
   it("exports the built-in template once and reports the exact result", async () => {
@@ -300,7 +158,7 @@ describe("ProtocolPackagesView list", () => {
     expect(screen.getByRole("button", { name: "查看协议包 JSON Body" })).toBeVisible();
     expect(screen.queryByRole("tab", { name: "HTTP" })).not.toBeInTheDocument();
     expect(screen.queryByRole("tab", { name: "Socket" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "恢复 ISO 8583 示例包" })).toBeVisible();
+    expect(screen.queryByRole("button", { name: "恢复 ISO 8583 示例包" })).not.toBeInTheDocument();
     expect(screen.getByText("内置 ISO 8583:1987 ASCII Profile")).toBeVisible();
     expect(screen.getByRole("button", { name: "查看协议包 ISO 8583" })).toHaveTextContent("Socket");
     expect(screen.getByRole("button", { name: "查看协议包 JSON Body" })).toHaveTextContent("HTTP");

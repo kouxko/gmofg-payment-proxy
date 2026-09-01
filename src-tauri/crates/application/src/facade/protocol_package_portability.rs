@@ -8,8 +8,8 @@ use std::collections::{HashMap, HashSet};
 
 use intercept_proxy_domain::{
     Condition, DocumentSchemaNode, ListenerDataPlane, ProtocolDirection, ProtocolPackageRef,
-    ProxyWorkspace, RuleContent, RuleDefinition, UnifiedAction,
-    validate_document_condition_schema, validate_unified_action_schema,
+    ProxyWorkspace, RuleContent, RuleDefinition, UnifiedAction, validate_document_condition_schema,
+    validate_unified_action_schema,
 };
 
 use super::protocol_packages::ensure_description_identity;

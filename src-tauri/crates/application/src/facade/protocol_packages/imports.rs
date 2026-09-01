@@ -45,14 +45,6 @@ impl Application {
         })
     }
 
-    /// 从应用内置的不可信 Component 重新恢复官方起始示例。
-    pub async fn protocol_package_restore_builtin(
-        &self,
-    ) -> AppResult<ProtocolPackageImportViewModel> {
-        let _gate = self.mutation_gate.lock().await;
-        self.protocol_package_builtin.restore_builtin().await
-    }
-
     /// 读取编译期内置的官方起始示例 Component，不访问或修改安装库。
     pub async fn protocol_package_builtin_archive(&self) -> AppResult<Vec<u8>> {
         self.protocol_package_builtin.builtin_archive().await

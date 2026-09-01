@@ -1,0 +1,48 @@
+{
+  "name": "all",
+  "method": "POST",
+  "target": "/orders/123?mode=test",
+  "status": 200,
+  "response": {
+    "remote": "127.0.0.1:59227",
+    "method": "POST",
+    "target": "/orders/123?mode=test",
+    "headers": {
+      "accept-encoding": [
+        "identity"
+      ],
+      "content-type": [
+        "application/json"
+      ],
+      "x-probe": [
+        "alpha"
+      ],
+      "x-method-hit": [
+        "yes"
+      ],
+      "x-header-hit": [
+        "yes"
+      ],
+      "x-path-hit": [
+        "yes"
+      ],
+      "host": [
+        "127.0.0.1:18083"
+      ],
+      "connection": [
+        "close"
+      ],
+      "content-length": [
+        "42"
+      ]
+    },
+    "body_hex": "7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d",
+    "body_text": "{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}",
+    "document": {
+      "customer": {
+        "age": 18.0,
+        "name": "matched"
+      }
+    }
+  }
+}

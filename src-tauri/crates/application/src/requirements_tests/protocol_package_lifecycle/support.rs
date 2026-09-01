@@ -31,6 +31,7 @@ pub(super) struct FakeProtocolPackageServices {
     pub failures: parking_lot::Mutex<ProtocolPortFailures>,
     pub get_calls: AtomicUsize,
     pub describe_calls: AtomicUsize,
+    pub detail_calls: AtomicUsize,
     pub installed_preflight_calls: AtomicUsize,
     pub import_calls: AtomicUsize,
     pub usage_calls: AtomicUsize,
@@ -169,6 +170,7 @@ impl ExternalPackageApplicationPort for FakeProtocolPackageServices {
     }
 
     async fn detail(&self, _: &ProtocolPackageRef) -> AppResult<ExternalPackageDetailViewModel> {
+        self.detail_calls.fetch_add(1, Ordering::SeqCst);
         let methods = ExternalPackageDirectionMethodsViewModel {
             frame: "hooks.frame".into(),
             decode: "hooks.decode".into(),

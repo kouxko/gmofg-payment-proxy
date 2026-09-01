@@ -43,7 +43,10 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
 #[tokio::test]
 async fn missing_condition_fails_schema_with_exact_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"].as_object_mut().unwrap().remove("condition");
+        candidate["workspace"]["rules"][0]["content"]["value"]
+            .as_object_mut()
+            .unwrap()
+            .remove("condition");
     });
 
     selector_parse_red::assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;
@@ -66,14 +69,13 @@ async fn request_stage_custom_status_fails_with_exact_http_rule_code() {
 #[tokio::test]
 async fn request_stage_downstream_throttle_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["action"] =
-            serde_json::json!({"source":"http","value":{
-                "Throttle": {
-                    "bytes_per_second": 1024,
-                    "chunk_bytes": 128,
-                    "direction": "Downstream"
-                }}
-            });
+        candidate["workspace"]["rules"][0]["content"]["value"]["action"] = serde_json::json!({"source":"http","value":{
+            "Throttle": {
+                "bytes_per_second": 1024,
+                "chunk_bytes": 128,
+                "direction": "Downstream"
+            }}
+        });
     });
 
     domain_contract_red::assert_domain_code_before_preview(

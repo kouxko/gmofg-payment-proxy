@@ -1,6 +1,5 @@
 import { describe, expect, it } from "vitest";
 import {
-  builtInRestoreResultError,
   isProtocolPackageGroupList,
   packageStatus,
   protocolPackageDetailError,
@@ -67,36 +66,6 @@ describe("protocol package presentation model", () => {
       }],
     }];
     expect(isProtocolPackageGroupList(malformed)).toBe(false);
-  });
-
-  it("accepts only the protected built-in exact identity as a restore result", () => {
-    expect(builtInRestoreResultError({
-      outcome: "installed",
-      version: version("1.0.0", {
-        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        package_source: { type: "external", online: true },
-        enabled: true,
-      }),
-      kind: "socket",
-      capabilities: {
-        upstream: { frame: true, decode: true, encode: true },
-        downstream: { frame: true, decode: true, encode: true },
-        display: true,
-      },
-      upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },
-      downstream_schema: { root: { type: "object", title: "ISO Response", properties: { code: { type: "string", title: "Code" } } } },
-    })).toBeUndefined();
-    expect(builtInRestoreResultError({
-      outcome: "installed",
-      version: version("1.0.0", { package_source: { type: "external", online: true } }),
-    })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
-    expect(builtInRestoreResultError({
-      outcome: "installed",
-      version: version("1.0.0", {
-        package: { id: "iso8583-ascii-standard", version: "1.0.0" },
-        package_source: { type: "external", online: true },
-      }),
-    })).toBe("内置示例恢复结果不完整，请刷新列表后重试。");
   });
 
   it("rejects cross-kind versions and unknown list fields", () => {

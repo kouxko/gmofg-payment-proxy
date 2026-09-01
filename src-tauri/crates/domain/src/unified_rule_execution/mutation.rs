@@ -19,31 +19,25 @@ pub fn validate_unified_action_schema(
     schema: &DocumentSchemaNode,
 ) -> Result<(), DomainError> {
     let expected_and_type = match action {
-            UnifiedAction::Document(DocumentMutation::Set { path, value }) => schema
-                .resolve(path)
-                .ok()
-                .map(|node| (node, value.value_type())),
-            UnifiedAction::Document(DocumentMutation::Clear { path, value_type }) => {
-                schema.resolve(path).ok().map(|node| (node, *value_type))
+        UnifiedAction::Document(DocumentMutation::Set { path, value }) => schema
+            .resolve(path)
+            .ok()
+            .map(|node| (node, value.value_type())),
+        UnifiedAction::Document(DocumentMutation::Clear { path, value_type }) => {
+            schema.resolve(path).ok().map(|node| (node, *value_type))
+        }
+        UnifiedAction::Document(
+            DocumentMutation::Insert { path, value, .. } | DocumentMutation::Append { path, value },
+        ) => match schema.resolve(path).ok() {
+            Some(DocumentSchemaNode::Array { items, .. }) => {
+                Some((items.as_ref(), value.value_type()))
             }
-            UnifiedAction::Document(
-                DocumentMutation::Insert { path, value, .. }
-                | DocumentMutation::Append { path, value },
-            ) => match schema.resolve(path).ok() {
-                Some(DocumentSchemaNode::Array { items, .. }) => {
-                    Some((items.as_ref(), value.value_type()))
-                }
-                Some(_) => {
-                    return Err(rule_error(
-                        "action",
-                        "动作值类型与 Schema 声明不一致",
-                    ));
-                }
-                None => None,
-            },
-            UnifiedAction::RecordMatch | UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => {
-                None
+            Some(_) => {
+                return Err(rule_error("action", "动作值类型与 Schema 声明不一致"));
             }
+            None => None,
+        },
+        UnifiedAction::RecordMatch | UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => None,
     };
     if let Some((expected, value_type)) = expected_and_type
         && !expected.accepts(value_type)

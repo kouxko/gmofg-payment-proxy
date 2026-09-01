@@ -69,10 +69,10 @@ Base64，第三方进程只实现上述 JSON-RPC wire，不应把某个源码语
 ## 4. 规则事务与过程证据
 
 Proxy 只在两个写出边界执行统一规则：`Proxy -> Server` 和 `Proxy -> App`。HTTP Body 与 Socket 的
-Document 条件使用非空扁平列表，同一规则内固定 AND；需要 OR 时创建多条规则。命中规则的有序
+每条规则必须且只能包含一个条件和一个对应动作；需要组合逻辑时创建多条规则。命中规则的唯一
 action 在一次事务中执行，最后最多 Encode 一次。
-Frame、Decode、Rules 或 Encode 失败会终止当前 Exchange；Encode 失败不能提交 Nth counter、hit、
-one-shot 或 Document 修改。
+Frame、Decode、Rules 或 Encode 失败会终止当前 Exchange；Encode 失败不能提交 hit 或 Document
+修改。
 
 `exchange_observation_get` 的时间线可包含：
 

@@ -23,16 +23,12 @@ pub trait ProtocolPackageImportPort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 官方内置协议包的显式恢复边界。
-///
-/// 实现必须把编译期资产重新当作不可信 Component，完整执行 binary、Manifest、
-/// WIT world 和 Host API 校验后才原子替换官方精确身份。
+/// 官方内置协议包模板的导出边界。
 pub trait BuiltinProtocolPackagePort: Send + Sync + std::fmt::Debug {
     /// 返回编译期内置 Component 的独立字节副本，供用户直接导出模板。
     ///
     /// 该操作不读取已安装注册表，也不重新打包协议包。
     async fn builtin_archive(&self) -> AppResult<Vec<u8>>;
-    async fn restore_builtin(&self) -> AppResult<ProtocolPackageImportViewModel>;
 }
 
 #[async_trait]

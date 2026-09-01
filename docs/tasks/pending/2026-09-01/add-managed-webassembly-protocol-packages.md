@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-01 20:56:42 +08:00`
+- 最后更新时间：`2026-09-01 23:18:03 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -76,6 +76,9 @@
 | `2026-09-01 17:23:52 +08:00` | 用户明确推翻此前保留 Boa/Sidecar 的方案：产品只运行 Wasm，不使用 Sidecar，所有本地 Wasm 协议包在同一个应用进程内执行。此前双运行时、JavaScript 兼容、Sidecar Transport/heartbeat/注册/进程打包验收失效；单文件 Component、版本化 WIT、完整 Host capability、无安全限制、无产品级大小/性能阈值等未冲突结论继续有效。 |
 | `2026-09-01 17:32:10 +08:00` | 用户选择方案 B：只删除本地 Sidecar，本地协议包仅以单文件 Wasm 在主进程运行；保留远端 `/packages` 外部软件包，用于快速调试并避免 Wasm 编译或 ABI 适配阶段丢失源级诊断信息。远端路径不是本地 Wasm 失败回退。 |
 | `2026-09-01 19:05:26 +08:00` | 用户要求同步检查仓库内全部协议包 examples/templates：能够直接生成 Component 的纳入统一构建，不能直接生成的实现重写为 Rust。源码确认当前共有 AU EFTEX、Nuvei Tango JSON、ISO8583 Deno、Nuvei Tango Rhai 四个 example 与一个 ISO8583 template；全部必须有 Rust Component、局部行为测试和统一构建/Wasmtime 加载验证。Python/Deno 外部调试入口按既有方案 B 保留。 |
+| `2026-09-01 22:08:24 +08:00` | 用户明确删除协议包页面“恢复 ISO 8583 示例包”功能，不保留隐藏命令、兼容入口或失败回退；继续保留“导出 ISO 8583 模板”，其产物必须是由仓库 Rust 模板构建的单文件 Wasm Component。并行验证只覆盖现有 Wasm Decode/Display/Encode 与本机重放，不测试文件系统或出站 HTTP。 |
+| `2026-09-01 22:45:00 +08:00` | 用户明确本轮不测试文件系统或出站 HTTP Host capability；这些项目从本轮发布候选验收中排除，不得用静态存在性冒充运行验证。 |
+| `2026-09-01 23:00:00 +08:00` | 用户授权在本地审查和回归无重大问题后提交并推送当前分支，触发仅 Windows 的 CI，生成未签名 Windows 可执行文件；不得创建 tag、GitHub Release、Android/macOS job 或安装包构建。普通本地/Tauri 构建不得再自动执行 Phase2 release blocker。 |
 
 ## 未确认事项
 
@@ -135,9 +138,9 @@
 | WPC-05 | 用进程内 runtime owner 替换 Supervisor、本地注册、自连接和 RPC capability | WPC-04 | 否 | 已完成 | 启停、重启、恢复、删除、在线门禁、顺序调用和清理通过，无额外进程 |
 | WPC-06 | 将内置包、四个 example、模板和测试向量转换为 Rust Wasm Component，并提供统一构建入口 | WPC-05 | 是（按目录隔离） | 已完成 | 五个仓库 Component 均可一次构建、静态校验、Wasmtime 实例化；局部业务字段和最终 bytes 与当前权威向量一致 |
 | WPC-07 | 删除 Boa、Sidecar binary、Tauri externalBin、staging/签名脚本和失效 checker/docs | WPC-06 | 否 | 已完成 | 源码、Cargo、Tauri、macOS/Windows workflow 均无 Sidecar/Boa 活动依赖 |
-| WPC-08 | 验证完整 WASI、Host WebSocket、跨平台文件系统、持久化和失败语义 | WPC-04、WPC-05 | 否 | 进行中 | HTTP/ws/file/env 与生命周期已实测；真实 wss 和跨平台盘符留待合并后验收 |
-| WPC-09 | 执行真实 HTTP/Socket 流水线和 macOS/Windows/Linux 单进程打包验收 | WPC-07、WPC-08 | 否 | 待实现 | 业务结果一致，安装包只有主 executable，无 Sidecar 资源或孤儿进程 |
-| WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 待实现 | 文档与 Wasm-only 单进程产物一致，审查无未关闭高风险发现 |
+| WPC-08 | 验证本轮已确认的 Wasm Host、持久化和失败语义 | WPC-04、WPC-05 | 否 | 已完成 | 当前正式 Host runtime 直接加载 Component；AU EFTEX Decode/Display/Encode 旧向量通过；文件系统和出站 HTTP 按用户要求本轮 NOT_RUN |
+| WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 进行中 | macOS Release App 与真实 HTTP/Socket 回放已通过；Windows executable-only CI 待推送后终态验证 |
+| WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 进行中 | 活动文档已同步当前规则和 Wasm-only 合同；最终独立审查待源码冻结后执行 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -192,6 +195,12 @@
 - `2026-09-01 17:51:23 +08:00`：在独立 worktree `gmofg-payment-proxy-wasm-runtime`、分支 `codex/task-20260901-001-wasm-runtime` 开始实现。先以 TDD 新增单文件 Component 静态合同测试；测试首先因缺少 `read_package_component` 失败，完成唯一 Manifest section、Component encoding、完整 binary 校验后 3 个用例通过。随后新增 world exports 加载负例，测试因缺少 `WasmPackageRuntime` 再次进入 RED。未修改原工作区。
 - `2026-09-01 19:05:26 +08:00`：按用户新增范围并行迁移四个 example。ISO8583 Deno、Nuvei Tango Rhai 与 Nuvei Tango JSON 已新增 Rust Component 并通过各自单元测试、Clippy、`wasm32-wasip2 --release` 构建；AU EFTEX 仍在执行。新增 `scripts/build-protocol-package-components.mjs` 与 `pnpm build:protocol-packages`，自动发现 `templates/**/Cargo.toml` 和 `examples/**/component/Cargo.toml`，逐一使用锁文件构建、校验 Component 文件头与嵌入 Manifest，并汇总到忽略提交的 `dist/protocol-package-components/`。新增 package-runtime 集成测试，最终将通过统一命令构建并由 Wasmtime 实例化全部仓库 Component。完整 Proxy、真实链路和打包测试按用户要求等待合并回原工作区后执行。
 - `2026-09-01 20:56:42 +08:00`：单进程 Wasmtime runtime、WASI HTTP/文件/环境、Host WebSocket、启停/重启/冷启动、原子启用、稳定 runtime Arc、单文件备份导入导出与 SQLite 原子替换已完成。最终审查发现停用仅摘除外层实例但未取消旧 generation 调用；随即为每代 runtime 增加取消 owner，停用/重启/删除/替换会取消正在执行及排队调用。阻塞于 WebSocket receive 的真实 guest 调用已证明在停用后 100ms 内返回错误。五个仓库 Component 统一测试构建通过；Host 两次启动测试已从旧 ZIP 改为真实 Component。完整 Proxy、真实 wss、跨平台文件系统和安装包验收继续按用户要求延期到合并后。
+- `2026-09-01 22:08:24 +08:00`：按最新产品结论物理删除内置 ISO 示例恢复 UI、前端状态/校验、Tauri command、Application facade/port 方法、Infrastructure restore 实现和对应测试；保留 `builtin_archive` 单一导出边界。导出文件名为 `iso8583-ascii-standard-1.0.0.wasm`，字节来自 `templates/socket-protocol/iso8583-standard` Rust crate 经 `wasm32-wasip2` 编译并追加内嵌 Manifest 的 Component，不是源码目录或 ZIP。
+- `2026-09-01 22:40:00 +08:00`：直接使用当前 `dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm` 和正式 Wasmtime Host runtime 重放公开上下行旧向量；Frame、Decode、Display、Encode 均通过，编码结果逐字节保持。现有 App 进程未配置 AU EFTEX BDK，因此 App 数据面按真实 `PROTOCOL_PACKAGE_INVALID` fail-closed，不将配置缺失误报为算法回归。
+- `2026-09-01 22:55:00 +08:00`：构建并保持运行当前 macOS Release App；真实 HTTP 规则覆盖 Method、Header、Request target wildcard、Plain Body RFC6901、miss 和非法 JSON，真实 Socket Schema 规则覆盖 match/action、miss 和非法 Frame。受控 Server 的实际接收数据、客户端结果和诊断已归档到 `release-app-replay` 证据。
+- `2026-09-01 23:05:00 +08:00`：Windows workflow 新增严格 `build-only/windows` raw executable job；该路径不依赖 Android job、不运行 Verify、installer 或 macOS job，只构建 `intercept-proxy.exe`、检查 OpenSSL 动态依赖并上传未签名 artifact。普通 Tauri build 改为只执行前端 build，Phase2 release blocker 保留为显式发布门禁而不再自动重复执行。
+- `2026-09-01 23:08:58 +08:00`：完成共享源码收口：Wasm Host/Registry 超长文件按职责拆分，托管 Component detail 不再读取远端连接元数据并有回归测试，活动架构/MCP/发布文档删除旧 Nth/one-shot/TLS 规则描述。Workspace check、strict Clippy、Rust fmt、bindings、typecheck、lint、Next production build、source-size 和 diff-check 均通过；进入最终独立审查。
+- `2026-09-01 23:18:03 +08:00`：补充托管 Component 详情派生证据：精确 Rust 查询测试 1/1 与协议包前端 7 files/77 tests 通过；详情不调用远端 connection metadata port。同步修正规则文档，明确多条规则独立匹配，不能把它们描述成单条规则 AND/OR 的等价表达。
 
 ## 修改文件
 
@@ -217,7 +226,9 @@
 - `VERIFIED`：Rust HTTP fixture、内置 Socket template 与 Host WebSocket 由 Wasmtime 在当前进程实际加载调用；package-runtime 合同测试 11/11 通过。
 - `VERIFIED`：AU EFTEX 5、ISO8583 Deno 2、Nuvei Tango Rhai 5、Nuvei Tango JSON 5、ISO8583 模板 2 项逻辑测试全部通过；五个 release Component 已统一构建并由 Wasmtime 实际加载调用。
 - `VERIFIED`：Application 414/414、Infrastructure 463/463、备份归档 24+7+8、相关 UI 97/97、严格 Clippy、typecheck、lint、bindings 和架构门通过。
-- `NOT_RUN`：完整 Proxy、真实 HTTP/Socket 链路、跨平台打包和安装验收按用户要求在合并回原工作区后执行。
+- `VERIFIED`：当前 macOS Release App 中 HTTP Method/Header/path wildcard/Plain Body 条件与动作、miss、非法 JSON fail-closed，以及 Socket ISO8583 Schema match/action、miss、非法 Frame fail-closed 均通过；App 保持运行供用户检查。
+- `VERIFIED`：当前 AU EFTEX Component 经正式 Host runtime 的上下行旧向量 Frame/Decode/Display/Encode 通过；当前 App 数据面因未配置 BDK 明确失败，属于配置阻断，不是成功验收。
+- `NOT_RUN`：文件系统和出站 HTTP Host capability 按用户明确范围不执行；Windows raw executable CI 仍待推送后终态验证。
 
 ## 测试结果
 
@@ -227,12 +238,16 @@
 - `PASS`：Host 两次启动 Component 恢复测试 1/1；备份归档测试 24+7+8。
 - `PASS`：`pnpm test:protocol-packages`，五个 Component 的逻辑测试、release 构建和汇总校验全部通过。
 - `PASS`：相关前端 Vitest 97/97；typecheck、lint、bindings、architecture、严格 Clippy 全部通过。
-- `NOT_RUN`：完整 Proxy、真实 wss、跨平台文件系统和安装包测试明确延期到合并后。
+- `PASS`：当前 macOS Release App HTTP 与 Socket 真实数据面回放，证据见 [`release-app-replay`](../../testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay/README.md)。
+- `PASS`：五个仓库 Component 的正式 Host runtime/集成证据见 [`wasm-integrated-runtime`](../../testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md)。
+- `PASS`：托管 Component 详情隔离回归见 [`managed-component-detail-regression`](../../testing/evidence/2026-09-01/TASK-20260901-001/managed-component-detail-regression/README.md)。
+- `PASS`：Workspace all-target/all-feature check 与 strict Clippy、Rust fmt、bindings、typecheck、协议包 UI 77 项、Next production build、source-size、diff-check。
+- `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除；Windows CI 尚未触发。
 
 ## CI 情况
 
-- `NOT_RUN`：用户未要求触发远程 CI。
+- `PENDING`：用户已授权推送后仅触发 `workflow_dispatch(run_mode=build-only, platform=windows)`；不创建 tag/Release，不运行 Android、Verify、installer 或 macOS job。CI run ID、终态和 executable artifact 将在运行完成后回填。
 
 ## 完成总结
 
-- `进行中`：独立 worktree 的代码与单元/集成验证已完成；等待最终对抗审查和本地提交。完整 Proxy、真实 wss、跨平台文件系统与打包验收按用户要求在合并后执行，因此任务暂不归档为完成。
+- `进行中`：实现、macOS App、真实 HTTP/Socket 回放、Wasm Host 旧向量、静态门和本地 build 已完成；等待最终独立审查、推送及 Windows executable-only CI 终态。文件系统和出站 HTTP 不在本轮验收范围；任务在 Windows artifact 验证前不归档。

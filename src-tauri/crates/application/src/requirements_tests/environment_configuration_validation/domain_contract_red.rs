@@ -107,7 +107,10 @@ async fn duplicate_enabled_listener_endpoint_fails_domain_before_preview() {
 #[tokio::test]
 async fn http_rule_without_action_fails_schema_before_preview() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"].as_object_mut().unwrap().remove("action");
+        candidate["workspace"]["rules"][0]["content"]["value"]
+            .as_object_mut()
+            .unwrap()
+            .remove("action");
     });
 
     selector_parse_red::assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;

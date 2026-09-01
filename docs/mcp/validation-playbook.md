@@ -51,8 +51,8 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
   和调用；远端源码调试进程先向 `/packages` 发送无 `id` 的 `package.register` notification。
 - 本地 Component Hook 直接使用字符串或字节；只有远端 JSON-RPC Socket wire 使用 canonical padded
   Base64。不要把传输编码泄漏进本地协议实现。
-- 统一规则只在 `Proxy -> Server` 和 `Proxy -> App` 执行。Encode 失败必须回滚 Document、Nth、hit 与
-  one-shot 生命周期，不能把处理过程或命中统计作为已提交结果。
+- 统一规则只在 `Proxy -> Server` 和 `Proxy -> App` 执行；每条规则只有一个条件和一个对应动作。
+  Encode 失败必须回滚 Document 与 hit，不能把处理过程或命中统计作为已提交结果。
 - `processed.changes_truncated=true` 表示 typed operation 摘要被有界截断；继续比较 `final_document`、
   `encoded`、`sent` 与对端接收，不能把摘要缺失解释为动作未执行。
 

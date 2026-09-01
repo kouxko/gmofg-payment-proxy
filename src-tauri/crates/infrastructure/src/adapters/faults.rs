@@ -150,8 +150,14 @@ fn configuration_condition(configuration: &FaultConfigurationDraft) -> AppResult
     }
     match conditions.as_slice() {
         [condition] => Ok(condition.clone()),
-        [] => Err(AppError::new("RULE_INVALID", "故障规则必须设置一个匹配条件。")),
-        _ => Err(AppError::new("RULE_INVALID", "故障规则只能设置一个匹配条件。")),
+        [] => Err(AppError::new(
+            "RULE_INVALID",
+            "故障规则必须设置一个匹配条件。",
+        )),
+        _ => Err(AppError::new(
+            "RULE_INVALID",
+            "故障规则只能设置一个匹配条件。",
+        )),
     }
 }
 

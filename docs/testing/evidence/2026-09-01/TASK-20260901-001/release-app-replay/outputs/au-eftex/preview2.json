@@ -1,0 +1,111 @@
+{
+  "baseline_public": {
+    "revision": null,
+    "selected": false,
+    "workspace_id": null
+  },
+  "candidate_id": "4e8dfa3e-bc0a-40a4-9c7f-dfc7d9e83fba",
+  "confirmation_token": "9f88b36b-942f-4462-bdc7-8465c357bfcd",
+  "errors": [],
+  "expires_on": "app_exit_or_invalidation",
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "live-au-eftex",
+          "candidate_local_id": "0fe2bb27-8929-49d1-a2d6-68a7e059077d"
+        }
+      ],
+      "rules": []
+    },
+    "target": {
+      "mode": "new",
+      "name": "Live AU EFTEX Replay"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "preview_ready",
+  "target_key": "new:4c697665204155204546544558205265706c6179",
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

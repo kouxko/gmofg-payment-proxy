@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use intercept_proxy_domain::{DocumentSchemaNode, Revision, RuleDefinitionDraft, RuleId, RuleStage};
+use intercept_proxy_domain::{
+    DocumentSchemaNode, Revision, RuleDefinitionDraft, RuleId, RuleStage,
+};
 
 use super::{ListenerId, ProtocolPackageRef, RuleActionKind, RuleStageCapabilityViewModel};
 

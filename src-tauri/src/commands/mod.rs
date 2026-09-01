@@ -128,7 +128,6 @@ pub fn builder() -> Builder<Wry> {
             protocol_package_import,
             protocol_package_import_commit,
             protocol_package_import_discard,
-            protocol_package_restore_builtin,
             protocol_package_export_builtin,
             protocol_package_enable,
             protocol_package_disable,

@@ -142,10 +142,7 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                 content: RuleContent::Http(HttpRuleContent {
                     description: "document".into(),
                     condition: equals("trace_id", DocumentValue::String("abc".into())),
-                    action: set(
-                        "amount",
-                        DocumentValue::integer(2).unwrap(),
-                    ),
+                    action: set("amount", DocumentValue::integer(2).unwrap()),
                 }),
             },
         })
@@ -174,10 +171,7 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
                         condition: equals("trace_id", DocumentValue::String("abc".into())),
-                        action: set(
-                            "amount",
-                            DocumentValue::integer(2).unwrap(),
-                        ),
+                        action: set("amount", DocumentValue::integer(2).unwrap()),
                     }),
                 },
             })

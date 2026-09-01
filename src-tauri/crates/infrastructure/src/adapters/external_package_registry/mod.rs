@@ -67,19 +67,6 @@ pub struct ExternalPackageRegistryAdapter {
 }
 
 impl ExternalPackageRegistryAdapter {
-    pub(crate) async fn environment_apply_projection(
-        &self,
-        package: &ProtocolPackageRef,
-    ) -> AppResult<Option<intercept_proxy_application::ProtocolPackageVersionViewModel>> {
-        intercept_proxy_application::ExternalPackageApplicationPort::get(self, package).await
-    }
-
-    pub(crate) async fn environment_apply_projections(
-        &self,
-    ) -> AppResult<Vec<intercept_proxy_application::ProtocolPackageVersionViewModel>> {
-        intercept_proxy_application::ExternalPackageApplicationPort::list(self).await
-    }
-
     /// 从持久化仓储创建注册表。
     ///
     /// 构造时不会从 `SQLite` 恢复在线状态；只有当前进程完成注册握手的 client 才能进入内存表。

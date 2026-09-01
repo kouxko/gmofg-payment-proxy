@@ -239,10 +239,7 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                 stage,
                 content: RuleContent::Socket(intercept_proxy_domain::SocketRuleContent {
                     package,
-                    condition: document_equals(
-                        "text",
-                        DocumentValue::String("sale".into()),
-                    ),
+                    condition: document_equals("text", DocumentValue::String("sale".into())),
                     action: document_set("text", DocumentValue::String("reply".into())),
                 }),
             },

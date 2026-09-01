@@ -120,7 +120,10 @@ pub enum Condition {
 
 #[must_use]
 pub const fn is_document_condition(condition: &Condition) -> bool {
-    matches!(condition, Condition::Document { .. } | Condition::DocumentPattern { .. })
+    matches!(
+        condition,
+        Condition::Document { .. } | Condition::DocumentPattern { .. }
+    )
 }
 
 /// Evaluates one condition using a caller-provided evaluator for typed HTTP conditions.
@@ -134,19 +137,19 @@ where
 {
     let evaluated = match condition {
         Condition::Document { path, predicate } => match document.resolve(path) {
-                Ok(actual) => ConditionEvaluation::ordinary(predicate.matches(actual)),
-                Err(DomainError {
-                    code: ErrorCode::DocumentPathMissing | ErrorCode::DocumentPathTypeMismatch,
-                    ..
-                }) => ConditionEvaluation::ordinary(false),
-                Err(error) => return Err(error.into()),
-            },
+            Ok(actual) => ConditionEvaluation::ordinary(predicate.matches(actual)),
+            Err(DomainError {
+                code: ErrorCode::DocumentPathMissing | ErrorCode::DocumentPathTypeMismatch,
+                ..
+            }) => ConditionEvaluation::ordinary(false),
+            Err(error) => return Err(error.into()),
+        },
         Condition::DocumentPattern { path, predicate } => ConditionEvaluation::ordinary(
-                document
-                    .resolve_match_path(path)
-                    .into_iter()
-                    .any(|actual| predicate.matches(actual)),
-            ),
+            document
+                .resolve_match_path(path)
+                .into_iter()
+                .any(|actual| predicate.matches(actual)),
+        ),
         Condition::Http { field, operator } => {
             ConditionEvaluation::ordinary(http_matches(field, operator)?)
         }
@@ -205,22 +208,22 @@ pub fn validate_document_condition_schema(
 ) -> Result<(), DomainError> {
     match condition {
         Condition::Document { path, predicate } => {
-                if let Ok(node) = schema.resolve(path)
-                    && !node.accepts(predicate.value_type())
-                {
-                    return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
-                }
+            if let Ok(node) = schema.resolve(path)
+                && !node.accepts(predicate.value_type())
+            {
+                return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
             }
+        }
         Condition::DocumentPattern { path, predicate } => {
-                let nodes = schema.resolve_match_path(path);
-                if !nodes.is_empty()
-                    && !nodes
-                        .iter()
-                        .any(|node| node.accepts(predicate.value_type()))
-                {
-                    return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
-                }
+            let nodes = schema.resolve_match_path(path);
+            if !nodes.is_empty()
+                && !nodes
+                    .iter()
+                    .any(|node| node.accepts(predicate.value_type()))
+            {
+                return Err(rule_error(path.as_str(), "条件值类型与 Schema 声明不一致"));
             }
+        }
         Condition::Http { .. } => {}
     }
     Ok(())
@@ -228,7 +231,9 @@ pub fn validate_document_condition_schema(
 
 /// Returns the independently owned path/type metadata carried by Document conditions.
 #[must_use]
-pub fn document_condition_path_types(condition: &Condition) -> BTreeMap<JsonPointer, DocumentValueType> {
+pub fn document_condition_path_types(
+    condition: &Condition,
+) -> BTreeMap<JsonPointer, DocumentValueType> {
     match condition {
         Condition::Document { path, predicate } => {
             BTreeMap::from([(path.clone(), predicate.value_type())])
