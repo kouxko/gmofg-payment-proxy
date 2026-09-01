@@ -9,26 +9,26 @@ use crate::{
 };
 
 #[async_trait]
-/// 使用宿主原生文件选择器导入一个 ZIP，并在成功前完成全部校验。
+/// 使用宿主原生文件选择器导入一个 Wasm Component，并在成功前完成全部校验。
 ///
 /// `WebView` 不提供路径或字节。`None` 只表示取消；非法包不得留下数据库记录或缓存。
 pub trait ProtocolPackageImportPort: Send + Sync + std::fmt::Debug {
-    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>>;
-    async fn commit_zip(
+    async fn prepare_component(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>>;
+    async fn commit_component(
         &self,
         token: ProtocolPackageImportToken,
     ) -> AppResult<ProtocolPackageImportViewModel>;
     /// 主动释放尚未提交的冻结包；成功后该 token 永久按无效处理。
-    async fn discard_zip(&self, token: ProtocolPackageImportToken) -> AppResult<()>;
+    async fn discard_component(&self, token: ProtocolPackageImportToken) -> AppResult<()>;
 }
 
 #[async_trait]
 /// 官方内置协议包的显式恢复边界。
 ///
-/// 实现必须把编译期资产重新当作不可信 ZIP，完整执行 Archive、Manifest、
-/// Schema、JavaScript 和 Host API 校验后才原子替换官方精确身份。
+/// 实现必须把编译期资产重新当作不可信 Component，完整执行 binary、Manifest、
+/// WIT world 和 Host API 校验后才原子替换官方精确身份。
 pub trait BuiltinProtocolPackagePort: Send + Sync + std::fmt::Debug {
-    /// 返回编译期内置 ZIP 的独立字节副本，供用户直接导出模板。
+    /// 返回编译期内置 Component 的独立字节副本，供用户直接导出模板。
     ///
     /// 该操作不读取已安装注册表，也不重新打包协议包。
     async fn builtin_archive(&self) -> AppResult<Vec<u8>>;

@@ -12,7 +12,7 @@ use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::{
     AppError, AppResult, EnvironmentMaterialProbe, EnvironmentMaterialProbeKind,
     EnvironmentValidationLayer, EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest,
-    EnvironmentValidationStatus, ExternalPackageApplicationPort, ProtocolPackageSourceViewModel,
+    EnvironmentValidationStatus, ExternalPackageApplicationPort,
     ProtocolPackageValidationViewModel,
 };
 use tokio::net::{TcpStream, lookup_host};
@@ -173,11 +173,8 @@ impl EnvironmentConfigurationValidationAdapter {
             ) {
                 return Err(stable_error("PROTOCOL_PACKAGE_INCOMPATIBLE"));
             }
-            if matches!(
-                projection.source,
-                ProtocolPackageSourceViewModel::External { online: false }
-            ) {
-                return Err(stable_error("EXTERNAL_PACKAGE_OFFLINE"));
+            if !projection.source.online() {
+                return Err(stable_error("PROTOCOL_PACKAGE_RUNTIME_OFFLINE"));
             }
         }
         Ok(EnvironmentValidationStatus::Passed)

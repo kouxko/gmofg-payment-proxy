@@ -26,11 +26,8 @@ function check(command, args, label, input) {
 function verifyApp(app) {
   const executableDirectory = path.join(app, "Contents", "MacOS");
   const mainBinary = path.join(executableDirectory, "intercept-proxy");
-  const sidecar = path.join(executableDirectory, "intercept-proxy-package-sidecar");
   const plist = path.join(app, "Contents", "Info.plist");
-  for (const binary of [mainBinary, sidecar]) {
-    check("lipo", [binary, "-verify_arch", "arm64", "x86_64"], `universal binary ${binary}`);
-  }
+  check("lipo", [mainBinary, "-verify_arch", "arm64", "x86_64"], `universal binary ${mainBinary}`);
   const identifier = check(
     "plutil",
     ["-extract", "CFBundleIdentifier", "raw", "-o", "-", plist],
@@ -40,14 +37,13 @@ function verifyApp(app) {
     throw new Error(`unexpected CFBundleIdentifier: ${identifier}`);
   }
   check("codesign", ["--verify", "--deep", "--strict", app], "app code signature");
-  return { app, mainBinary, sidecar, identifier };
+  return { app, mainBinary, identifier };
 }
 
 const app = await onlyArtifact(path.join(bundleRoot, "macos"), ".app");
 const dmg = await onlyArtifact(path.join(bundleRoot, "dmg"), ".dmg");
 for (const file of [
   path.join(app, "Contents", "MacOS", "intercept-proxy"),
-  path.join(app, "Contents", "MacOS", "intercept-proxy-package-sidecar"),
   path.join(app, "Contents", "Info.plist"),
   dmg,
 ]) {

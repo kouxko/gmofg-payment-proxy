@@ -22,6 +22,14 @@ pub(super) fn external_rpc_error(
                 Some(error.message().to_owned()),
                 Some("object(fields=1)".to_owned()),
             ),
+            crate::adapters::PackageTransportError::Package { error } => (
+                default_method.to_owned(),
+                None,
+                None,
+                Some(error.code.as_str().to_owned()),
+                Some(error.message.clone()),
+                None,
+            ),
             _ => (default_method.to_owned(), None, None, None, None, None),
         };
     Error::new(format!("EXTERNAL_PACKAGE_CALL_FAILED\n{error}")).with_external_package_call(

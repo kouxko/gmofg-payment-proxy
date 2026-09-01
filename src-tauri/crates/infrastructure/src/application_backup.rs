@@ -1,4 +1,4 @@
-//! Strict, bounded in-memory reader for application backup ZIP v1.
+//! Strict in-memory reader for application backup ZIP v1.
 
 use std::{
     collections::{BTreeMap, BTreeSet},
@@ -15,17 +15,17 @@ mod error;
 
 pub use error::{ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode};
 
-pub const DEFAULT_MAX_APPLICATION_BACKUP_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+pub const DEFAULT_MAX_APPLICATION_BACKUP_ARCHIVE_BYTES: u64 = u64::MAX;
 pub const DEFAULT_MAX_APPLICATION_BACKUP_ENTRIES: usize = 8_192;
-pub const DEFAULT_MAX_APPLICATION_BACKUP_FILE_BYTES: u64 = 32 * 1024 * 1024;
-pub const DEFAULT_MAX_APPLICATION_BACKUP_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
-pub const DEFAULT_MAX_APPLICATION_BACKUP_COMPRESSION_RATIO: u64 = 1_000;
+pub const DEFAULT_MAX_APPLICATION_BACKUP_FILE_BYTES: u64 = u64::MAX;
+pub const DEFAULT_MAX_APPLICATION_BACKUP_TOTAL_BYTES: u64 = u64::MAX;
+pub const DEFAULT_MAX_APPLICATION_BACKUP_COMPRESSION_RATIO: u64 = u64::MAX;
 pub const DEFAULT_MAX_APPLICATION_BACKUP_PATH_DEPTH: usize = 40;
-pub const MAX_APPLICATION_BACKUP_ARCHIVE_BYTES: u64 = 256 * 1024 * 1024;
+pub const MAX_APPLICATION_BACKUP_ARCHIVE_BYTES: u64 = u64::MAX;
 pub const MAX_APPLICATION_BACKUP_ENTRIES: usize = 8_192;
-pub const MAX_APPLICATION_BACKUP_FILE_BYTES: u64 = 32 * 1024 * 1024;
-pub const MAX_APPLICATION_BACKUP_TOTAL_BYTES: u64 = 512 * 1024 * 1024;
-pub const MAX_APPLICATION_BACKUP_COMPRESSION_RATIO: u64 = 1_000;
+pub const MAX_APPLICATION_BACKUP_FILE_BYTES: u64 = u64::MAX;
+pub const MAX_APPLICATION_BACKUP_TOTAL_BYTES: u64 = u64::MAX;
+pub const MAX_APPLICATION_BACKUP_COMPRESSION_RATIO: u64 = u64::MAX;
 pub const MAX_APPLICATION_BACKUP_ARCHIVE_PATH_DEPTH: usize = 40;
 
 #[derive(Clone, Debug, Eq, PartialEq)]
@@ -377,7 +377,7 @@ fn read_entry<R: Read + Seek>(
 ) -> Result<Vec<u8>, ApplicationBackupArchiveError> {
     let file = archive.by_index(index).map_err(|_| invalid_zip())?;
     let mut bytes = Vec::with_capacity(usize::try_from(entry.declared_size).unwrap_or(0));
-    file.take(limits.file_bytes + 1)
+    file.take(limits.file_bytes.saturating_add(1))
         .read_to_end(&mut bytes)
         .map_err(|_| invalid_zip())?;
     if bytes.len() as u64 > limits.file_bytes {

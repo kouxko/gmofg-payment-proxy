@@ -60,7 +60,7 @@ pub struct ExternalPackageServerConfig {
 pub struct ExternalPackageServer {
     cancellation: CancellationToken,
     task: Mutex<Option<JoinHandle<()>>>,
-    local_supervisor: Option<Arc<super::LocalPackageSupervisor>>,
+    registry: Arc<ExternalPackageRegistryAdapter>,
 }
 
 impl ExternalPackageServer {
@@ -84,17 +84,18 @@ impl ExternalPackageServer {
                 return Self {
                     cancellation,
                     task: Mutex::new(None),
-                    local_supervisor: None,
+                    registry,
                 };
             }
         };
         registry.mark_service_listening(websocket_url).await;
         let task_cancellation = cancellation.clone();
+        let task_registry = registry.clone();
         let task = tokio::spawn(async move {
             run_accept_loop(
                 listener,
                 config.connection,
-                registry,
+                task_registry,
                 usage,
                 listener_runtime,
                 task_cancellation,
@@ -104,16 +105,8 @@ impl ExternalPackageServer {
         Self {
             cancellation,
             task: Mutex::new(Some(task)),
-            local_supervisor: None,
+            registry,
         }
-    }
-
-    pub(crate) fn with_local_supervisor(
-        mut self,
-        supervisor: Arc<super::LocalPackageSupervisor>,
-    ) -> Self {
-        self.local_supervisor = Some(supervisor);
-        self
     }
 
     /// 取消接受循环并等待所有已纳管连接任务结束。
@@ -129,15 +122,11 @@ impl ExternalPackageServer {
                 "external package server task failed during shutdown"
             );
         }
-        if let Some(supervisor) = &self.local_supervisor {
-            supervisor.shutdown().await;
-        }
+        self.registry.deactivate_all_local_components();
     }
 
-    pub async fn shutdown_local_packages(&self) {
-        if let Some(supervisor) = &self.local_supervisor {
-            supervisor.shutdown().await;
-        }
+    pub fn shutdown_local_packages(&self) {
+        self.registry.deactivate_all_local_components();
     }
 
     /// 请求停止接受新连接；等待任务回收由 [`Self::shutdown`] 完成。

@@ -60,7 +60,7 @@ describe("ProtocolPackagesView list", () => {
       downstream_schema: detail().downstream_schema,
     });
     mocks.protocolPackageExportBuiltin.mockResolvedValue({
-      path: "/tmp/iso8583-template.zip",
+      path: "/tmp/iso8583-template.wasm",
       bytes_written: 4096,
       replaced_existing: false,
     });
@@ -116,7 +116,7 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2);
     expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("官方 ISO 8583 示例已存在并通过重新校验。");
-    expect(screen.getByText("外部 · 在线", { selector: "dd" })).toBeVisible();
+    expect(screen.getByText("远端调试 · 在线", { selector: "dd" })).toBeVisible();
   });
 
   it("does not report success or refresh when the restore command fails", async () => {
@@ -218,27 +218,27 @@ describe("ProtocolPackagesView list", () => {
     expect(await screen.findByRole("dialog", { name: "ISO 8583 ASCII 示例" })).toBeVisible();
   });
 
-  it("exports the built-in template once and reports the exact ZIP result", async () => {
+  it("exports the built-in template once and reports the exact result", async () => {
     const exported = deferred<{ path: string; bytes_written: number; replaced_existing: boolean }>();
     mocks.protocolPackageExportBuiltin.mockReturnValue(exported.promise);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    const exportButton = screen.getAllByRole("button", { name: "导出 ISO 8583 模板 ZIP" })[0];
+    const exportButton = screen.getAllByRole("button", { name: "导出 ISO 8583 模板" })[0];
 
     await Promise.all([user.click(exportButton), user.click(exportButton)]);
     expect(mocks.protocolPackageExportBuiltin).toHaveBeenCalledTimes(1);
     expect(screen.getAllByRole("button", { name: "正在导出…" })[0]).toBeDisabled();
 
     exported.resolve({
-      path: "/tmp/iso8583-template.zip",
+      path: "/tmp/iso8583-template.wasm",
       bytes_written: 8192,
       replaced_existing: true,
     });
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith(
-      "ISO 8583 模板 ZIP 已导出（8192 字节，已覆盖原文件）。",
+      "ISO 8583 模板已导出（8192 字节，已覆盖原文件）。",
       { variant: "success" },
     ));
-    await waitFor(() => expect(screen.getAllByRole("button", { name: "导出 ISO 8583 模板 ZIP" })[0]).toBeEnabled());
+    await waitFor(() => expect(screen.getAllByRole("button", { name: "导出 ISO 8583 模板" })[0]).toBeEnabled());
   });
 
   it("reports a template export failure and restores the export action", async () => {
@@ -246,10 +246,10 @@ describe("ProtocolPackagesView list", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await user.click(screen.getAllByRole("button", { name: "导出 ISO 8583 模板 ZIP" }).at(-1)!);
+    await user.click(screen.getAllByRole("button", { name: "导出 ISO 8583 模板" }).at(-1)!);
 
     await waitFor(() => expect(mocks.toast).toHaveBeenCalledWith("模板目录不可写", { variant: "danger" }));
-    expect(screen.getAllByRole("button", { name: "导出 ISO 8583 模板 ZIP" })[0]).toBeEnabled();
+    expect(screen.getAllByRole("button", { name: "导出 ISO 8583 模板" })[0]).toBeEnabled();
   });
 
   it("shows a recoverable list error", async () => {
@@ -446,7 +446,7 @@ describe("ProtocolPackagesView list", () => {
     expect(row).not.toHaveTextContent("外部软件包");
     expect(row).not.toHaveTextContent("已启用");
     await user.click(row);
-    expect(await screen.findByText("外部 · 在线")).toBeVisible();
+    expect(await screen.findByText("远端调试 · 在线")).toBeVisible();
   });
 
   it("shows a single offline state when every installed version is offline", async () => {

@@ -21,11 +21,67 @@ pub(crate) use rows::{
     StoredExternalPackage, StoredExternalPackageRegistrationOutcome,
     StoredLocalPackageInstallOutcome,
 };
+
+#[derive(Clone, Debug)]
+pub(crate) struct LocalApplicationPackageRecord {
+    pub registration: PackageManifest,
+    pub archive: Vec<u8>,
+    pub enabled: bool,
+}
+
+pub(super) fn replace_local_application_packages(
+    transaction: &rusqlite::Transaction<'_>,
+    packages: &[LocalApplicationPackageRecord],
+    installed_at: DateTime<Utc>,
+) -> Result<(), InfrastructureError> {
+    transaction
+        .execute("DELETE FROM external_protocol_packages", [])
+        .map_err(database_error)?;
+    for package in packages {
+        let identity = package.registration.package().identity();
+        let registration_json = canonical_external_registration_json(&package.registration)?;
+        let fingerprint = sha256(registration_json.as_bytes());
+        transaction
+            .execute(
+                "INSERT INTO external_protocol_packages(
+                    package_id, version, registration_json, registration_fingerprint,
+                    local_archive, enabled, first_connected_at, last_connected_at
+                 ) VALUES (?1, ?2, ?3, ?4, ?5, ?6, ?7, ?7)",
+                params![
+                    identity.id.as_str(),
+                    identity.version.as_str(),
+                    registration_json,
+                    fingerprint.as_slice(),
+                    package.archive,
+                    package.enabled,
+                    installed_at.to_rfc3339(),
+                ],
+            )
+            .map_err(database_error)?;
+    }
+    Ok(())
+}
 use rows::{
     parse_enabled, parse_external_package_row, read_external_package_row, validate_stable_error,
 };
 
 impl SqliteStore {
+    #[cfg(test)]
+    pub(crate) fn replace_local_archive_for_test(
+        &self,
+        package: &ProtocolPackageRef,
+        archive: &[u8],
+    ) {
+        self.connection
+            .lock()
+            .execute(
+                "UPDATE external_protocol_packages SET local_archive = ?3
+                 WHERE package_id = ?1 AND version = ?2",
+                params![package.id.as_str(), package.version.as_str(), archive],
+            )
+            .expect("replace local archive fixture");
+    }
+
     /// 删除外部包表以注入可重现的持久化故障。
     ///
     /// 仅供适配器错误投影测试使用，避免为测试扩大 `SQLite` 连接的生产可见性。

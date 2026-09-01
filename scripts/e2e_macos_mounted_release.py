@@ -105,28 +105,6 @@ def wait_for_mcp(port: int, process: subprocess.Popen[bytes], timeout: float) ->
     raise AcceptanceError("mounted App MCP did not become ready")
 
 
-def child_sidecars(process_id: int) -> list[int]:
-    result = subprocess.run(
-        ["pgrep", "-P", str(process_id), "-f", "intercept-proxy-package-sidecar"],
-        text=True,
-        capture_output=True,
-        check=False,
-    )
-    if result.returncode not in (0, 1):
-        raise AcceptanceError(f"pgrep failed: {result.stderr}")
-    return [int(value) for value in result.stdout.split()]
-
-
-def wait_for_sidecar(process_id: int, timeout: float) -> list[int]:
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        processes = child_sidecars(process_id)
-        if processes:
-            return processes
-        time.sleep(0.1)
-    raise AcceptanceError("bundled Boa sidecar was not started by the mounted App")
-
-
 def candidate(args: argparse.Namespace) -> dict[str, Any]:
     common = {
         "enabled": True,
@@ -357,7 +335,7 @@ def socket_byte_chain(proxy_port: int, upstream_port: int, timeout: float) -> di
     if isinstance(actual_request, BaseException):
         raise AcceptanceError(f"Socket upstream failed: {actual_request}") from actual_request
     if actual_request != request or actual_response != response:
-        raise AcceptanceError("official ZIP Socket byte chain changed an unchanged Document")
+        raise AcceptanceError("official package Socket byte chain changed an unchanged Document")
     return {"request_bytes": len(request), "response_bytes": len(response)}
 
 
@@ -368,26 +346,12 @@ def launch(executable: Path, profile: Path) -> subprocess.Popen[bytes]:
     return subprocess.Popen([str(executable)], env=environment, start_new_session=True)
 
 
-def quit_app(process: subprocess.Popen[bytes], sidecars: list[int], timeout: float) -> None:
+def quit_app(process: subprocess.Popen[bytes], timeout: float) -> None:
     command("osascript", "-e", 'tell application id "com.interceptproxy.desktop" to quit')
     try:
         process.wait(timeout=timeout)
     except subprocess.TimeoutExpired as error:
         raise AcceptanceError("mounted App did not complete graceful quit") from error
-    deadline = time.monotonic() + timeout
-    while time.monotonic() < deadline:
-        if all(not process_alive(process_id) for process_id in sidecars):
-            return
-        time.sleep(0.1)
-    raise AcceptanceError(f"orphaned bundled sidecar process IDs: {sidecars}")
-
-
-def process_alive(process_id: int) -> bool:
-    try:
-        os.kill(process_id, 0)
-        return True
-    except ProcessLookupError:
-        return False
 
 
 def main() -> None:
@@ -429,7 +393,6 @@ def main() -> None:
             for start in (1, 2):
                 process = launch(executable, profile)
                 wait_for_mcp(args.mcp_port, process, args.timeout)
-                sidecars = wait_for_sidecar(process.pid, args.timeout)
                 if start == 1:
                     apply_candidate(args.mcp_port, args)
                 workspaces = mcp_call(args.mcp_port, 20 + start, "workspace_list", {})
@@ -442,9 +405,8 @@ def main() -> None:
                     "workspace": selected,
                     "http": http_byte_chain(args.http_proxy_port, args.http_upstream_port, args.timeout),
                     "socket": socket_byte_chain(args.socket_proxy_port, args.socket_upstream_port, args.timeout),
-                    "sidecar_pids": sidecars,
                 }
-                quit_app(process, sidecars, args.timeout)
+                quit_app(process, args.timeout)
                 process = None
             database = profile / "Library/Application Support/com.interceptproxy.desktop/intercept-proxy.sqlite3"
             if not database.is_file():

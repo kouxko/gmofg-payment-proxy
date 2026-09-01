@@ -184,25 +184,19 @@ impl ApplicationBackupDocument {
                 ));
             }
             previous_package = Some(&package.package);
-            if package.files.is_empty() {
-                return Err(invalid_reference("协议包至少必须引用一个文件。"));
-            }
             let prefix = format!(
                 "protocol-packages/{}/{}/",
                 package.package.id.as_str(),
                 package.package.version.as_str()
             );
-            let mut previous_path: Option<&PortableArchivePath> = None;
-            for path in &package.files {
-                if !path.as_str().starts_with(&prefix)
-                    || previous_path.is_some_and(|previous| previous >= path)
-                    || !all_paths.insert(path.clone())
-                {
-                    return Err(invalid_reference(
-                        "协议包文件引用必须位于精确身份目录并按路径严格升序且不能重复。",
-                    ));
-                }
-                previous_path = Some(path);
+            let expected_path = format!("{prefix}component.wasm");
+            if package.files.len() != 1
+                || package.files[0].as_str() != expected_path
+                || !all_paths.insert(package.files[0].clone())
+            {
+                return Err(invalid_reference(
+                    "协议包必须且只能引用精确身份目录下的 component.wasm。",
+                ));
             }
         }
         Ok(())

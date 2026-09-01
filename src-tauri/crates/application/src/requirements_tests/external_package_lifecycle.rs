@@ -97,7 +97,10 @@ async fn disabled_local_offline_package_can_enable_and_start_its_owned_process()
     let target = package("local-external", "1.0.0");
     external.records.lock().insert(
         target.clone(),
-        external_record(target.clone(), false, false),
+        ProtocolPackageVersionViewModel {
+            source: ProtocolPackageSourceViewModel::Managed { online: false },
+            ..external_record(target.clone(), false, false)
+        },
     );
     external
         .descriptions
@@ -123,14 +126,18 @@ async fn manual_restart_is_available_only_for_local_external_packages() {
     let disabled_local = package("disabled-local-external", "1.0.0");
     let remote = package("remote-external", "1.0.0");
     for package in [&local, &remote] {
-        external.records.lock().insert(
-            package.clone(),
-            external_record(package.clone(), true, false),
-        );
+        let mut record = external_record(package.clone(), true, false);
+        if package == &local {
+            record.source = ProtocolPackageSourceViewModel::Managed { online: true };
+        }
+        external.records.lock().insert(package.clone(), record);
     }
     external.records.lock().insert(
         disabled_local.clone(),
-        external_record(disabled_local.clone(), false, false),
+        ProtocolPackageVersionViewModel {
+            source: ProtocolPackageSourceViewModel::Managed { online: false },
+            ..external_record(disabled_local.clone(), false, false)
+        },
     );
     external
         .local_packages
@@ -145,7 +152,7 @@ async fn manual_restart_is_available_only_for_local_external_packages() {
     let restarted = application.protocol_package_restart(local).await.unwrap();
     assert!(matches!(
         restarted.source,
-        ProtocolPackageSourceViewModel::External { online: true }
+        ProtocolPackageSourceViewModel::Managed { online: true }
     ));
     let error = application
         .protocol_package_restart(remote)

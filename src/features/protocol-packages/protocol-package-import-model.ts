@@ -102,7 +102,7 @@ export interface ImportErrorPresentation {
 }
 
 /**
- * Rust 会把 ZIP、JSON、Schema、JavaScript 与入口错误的位置写入 message/field_errors。
+ * Rust 会把 Component、Manifest、Schema 与接口错误的位置写入 message/field_errors。
  * 前端只按原文展示，不根据错误码重建解析器，也不猜测文件、行列。
  */
 export function presentImportError(reason: unknown): ImportErrorPresentation {

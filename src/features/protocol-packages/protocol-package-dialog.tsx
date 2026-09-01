@@ -87,7 +87,7 @@ export function ProtocolPackageDialog({
   }
 
   async function disableVersion() {
-    if (!currentVersion || !currentVersion.enabled || currentVersion.package_source.type !== "external" || mutationLock.current) return;
+    if (!currentVersion || !currentVersion.enabled || mutationLock.current) return;
     mutationLock.current = true;
     setLifecycle({ kind: "disabling", packageKey });
     try {
@@ -95,7 +95,7 @@ export function ProtocolPackageDialog({
       if (!isProtocolPackageVersion(disabled)
         || disabled.package.id !== currentVersion.package.id
         || disabled.package.version !== currentVersion.package.version
-        || disabled.package_source.type !== "external"
+        || disabled.package_source.type !== currentVersion.package_source.type
         || disabled.enabled) {
         setLifecycle({ kind: "disable-error", packageKey, message: "协议包停用结果不完整，请刷新列表后重试。" });
         return;
@@ -111,7 +111,7 @@ export function ProtocolPackageDialog({
   }
 
   async function restartVersion() {
-    if (!currentVersion || !currentVersion.enabled || currentVersion.package_source.type !== "external" || !detail.data?.external?.local_process || mutationLock.current) return;
+    if (!currentVersion || !currentVersion.enabled || currentVersion.package_source.type !== "managed" || mutationLock.current) return;
     mutationLock.current = true;
     setLifecycle({ kind: "restarting", packageKey });
     try {
@@ -119,7 +119,7 @@ export function ProtocolPackageDialog({
       if (!isProtocolPackageVersion(restarted)
         || restarted.package.id !== currentVersion.package.id
         || restarted.package.version !== currentVersion.package.version
-        || restarted.package_source.type !== "external") {
+        || restarted.package_source.type !== "managed") {
         setLifecycle({ kind: "restart-error", packageKey, message: "本地软件包重启结果不完整，请刷新列表后重试。" });
         return;
       }
@@ -135,7 +135,7 @@ export function ProtocolPackageDialog({
   }
 
   async function deleteVersion() {
-    if (!currentVersion || currentVersion.package_source.type !== "external" || mutationLock.current || detail.data?.usages.length !== 0) return;
+    if (!currentVersion || mutationLock.current || detail.data?.usages.length !== 0) return;
     mutationLock.current = true;
     setLifecycle({ kind: "deleting", packageKey });
     try {
@@ -217,20 +217,22 @@ export function ProtocolPackageDialog({
         setLifecycle(open ? { kind: "delete-confirm", packageKey } : { kind: "idle" });
       }}
     >
-      <Button className="hidden" aria-hidden="true">打开外部软件包删除确认</Button>
+      <Button className="hidden" aria-hidden="true">打开协议包删除确认</Button>
       <AlertDialog.Backdrop isDismissable={visibleLifecycle.kind !== "deleting"}>
         <AlertDialog.Container>
           <AlertDialog.Dialog>
             <AlertDialog.Header>
-              <AlertDialog.Heading>删除 {selectedVersion?.name ?? "外部软件包"} {selectedVersion?.package.version ?? ""}？</AlertDialog.Heading>
+              <AlertDialog.Heading>删除 {selectedVersion?.name ?? "协议包"} {selectedVersion?.package.version ?? ""}？</AlertDialog.Heading>
             </AlertDialog.Header>
             <AlertDialog.Body className="space-y-3">
-              <p>此操作会永久删除该精确版本的元数据。若软件包仍在线，Proxy 会先关闭对应连接；之后重新注册将视为首次连接并默认停用。</p>
+              <p>{selectedVersion?.package_source.type === "managed"
+                ? "此操作会永久删除该精确版本及其本地文件。仍有入口引用时不能删除。"
+                : "此操作会永久删除该精确版本的元数据。若远端调试连接仍在线，Proxy 会先关闭对应连接；之后重新注册将视为首次连接并默认停用。"}</p>
               {visibleLifecycle.kind === "delete-error" ? (
                 <Alert status="danger">
                   <Alert.Indicator />
                   <Alert.Content>
-                    <Alert.Title>外部软件包删除失败</Alert.Title>
+                    <Alert.Title>协议包删除失败</Alert.Title>
                     <Alert.Description>{visibleLifecycle.message}</Alert.Description>
                   </Alert.Content>
                 </Alert>

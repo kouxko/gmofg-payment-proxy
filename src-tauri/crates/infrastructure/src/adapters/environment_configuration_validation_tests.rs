@@ -159,7 +159,7 @@ fn projection(
 }
 
 #[tokio::test]
-async fn package_validation_is_exact_get_only_and_rejects_offline_external() {
+async fn package_validation_is_exact_get_only_and_rejects_an_offline_runtime() {
     let ports = Arc::new(ProjectionPorts::default());
     *ports.external.lock().unwrap() = Some(projection(
         ProtocolPackageSourceViewModel::External { online: false },
@@ -171,7 +171,7 @@ async fn package_validation_is_exact_get_only_and_rejects_offline_external() {
         .await
         .unwrap_err();
 
-    assert_eq!(error.view_model.code, "EXTERNAL_PACKAGE_OFFLINE");
+    assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_RUNTIME_OFFLINE");
     assert_eq!(ports.external_gets.load(Ordering::SeqCst), 1);
 }
 

@@ -153,5 +153,8 @@ function optionLabel(option: ListenerProtocolPackageOptionViewModel): string {
 }
 
 function sourceLabel(option: ListenerProtocolPackageOptionViewModel): string {
-  return option.package_source.online ? "外部 · 在线" : "外部 · 离线";
+  if (option.package_source.type === "managed") {
+    return option.package_source.online ? "本地管理 · 运行中" : "本地管理 · 已停止";
+  }
+  return option.package_source.online ? "远端调试 · 在线" : "远端调试 · 离线";
 }

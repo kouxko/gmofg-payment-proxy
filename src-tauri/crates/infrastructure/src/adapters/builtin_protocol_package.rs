@@ -1,4 +1,4 @@
-//! 编译期内置严格 ZIP 到统一外部注册表的适配器。
+//! 编译期内置 Wasm Component 到统一协议包注册表的适配器。
 
 use std::sync::Arc;
 
@@ -7,33 +7,9 @@ use intercept_proxy_application::{
     AppError, AppResult, BuiltinProtocolPackagePort, ExternalPackageApplicationPort,
     ProtocolPackageImportOutcomeViewModel, ProtocolPackageImportViewModel,
 };
-use intercept_proxy_package_runtime::{PackageArchiveResourceLimits, read_package_zip};
+use intercept_proxy_package_runtime::read_package_component;
 
 use super::{ExternalPackageRegistryAdapter, external_package_registry::application_description};
-
-#[derive(Debug, Clone, Copy)]
-pub(crate) struct PackageArchiveLimits;
-
-impl PackageArchiveResourceLimits for PackageArchiveLimits {
-    fn max_archive_bytes(&self) -> u64 {
-        8 * 1024 * 1024
-    }
-    fn max_entries(&self) -> usize {
-        64
-    }
-    fn max_file_bytes(&self) -> u64 {
-        1024 * 1024
-    }
-    fn max_total_bytes(&self) -> u64 {
-        4 * 1024 * 1024
-    }
-    fn max_compression_ratio(&self) -> u64 {
-        100
-    }
-    fn max_path_depth(&self) -> usize {
-        8
-    }
-}
 
 #[derive(Debug)]
 pub struct BuiltinProtocolPackageAdapter {
@@ -51,10 +27,9 @@ impl BuiltinProtocolPackageAdapter {
         let Some(bytes) = self.archive.as_deref() else {
             return Ok(());
         };
-        let archive = read_package_zip(std::io::Cursor::new(bytes), &PackageArchiveLimits)
-            .map_err(AppError::from)?;
+        let component = read_package_component(bytes).map_err(AppError::from)?;
         self.registry
-            .install_local_archive(archive.manifest(), bytes)
+            .install_local_archive(component.manifest(), bytes)
             .await?;
         Ok(())
     }
@@ -74,17 +49,19 @@ impl BuiltinProtocolPackagePort for BuiltinProtocolPackageAdapter {
             .archive
             .as_deref()
             .ok_or_else(|| AppError::new("BUILTIN_PACKAGE_MISSING", "编译期内置协议包不存在。"))?;
-        let archive = read_package_zip(std::io::Cursor::new(bytes), &PackageArchiveLimits)
-            .map_err(AppError::from)?;
+        let component = read_package_component(bytes).map_err(AppError::from)?;
         let outcome = self
             .registry
-            .install_local_archive(archive.manifest(), bytes)
+            .install_local_archive(component.manifest(), bytes)
             .await?;
-        let package = archive.manifest().package().identity();
+        let package = component.manifest().package().identity();
+        self.registry
+            .activate_local_component(&package, bytes)
+            .await?;
         let version = self.registry.get(&package).await?.ok_or_else(|| {
             AppError::new("PROTOCOL_PACKAGE_NOT_FOUND", "内置协议包写入后无法读取。")
         })?;
-        let description = application_description(archive.manifest());
+        let description = application_description(component.manifest());
         let outcome = match outcome {
             crate::sqlite::external_packages::StoredLocalPackageInstallOutcome::Installed => ProtocolPackageImportOutcomeViewModel::Installed,
             crate::sqlite::external_packages::StoredLocalPackageInstallOutcome::Reused => ProtocolPackageImportOutcomeViewModel::Reused,

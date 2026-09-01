@@ -60,7 +60,9 @@ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange
   }
 
   function optionText(option: ListenerProtocolPackageOptionViewModel): string {
-    const source = option.package_source.online ? "外部 · 在线" : "外部 · 离线";
+    const source = option.package_source.type === "managed"
+      ? option.package_source.online ? "本地管理 · 运行中" : "本地管理 · 已停止"
+      : option.package_source.online ? "远端调试 · 在线" : "远端调试 · 离线";
     return `${option.name} · ${option.package.version} · ${source}`;
   }
 

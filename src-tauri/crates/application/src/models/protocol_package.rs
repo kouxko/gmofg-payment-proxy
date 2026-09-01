@@ -1,6 +1,6 @@
 //! 协议包生命周期的无源码应用模型。
 //!
-//! 这些类型只描述 Manifest 元数据、启用状态、校验结果和引用者。脚本源码、AST、ZIP
+//! 这些类型只描述 Manifest 元数据、启用状态、校验结果和引用者。Component 原始字节
 //! 原始字节与本机路径都不能进入 Application 返回模型，后续任何 UI/CLI 适配器只能基于
 //! 这些经过收敛的字段展示协议包。
 
@@ -60,9 +60,11 @@ pub enum ProtocolPackageValidationViewModel {
 #[serde(tag = "type", rename_all = "snake_case")]
 /// 精确协议包版本的执行来源。
 ///
-/// 严格 JavaScript ZIP 与官方起始包都由本地或远端外部进程执行。`online` 是连接状态快照，
+/// 本地 Component 在当前进程执行；远端调试包由外部进程执行。`online` 是可调用状态快照，
 /// 与用户启用状态相互独立。
 pub enum ProtocolPackageSourceViewModel {
+    /// 由 Proxy 主进程拥有并管理生命周期。
+    Managed { online: bool },
     /// 由已注册的第三方进程通过 JSON-RPC 执行。
     External { online: bool },
 }
@@ -93,14 +95,24 @@ impl ProtocolPackageSourceViewModel {
     /// 返回该精确版本是否由外部进程执行。
     #[must_use]
     pub const fn is_external(self) -> bool {
-        true
+        matches!(self, Self::External { .. })
+    }
+
+    /// 返回当前精确版本是否可调用。
+    #[must_use]
+    pub const fn online(self) -> bool {
+        match self {
+            Self::Managed { online } | Self::External { online } => online,
+        }
     }
 
     /// 返回外部连接是否在线。
     #[must_use]
     pub const fn external_online(self) -> Option<bool> {
-        let Self::External { online } = self;
-        Some(online)
+        match self {
+            Self::External { online } => Some(online),
+            Self::Managed { .. } => None,
+        }
     }
 }
 
@@ -196,7 +208,7 @@ pub struct ExternalPackageRecentErrorViewModel {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 外部协议包详情的严格连接投影。
 pub struct ExternalPackageDetailViewModel {
-    /// `true` 表示由 Proxy 持久化 ZIP 并拥有本地 Sidecar 进程生命周期。
+    /// 历史字段名；`true` 表示由 Proxy 持久化 Component 并拥有本地实例生命周期。
     pub local_process: bool,
     pub remote_address: Option<String>,
     pub connection_id: Option<Uuid>,
@@ -303,7 +315,7 @@ pub struct ListenerProtocolPackageCatalogViewModel {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
-/// 原生 ZIP 导入是新安装，还是相同身份和内容的幂等复用。
+/// 原生 Component 导入是新安装，还是相同身份和内容的幂等复用。
 pub enum ProtocolPackageImportOutcomeViewModel {
     Installed,
     Reused,
@@ -338,7 +350,7 @@ impl ProtocolPackageImportToken {
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。
+/// Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。
 pub struct ProtocolPackageImportPreviewViewModel {
     /// 冲突预览没有 token，类型层面保证它不能进入 commit。
     pub token: Option<ProtocolPackageImportToken>,
@@ -354,7 +366,7 @@ pub struct ProtocolPackageImportPreviewViewModel {
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 原生文件选择和完整校验成功后的无源码导入结果。
-/// 用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
+/// 用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
 /// 稳定 `AppError` 返回，不会构造该类型。
 pub struct ProtocolPackageImportViewModel {
     pub outcome: ProtocolPackageImportOutcomeViewModel,
@@ -366,7 +378,7 @@ pub struct ProtocolPackageImportViewModel {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 内置协议包 ZIP 写入用户所选文件后的结果。
+/// 内置协议包 Component 写入用户所选文件后的结果。
 pub struct ProtocolPackageExportOutcomeViewModel {
     pub bytes_written: u64,
     pub replaced_existing: bool,

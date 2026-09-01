@@ -1,6 +1,5 @@
 use std::{
     collections::VecDeque,
-    io::{Cursor, Write},
     path::PathBuf,
     sync::{Arc, Mutex},
 };
@@ -17,15 +16,10 @@ use tauri::{
     Manager, WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody, test::MockRuntime,
 };
 use tempfile::TempDir;
-use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::super::*;
 use crate::app_state::AppState;
 use crate::mcp::{ApplicationBackend, McpBackend};
-
-const MANIFEST: &str = include_str!(
-    "../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
-);
 
 #[derive(Debug)]
 struct TestDialog {
@@ -71,11 +65,11 @@ pub(super) struct CrossLayerFixture {
 impl CrossLayerFixture {
     pub(super) fn new() -> Self {
         let directory = TempDir::new().unwrap();
-        let zip_path = directory.path().join("t30-iso.zip");
+        let component_path = directory.path().join("t30-iso.wasm");
         let unused_save_path = directory.path().join("unused-save-target");
-        std::fs::write(&zip_path, package_zip()).unwrap();
+        std::fs::write(&component_path, crate::BUILTIN_ISO8583_COMPONENT).unwrap();
         let dialog = Arc::new(TestDialog {
-            open_paths: Mutex::new(VecDeque::from([zip_path])),
+            open_paths: Mutex::new(VecDeque::from([component_path])),
             save_path: unused_save_path,
             calls: Mutex::new(Vec::new()),
         });
@@ -143,7 +137,7 @@ impl CrossLayerFixture {
     pub(super) fn assert_dialog_boundaries(&self) {
         assert_eq!(
             self.dialog.calls.lock().unwrap().as_slice(),
-            &[("protocol_package_zip".into(), "open")]
+            &[("protocol_package_wasm".into(), "open")]
         );
     }
 
@@ -186,19 +180,4 @@ fn request(command: &str, body: Value) -> tauri::webview::InvokeRequest {
         headers: HeaderMap::default(),
         invoke_key: tauri::test::INVOKE_KEY.to_owned(),
     }
-}
-
-fn package_zip() -> Vec<u8> {
-    let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
-    for (path, contents) in [
-        ("manifest.json", MANIFEST.as_bytes()),
-        ("protocol.js", b"export {}".as_slice()),
-        ("display.js", b"export {}".as_slice()),
-    ] {
-        archive
-            .start_file(path, SimpleFileOptions::default())
-            .unwrap();
-        archive.write_all(contents).unwrap();
-    }
-    archive.finish().unwrap().into_inner()
 }

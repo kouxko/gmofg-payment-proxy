@@ -134,8 +134,8 @@ pub(in crate::requirements_tests) fn portable_protocol_package(
     PortableApplicationProtocolPackage {
         package,
         files: vec![PortableProtocolPackageFile {
-            path: "manifest.json".into(),
-            contents_base64: "bWFuaWZlc3Q=".into(),
+            path: "component.wasm".into(),
+            contents_base64: "Y29tcG9uZW50".into(),
         }],
         enabled,
     }

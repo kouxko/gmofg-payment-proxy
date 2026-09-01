@@ -1,45 +1,36 @@
 # Protocol package API 1
 
-## Archive
+## Component file
 
-A package is one ZIP whose root contains `manifest.json`, `protocol.js`, and `display.js`.
-Every additional file must be a package-relative JavaScript module. Paths are case-sensitive and
-must not contain wrappers, absolute paths, empty segments, `.` or `..`.
+A local package is one WebAssembly Component file. It contains exactly one top-level
+`intercept-proxy:manifest` custom section whose bytes are the strict API 1 Manifest JSON. The host
+validates the Component, Manifest, recursive Schema, and the Manifest-selected WIT world before the
+package can be called.
 
-## Manifest
+## WIT exports
 
-`manifest.json` is strict JSON with `api`, `kind`, `package`, and `document`. Socket packages must
-provide upstream and downstream recursive JSON Schema objects. Unknown fields are rejected.
+The versioned WIT contract is `src-tauri/crates/package-runtime/wit/protocol-package.wit`.
 
-## Local Boa exports
+- HTTP Decode and Encode use `string`.
+- Socket Frame, Decode, and Encode use raw `list<u8>`.
+- Document values cross WIT as canonical JSON `string` and are parsed into the host `Document`.
+- Display returns untrusted HTML `string`.
 
-`protocol.js` exports:
+The local host calls these exports directly through Wasmtime. It does not use WebSocket, JSON-RPC,
+or Base64 for local Hooks.
 
-- `upstreamFrame` and `downstreamFrame`
-- `upstreamDecode` and `downstreamDecode`
-- `upstreamEncode` and `downstreamEncode`
+## Host capabilities
 
-`display.js` exports `upstreamDisplay` and `downstreamDisplay`.
-
-Frame receives `{ buffer: Uint8Array }` and returns `need_more`, `complete`, or `reject`.
-Decode receives `{ input: Uint8Array }` and returns a JSON Document. Encode receives
-`{ originalInput: Uint8Array, document }` and returns `Uint8Array`. Display receives `{ document }`
-and returns untrusted HTML text.
-
-The Boa Sidecar evaluates modules and verifies every fixed export before registration. The current
-host does not inject Node, filesystem, process, Buffer, fetch, timer, or WebSocket bindings. This is
-the current host surface, not a general restriction on Boa default or native capabilities.
+The Component imports WASI plus the versioned Host WebSocket interface. WebSocket supports `ws` and
+`wss`, text, binary, receive, and close. A package only uses it when its own implementation needs an
+outbound connection; ordinary Hook invocation does not pass through WebSocket.
 
 ## Public `/packages` JSON-RPC
 
-Both local Sidecars and remote package processes initiate a WebSocket connection to `/packages` and
-send one `package.register` notification without an `id`; its `params` are the complete Manifest,
-and the Proxy sends no response to that notification. Proxy calls use the fixed method names
-`hooks.upstream.frame`, `hooks.upstream.decode`, `hooks.upstream.encode`,
-`hooks.downstream.frame`, `hooks.downstream.decode`, `hooks.downstream.encode`,
-`document.upstream.display`, and `document.downstream.display`.
+Remote debugging packages may initiate a WebSocket connection to `/packages` and send one
+`package.register` notification. The fixed methods remain `hooks.upstream.frame|decode|encode`,
+`hooks.downstream.frame|decode|encode`, and `document.upstream|downstream.display`.
 
-The public JSON-RPC wire carries Socket binary input and output as canonical padded Base64 text;
-`Uint8Array` is only the local Boa export boundary. Every response copies the request's string `id`.
-Failures place their stable machine code in `error.data.code`; clients must not depend on the human
-`message`. The Proxy does not retry, replay, select another package version, or switch execution paths.
+Only this remote JSON-RPC adapter represents Socket bytes as canonical padded Base64. The Proxy does
+not retry, replay, select another package version, or fall back from a failed local Component to a
+remote package.

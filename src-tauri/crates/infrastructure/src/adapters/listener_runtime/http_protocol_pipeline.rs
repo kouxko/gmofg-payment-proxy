@@ -2,7 +2,7 @@
 //!
 //! 本模块不再实现 `PipelinePorts`：通用 HTTP action/session 仍由原端口负责，而协议包的
 //! Decode、Display、Rules、Encode 由 Exchange Pipeline 按固定顺序分别调用。每个 capability
-//! 只进入 Sidecar JSON-RPC 的一个固定阶段方法，避免旧组合 processor 隐藏或重复执行阶段。
+//! 只进入协议包运行时的一个固定阶段方法，避免旧组合 processor 隐藏或重复执行阶段。
 
 use std::{fmt, sync::Arc};
 
@@ -31,7 +31,7 @@ use programs::{HttpDocumentRulePrograms, compile_programs};
 /// Listener 启动时冻结的协议包与规则集合。
 ///
 /// 精确协议包版本在 Listener 生命周期内不可变；规则集合可原子替换。upstream/downstream
-/// capability 共享该版本对应的在线 Sidecar actor，连接级 Document 只在 joint runtime 暂存。
+/// capability 共享该版本对应的运行时实例，连接级 Document 只在 joint runtime 暂存。
 #[derive(Clone)]
 pub(super) struct HttpProtocolRuntimeSnapshot {
     external: Option<RuntimeExternalSocketPackageBinding>,

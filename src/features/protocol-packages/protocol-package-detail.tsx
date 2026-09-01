@@ -92,26 +92,26 @@ export function ProtocolPackageDetail({
             ) : null}
             <Button
               variant="primary"
-              isDisabled={enablePending || (version.package_source.type === "external" && !version.package_source.online && !external?.local_process)}
+              isDisabled={enablePending || (version.package_source.type === "external" && !version.package_source.online)}
               onPress={onEnable}
             >
               {enablePending ? "正在启用…" : "启用协议包"}
             </Button>
             <p className="text-sm text-[var(--telemetry-muted)]">
-              {version.package_source.type === "external" && !version.package_source.online && !external?.local_process
-                ? "外部软件包离线，重新连接并完成注册后才能启用。"
+              {version.package_source.type === "external" && !version.package_source.online
+                ? "远端调试包离线，重新连接并完成注册后才能启用。"
                 : "启用后可在匹配的入口配置中选择此版本。"}
             </p>
           </div>
         ) : null}
-        {version.package_source.type === "external" ? (
+        {!isBuiltInPackage(version) ? (
           <div className="mt-4 space-y-3 rounded-xl border border-[var(--telemetry-line)] p-4">
-            <h4 className="font-medium">外部软件包生命周期</h4>
+            <h4 className="font-medium">{version.package_source.type === "managed" ? "本地软件包生命周期" : "远端调试包生命周期"}</h4>
             {disableError ? (
               <Alert status="danger">
                 <Alert.Indicator />
                 <Alert.Content>
-                  <Alert.Title>外部软件包停用失败</Alert.Title>
+                  <Alert.Title>协议包停用失败</Alert.Title>
                   <Alert.Description>{disableError}</Alert.Description>
                 </Alert.Content>
               </Alert>
@@ -128,17 +128,17 @@ export function ProtocolPackageDetail({
             <div className="flex flex-wrap gap-2">
               {version.enabled && onDisable ? (
                 <Button variant="outline" isDisabled={disablePending || restartPending} onPress={onDisable}>
-                  {disablePending ? "正在停用…" : "停用外部软件包"}
+                  {disablePending ? "正在停用…" : "停用协议包"}
                 </Button>
               ) : null}
-              {version.enabled && external?.local_process && onRestart ? (
+              {version.enabled && version.package_source.type === "managed" && onRestart ? (
                 <Button variant="outline" isDisabled={disablePending || restartPending} onPress={onRestart}>
                   {restartPending ? "正在重启…" : "重启本地软件包"}
                 </Button>
               ) : null}
               {onRequestDelete ? (
                 <Button variant="danger" isDisabled={disablePending || restartPending || deleteBlockedReason !== undefined} onPress={onRequestDelete}>
-                  删除外部软件包
+                  删除协议包
                 </Button>
               ) : null}
             </div>
@@ -152,14 +152,16 @@ export function ProtocolPackageDetail({
               </Alert>
             ) : (
               <p className="text-sm text-[var(--telemetry-muted)]">
-                删除会移除此精确版本的元数据；若软件包仍在线，Proxy 会先关闭对应连接。
+                {version.package_source.type === "managed"
+                  ? "删除会移除此精确版本及其本地文件。"
+                  : "删除会移除此精确版本的元数据；若远端调试连接仍在线，Proxy 会先关闭对应连接。"}
               </p>
             )}
           </div>
         ) : null}
       </section>
 
-      {external ? (
+      {version.package_source.type === "external" && external ? (
         <section aria-labelledby="external-package-connection-heading">
           <h3 id="external-package-connection-heading" className="mb-2 font-semibold">外部连接</h3>
           <dl className="grid grid-cols-[8rem_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm max-[560px]:grid-cols-1">

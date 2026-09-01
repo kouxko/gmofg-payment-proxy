@@ -15,6 +15,7 @@ import {
 export {
   isBuiltInPackage,
   isExternalPackage,
+  isManagedPackage,
   packageSourceText,
 } from "./protocol-package-source";
 
@@ -173,7 +174,9 @@ export function protocolPackageDetailError(
     || !isProtocolPackageSchema(value.downstream_schema)
     || !Array.isArray(value.usages)
     || !value.usages.every(isUsage)
-    || !isExternalDetail(value.external)) {
+    || (value.version.package_source.type === "managed"
+      ? value.external !== null
+      : !isExternalDetail(value.external))) {
     return "协议包详情数据不完整。";
   }
   return undefined;

@@ -132,7 +132,7 @@ export function ProtocolPackagesView() {
     setImportState({ kind: "preparing" });
     setImportNotice(undefined);
     try {
-      // 此命令同时打开原生文件选择器并在 Rust 中完整读取/校验 ZIP；前端不接触路径和字节。
+      // 此命令同时打开原生文件选择器并在 Rust 中完整读取/校验协议包；前端不接触路径和字节。
       const candidate = await callCommand(commands.protocolPackageImport());
       if (generation !== importGeneration.current) return;
       if (candidate === null) {
@@ -212,7 +212,7 @@ export function ProtocolPackagesView() {
     try {
       const result = await callCommand(commands.protocolPackageExportBuiltin());
       if (result) {
-        toast(`ISO 8583 模板 ZIP 已导出（${result.bytes_written} 字节${result.replaced_existing ? "，已覆盖原文件" : ""}）。`, { variant: "success" });
+        toast(`ISO 8583 模板已导出（${result.bytes_written} 字节${result.replaced_existing ? "，已覆盖原文件" : ""}）。`, { variant: "success" });
       }
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
@@ -349,7 +349,7 @@ export function ProtocolPackagesView() {
             isDisabled={exportPending || restorePending || importState.kind !== "closed"}
             onPress={() => void exportBuiltInTemplate()}
           >
-            {exportPending ? "正在导出…" : "导出 ISO 8583 模板 ZIP"}
+            {exportPending ? "正在导出…" : "导出 ISO 8583 模板"}
           </Button>
           <Button
             ref={importTriggerRef}
@@ -357,7 +357,7 @@ export function ProtocolPackagesView() {
             isDisabled={prepareLock.current || commitLock.current || restorePending || exportPending}
             onPress={() => void chooseZip()}
           >
-            导入协议包 ZIP
+            导入协议包
           </Button>
         </div>
       </div>
@@ -396,7 +396,7 @@ export function ProtocolPackagesView() {
       ) : !listError && groups.length === 0 ? (
         <div className="rounded-xl border border-dashed border-[var(--telemetry-line)] p-10 text-center">
           <p className="font-medium">尚未安装协议包</p>
-          <p className="mt-1 text-sm text-[var(--telemetry-muted)]">导入 ZIP 后可在此查看 HTTP 与 Socket 包的版本、能力与 Schema。</p>
+          <p className="mt-1 text-sm text-[var(--telemetry-muted)]">导入协议包后可在此查看 HTTP 与 Socket 包的版本、能力与 Schema。</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
             <Button variant="primary"
               isDisabled={restorePending || exportPending || importState.kind !== "closed"}
@@ -406,7 +406,7 @@ export function ProtocolPackagesView() {
             <Button variant="outline"
               isDisabled={exportPending || restorePending || importState.kind !== "closed"}
               onPress={() => void exportBuiltInTemplate()}>
-              {exportPending ? "正在导出…" : "导出 ISO 8583 模板 ZIP"}
+              {exportPending ? "正在导出…" : "导出 ISO 8583 模板"}
             </Button>
           </div>
         </div>

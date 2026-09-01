@@ -22,6 +22,7 @@ rusqlite.workspace = true
 serde_json.workspace = true
 tempfile.workspace = true
 uuid.workspace = true
+wasm-encoder.workspace = true
 zip.workspace = true
 
 [lints]

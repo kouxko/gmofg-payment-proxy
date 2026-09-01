@@ -1,0 +1,20 @@
+[package]
+name = "intercept-proxy-au-eftex-component"
+version = "1.1.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+base64 = "0.22.1"
+cipher = "0.5.2"
+des = "0.9.0"
+serde_json = "1.0.149"
+wit-bindgen = "=0.48.1"
+
+[dev-dependencies]
+intercept-proxy-package-contract = { path = "../../../../src-tauri/crates/package-contract" }
+
+[workspace]

@@ -28,9 +28,9 @@ use crate::{
     runtime_logs::{ApplicationLogLevel, RuntimeLogStore, TracingBridge, install_tracing_bridge},
 };
 
-const BUILTIN_ISO8583_ARCHIVE: &[u8] = include_bytes!(concat!(
+const BUILTIN_ISO8583_COMPONENT: &[u8] = include_bytes!(concat!(
     env!("OUT_DIR"),
-    "/iso8583-ascii-standard-1.0.0.zip"
+    "/iso8583-ascii-standard-1.0.0.wasm"
 ));
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -113,7 +113,7 @@ fn initialize_application(
     if let Some(companion_apk) = companion_apk {
         host_builder = host_builder.with_android_companion_apk(companion_apk);
     }
-    host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_ARCHIVE));
+    host_builder = host_builder.with_builtin_protocol_package(Arc::from(BUILTIN_ISO8583_COMPONENT));
     let host = tauri::async_runtime::block_on(host_builder.build())?;
     let observation_queue_capacity =
         tauri::async_runtime::block_on(host.application().settings_get())?

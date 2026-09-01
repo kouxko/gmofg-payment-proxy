@@ -68,12 +68,16 @@ const decisions = new Map([
   [
     "decisions/ADR-009-nested-document-javascript-package-runtime.md",
     {
-      status: "Accepted",
+      status: "Superseded by [ADR-010](ADR-010-in-process-webassembly-protocol-packages.md) for local package execution",
       supersedes: [
         "decisions/ADR-002-protocol-packages-http.md",
         "decisions/ADR-007-exchange-pipeline-runtime-boundary.md",
       ],
     },
+  ],
+  [
+    "decisions/ADR-010-in-process-webassembly-protocol-packages.md",
+    { status: "Accepted" },
   ],
 ]);
 
@@ -382,7 +386,7 @@ for (const [name, source] of documents) {
 const templateApi = await readFile(path.join(repositoryRoot, "templates/socket-protocol/API.md"), "utf8");
 const templateAuthoring = await readFile(path.join(repositoryRoot, "templates/socket-protocol/AUTHORING.md"), "utf8");
 for (const [name, source] of [["API.md", templateApi], ["AUTHORING.md", templateAuthoring]]) {
-  for (const required of ["manifest.json", "protocol.js", "display.js", "Sidecar"]) {
+  for (const required of ["intercept-proxy:manifest", "WIT", "list<u8>", "WebSocket"]) {
     if (!source.includes(required)) failures.push(`templates/socket-protocol/${name}: missing ${required}`);
   }
   if (/^\s*script\s*=/mu.test(source) || /\[(?:document|hooks)\.(?:upstream|downstream)\]/u.test(source)) failures.push(`templates/socket-protocol/${name}: legacy TOML contract is forbidden`);

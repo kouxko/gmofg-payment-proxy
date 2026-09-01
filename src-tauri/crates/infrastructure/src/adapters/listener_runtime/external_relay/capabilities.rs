@@ -10,20 +10,18 @@ use intercept_proxy_exchange::{
     ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Socket,
     SocketContext,
 };
-use intercept_proxy_package_contract::{
-    CanonicalBase64, DecodeParams, DisplayParams, FrameParams, FrameResult as PackageFrameResult,
-};
+use intercept_proxy_package_contract::FrameResult as PackageFrameResult;
 use intercept_proxy_runtime::{SocketConnectionIdentity, SocketProcessingFailureKind};
 use parking_lot::Mutex;
 
 use super::joint_socket::ExternalSocketObserved;
-use super::{ExternalPackageRpc, trace_external_rpc_failure};
-use crate::adapters::PackageTransportError;
+use super::trace_external_rpc_failure;
+use crate::adapters::{PackageTransportError, ProtocolPackageRuntime};
 
 macro_rules! capability {
     ($name:ident $(<$d:ident>)?) => {
         pub(super) struct $name$(<$d: Direction>)? {
-            rpc: Arc<dyn ExternalPackageRpc>,
+            runtime: Arc<dyn ProtocolPackageRuntime>,
             method: &'static str,
             package: ProtocolPackageRef,
             connection: SocketConnectionIdentity,
@@ -37,7 +35,7 @@ capability!(ExternalFrame<D>);
 capability!(ExternalDisplay);
 
 pub(super) struct ExternalDecode<D: Direction> {
-    rpc: Arc<dyn ExternalPackageRpc>,
+    runtime: Arc<dyn ProtocolPackageRuntime>,
     method: &'static str,
     package: ProtocolPackageRef,
     connection: SocketConnectionIdentity,
@@ -48,14 +46,14 @@ pub(super) struct ExternalDecode<D: Direction> {
 
 impl<D: Direction> ExternalFrame<D> {
     pub(super) fn new(
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
     ) -> Self {
         Self {
-            rpc,
+            runtime,
             method,
             package,
             connection,
@@ -69,13 +67,8 @@ impl<D: Direction> ExternalFrame<D> {
 impl<D: Direction> Frame<D> for ExternalFrame<D> {
     async fn split(&mut self, buffer: &[u8]) -> Result<FrameResult, Error> {
         let result = self
-            .rpc
-            .frame(
-                self.direction,
-                FrameParams {
-                    buffer: CanonicalBase64::from_bytes(buffer),
-                },
-            )
+            .runtime
+            .frame(self.direction, buffer.to_vec())
             .await
             .map_err(|error| rpc_error::<D>(ExternalCallStage::Frame, self.method, &error, self))?;
         Ok(match result {
@@ -92,7 +85,7 @@ impl<D: Direction> Frame<D> for ExternalFrame<D> {
 
 impl<D: Direction> ExternalDecode<D> {
     pub(super) fn new(
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
@@ -100,7 +93,7 @@ impl<D: Direction> ExternalDecode<D> {
         observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     ) -> Self {
         Self {
-            rpc,
+            runtime,
             method,
             package,
             connection,
@@ -115,15 +108,8 @@ impl<D: Direction> ExternalDecode<D> {
 impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
     async fn decode(&mut self, context: &SocketContext) -> Result<Document, Error> {
         let response = self
-            .rpc
-            .decode(
-                self.direction,
-                DecodeParams {
-                    input: CanonicalBase64::from_bytes(&context.data)
-                        .as_str()
-                        .to_owned(),
-                },
-            )
+            .runtime
+            .decode_socket(self.direction, context.data.clone())
             .await
             .map_err(|error| {
                 rpc_error::<D>(ExternalCallStage::Decode, self.method, &error, self)
@@ -138,14 +124,14 @@ impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
 
 impl ExternalDisplay {
     pub(super) fn new(
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         method: &'static str,
         package: ProtocolPackageRef,
         connection: SocketConnectionIdentity,
         direction: ProtocolDirection,
     ) -> Self {
         Self {
-            rpc,
+            runtime,
             method,
             package,
             connection,
@@ -157,13 +143,8 @@ impl ExternalDisplay {
 #[async_trait]
 impl Display for ExternalDisplay {
     async fn display(&mut self, document: &Document) -> Result<String, Error> {
-        self.rpc
-            .display(
-                self.direction,
-                DisplayParams {
-                    document: document.clone(),
-                },
-            )
+        self.runtime
+            .display(self.direction, document.clone())
             .await
             .map_err(|error| {
                 rpc_error_untyped(ExternalCallStage::Display, self.method, &error, self)

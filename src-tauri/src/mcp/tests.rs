@@ -103,7 +103,7 @@ fn tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_t
 }
 
 #[test]
-fn resources_include_authoring_manifest_and_official_zip() {
+fn resources_include_authoring_manifest_and_official_component() {
     let resources = resources::list();
     assert!(
         resources
@@ -147,8 +147,8 @@ fn resources_include_authoring_manifest_and_official_zip() {
             && resource.mime_type.as_deref() == Some("text/markdown")
     }));
     assert!(resources.iter().any(|resource| {
-        resource.uri == resources::ISO8583_ARCHIVE_URI
-            && resource.mime_type.as_deref() == Some("application/zip")
+        resource.uri == resources::ISO8583_COMPONENT_URI
+            && resource.mime_type.as_deref() == Some("application/wasm")
     }));
 }
 
@@ -242,13 +242,13 @@ fn external_package_guide_explains_connection_runtime_diagnostics_and_read_only_
 fn every_text_resource_resolves_with_its_declared_mime_type() {
     for resource in resources::list()
         .into_iter()
-        .filter(|resource| resource.uri != resources::ISO8583_ARCHIVE_URI)
+        .filter(|resource| resource.uri != resources::ISO8583_COMPONENT_URI)
     {
         let (mime_type, text) = resources::text(&resource.uri).expect("listed text resource");
         assert_eq!(resource.mime_type.as_deref(), Some(mime_type));
         assert!(!text.is_empty());
     }
-    assert!(resources::text(resources::ISO8583_ARCHIVE_URI).is_none());
+    assert!(resources::text(resources::ISO8583_COMPONENT_URI).is_none());
     assert!(resources::text("intercept-proxy://unknown").is_none());
 }
 

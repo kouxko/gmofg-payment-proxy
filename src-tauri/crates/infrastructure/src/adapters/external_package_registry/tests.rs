@@ -26,12 +26,34 @@ fn registration(name: &str) -> PackageManifest {
     serde_json::from_value(value).expect("valid external registration")
 }
 
+fn registration_version(version: &str) -> PackageManifest {
+    let mut value: Value = serde_json::to_value(registration(version)).unwrap();
+    value["package"]["version"] = Value::String(version.to_owned());
+    serde_json::from_value(value).unwrap()
+}
+
 mod async_persistence;
 mod coverage;
 mod diagnostics;
 mod environment_apply_gate_revision16;
 mod error_views;
 mod lifecycle;
+
+#[tokio::test]
+async fn application_list_orders_versions_by_semver_not_sql_text() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    for version in ["10.0.0", "2.0.0"] {
+        let registration = registration_version(version);
+        let fingerprint = external_package_registration_fingerprint(&registration).unwrap();
+        store
+            .accept_external_package_registration(&registration, fingerprint, chrono::Utc::now())
+            .unwrap();
+    }
+    let registry = ExternalPackageRegistryAdapter::new(store);
+    let versions = registry.list().await.unwrap();
+    assert_eq!(versions[0].package.version.as_str(), "2.0.0");
+    assert_eq!(versions[1].package.version.as_str(), "10.0.0");
+}
 
 async fn connected_client(
     registration: &PackageManifest,
@@ -172,6 +194,30 @@ async fn persisted_records_restart_offline_and_keep_enabled_state() {
     assert!(version.enabled);
     assert_eq!(version.source.external_online(), Some(false));
     assert_eq!(restarted.describe(&package).await.unwrap().package, package);
+}
+
+#[tokio::test]
+async fn remote_registration_cannot_claim_an_identity_with_a_local_component() {
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    let registry = ExternalPackageRegistryAdapter::new(Arc::clone(&store));
+    let registration = registration("Locally managed ISO8583");
+    store
+        .install_local_external_package(&registration, b"component-bytes", Utc::now())
+        .unwrap();
+    let fingerprint = external_package_registration_fingerprint(&registration).unwrap();
+    let (client, _peer) = connected_client(&registration, 1).await;
+
+    let error = registry
+        .accept_registration(&registration, fingerprint, client)
+        .await
+        .unwrap_err();
+
+    assert_eq!(error.view_model.code, "PROTOCOL_PACKAGE_SOURCE_CONFLICT");
+    assert!(
+        registry
+            .client(&registration.package().identity())
+            .is_none()
+    );
 }
 
 #[tokio::test]

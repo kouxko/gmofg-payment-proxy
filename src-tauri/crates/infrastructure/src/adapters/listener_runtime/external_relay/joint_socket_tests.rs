@@ -9,9 +9,6 @@ use intercept_proxy_domain::{
     ProtocolPackageVersion, RuleId, RuleProgramEntry, UnifiedAction, UnifiedRuleProgram,
 };
 use intercept_proxy_exchange::{Rules, SocketContext};
-use intercept_proxy_package_contract::{
-    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult,
-};
 use intercept_proxy_runtime::{
     ConnectionContext, HandshakePolicy, JointRuleConditionEvaluation, PipelinePorts,
     Result as ProxyResult, SocketJointEvaluation, SocketPayloadDirection,
@@ -20,7 +17,6 @@ use parking_lot::Mutex;
 use uuid::Uuid;
 
 use super::{ExternalSocketObserved, JointSocketRules};
-use crate::adapters::PackageTransportError;
 use crate::adapters::listener_runtime::{
     DocumentProgramFactory, external_relay::ExternalPackageRpc,
 };
@@ -28,40 +24,7 @@ use crate::adapters::listener_runtime::{
 #[derive(Debug)]
 struct UnusedRpc;
 
-#[async_trait]
-impl ExternalPackageRpc for UnusedRpc {
-    async fn frame(
-        &self,
-        _: ProtocolDirection,
-        _: FrameParams,
-    ) -> Result<FrameResult, PackageTransportError> {
-        unreachable!("generation test never calls package RPC")
-    }
-
-    async fn decode(
-        &self,
-        _: ProtocolDirection,
-        _: DecodeParams,
-    ) -> Result<Document, PackageTransportError> {
-        unreachable!("generation test never calls package RPC")
-    }
-
-    async fn encode(
-        &self,
-        _: ProtocolDirection,
-        _: EncodeParams,
-    ) -> Result<String, PackageTransportError> {
-        unreachable!("generation test never calls package RPC")
-    }
-
-    async fn display(
-        &self,
-        _: ProtocolDirection,
-        _: DisplayParams,
-    ) -> Result<String, PackageTransportError> {
-        unreachable!("generation test never calls package RPC")
-    }
-}
+impl ExternalPackageRpc for UnusedRpc {}
 
 #[derive(Debug)]
 struct GenerationRecordingPipeline {
