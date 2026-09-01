@@ -153,7 +153,7 @@ flowchart LR
     STORE --> EVENTS[EventHub]
     EVENTS --> BOOT[BootstrapProvider]
     BOOT --> CAPTURE[抓包页面刷新]
-    STORE --> MCP[36 个 MCP 只读查询]
+    STORE --> MCP[34 个 MCP 只读查询]
 ```
 
 业务事件按实际发生顺序追加：

@@ -48,7 +48,6 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
         "android_runtime_owner_list",
         "android_profile_list",
         "workspace_certificate_overview",
-        "breakpoint_query",
         "rule_list",
         "workspace_rule_list",
         "protocol_package_list",
@@ -56,7 +55,7 @@ fn every_tool_publishes_a_complete_machine_readable_contract() {
     ]
     .into_iter()
     .collect::<BTreeSet<_>>();
-    assert_eq!(tools.len(), 41, "36 reads plus five environment tools");
+    assert_eq!(tools.len(), 39, "34 reads plus five environment tools");
 
     let names = tools
         .iter()

@@ -191,9 +191,6 @@ function CapacitySettings({
           </Switch.Content>
         </Switch>
       </div>
-      <Alert status="accent">
-        待处理断点对应的 HTTP 交换永不自动淘汰；容量按可重复计算的逻辑字节数判定。
-      </Alert>
     </Form>
   );
 }

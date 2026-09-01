@@ -22,6 +22,18 @@ const FULL_SHAPE: &[u8] = include_bytes!(concat!(
     "/../../src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json"
 ));
 
+fn rule_named_mut<'a>(
+    candidate: &'a mut serde_json::Value,
+    name: &str,
+) -> &'a mut serde_json::Value {
+    candidate["workspace"]["rules"]
+        .as_array_mut()
+        .expect("candidate rules array")
+        .iter_mut()
+        .find(|rule| rule["name"] == name)
+        .unwrap_or_else(|| panic!("candidate rule `{name}`"))
+}
+
 const ORDER: [EnvironmentValidationLayer; 7] = [
     EnvironmentValidationLayer::Schema,
     EnvironmentValidationLayer::Domain,

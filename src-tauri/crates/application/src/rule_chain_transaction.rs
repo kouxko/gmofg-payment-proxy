@@ -8,7 +8,7 @@ use chrono::{DateTime, Utc};
 use intercept_proxy_domain::{
     Document, HttpAction, MatchField, MatchOperator, NthCounterAdvance, NthCounterSnapshot, RuleId,
     RuleLifecycleDelta, RuleLifecycleSnapshot, RuleProgramEntry, TerminalAction, TerminalIdentity,
-    UnifiedAction,
+    UnifiedAction, evaluate_conditions_with_nth,
 };
 use tokio_util::sync::CancellationToken;
 
@@ -181,7 +181,8 @@ impl RuleChainTransaction {
                 AppError::new("RULE_INVALID", "Nth counter 已溢出。")
                     .entity(entry.rule_id().to_string())
             })?;
-            let evaluation = entry.condition().evaluate_with_nth(
+            let evaluation = evaluate_conditions_with_nth(
+                entry.conditions(),
                 &working_document,
                 nth_attempt,
                 &mut |field, operator| self.http.matches(&working_message, field, operator),

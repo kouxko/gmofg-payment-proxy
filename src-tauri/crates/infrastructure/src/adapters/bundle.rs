@@ -12,9 +12,9 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
-    BreakpointValidator, CapacityLedger, CertificateServicePort, EventHub, InMemorySessionStore,
-    ProtocolPackageApplicationServices, SettingsRepositoryPort, WorkspaceRepositoryPort,
+    AppError, AppResult, Application, ApplicationDependencies, CapacityLedger,
+    CertificateServicePort, EventHub, InMemorySessionStore, ProtocolPackageApplicationServices,
+    SettingsRepositoryPort, WorkspaceRepositoryPort,
 };
 use intercept_proxy_product_api::ProductProfile;
 
@@ -25,7 +25,7 @@ use super::{
     CertificateServiceAdapter, EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
     EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
     ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
-    FaultServiceAdapter, HeaderBodyCodecResolver, ListenerRuntimeAdapter, LocalPackageSupervisor,
+    FaultServiceAdapter, ListenerRuntimeAdapter, LocalPackageSupervisor,
     ManagedListenerCertificateAdapter, NativeFileDialog, PackageTransportConfig,
     ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageUsageQueryAdapter,
     RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
@@ -200,19 +200,13 @@ impl InfrastructureServiceBundle {
         Ok(())
     }
 
-    pub fn configure_runtime(
-        &self,
-        product: &dyn ProductProfile,
-        breakpoints: Arc<BreakpointCoordinator>,
-        events: Arc<EventHub>,
-    ) {
+    pub fn configure_runtime(&self, product: &dyn ProductProfile, events: Arc<EventHub>) {
         configure_listener_runtime_pipeline(
             &self.listener_runtime,
             ListenerRuntimePipelineAssembly {
                 product,
                 rules: self.rules.clone(),
                 sessions: self.sessions.clone(),
-                breakpoints,
                 events: events.clone(),
                 capture: self.capture.clone(),
                 workspace_body_codecs: self.workspace_body_codecs.clone(),
@@ -278,17 +272,10 @@ impl InfrastructureServiceBundle {
         self,
         product_name: String,
         android_companion_apk: Option<PathBuf>,
-        breakpoints: Arc<BreakpointCoordinator>,
         events: Arc<EventHub>,
     ) -> Result<Application, InfrastructureError> {
-        self.into_application_inner(
-            product_name,
-            android_companion_apk,
-            breakpoints,
-            events,
-            None,
-        )
-        .await
+        self.into_application_inner(product_name, android_companion_apk, events, None)
+            .await
     }
 
     /// Builds the real Application while replacing its complete environment-configuration port
@@ -298,14 +285,12 @@ impl InfrastructureServiceBundle {
         self,
         product_name: String,
         android_companion_apk: Option<PathBuf>,
-        breakpoints: Arc<BreakpointCoordinator>,
         events: Arc<EventHub>,
         environment: intercept_proxy_application::EnvironmentConfigurationApplicationServices,
     ) -> Result<Application, InfrastructureError> {
         self.into_application_inner(
             product_name,
             android_companion_apk,
-            breakpoints,
             events,
             Some(environment),
         )
@@ -316,7 +301,6 @@ impl InfrastructureServiceBundle {
         self,
         product_name: String,
         android_companion_apk: Option<PathBuf>,
-        breakpoints: Arc<BreakpointCoordinator>,
         events: Arc<EventHub>,
         environment_override: Option<
             intercept_proxy_application::EnvironmentConfigurationApplicationServices,
@@ -363,10 +347,6 @@ impl InfrastructureServiceBundle {
             ApplicationDependencies {
                 capture: self.capture,
                 sessions: self.sessions,
-                breakpoints,
-                breakpoint_validation: Arc::new(BreakpointValidator::new_with_resolver(Arc::new(
-                    HeaderBodyCodecResolver,
-                ))),
                 faults: self.faults,
                 certificates: self.certificates,
                 settings: self.settings,
@@ -396,7 +376,6 @@ pub(crate) struct ListenerRuntimePipelineAssembly<'a> {
     pub(crate) product: &'a dyn ProductProfile,
     pub(crate) rules: Arc<RuleRepositoryAdapter>,
     pub(crate) sessions: Arc<InMemorySessionStore>,
-    pub(crate) breakpoints: Arc<BreakpointCoordinator>,
     pub(crate) events: Arc<EventHub>,
     pub(crate) capture: Arc<CaptureRepositoryAdapter>,
     pub(crate) workspace_body_codecs: Arc<WorkspaceBodyCodecResolver>,
@@ -421,7 +400,6 @@ pub(crate) fn configure_listener_runtime_pipeline(
             },
             assembly.rules,
             assembly.sessions,
-            assembly.breakpoints,
             assembly.events.clone(),
             assembly.capture,
         )

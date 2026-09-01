@@ -13,6 +13,7 @@ const files = [
   "docs/architecture/rules-and-protocol-packages.md",
   "docs/architecture/data-flow.md",
   "docs/architecture/modules.md",
+  "docs/architecture/security-and-persistence.md",
   "docs/user-operation-guide.md",
   "docs/onboarding-guide.md",
   "templates/socket-protocol/AUTHORING.md",
@@ -102,6 +103,8 @@ test("checker rejects reviewed documentation regressions", () => {
     ["docs/testing/release-validation-matrix.md", "调用顺序和超时预算"],
     ["docs/testing/release-validation-matrix.md", "详情只显示固定的 Display HTML"],
     ["docs/architecture/exchange-pipeline-template/README.md", "权威设计模板"],
+    ["docs/architecture/modules.md", "TLS 握手规则"],
+    ["docs/testing/release-validation-matrix.md", "RejectTlsHandshake"],
   ]) {
     const root = fixture();
     try {
@@ -157,11 +160,11 @@ test("checker rejects overstating the current Boa host as a general sandbox", ()
   }
 });
 
-test("checker rejects drifting the current MCP read-tool count from 36 to 37", () => {
+test("checker rejects drifting the current MCP read-tool count from 34 to 35", () => {
   const root = fixture();
   try {
     const path = join(root, "docs/user-operation-guide.md");
-    writeFileSync(path, readFileSync(path, "utf8").replaceAll("36 个", "37 个"));
+    writeFileSync(path, readFileSync(path, "utf8").replaceAll("34 个", "35 个"));
     assert.notEqual(run(root).status, 0);
   } finally {
     rmSync(root, { recursive: true, force: true });

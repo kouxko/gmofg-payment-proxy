@@ -87,7 +87,7 @@ impl ServerTlsAdapter {
         })
     }
 
-    fn acceptor_for(&self, context: &ConnectionContext) -> Result<TlsAcceptor> {
+    fn acceptor(&self) -> Result<TlsAcceptor> {
         let mut roots = RootCertStore::empty();
         roots
             .add(CertificateDer::from(self.client_ca_der.as_ref().clone()))
@@ -101,8 +101,6 @@ impl ServerTlsAdapter {
         let verifier = PolicyClientCertVerifier {
             webpki,
             allowed_fingerprint: self.allowed_client_fingerprint.clone(),
-            policy: Arc::clone(&self.handshake_policy),
-            context: context.clone(),
         };
         let config =
             ServerConfig::builder_with_provider(Arc::new(rustls::crypto::ring::default_provider()))
@@ -118,7 +116,7 @@ impl ServerTlsAdapter {
 impl ConnectionAcceptor for ServerTlsAdapter {
     async fn accept(&self, io: BoxIo, context: &ConnectionContext) -> Result<AcceptedConnection> {
         self.handshake_policy.prepare_tls_handshake(context).await?;
-        let acceptor = self.acceptor_for(context)?;
+        let acceptor = self.acceptor()?;
         let permit = Arc::clone(&self.handshake_capacity)
             .acquire_owned()
             .await
@@ -216,8 +214,6 @@ impl Drop for HandshakeCancellation {
 struct PolicyClientCertVerifier {
     webpki: Arc<dyn ClientCertVerifier>,
     allowed_fingerprint: Option<Vec<u8>>,
-    policy: Arc<dyn HandshakePolicy>,
-    context: ConnectionContext,
 }
 
 impl ClientCertVerifier for PolicyClientCertVerifier {
@@ -250,15 +246,7 @@ impl ClientCertVerifier for PolicyClientCertVerifier {
         {
             return Err(application_verification_failure());
         }
-        let identity =
-            peer_identity(end_entity.as_ref()).map_err(|_| application_verification_failure())?;
-        if self
-            .policy
-            .reject_tls_handshake(&self.context, &identity)
-            .unwrap_or(true)
-        {
-            return Err(application_verification_failure());
-        }
+        peer_identity(end_entity.as_ref()).map_err(|_| application_verification_failure())?;
         Ok(verified)
     }
 

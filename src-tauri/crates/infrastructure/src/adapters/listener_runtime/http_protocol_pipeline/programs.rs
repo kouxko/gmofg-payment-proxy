@@ -2,8 +2,8 @@ use std::sync::Arc;
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    DocumentSchemaNode, HttpRuleContent, ProtocolDirection, ProtocolPackageRef, ProxyListener,
-    ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram,
+    DocumentSchemaNode, HttpRuleContent, ProtocolDirection, ProxyListener, ProxyWorkspace,
+    RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram, contains_document_condition,
     validate_unified_actions_schema,
 };
 
@@ -20,28 +20,32 @@ impl HttpDocumentRulePrograms {
             ProtocolDirection::Downstream => &self.proxy_to_app,
         })
     }
+
+    pub(super) fn has_rules(&self, direction: ProtocolDirection) -> bool {
+        !self.program(direction).rules().is_empty()
+    }
 }
 
 pub(super) fn compile_programs(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
-    package: &ProtocolPackageRef,
     upstream_schema: Option<&DocumentSchemaNode>,
     downstream_schema: Option<&DocumentSchemaNode>,
+    owns_all_http: bool,
 ) -> AppResult<HttpDocumentRulePrograms> {
     Ok(HttpDocumentRulePrograms {
         proxy_to_upstream: Arc::new(compile_program(
             workspace,
             listener,
-            package,
             upstream_schema,
+            owns_all_http,
             RuleStage::ProxyToUpstream,
         )?),
         proxy_to_app: Arc::new(compile_program(
             workspace,
             listener,
-            package,
             downstream_schema,
+            owns_all_http,
             RuleStage::ProxyToApp,
         )?),
     })
@@ -50,43 +54,45 @@ pub(super) fn compile_programs(
 fn compile_program(
     workspace: &ProxyWorkspace,
     listener: &ProxyListener,
-    package: &ProtocolPackageRef,
     schema: Option<&DocumentSchemaNode>,
+    owns_all_http: bool,
     stage: RuleStage,
 ) -> AppResult<UnifiedRuleProgram> {
+    let definitions = workspace
+        .rule_definitions
+        .iter()
+        .filter(|definition| definition.listener_id() == listener.id && definition.stage() == stage)
+        .filter_map(|definition| match definition.content() {
+            RuleContent::Http(content) => Some((definition, content)),
+            RuleContent::Socket(_) => None,
+        })
+        .collect::<Vec<_>>();
+    let owns_direction = owns_all_http
+        || definitions.iter().any(|(_, content)| {
+            contains_document_condition(&content.conditions)
+                || content.actions.iter().any(|action| {
+                    matches!(action, intercept_proxy_domain::UnifiedAction::Document(_))
+                })
+        });
+    if !owns_direction {
+        return UnifiedRuleProgram::new(Vec::new()).map_err(AppError::from);
+    }
     let mut entries = Vec::new();
-    for definition in &workspace.rule_definitions {
-        let RuleContent::Http(HttpRuleContent {
-            condition,
+    for (definition, content) in definitions {
+        let HttpRuleContent {
+            conditions,
             actions,
-            document,
             ..
-        }) = definition.content()
-        else {
-            continue;
-        };
-        if definition.listener_id() != listener.id || definition.stage() != stage {
-            continue;
-        }
-        if document
-            .as_ref()
-            .is_some_and(|document| &document.package != package)
-        {
-            return Err(AppError::new(
-                "DOCUMENT_RULE_RUNTIME_BINDING_MISMATCH",
-                "报文规则与当前协议包或 Schema 不一致。",
-            )
-            .entity(definition.rule_id().to_string()));
-        }
+        } = content;
         if let Some(schema) = schema {
-            condition.validate_document_schema(schema)?;
+            intercept_proxy_domain::validate_document_conditions_schema(conditions, schema)?;
             validate_unified_actions_schema(actions, schema)?;
         }
         entries.push(RuleProgramEntry::new(
             definition.rule_id(),
             definition.priority(),
             definition.created_order(),
-            condition.clone(),
+            conditions.clone(),
             actions.clone(),
         )?);
     }
@@ -96,9 +102,8 @@ fn compile_program(
 #[cfg(test)]
 mod tests {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentMutation, DocumentPredicate, DocumentValue,
-        HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, ProtocolPackageId,
-        ProtocolPackageVersion, RuleDefinition, RuleDefinitionDraft, StringOperator,
+        Condition, DocumentMutation, DocumentPredicate, DocumentValue, HttpRuleContent,
+        JsonPointer, ListenerId, RuleDefinition, RuleDefinitionDraft, StringOperator,
         StringPredicate, UnifiedAction,
     };
 
@@ -110,10 +115,6 @@ mod tests {
             id: ListenerId::new(),
             ..ProxyListener::default()
         };
-        let package = ProtocolPackageRef {
-            id: ProtocolPackageId::new("schema-free-http").unwrap(),
-            version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-        };
         let definition = RuleDefinition::create(
             RuleDefinitionDraft {
                 name: "schema-free root".into(),
@@ -124,20 +125,17 @@ mod tests {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: ConditionTree::Leaf(Condition::Document {
+                    conditions: vec![Condition::Document {
                         path: JsonPointer::root(),
                         predicate: DocumentPredicate::String(StringPredicate {
                             operator: StringOperator::Equal,
                             value: "before".into(),
                         }),
-                    }),
+                    }],
                     actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::root(),
                         value: DocumentValue::String("after".into()),
                     })],
-                    document: Some(HttpDocumentRuleContent {
-                        package: package.clone(),
-                    }),
                 }),
             },
             1,
@@ -151,8 +149,8 @@ mod tests {
         let program = compile_program(
             &workspace,
             &listener,
-            &package,
             None,
+            false,
             RuleStage::ProxyToUpstream,
         )
         .unwrap();

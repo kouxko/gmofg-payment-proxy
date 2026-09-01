@@ -207,7 +207,13 @@ fn full_resource_candidate() -> Value {
         "mode":"scripted",
         "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
     });
-    value["workspace"]["rules"][14]["package"] =
+    let document_rule = value["workspace"]["rules"]
+        .as_array_mut()
+        .expect("full-shape rules array")
+        .iter_mut()
+        .find(|rule| rule["name"] == "Protocol Document values")
+        .expect("full-shape protocol Document rule");
+    document_rule["content"]["value"]["package"] =
         json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
     value["materials"] = json!({"certificates":[],"secrets":[]});
     value

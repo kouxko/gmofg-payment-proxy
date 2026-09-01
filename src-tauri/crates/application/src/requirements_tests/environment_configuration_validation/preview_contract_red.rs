@@ -343,7 +343,7 @@ async fn new_target_preview_captures_the_normalized_candidate_workspace_for_appl
     let workspace = &requests[0].candidate_workspace;
     assert_eq!(workspace.name, "Store Lab");
     assert_eq!(workspace.listeners.len(), 3);
-    assert_eq!(http_rule_definitions(workspace).len(), 14);
+    assert_eq!(http_rule_definitions(workspace).len(), 13);
     assert_eq!(protocol_rule_definitions(workspace).len(), 1);
     assert_eq!(workspace.android_network_profiles.len(), 1);
 }
@@ -389,7 +389,7 @@ async fn existing_target_preview_captures_persisted_and_candidate_workspaces_for
     assert_eq!(requests[0].candidate_workspace.listeners.len(), 3);
     assert_eq!(
         http_rule_definitions(&requests[0].candidate_workspace).len(),
-        14
+        13
     );
     assert_eq!(
         protocol_rule_definitions(&requests[0].candidate_workspace).len(),
@@ -443,17 +443,23 @@ async fn preview_and_apply_projection_share_each_non_idempotent_allocation_once(
         status["preview"]["resources"]["rules"][0]["created_order"],
         serde_json::json!(http_rules[0].created_order())
     );
+    let protocol_preview = status["preview"]["resources"]["rules"]
+        .as_array()
+        .expect("preview rules array")
+        .iter()
+        .find(|rule| rule["listener_alias"] == "socket-entry")
+        .expect("Socket rule preview");
     assert_eq!(
-        status["preview"]["resources"]["rules"][14]["candidate_local_id"],
+        protocol_preview["candidate_local_id"],
         serde_json::json!(protocol_rules[0].rule_id())
     );
     assert_eq!(
-        status["preview"]["resources"]["rules"][14]["created_order"],
+        protocol_preview["created_order"],
         serde_json::json!(protocol_rules[0].created_order())
     );
     assert_eq!(allocator.workspace.load(Ordering::SeqCst), 1);
     assert_eq!(allocator.listeners.load(Ordering::SeqCst), 3);
-    assert_eq!(allocator.http_rules.load(Ordering::SeqCst), 14);
+    assert_eq!(allocator.http_rules.load(Ordering::SeqCst), 13);
     assert_eq!(allocator.protocol_rules.load(Ordering::SeqCst), 1);
     assert_eq!(allocator.android_profiles.load(Ordering::SeqCst), 0);
 }

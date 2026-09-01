@@ -1,4 +1,3 @@
-import { createHash } from "node:crypto";
 import { spawnSync } from "node:child_process";
 import fs from "node:fs";
 import path from "node:path";
@@ -6,7 +5,6 @@ import path from "node:path";
 const root = process.cwd();
 const read = (file) => fs.readFileSync(path.join(root, file), "utf8");
 const fail = (message) => { throw new Error(`TASK-20260829-002 Phase5 contract: ${message}`); };
-const sha256 = (value) => createHash("sha256").update(value).digest("hex");
 const stripComments = (source) => source
   .replace(/\/\*[\s\S]*?\*\//gu, " ")
   .replace(/\/\/[^\n]*/gu, " ");
@@ -51,10 +49,6 @@ function enumDefinitions(source) {
 }
 
 const wireShapes = new Map([
-  ["ConditionTree", {
-    tag: /serde\s*\(\s*tag\s*=\s*"operator"[\s\S]*content\s*=\s*"children"/u,
-    variants: [/\bAll\s*\(\s*Vec\s*<\s*ConditionTree\s*>\s*\)/u, /\bAny\s*\(\s*Vec\s*<\s*ConditionTree\s*>\s*\)/u, /\bLeaf\s*\(\s*Condition\s*\)/u],
-  }],
   ["DocumentPredicate", {
     tag: /serde\s*\(\s*tag\s*=\s*"type"[\s\S]*content\s*=\s*"value"/u,
     variants: [/\bString\s*\(\s*StringPredicate\s*\)/u, /\bNumber\s*\(\s*NumberPredicate\s*\)/u, /\bBoolean\s*\(\s*BooleanPredicate\s*\)/u, /\bNullEqual\b/u],
@@ -137,7 +131,6 @@ for (const testName of fixture.discoverable_tests.rust_names) {
 
 const domainRustFiles = walk("src-tauri/crates/domain/src", (file) => file.endsWith(".rs"));
 const canonicalFiles = new Map([
-  ["ConditionTree", "src-tauri/crates/domain/src/unified_rule_execution.rs"],
   ["DocumentPredicate", "src-tauri/crates/domain/src/unified_rule_execution.rs"],
   ["DocumentMutation", "src-tauri/crates/domain/src/unified_rule_execution.rs"],
   ["UnifiedAction", "src-tauri/crates/domain/src/unified_rule_execution.rs"],
@@ -160,19 +153,20 @@ for (const file of domainRustFiles) {
 }
 
 const unifiedRuleOwner = stripComments(read("src-tauri/crates/domain/src/unified_rule.rs"));
+if (!/\bpub\s+conditions\s*:\s*Vec\s*<\s*Condition\s*>/u.test(unifiedRuleOwner)) {
+  fail("authoritative flat conditions owner missing");
+}
 if (/\bpub\s+conditions\s*:\s*Vec\s*<\s*(?:MatchCondition|DocumentCondition)\s*>/u.test(unifiedRuleOwner)) {
-  fail("flat condition owner detected");
+  fail("parallel condition owner detected");
 }
 if (/\bpub\s+actions\s*:\s*Vec\s*<\s*(?:RuleAction|DocumentAction)\s*>/u.test(unifiedRuleOwner)) {
   fail("parallel action owner detected");
 }
 
 const generatedGolden = JSON.parse(read(fixture.generated_wire_golden));
-if (generatedGolden.semantic_sha256 !== sha256(JSON.stringify(generatedGolden.type_blocks))) fail("generated golden hash drift");
 const generatedSource = read("src/generated/rust-types.ts");
 const actualGenerated = Object.fromEntries(Object.keys(generatedGolden.type_blocks).map((symbol) => [symbol, extractGeneratedType(generatedSource, symbol)]));
-if (JSON.stringify(actualGenerated) !== JSON.stringify(generatedGolden.type_blocks)
-    || sha256(JSON.stringify(actualGenerated)) !== generatedGolden.semantic_sha256) fail("generated semantic drift");
+if (JSON.stringify(actualGenerated) !== JSON.stringify(generatedGolden.type_blocks)) fail("generated semantic drift");
 
 const productionRoots = ["src-tauri/crates/domain/src", "src-tauri/crates/application/src", "src-tauri/crates/infrastructure/src", "src-tauri/src", "src"];
 const productionFiles = productionRoots.flatMap((directory) => walk(directory, (file) => {

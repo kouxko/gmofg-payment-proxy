@@ -37,8 +37,8 @@ pub use workspace::*;
 
 use intercept_proxy_application::{AppError, AppErrorViewModel};
 use intercept_proxy_domain::{
-    BooleanPredicate, Condition, ConditionTree, DocumentMutation, DocumentPredicate,
-    NumberOperator, NumberPredicate, StringOperator, StringPredicate, UnifiedAction,
+    BooleanPredicate, Condition, DocumentMutation, DocumentPredicate, NumberOperator,
+    NumberPredicate, StringOperator, StringPredicate, UnifiedAction,
 };
 use intercept_proxy_package_contract::{
     CanonicalBase64, DecodeParams, DecodeRpcSuccess, DisplayParams, DisplayRpcSuccess,
@@ -147,12 +147,6 @@ pub fn builder() -> Builder<Wry> {
             exchange_observation_query,
             exchange_observation_get,
             exchange_observation_clear,
-            breakpoint_query,
-            breakpoint_get,
-            breakpoint_format_json,
-            breakpoint_restore_original,
-            breakpoint_validate,
-            breakpoint_resolve,
             rule_definition_list,
             rule_editor_context,
             rule_definition_get,
@@ -210,7 +204,6 @@ pub fn builder() -> Builder<Wry> {
         .typ::<PackageRpcRequest>()
         .typ::<BooleanPredicate>()
         .typ::<Condition>()
-        .typ::<ConditionTree>()
         .typ::<DocumentMutation>()
         .typ::<DocumentPredicate>()
         .typ::<NumberOperator>()

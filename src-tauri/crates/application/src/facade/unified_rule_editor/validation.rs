@@ -1,8 +1,8 @@
 //! 持久化前基于 Listener 与协议包描述的统一 Document 规则校验。
 
 use intercept_proxy_domain::{
-    ConditionTree, DocumentSchemaNode, ProtocolPackageRef, RuleContent, UnifiedAction,
-    validate_unified_actions_schema,
+    Condition, DocumentSchemaNode, RuleContent, UnifiedAction, contains_document_condition,
+    validate_document_conditions_schema, validate_unified_actions_schema,
 };
 
 use super::Application;
@@ -28,19 +28,19 @@ impl Application {
         let Some(candidate) = document_candidate(listener, rule)? else {
             return Ok(());
         };
-        let description = self
-            .rule_package_description(listener, candidate.package)
-            .await?;
+        let Some(package) = candidate.package else {
+            return Ok(());
+        };
+        let description = self.rule_package_description(listener, package).await?;
         let (schema, capabilities) = match rule.stage().direction() {
-            Some(intercept_proxy_domain::ProtocolDirection::Upstream) => (
+            intercept_proxy_domain::ProtocolDirection::Upstream => (
                 description.upstream_schema.as_ref().map(domain_schema),
                 description.capabilities.upstream,
             ),
-            Some(intercept_proxy_domain::ProtocolDirection::Downstream) => (
+            intercept_proxy_domain::ProtocolDirection::Downstream => (
                 description.downstream_schema.as_ref().map(domain_schema),
                 description.capabilities.downstream,
             ),
-            None => return Err(rule_invalid("stage", "TLS 握手阶段不支持 Document 规则")),
         };
         if !capabilities.decode {
             return Err(rule_invalid(
@@ -55,7 +55,7 @@ impl Application {
             ));
         }
         if let Some(schema) = schema {
-            candidate.condition.validate_document_schema(&schema)?;
+            validate_document_conditions_schema(candidate.conditions, &schema)?;
             validate_unified_actions_schema(candidate.actions, &schema)?;
         }
         Ok(())
@@ -63,8 +63,8 @@ impl Application {
 }
 
 struct DocumentCandidate<'a> {
-    package: &'a ProtocolPackageRef,
-    condition: &'a ConditionTree,
+    package: Option<&'a intercept_proxy_domain::ProtocolPackageRef>,
+    conditions: &'a [Condition],
     actions: &'a [UnifiedAction],
 }
 
@@ -74,24 +74,17 @@ fn document_candidate<'a>(
 ) -> AppResult<Option<DocumentCandidate<'a>>> {
     match (rule.content(), &listener.data_plane) {
         (RuleContent::Http(content), ListenerDataPlane::Http(settings)) => {
-            let Some(document) = &content.document else {
+            if !contains_document_condition(&content.conditions)
+                && !content.actions.iter().any(document_action_modifies_value)
+            {
                 return Ok(None);
-            };
-            let HttpBodyProcessing::Protocol { package } = &settings.body_processing else {
-                return Err(rule_invalid(
-                    "content.document.package",
-                    "HTTP Document 规则要求 Listener 使用协议包处理 Body",
-                ));
-            };
-            if document.package != *package {
-                return Err(rule_invalid(
-                    "content.document.package",
-                    "规则协议包必须与 Listener 的精确绑定一致",
-                ));
             }
             Ok(Some(DocumentCandidate {
-                package,
-                condition: &content.condition,
+                package: match &settings.body_processing {
+                    HttpBodyProcessing::Plain => None,
+                    HttpBodyProcessing::Protocol { package } => Some(package),
+                },
+                conditions: &content.conditions,
                 actions: &content.actions,
             }))
         }
@@ -117,8 +110,8 @@ fn document_candidate<'a>(
                 return Err(rule_invalid("stage", "本机应答只支持统一的代理写出阶段"));
             }
             Ok(Some(DocumentCandidate {
-                package: &scripted.package,
-                condition: &content.condition,
+                package: Some(&scripted.package),
+                conditions: &content.conditions,
                 actions: &content.actions,
             }))
         }

@@ -1,0 +1,27 @@
+{
+  "workspace_id": "55826116-8377-4386-8664-7febafb9d9bc",
+  "workspace_revision": 7,
+  "listener": {
+    "id": "90127696-3ae4-4108-9fbb-25899d1f1bd8",
+    "bind_address": "127.0.0.1",
+    "port": 8080,
+    "body_processing": { "mode": "plain" }
+  },
+  "rule": {
+    "rule_id": "939447d8-db24-4e26-a5a8-a74141597eb4",
+    "name": "Body age 18",
+    "stage": "proxy_to_upstream",
+    "enabled": true,
+    "priority": 100,
+    "conditions": [{
+      "source": "document",
+      "path": "/customer/age",
+      "predicate": { "type": "number", "operator": "equal", "value": 18.0 }
+    }],
+    "actions": [{ "source": "record_match" }],
+    "lifecycle": {
+      "hit_count": 1,
+      "last_hit_at": "2026-09-01T04:29:18.686694Z"
+    }
+  }
+}

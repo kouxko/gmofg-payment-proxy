@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-09-01 00:54:25 +08:00`
+- 最后更新时间：`2026-09-01 14:01:52 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -27,9 +27,9 @@
 ### 1. 数据库 100 发布基线
 
 - 最终数据库版本保持 `100`，不增加 `101`。
-- 当前 `<100` 与旧结构 `100` 数据均为本地开发数据，不迁移、不兼容、不保留。
-- 当前开发切换阶段每次 App 启动直接清空数据库并按最终 Schema 100 重建。
-- 正式发布前必须删除“每次启动清空”逻辑，并以源码检查、自动化测试和真实 Release App 重启证明数据正常持久化。
+- 空数据库创建最终 Schema 100；现有 Schema 100 原样保留并正常持久化。
+- 能明确读取唯一版本标记且版本 `<100` 时，App 启动默认删除整个旧 SQLite 数据库及其 WAL/SHM，再创建全新 Schema 100；不迁移、不兼容、不保留旧数据。
+- 版本 `>100`、缺少版本标记、重复/损坏版本标记继续 fail-closed，且不得清除或改写数据。
 - 不保留旧规则、旧 Rhai/TOML、旧 API 1 或旧四阶段兼容读写路径。
 
 ### 2. Recursive Document
@@ -53,10 +53,11 @@
 
 ### 4. 统一规则系统
 
-- HTTP 上下文条件与 Decode 后 Document 条件/动作属于同一条规则，可组合 URL、Header、Method、Status 与 Document path。
-- Document 领域层不依赖 HTTP；应用层组合类型化上下文和 Document 能力。Socket 复用规则生命周期和执行骨架，但不获得 HTTP 能力。TLS handshake 规则保持独立。
+- HTTP 上下文条件与 Decode 后 Document 条件/动作属于同一条规则，可组合请求目标、Header、Method 与 Document path。
+- Document 领域层不依赖 HTTP；应用层组合类型化上下文和 Document 能力。Socket 复用规则生命周期和执行骨架，但不获得 HTTP 能力。
 - 消息规则只保留 `ProxyToUpstream` 和 `ProxyToApp` 两个写出阶段，删除 `AppToProxy` 与 `UpstreamToProxy` 消息规则阶段。
-- 每条规则包含一个非空条件树和一个非空有序动作列表；条件树支持任意嵌套 AND/OR，不支持 NOT 或空组。
+- 物理删除 TLS 握手规则阶段、拒绝 TLS 握手规则动作和对应故障模板；不解析旧阶段、旧动作或旧配置，不增加兼容、迁移、别名或回退。
+- 每条规则包含一个非空扁平条件列表和一个非空有序动作列表；同一规则内的多个条件固定为 AND。需要 OR 时创建多条规则，不提供条件组、NOT 或递归布尔树。
 - 规则按 priority 升序、相同 priority 按 Rule ID 升序执行；后一规则读取前面动作产生的当前 working state。
 - 条件命中后按声明顺序执行动作；Mock、主动断连、模拟网络故障等终止动作必须是该规则最后一个动作，并停止后续规则。
 - 整个方向规则链在私有 working Exchange 上执行。任何条件、动作、Encode 或提交校验失败都回滚 HTTP/Document 修改、控制效果和命中状态，并明确终止 Exchange；不得透传、部分提交、转成 no-match、重试或回退。
@@ -77,7 +78,7 @@
 - HTTP 协议包只处理 Body；transport 负责 framing 与 Header。
 - 保留现有严格 UTF-8、Shift-JIS 及已支持别名；严格解码后调用包，修改后按原解析 codec 严格重编码。
 - 非法字节、未知 charset、输出不可表示或非 identity Content-Encoding 均明确失败，不进行有损替换或原样绕过。
-- 未绑定协议包时 HTTP 上下文规则仍可执行，但不能配置或执行 Document 条件/动作。
+- 未绑定协议包时，只有存在 Document 条件/动作的方向才启用 Plain JSON Decode；用户用手工 RFC 6901 路径和显式类型配置 Schema-free Body 规则。非法 JSON 在 Decode 阶段 fail-closed，不透传、不重试、不回退。没有 Document 规则的方向继续使用现有文本管线。
 
 ### 7. Manifest API 1
 
@@ -161,8 +162,8 @@ result: "<HTML string>"
 
 ### 11. UI 与观察边界
 
-- 统一规则使用 modal，不保留固定右侧编辑栏。
-- 上部为 Document/metadata tree，下部为递归 AND/OR condition tree，动作使用有序列表编辑器。
+- 统一规则恢复为规则列表与固定右侧编辑栏的页面内联布局，不使用 modal/dialog。
+- 条件使用轻量行编辑器：选择 HTTP Method、Request target、Header 或 Document/Socket Body 后，以 `/a/b` 形式的输入框直接编辑 Header 名称或 RFC 6901 路径；有 Schema 时同时提供路径下拉选择和手工输入，无 Schema 时只保留手工输入。动作使用有序列表编辑器。
 - Document tree 只显示每节点条件数量；Schema tree 只读，Schema-free tree 属于当前规则并可编辑。
 - 普通新建规则为空树；显式 copy 复制完整规则。Array 显示 items 类型及用户创建的具体 index，不显示 Item template row。
 - UI 只消费 Rust 返回的能力和稳定 error code，最终保存由 Rust Domain 再校验。
@@ -172,9 +173,9 @@ result: "<HTML string>"
 ### 12. 发布目标与交付边界
 
 - 正式发布目标：Windows x64 MSI/NSIS，以及 macOS Universal App/DMG。Linux 只保持编译与测试。
-- 本次执行边界为实现、本地提交、本地测试、macOS 实际安装包和审查报告。
-- 未经用户后续明确批准，不 push、不触发远程 CI、不创建 Release。
-- Windows 真实 runner/安装包验证保持 `NOT_RUN`，直至用户批准推送和远程 CI。
+- 本次执行边界扩展为实现、本地测试、提交并推送当前任务分支，以及手动触发 Windows `verify-and-build` 候选构建。
+- 产品版本保持 SemVer `1.0.0`，对应产品显示“1.00”；本次为正式版本候选构建，不创建正式发布标签或 GitHub Release。
+- Windows 真实 runner、MSI/NSIS 与 portable artifact 由本次远程 workflow 验证；macOS/Android 远程构建不在本次候选触发范围。
 
 ## 不在范围与已接受风险
 
@@ -183,7 +184,7 @@ result: "<HTML string>"
 - `/packages` 身份认证与来源安全。
 - Hook timeout、应用层队列容量、busy 拒绝、自动限流、自动重试、自动恢复、自动 takeover。
 - 规则路径稳定节点 ID、自动引用修复、依赖分析和用户可自行修正问题的额外 Proxy 判断。
-- Linux 正式安装包与未经授权的 push、远程 CI、Release。
+- Linux 正式安装包、正式发布标签、GitHub Release 与未经授权的其他远程发布操作。
 
 ## 需求确认记录
 
@@ -196,6 +197,10 @@ result: "<HTML string>"
 | `2026-08-30 22:35:02 +08:00` | 用户明确覆盖 Phase8 旧安全限制：不考虑安全问题，不人为限制 Boa 自身能力；旧“不提供 Host API”“启动时一次图冻结”“错误脱敏”验收失效。新验收为 Boa default features/原生能力不受 Proxy 限制、允许合法 `dynamic import()`、错误无需安全脱敏；Proxy 仍不额外发明 Boa 本身没有的 Node/fs/process 等 bindings。受影响的 Host API absence、dynamic-import reject、secret-redaction tests/checker 必须删除或反转；固定八 exports、单 Context、ESM、HTTP string、Socket `Uint8Array`/Base64 和公共 JSON-RPC 合同不变。 |
 | `2026-08-31 18:23:58 +08:00` | 本地 App/Computer Use 验证发现规则页无法编辑真实匹配条件，条件树为空且 Document 仅为扁平字段投影。用户明确覆盖早期“HTTP Body-only、URL/Header/Method 延后、条件路径无 wildcard”的合同：HTTP 条件统一支持 Body、Header、Method 与请求目标 `path + ?query`，不匹配 scheme/host/port；Forward 与 Fixed Server 使用同一请求目标语义，Response 复用关联 Request 的同一 target。Body 有 Schema 时路径可下拉选择或手工输入，无 Schema 时只允许手工输入；Socket 复用同一 decoded Document Schema/手工路径能力，不暴露 HTTP 专属字段。Header 名称大小写不敏感，选择 Header 后手工输入 `/content-type` 形式的名称，重复同名值按 ANY；Header 值支持 EQUAL、CONTAINS、STARTS WITH、ENDS WITH 与 wildcard。条件路径中的 `*` 只匹配一个层级，展开多个值时按 ANY；Set/Clear/Insert/Append 继续要求精确 RFC 6901 路径。规则阶段展示统一为 `Proxy → Server`，内部枚举可保持私有兼容名。原 Body-only/no-wildcard 验收失效；受影响 Domain 匹配类型、HTTP transaction request-target 持有、Application capability/factory、generated bindings、递归 Document/条件树 UI、HTTP/Socket runtime 与 tests 必须重验。Method 的最终操作符集合仍待用户确认，受影响实现保持 RED/待确认。 |
 | `2026-08-31 18:25:38 +08:00` | 用户最终确认 Method 只支持精确 EQUAL，不提供 CONTAINS、前缀、后缀或 wildcard；请求目标字段继续使用字符串条件及已确认的单层 wildcard。新增匹配合同的会改变实现方向事项已清零，受影响实现重新通过需求就绪门禁并进入 TDD。 |
+| `2026-09-01 09:51:49 +08:00` | 人工 GUI 验收后用户明确撤销递归条件树与规则 modal：规则编辑恢复旧版页面内联左右分栏；条件恢复轻量扁平列表，同一规则内固定 AND，OR 通过多条规则表达；HTTP Method、`path?query`、Header 与 HTTP/Socket Document 继续使用 Rust 声明的字段/操作符，Header 名称和 Document 路径直接用 `/a/b` 输入，有 Schema 时可下拉选择或手工输入，无 Schema 时只手工输入。旧 modal、递归 AND/OR tree 及其验收全部失效，不保留兼容 UI、兼容 wire 或旧数据迁移。NDR-JS-09、NDR-JS-11、NDR-JS-12 重新打开并重新经过需求就绪门禁。 |
+| `2026-09-01 10:26:12 +08:00` | 用户再次明确不考虑兼容性并删除全部 TLS 握手规则能力：领域与应用规则阶段只保留 `ProxyToUpstream`、`ProxyToApp`，物理删除 `TlsHandshake` 规则阶段、`RejectTlsHandshake` 规则动作、对应故障模板、能力、wire、UI、测试和 current 文档；旧数据库可清除，不提供旧阶段/动作解析、迁移、别名、fallback 或额外错误处理。规则页面不再按两个阶段分区，合并为一个规则列表；每张规则卡以“上行”或“下行”标识真实阶段，右侧固定编辑器继续编辑对应阶段。受影响 NDR-JS-03、09、11、12 重新打开并重新验收。 |
+| `2026-09-01 11:25:53 +08:00` | 新一轮实际 App 验收确认三项变更：规则编辑器同组输入框、选择框和按钮必须对齐并使用统一尺寸；无协议 Schema 时 HTTP Body 仍必须允许手工输入 RFC 6901 `/a/b` 路径创建匹配条件，不能只显示“无 Body Document 能力”；断点功能与规则 `Pause` 动作全部物理删除，不保留隐藏入口、兼容 wire、迁移、alias、fallback 或额外错误处理。当前旧构建代理链路继续用隔离数据库同步验证；上述源码完成并重新构建后立即开始第二轮 GUI 与真实 Proxy 链路测试。受影响 NDR-JS-03、09、11、12 再次打开。 |
+| `2026-09-01 13:08:47 +08:00` | 用户授权提交并推送当前任务分支、触发 Windows 候选构建；产品版本为“1.00”，仓库 SemVer 保持 `1.0.0`。用户覆盖 Phase17 的 `<100` fail-closed/no-mutation 合同：唯一有效版本标记 `<100` 时启动默认整库清除并创建全新 Schema 100，不迁移、不兼容、不保留旧数据；Schema 100 原样保留，`>100`、缺少或损坏标记继续 fail-closed。正式标签与 GitHub Release 未获授权，本次只运行 Windows `verify-and-build` 候选 workflow。NDR-JS-10、11、12 重新打开。 |
 
 旧任务正文中与本节最终合同冲突的初始结论全部失效，不得作为实现依据。
 
@@ -210,8 +215,8 @@ result: "<HTML string>"
 - 输入、输出、状态变化和错误行为：`PASS`
 - 具体 Manifest、注册、Hook、Frame、规则、Document、生命周期示例：`PASS`
 - 可重复 PASS/FAIL 验收：`PASS`
-- 会改变实现方向的未确认事项：`0`（Method 仅 EQUAL 已于 `2026-08-31 18:25:38 +08:00` 确认）
-- 需求变更重新进入实现时间：`2026-08-31 18:25:38 +08:00`
+- 会改变实现方向的未确认事项：`0`（Schema100 preserve、有效 `<100` 整库清除重建、其他无效/未来版本 fail-closed，以及 Windows 候选 workflow 边界均已明确）
+- 需求变更重新进入实现时间：`2026-09-01 13:08:47 +08:00`
 - 进入实现时间：`2026-08-29 22:55:17 +08:00`；Planner → Architect → Critic 共识规划已通过，现有 Ultragoal 质量基线已纳入本任务并开始执行。
 
 ## 问题与根因分析
@@ -225,6 +230,7 @@ result: "<HTML string>"
 - 未知：无产品合同未知；具体代码影响面由架构规划和实施前源码映射确认。
 - 根因：旧发布前原型的领域边界与已确认最终合同不同，不存在保持旧模型的局部修复。
 - 正确边界：保留稳定的 Exchange/Pipeline 分层意图，直接替换旧领域模型、应用编排和包基础设施，不保留兼容路径。
+- `2026-09-01 11:25:53 +08:00` 当前已验证：隔离 HOME 的 arm64 App 已启动默认 Listener，`curl` 经 `127.0.0.1:8080` 实际转发到本地 `127.0.0.1:18083`，Server 收到 `GET /health?probe=1` 并返回 200；同一 GUI 验收截图同时证明编辑器控件未对齐、无 Schema Body 仅显示不可用文案、断点/Pause 仍暴露。正确修复边界是补齐权威 schema-free Document capability、统一前端布局，并物理删除断点/Pause 全链路；不得用纯 UI 假入口、disabled 控件或旧动作过滤代替。
 
 ## 最小改动与最优设计比较
 
@@ -242,16 +248,16 @@ result: "<HTML string>"
 | --- | --- | --- | --- | --- | --- |
 | NDR-JS-01 | 映射当前源码，锁定旧行为与新合同 RED 测试；加入开发期 DB100 每启动重建及正式发布移除门禁 | TASK-20260829-001 | 否 | 已完成 | Phase1/2合同、RED基线和发布阻断门均已验证；Phase17已删除开发重建路径并证明Release持久化 |
 | NDR-JS-02 | 实现递归 Document、Number、RFC6901、Schema 和规则本地元数据 | NDR-JS-01 | 否 | 已完成 | Domain101/101及Schema/no-Schema、root `""`/empty-name `"/"`、wildcard与UI回归通过 |
-| NDR-JS-03 | 实现统一 HTTP/Document/Socket 规则、两写出阶段、多动作顺序、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 已完成 | 单一RuleDefinition、working-state前序可见、原子RuntimeRuleBundle、HTTP/Socket generation lease与失败回滚通过 |
+| NDR-JS-03 | 实现统一 HTTP/Document/Socket 规则、两写出阶段、多动作顺序、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 进行中 | 删除 TLS 握手阶段/动作/模板后，仅保留两写出阶段并重新验证单一RuleDefinition与RuntimeRuleBundle |
 | NDR-JS-04 | 定义严格 Manifest、稳定错误和唯一 JSON-RPC wire | NDR-JS-01 | 否 | 已完成 | 本地/远程共享Manifest、注册、Hook、stable code和固定JSON-RPC API1合同已验证 |
 | NDR-JS-05 | 实现通用 Boa Sidecar、固定 exports、ESM 加载和内部字节适配 | NDR-JS-04 | 否 | 已完成 | G049 / Phase 8 已 `VERIFIED / APPROVED / CHECKPOINT READY`；P0/P1/P2=0，`blockers=[]` |
 | NDR-JS-06 | 实现 ZIP 安装、包注册表和 enabled/online/failed/disabled 生命周期 | NDR-JS-05 | 否 | 已完成 | 10秒注册、冲突、启停、断连、删除、process ownership及无孤儿进程自动化通过 |
 | NDR-JS-07 | 将 HTTP/Socket Pipeline 切换到统一规则和唯一 WebSocket 包端口，删除旧执行路径 | NDR-JS-03、NDR-JS-06 | 否 | 已完成 | 两方向Pipeline、codec、原始字节、Encode、生命周期/CAS及旧执行路径物理删除已验证 |
 | NDR-JS-08 | 将内置 JSON、ISO8583 和第三方本地包迁移为同一 ZIP/Sidecar；保留远程同协议接入 | NDR-JS-07 | 可按包并行 | 已完成 | 内置/本地/远程统一ZIP、注册、RPC和capability链已验证，无Rhai/TOML兼容路径 |
-| NDR-JS-09 | 实现统一规则 modal、元数据树、条件树、多动作、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 已完成 | G056 / Phase15 Reviewer APPROVE、Verifier VERIFIED，P0/P1/P2=0，code checkpoint ready；current full=false |
-| NDR-JS-10 | 删除开发期 DB 清空逻辑及所有旧 Rhai/TOML/flat/four-stage/API1 路径，固化正式 Schema100 | NDR-JS-07、NDR-JS-09 | 否 | 已完成 | Phase17 Release optimized 双启动1/1、pre100 fail-closed/no-mutation、reset owner零残留；Reviewer/Verifier P0/P1/P2=0 |
-| NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 已完成 | Reviewer APPROVE、Verifier VERIFIED，P0/P1/P2=0，code checkpoint ready；full由NDR-JS-12负责 |
-| NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 进行中 | 自动化代码/全层门禁、Universal App/DMG与独立审查已通过，P0/P1/P2=0；明日人工GUI、网络/系统权限、Windows、Android及Developer ID验收待执行 |
+| NDR-JS-09 | 实现统一规则内联编辑、扁平 AND 条件行、多动作、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 进行中 | 物理删除 modal、递归条件树和 TLS 规则；左侧为合并规则列表，卡片显示上行/下行，右侧固定编辑 |
+| NDR-JS-10 | 固化正式 Schema100，并按最终发布合同在有效版本 `<100` 时整库清除重建；删除所有旧 Rhai/TOML/flat/four-stage/API1 路径 | NDR-JS-07、NDR-JS-09 | 否 | 进行中 | TDD证明Schema100保留、有效`<100`删除数据库/WAL/SHM并重建100、其他无效/未来版本fail-closed；随后重新执行Release启动与审查 |
+| NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 进行中 | 删除 current 文档中的 modal/递归条件树合同，改为内联扁平 AND 条件行；历史证据保持不可变 |
+| NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 进行中 | 旧递归树/modal checkpoint 已被用户需求变更失效；完成扁平内联规则重构后重新执行自动化、GUI、本地数据面和安装包验收 |
 
 共享 Document、规则、Manifest、RPC、包身份、生命周期和持久化合同稳定前不得并行修改。主 Agent 在实施批次开始前确定文件所有权和集成顺序。
 
@@ -262,7 +268,7 @@ result: "<HTML string>"
 - Document 六类值、深层 object/array、Unicode、空键、`/`、`~`、RFC6901 根与转义。
 - finite number、安全整数、NaN/Infinity 拒绝、`1e-400`、重复 key last-wins、字段顺序非语义。
 - Schema 递归、title、HTTP 可省略、Socket 必填、null runtime、额外/缺失字段及无 Schema 独立树/显式复制。
-- 统一条件树、多动作顺序、前序修改可见、终止动作位置、严格 Set/Clear/Insert/Append、方向级失败回滚。
+- 扁平非空 AND 条件列表、多动作顺序、前序修改可见、终止动作位置、严格 Set/Clear/Insert/Append、方向级失败回滚；多规则表达 OR。
 - enabled/priority/Nth-hit/one-shot/count/last-hit/revision 只在整体成功后提交。
 - 开发期每启动重建；正式门禁删除该逻辑后，Release App 多次重启数据仍存在。
 
@@ -283,7 +289,7 @@ result: "<HTML string>"
 - HTTP UTF-8/Shift-JIS、未知/非法/不可表示 charset、非 identity content-encoding；Socket Frame/Base64/Decode/Rules/Encode 双端字节。
 - 未修改完整 Document 原始字节转发；修改后 Encode；Display 观察失败不阻断，其他阶段失败阻断。
 - 内置 JSON、ISO8583、本地第三方与远程软件包走同一注册、方法和能力链。
-- modal、Document/metadata tree、条件树、有序动作列表、Schema 只读、无 Schema 独立/显式 copy、Capture/Session、键盘/ARIA/截图。
+- 页面内联左右分栏、轻量条件行与 `/a/b` 路径输入、有序动作列表、Schema 下拉/手工路径、无 Schema 手工路径、Capture/Session、键盘/ARIA/截图。
 
 ### 构建、安装包与证据
 
@@ -429,7 +435,8 @@ result: "<HTML string>"
 - `2026-08-31 16:56:17 +08:00`：G058 / Phase17 物理删除development pre-100 recreate/reset policy、marker与启动分支，Schema100原样保留，其他版本/损坏标记fail-closed且不改写数据库bytes/data。真实Release optimized双启动完整名exact1/1、Phase17 aggregate Node10/10+Infra1/1+Host1/1+Release1/1、Infra501/501、Host10/10及static全绿；final mutation12/12。Application full session1189为`BLOCKED/PARTIAL` exit130，已见1个既有limits_red失败与2个validation hang，raw unavailable，后续completion`NOT_RUN`，不得替代为PASS。Phase17 full按NDR-JS-12职责为N/A。Reviewer `APPROVE`、Verifier `VERIFIED`，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。正式证据：[phase17-release-schema100-preservation](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/README.md)。
 - `2026-09-01 00:54:25 +08:00`：G059 / Phase18 完成统一规则最终收口与自动化发布验收。生产仅保留单一 `RuleDefinition`；Method、request target `/path?query`、Header、递归Document/wildcard、Schema下拉与手工路径、无Schema手工路径均由Rust能力合同驱动。规则链由listener-scoped `RuntimeRuleBundle`、同代compiled programs与transaction gate原子发布；HTTP keep-alive与Socket长连接逐消息取得generation lease，停止/启动/token切换及Socket取锁顺序竞态均以确定性RED→GREEN关闭。旧`Rule`/`RuleEngine`/`RuleDraft`、legacy projections/CRUD/wire/helper及兼容/fallback路径物理删除；root `""`与空名属性`"/"`、unknown rule id fail-closed、取消/cleanup owner均有回归。独立Reviewer `APPROVED`、Verifier `VERIFIED`，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。
 - `2026-09-01 00:54:25 +08:00`：`pnpm build:macos:universal` session3171 exit0，产出Universal `Intercept Proxy.app`和DMG；主程序与Sidecar均为`x86_64 arm64`，App bundle identifier=`com.interceptproxy.desktop`，App和挂载DMG内App均通过strict codesign/架构/Info.plist校验并正常detach，测试进程与8765/17653端口清理完成。自动化证据：[phase18-final-unified-release-automation](../../../testing/evidence/2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md)。原始session stdout未持久化，未伪造；用户已取消hash验收，本阶段不生成或声明hash。
-- 下一步：明日执行需要人为干预的GUI/computer-use、网络/系统权限弹窗、Windows、Android、Developer ID签名/公证验收；CI、push、release继续`NOT_RUN`。这些人工项完成前TASK保持`进行中`。
+- `2026-09-01 13:03:20 +08:00`：Phase19 根据当日真实 App 反馈直接替换最终规则 UI：物理删除递归条件树和 modal，规则改为非空扁平 `conditions[]` 固定 AND；上下行统一列表并在卡片显示方向；TLS 规则与 Breakpoint/Pause 从 Domain/Application/Infrastructure/Host/Tauri/MCP/frontend 物理删除；Plain HTTP Body 由手工 RFC 6901 路径直接创建 Schema-free Document 条件/动作。UI 将领域输入明确命名为“匹配值/动作值”，不再称“JSON 值”；HTTP、Nth、Document 条件/动作分别拥有独立布局容器，`动作参数 JSON`独占一行；根路径快捷按钮物理删除，路径框输入 `/` 直接映射为内部根路径，Schema 的空名称属性 `/` 保持独立。真实隔离 App 创建 `/customer/age number equals 18` 上行规则后，18 命中并执行RecordMatch、17不命中、非法`{`以`JSON_INVALID`在Decode阶段fail-closed；arm64 App增量构建、strict ad-hoc codesign、实际界面、退出清理均PASS。自动化前端64 files/534 tests与最终focused rules19/19、Node contracts31/31、workspace check/strict Clippy及静态门通过；独立Reviewer P0/P1/P2=`0/0/0`。正式证据：[phase19-flat-rule-ui-plain-body-runtime](../../../testing/evidence/2026-09-01/TASK-20260829-002/phase19-flat-rule-ui-plain-body-runtime/README.md)。
+- 下一步：网络/系统权限弹窗、Windows、Android、Developer ID签名/公证验收仍需人为环境并保持`NOT_RUN`；CI、push、release继续`NOT_RUN`。这些人工项完成前TASK保持`进行中`。
 
 ## 修改文件
 
@@ -461,6 +468,8 @@ result: "<HTML string>"
 - `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase16-documentation-contract/`：Phase16文档RED/GREEN、checker mutations、embedded MCP resource、static门、full N/A职责边界及用户拥有文件阻塞证据。
 - `docs/testing/evidence/2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/`：Phase17 pre100 fail-closed/no-mutation、真实Release双启动、affected/static、Application partial blocker与最终review证据。
 - `docs/testing/evidence/2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/`：Phase18统一规则/RuntimeRuleBundle最终自动化、全层门禁、独立审查、Universal App/DMG、清理状态和明日人工NOT_RUN边界。
+- `src/features/rules/rule-definition-{editor,list,model}*`、`rule-list-editors*`、`rules-view*`：Phase19扁平条件、固定右侧编辑器、统一上下行列表/方向badge、Schema-free手工Body规则及语义分组布局；旧tree/document-fields专用前端物理删除。
+- `docs/testing/evidence/2026-09-01/TASK-20260829-002/phase19-flat-rule-ui-plain-body-runtime/`：Phase19 UI截图、输入、运行日志/Workspace/Server读回、复测步骤和清理证据。
 - `docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/`：Phase 7 严格 ZIP、package-initiated registration、固定 typed transport、canonical Base64/FrameResult、旧 dynamic path 删除、checker mutation、活动 E2E、Phase6 真实 RED、affected full 与完整十门 PASS 证据。
 - `src-tauri/crates/package-runtime/src/sidecar.rs`、`src/bin/intercept-proxy-package-sidecar.rs`、Phase8 tests 与 Cargo manifests/lock：Phase 8 单 Boa Context、严格 ESM/exports/HTTP/Socket 转换及 compile-only generic Sidecar marker。
 - `scripts/check-task-20260829-002-phase8-sidecar.mjs`、对应 mutation tests 与 `package.json`：Phase 8 fail-closed checker、真实 Cargo discovery 和 focused 入口。
@@ -507,6 +516,7 @@ result: "<HTML string>"
 - Phase 12 正式证据：[phase12-legacy-stage-deletion](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase12-legacy-stage-deletion/README.md)。
 - Phase 13 正式证据：[phase13-builtin-zip-replacement](../../../testing/evidence/2026-08-31/TASK-20260829-002/phase13-builtin-zip-replacement/README.md)。
 - Phase 18 自动化正式证据：[phase18-final-unified-release-automation](../../../testing/evidence/2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md)。
+- Phase 19 真实规则 UI/Plain Body 正式证据：[phase19-flat-rule-ui-plain-body-runtime](../../../testing/evidence/2026-09-01/TASK-20260829-002/phase19-flat-rule-ui-plain-body-runtime/README.md)。
 
 ## 验收结果
 
@@ -524,6 +534,7 @@ result: "<HTML string>"
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT INCOMPLETE`：G053 / Phase 12最终Reviewer/Verifier P0/P1/P2=0，`code_checkpoint_ready=true`；session91671 gate1历史失败、修复focused PASS、gates2-10 `NOT_RUN`均保留，`global_checkpoint_complete=false`。
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY / GLOBAL CHECKPOINT ENVIRONMENT BLOCKED`：G054 / Phase 13严格内置ZIP、TOML/Rhai/crate/runtime owner及`Internal`/旧ports/stub/lookup merge物理删除、无兼容路径、production Sidecar seed与online gate完整名exact各1/1、Display export真实执行、checker18/18、Cargo2/2、affected/static均PASS。旧短名exact为0 tests且不作为证据。最终Reviewer/Verifier P0/P1/P2=0，`code_checkpoint_ready=true`；唯一session7784的nonloopback环境阻塞、后续targets`NOT_RUN`且full未重跑，故`global_checkpoint_complete=false`。
 - `VERIFIED / APPROVED / CODE CHECKPOINT READY / MANUAL ACCEPTANCE PENDING`：Phase18最终自动化完成。单一RuleDefinition/RuntimeRuleBundle、HTTP/Socket generation lease、递归Document与UI、无兼容路径、bindings与全层测试均通过；Universal App/DMG构建、架构、strict签名结构、挂载校验与清理通过。独立Reviewer/Verifier P0/P1/P2=`0/0/0`。
+- `VERIFIED / APPROVED / CODE CHECKPOINT READY / REMAINING MANUAL ENVIRONMENTS NOT_RUN`：Phase19扁平规则 UI、无Schema Plain Body、实际 App 匹配/不匹配/非法JSON fail-closed、语义文案和动作参数独立行均通过；独立Reviewer P0/P1/P2=`0/0/0`。Windows、Android、系统权限、Developer ID、CI/push/release仍`NOT_RUN`。
 - `NOT_RUN`：GUI/computer-use、网络/系统权限弹窗、Windows、Android、Developer ID正式签名/公证、外部CI、push和release；按用户要求留到明日人工执行，不以自动化PASS替代。
 
 ## 测试结果
@@ -539,6 +550,7 @@ result: "<HTML string>"
 - `PASS`：`pnpm check:task-20260829-002:checkpoint`；严格依次执行 Phase 1 tests、bindings、architecture、source-size、lint、typecheck、全量前端测试、Rust fmt、Rust clippy、workspace all-target/all-feature tests。
 - `OBSERVED THEN PASS`：独立 Verifier 首次完整 checkpoint 的 Rust workspace gate 中，既有 ADB deadline 测试 `cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial` 偶发失败一次，结果 647 passed / 1 failed / 0 ignored；该测试随后定向连续 3/3 PASS，完整十门禁复跑 exit 0。原始失败与复跑摘要已归档到正式证据。
 - `PASS`：`git diff --check`。
+- `PASS`：Phase19 `pnpm exec vitest run src/features/rules`，4 files / 19 tests（含无根路径按钮、手工 `/` 映射内部根路径）；`pnpm typecheck`、rules ESLint、source-size、diff；最终布局前同轮完整前端64 files/534 tests、Phase15/16/统一模型31/31、workspace check/strict Clippy/fmt/lint/typecheck/source-size/diff；arm64 App build、strict ad-hoc codesign与真实Computer Use界面通过。
 - `PASS`：`pnpm test:task-20260829-002:phase12`，cross-phase Phase5+Phase12 Node 25/25、Phase5 Cargo/Vitest discovery 9/5、Cargo旧stage fail-closed 2/2。
 - `FAILED THEN FOCUSED REPAIRED / NOT RERUN`：唯一完整checkpoint session91671在第1门Phase1 baseline因活动inventory仍要求已删除四阶段fragments失败；后9门NOT_RUN。活动inventory与mutation修复后Phase1 4/4、Phase12和静态门PASS，但完整checkpoint按指令未重跑。
 - `LOCAL GREEN / ENVIRONMENT BLOCKED`：`pnpm test:task-20260829-002:phase13` checker18/18、Cargo2/2；production seed与Sidecar gate完整名exact各1/1、stale production断言repair、排除nonloopback环境项的root lib129/129、review affected/static PASS。旧短名exact 0 tests不作证据。唯一checkpoint session7784前9门PASS，第10门既有nonloopback MCP HTTP deadline超时，后续workspace targets `NOT_RUN`，完整checkpoint未重跑。
@@ -591,6 +603,9 @@ result: "<HTML string>"
 - `PASS`：Phase18最终fresh自动化：前端67 files/571 tests；Domain101、Application477、Infrastructure519、Host31、package-runtime22个有效测试全部通过，0-test targets未计入；workspace check、strict Clippy、fmt、diff、source-size、bindings fresh/deterministic+mutation6/6及架构/checker门全部通过。
 - `PASS`：`pnpm build:macos:universal` session3171 exit0；Universal主程序111655488 bytes、Sidecar29443472 bytes、DMG59666432 bytes，双架构均为`x86_64 arm64`；App/挂载DMG内App strict codesign、bundle identifier与detach通过。
 - `PASS`：Phase18 checker17/17；最终受影响checker30/30、全套checker116/116与Runtime architecture 43/43、owned sites10+10/debt0均通过。
+- `PASS`：产品 1.00 / Schema100 候选发布前修复。跨进程启动所有权覆盖 Schema 分类、关闭、复验、`<100` 主文件/WAL/SHM 清除、重开和 Schema100 建表；确定性并发回归 1/1 证明等待实例不会删除前一实例刚创建的 Schema100。SQLite 88/88、Host 有效测试 31/31、workspace all-target/all-feature check 与 strict Clippy、architecture、bindings、typecheck、lint、source-size、fmt、diff 全部通过。
+- `PASS`：`pnpm test:task-20260829-002:phase17`；Node 14/14，Infrastructure `<100` cleanup exact 1/1，Host pre-1.0 cleanup exact 1/1，真实 Release profile 双启动 preserve exact 1/1。checker 先通过 Cargo `--list --format terse` 对三个完整名分别断言唯一发现，再执行 exact；旧名称和零发现均不能作为成功结果。
+- `APPROVED / CODE CHECKPOINT READY`：发布前独立 delta 复核关闭启动竞态、非确定性锁等待证明及 Phase17 零测试假绿，最终 P0/P1/P2=`0/0/0`；Windows workflow 边界复核确认本次仅允许当前分支 `verify-and-build/windows`，不创建 tag 或 GitHub Release。
 
 - `NOT_RUN`：未推送、未触发远程 CI。
 

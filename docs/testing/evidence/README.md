@@ -7,6 +7,7 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260829-002 | phase19-flat-rule-ui-plain-body-runtime | 验证非空扁平conditions固定AND、固定右侧编辑器、上下行统一列表/direction badge、Schema-free Plain Body手工RFC6901、匹配值/动作值文案、HTTP/Nth/Document语义分组、动作参数独立行及根路径按钮物理删除；路径框输入`/`直接映射内部根路径。真实隔离App中18命中RecordMatch、17不命中、非法JSON Decode fail-closed，arm64 build/strict ad-hoc codesign/退出清理PASS。Windows、Android、系统权限、Developer ID、CI/push/release NOT_RUN | VERIFIED / APPROVED / CODE CHECKPOINT READY / REMAINING MANUAL ENVIRONMENTS NOT_RUN | TASK-20260829-002 | phase18-final-unified-release-automation | [父证据](2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md) | [证据](2026-09-01/TASK-20260829-002/phase19-flat-rule-ui-plain-body-runtime/README.md) |
 | TASK-20260829-002 | phase18-final-unified-release-automation | 最终自动化验收单一RuleDefinition/RuntimeRuleBundle、HTTP/Socket generation lease、递归Document/UI、无兼容路径与全层测试；独立Reviewer/Verifier P0/P1/P2=0。Universal App/DMG真实构建，双架构、strict codesign结构、挂载校验与清理PASS。GUI/权限、Windows、Android、Developer ID、CI/push/release按用户要求留到明日NOT_RUN | VERIFIED / APPROVED / CODE CHECKPOINT READY / MANUAL ACCEPTANCE PENDING | TASK-20260829-002 | phase17-release-schema100-preservation | [父证据](2026-08-31/TASK-20260829-002/phase17-release-schema100-preservation/README.md) | [证据](2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md) |
 
 ## 2026-08-31

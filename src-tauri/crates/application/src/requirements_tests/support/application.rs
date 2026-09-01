@@ -20,8 +20,6 @@ pub(in crate::requirements_tests) fn application_with_fake_ports_and_events(
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -53,8 +51,6 @@ pub(in crate::requirements_tests) fn application_with_fake_ports_and_android(
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -261,8 +257,6 @@ fn application_with_workspace_configuration_packages_runtime_and_environment(
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),

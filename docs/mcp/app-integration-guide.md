@@ -56,7 +56,7 @@
 复测入口。`BLOCKED` 只用于已经被明确外部条件阻塞的必测层；实现违反合同应写 `FAILED`，不能用单元
 测试 PASS 覆盖这些状态。
 
-36 个 MCP 查询工具只提供读取和建议能力；五个环境配置工具可以在分层验证、完整预览和一次性
+34 个 MCP 查询工具只提供读取和建议能力；五个环境配置工具可以在分层验证、完整预览和一次性
 confirmation token 后修改一个明确目标 Workspace。它们不会修改 App 源码、应用级 Settings、任意
 本机文件或其他 Workspace，也不会自动启停 Listener。MCP 监听全接口明文 HTTP 且无认证，不能用作
 安全远程管理入口；私钥和密码不进入公开输出，confirmation token 只在 create 成功响应中交付，

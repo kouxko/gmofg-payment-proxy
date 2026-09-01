@@ -45,25 +45,23 @@ pub(super) async fn prepared_external_snapshot_for_registration(
 }
 
 #[tokio::test]
-async fn production_snapshot_compiles_recursive_or_with_insert_and_append() {
+async fn production_snapshot_compiles_flat_conditions_with_insert_and_append() {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentMutation, DocumentPredicate, HttpDocumentRuleContent,
-        RuleStage, StringOperator, StringPredicate, UnifiedAction,
+        Condition, DocumentMutation, DocumentPredicate, RuleStage, StringOperator, StringPredicate,
+        UnifiedAction,
     };
 
     let listener = phase10_listener();
-    let condition = |expected: &str| {
-        ConditionTree::Leaf(Condition::Document {
-            path: JsonPointer::property("value"),
-            predicate: DocumentPredicate::String(StringPredicate {
-                operator: StringOperator::Equal,
-                value: expected.to_owned(),
-            }),
-        })
+    let condition = |expected: &str| Condition::Document {
+        path: JsonPointer::property("value"),
+        predicate: DocumentPredicate::String(StringPredicate {
+            operator: StringOperator::Equal,
+            value: expected.to_owned(),
+        }),
     };
     let definition = RuleDefinition::create(
         RuleDefinitionDraft {
-            name: "recursive OR insert append".into(),
+            name: "flat conditions insert append".into(),
             enabled: true,
             priority: 10,
             listener_id: listener.id,
@@ -71,7 +69,7 @@ async fn production_snapshot_compiles_recursive_or_with_insert_and_append() {
             one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: ConditionTree::Any(vec![condition("old"), condition("fallback")]),
+                conditions: vec![condition("old")],
                 actions: vec![
                     UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::property("items"),
@@ -87,9 +85,6 @@ async fn production_snapshot_compiles_recursive_or_with_insert_and_append() {
                         value: DocumentValue::String("last".into()),
                     }),
                 ],
-                document: Some(HttpDocumentRuleContent {
-                    package: phase10_package(),
-                }),
             }),
         },
         1,
@@ -123,8 +118,8 @@ async fn production_snapshot_compiles_recursive_or_with_insert_and_append() {
 #[tokio::test]
 async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentMutation, DocumentPredicate, HttpDocumentRuleContent,
-        RuleStage, StringOperator, StringPredicate, UnifiedAction,
+        Condition, DocumentMutation, DocumentPredicate, RuleStage, StringOperator, StringPredicate,
+        UnifiedAction,
     };
 
     let listener = phase10_listener();
@@ -138,32 +133,20 @@ async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
             one_shot: true,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: ConditionTree::All(vec![
-                    ConditionTree::Any(vec![
-                        ConditionTree::Leaf(Condition::Document {
-                            path: JsonPointer::property("value"),
-                            predicate: DocumentPredicate::String(StringPredicate {
-                                operator: StringOperator::Equal,
-                                value: "old".into(),
-                            }),
+                conditions: vec![
+                    Condition::Document {
+                        path: JsonPointer::property("value"),
+                        predicate: DocumentPredicate::String(StringPredicate {
+                            operator: StringOperator::Equal,
+                            value: "old".into(),
                         }),
-                        ConditionTree::Leaf(Condition::Document {
-                            path: JsonPointer::property("value"),
-                            predicate: DocumentPredicate::String(StringPredicate {
-                                operator: StringOperator::Equal,
-                                value: "fallback".into(),
-                            }),
-                        }),
-                    ]),
-                    ConditionTree::Leaf(Condition::NthHit { count: 2 }),
-                ]),
+                    },
+                    Condition::NthHit { count: 2 },
+                ],
                 actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property("value"),
                     value: DocumentValue::String("new".into()),
                 })],
-                document: Some(HttpDocumentRuleContent {
-                    package: phase10_package(),
-                }),
             }),
         },
         1,
@@ -320,7 +303,6 @@ pub(super) fn actor_pipeline(
         },
         repository,
         Arc::clone(&sessions),
-        Arc::new(intercept_proxy_application::BreakpointCoordinator::default()),
         Arc::new(intercept_proxy_application::EventHub::new(16)),
         Arc::new(CaptureRepositoryAdapter::new(sessions)),
     )
@@ -345,13 +327,13 @@ async fn production_snapshot_uses_shared_provider_for_both_directions_and_joint_
         RuleStage::ProxyToUpstream,
         1,
         "value",
-        vec![ConditionTree::Leaf(Condition::Document {
+        vec![Condition::Document {
             path: JsonPointer::property("value"),
             predicate: DocumentPredicate::String(StringPredicate {
                 operator: StringOperator::Equal,
                 value: "old".into(),
             }),
-        })],
+        }],
         "new",
     );
     let workspace = workspace_with_http_rules(&listener, vec![rule]);

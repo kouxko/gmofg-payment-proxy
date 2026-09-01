@@ -30,15 +30,15 @@ export function testListener(id: string, name: string, kind: "http" | "socket"):
 
 export const httpListener = testListener("http-listener", "HTTP Listener", "http");
 export const socketListener = testListener("socket-listener", "Socket Listener", "socket");
-export const httpCondition = { operator: "leaf" as const, children: { source: "http" as const, field: "RequestTarget" as const, operator: { Equals: "/" } } };
-export const documentCondition = (path = "/amount", value = 0) => ({ operator: "leaf" as const, children: { source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } } });
+export const httpCondition = { source: "http" as const, field: "RequestTarget" as const, operator: { Equals: "/" } };
+export const documentCondition = (path = "/amount", value = 0) => ({ source: "document" as const, path, predicate: { type: "number" as const, value: { operator: "equal" as const, value } } });
 const lifecycle = { hit_count: 0, last_hit_at: null };
 
 export function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
   return {
     rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
     created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", one_shot: false, lifecycle,
-    content: { type: "http", value: { description: "headers and body", condition: httpCondition, actions: [{ source: "record_match" }], document: null } },
+    content: { type: "http", value: { description: "headers and body", conditions: [httpCondition], actions: [{ source: "record_match" }] } },
     ...overrides,
   };
 }
@@ -47,7 +47,7 @@ export function socketRule(): RuleDefinition_Serialize {
   return {
     rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
     created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", one_shot: false, lifecycle,
-    content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), actions: [{ source: "record_match" }] } },
+    content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, conditions: [documentCondition()], actions: [{ source: "record_match" }] } },
   };
 }
 
@@ -93,7 +93,7 @@ export function withSecondHttpStage(
       ...stage,
       stage: "proxy_to_app",
       http: {
-        stage: "response",
+        stage: "proxy_to_app",
         match_fields: stage.http?.match_fields ?? [],
         actions: actionKinds.map((kind) => ({ kind, terminal: false, traffic_direction: null, parameters_required: true })),
       },

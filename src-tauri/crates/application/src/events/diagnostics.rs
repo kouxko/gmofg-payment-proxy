@@ -479,7 +479,6 @@ mod tests {
             matched_rule_ids: Vec::new(),
             request_size_bytes: 12,
             response_size_bytes: 24,
-            pending_breakpoint: false,
             revision: 1,
         });
         let entry = diagnostic_entry(&payload).expect("HTTP diagnostic event");

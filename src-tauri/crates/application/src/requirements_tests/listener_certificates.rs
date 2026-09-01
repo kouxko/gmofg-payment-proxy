@@ -280,8 +280,6 @@ async fn running_workspace_listener_blocks_configuration_save_and_delete() {
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -352,8 +350,6 @@ async fn running_workspace_listener_allows_saving_and_starting_a_stopped_listene
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -439,8 +435,6 @@ async fn running_workspace_listener_allows_device_network_profile_persistence() 
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),

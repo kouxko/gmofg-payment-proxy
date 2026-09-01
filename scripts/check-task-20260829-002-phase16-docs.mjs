@@ -8,6 +8,7 @@ const files = {
   architecture: "docs/architecture/rules-and-protocol-packages.md",
   dataFlow: "docs/architecture/data-flow.md",
   modules: "docs/architecture/modules.md",
+  security: "docs/architecture/security-and-persistence.md",
   user: "docs/user-operation-guide.md",
   onboarding: "docs/onboarding-guide.md",
   authoring: "templates/socket-protocol/AUTHORING.md",
@@ -119,6 +120,7 @@ const activeOwners = [
   "architecture",
   "dataFlow",
   "modules",
+  "security",
   "user",
   "onboarding",
   "authoring",
@@ -150,6 +152,8 @@ const forbidden = [
   ["上下行 hook、断线、重连、超时、限额", "invented hook timeout and limit"],
   ["调用顺序和超时预算", "invented hook timeout budget"],
   ["当前实现以 ADR-007 和源码为准", "obsolete ADR-007 current authority"],
+  ["TLS 握手规则", "removed TLS handshake rule guidance"],
+  ["RejectTlsHandshake", "removed TLS handshake rule action"],
 ];
 for (const owner of activeOwners) {
   for (const [token, label] of forbidden) {
@@ -161,9 +165,9 @@ if (sources.get("historicalTemplate").includes("权威设计模板")) {
   failures.push("historicalTemplate: still claims current authority");
 }
 const toolCount = [...sources.get("catalog").matchAll(/\btool\(\s*\n?\s*"([a-z0-9_]+)"/gu)].length;
-if (toolCount !== 36) failures.push(`catalog: expected 36 read tools, found ${toolCount}`);
+if (toolCount !== 34) failures.push(`catalog: expected 34 read tools, found ${toolCount}`);
 for (const owner of ["user", "onboarding", "dataFlow"]) {
-  if (!sources.get(owner).includes("36 个")) failures.push(`${owner}: missing current 36-read-tool count`);
+  if (!sources.get(owner).includes("34 个")) failures.push(`${owner}: missing current 34-read-tool count`);
 }
 
 if (failures.length > 0) {

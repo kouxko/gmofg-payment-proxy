@@ -294,7 +294,7 @@ fn capacity_trigger_does_not_reject_same_serial_upsert_when_full() {
 }
 
 #[test]
-fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
+fn version_twenty_singleton_schema_is_cleared_with_owner_data() {
     let directory = tempfile::tempdir().unwrap();
     let path = directory.path().join("legacy.sqlite");
     let legacy_epoch = Uuid::new_v4();
@@ -312,13 +312,7 @@ fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
         ))
         .unwrap();
     drop(connection);
-    let before = std::fs::read(&path).expect("read legacy owner database before rejection");
-
-    SqliteStore::open(&path).expect_err("version 20 owner schema must fail closed");
-    assert_eq!(
-        std::fs::read(&path).expect("read legacy owner database after rejection"),
-        before
-    );
+    drop(SqliteStore::open(&path).expect("version 20 owner schema must recreate current storage"));
 
     let connection = Connection::open(&path).unwrap();
     let version: i64 = connection
@@ -338,19 +332,8 @@ fn version_twenty_singleton_schema_is_rejected_without_modifying_owner_data() {
             |row| row.get(0),
         )
         .unwrap();
-    let legacy_owner: (String, String) = connection
-        .query_row(
-            "SELECT serial, epoch FROM android_runtime_owner WHERE singleton_id = 1",
-            [],
-            |row| Ok((row.get(0)?, row.get(1)?)),
-        )
-        .unwrap();
-    assert_eq!(version, 20);
-    assert!(legacy_table_exists);
-    assert_eq!(
-        legacy_owner,
-        ("LEGACY".to_owned(), legacy_epoch.to_string())
-    );
+    assert_eq!(version, 100);
+    assert!(!legacy_table_exists);
 }
 
 #[test]

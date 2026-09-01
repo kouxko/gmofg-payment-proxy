@@ -12,7 +12,7 @@ Intercept Proxy 是与具体业务应用无关的 HTTP/HTTPS/Socket 测试代理
 
 1. 统一代理监听；普通 HTTP 可按请求目标转发，也可转发到固定 Server。
 2. 固定 Server 的 TLS/mTLS，以及独立的 Socket 协议处理或透明转发。
-3. 每条监听可选固定 Server、TLS/mTLS、抓包、断点、规则和故障注入。
+3. 每条监听可选固定 Server、TLS/mTLS、抓包、规则和故障注入。
 4. Android Companion，通过 `VpnService` 只接管指定包名，在 TCP/IP 包层实施弱网。
 5. UI 无关的 Rust Host，可被桌面、自动化测试以及未来 TUI/CLI 复用。
 
@@ -210,7 +210,7 @@ Android 设备网络方案及其透明代理路由与弱网参数。
 - HTTP Basic 明文密码或系统密钥密文。
 - 完整抓包 Payload。
 - Android 设备 serial、ADB 转发端口、VPN 授权或运行状态。
-- 抓包、会话、断点、统计、运行任务或临时桌面/Android 网络端点。
+- 抓包、会话、统计、运行任务或临时桌面/Android 网络端点。
 
 导入必须先完成 schema、版本、结构引用完整性、内嵌材料大小/哈希/格式/用途校验和禁止字段扫描，
 全部通过后才原子替换。Rust 将内嵌 Listener 证书材料恢复到目标机器的受保护存储，并重写托管引用。任何导入失败都不得部分修改当前 Workspace、全局 Settings、当前选择或受保护证书存储。
@@ -225,19 +225,19 @@ Android 设备网络方案及其透明代理路由与弱网参数。
 - 后续若支持 CONNECT tunnel、MITM 或 Upgrade，必须通过新的 ADR、生命周期测试和安全边界评审，
   不能仅靠启用已有配置字段改变生产行为。
 
-## 6. 抓包、断点与规则
+## 6. 抓包与规则
 
 阶段：`Connection`、`HttpRequest`、`HttpResponse`。
 
 连接动作：延迟、拒绝、限速、间歇传输、指定字节后断开、half-close、空闲超时。
 
 HTTP 动作：Header 增删改、文本替换、JSONPath 修改、Mock、状态码、延迟、抖动、限速、
-错误 Content-Length、截断、断点和丢弃响应。
+错误 Content-Length、截断和丢弃响应。
 
 组合规则：
 
 - Rust 按优先级排序，同优先级按创建顺序。
-- 修改、延迟和暂停可以组合。
+- 修改和延迟可以组合。
 - Mock、拒绝、断开、丢弃和截断是终止动作。
 - 第 N 次命中计数范围由规则明确指定；默认按客户端身份与目标组合计数。
 - 规则关闭后重新启用或匹配条件变化时重置计数。
@@ -393,8 +393,6 @@ WorkspaceChanged
 ListenerStatusChanged
 CaptureRowsAdded
 SessionUpdated
-BreakpointQueued
-BreakpointResolved
 RuleHit
 CertificateStatusChanged
 AndroidDeviceChanged
@@ -469,7 +467,7 @@ CI/开发机必须提供一个只存在于 `test-support` 和 `androidTest` 的�
 | HTTP 请求目标/固定 Server | Listener 状态与抓包 | proxy | listener/status events | 100× HTTP + fixed Server |
 | CONNECT/Upgrade 边界 | Listener 状态与诊断 | proxy | listener/status events | 501 before Server/Exchange |
 | 固定 Server TLS/mTLS | 同一入口配置（Server 材料按入口导入） | proxy + infrastructure | `listener_*` | TLS matrix |
-| 规则与暂停处理 | 规则/全局暂停处理窗口/抓包详情 | application + proxy | rule/breakpoint | rule semantics |
+| 规则处理 | 规则/抓包详情 | application + proxy | rule | rule semantics |
 | Android 定向 VPN | Android 弱网页 | application + android-engine | `android_*`, `device_network_*` | scope gate |
 | 弱网 | Profile/实时统计 | android-engine | profile/status events | deterministic vectors |
 | 真实上游兼容 | 无默认业务 UI | generic fixed-server route | existing generic IPC | real-device report |

@@ -7,9 +7,9 @@ use std::{
 use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppResult, BreakpointCoordinator, EventHub, ExternalPackageApplicationPort,
-    InMemorySessionStore, ListenerRuntimePort, ListenerRuntimeState, ProtocolPackageUsageCount,
-    ProtocolPackageUsageQueryPort, ProtocolPackageUsageViewModel,
+    AppResult, EventHub, ExternalPackageApplicationPort, InMemorySessionStore, ListenerRuntimePort,
+    ListenerRuntimeState, ProtocolPackageUsageCount, ProtocolPackageUsageQueryPort,
+    ProtocolPackageUsageViewModel,
 };
 use intercept_proxy_domain::{
     ListenerDataPlane, ListenerId, ProtocolPackageRef, ProxyListener, ProxyWorkspace,
@@ -104,7 +104,6 @@ impl ExternalRuntimeHarness {
                 product: &product,
                 rules: Arc::new(RuleRepositoryAdapter::new(Arc::clone(&store))),
                 sessions: Arc::clone(&sessions),
-                breakpoints: Arc::new(BreakpointCoordinator::default()),
                 events: Arc::new(EventHub::new(16)),
                 capture: Arc::new(CaptureRepositoryAdapter::new(sessions)),
                 workspace_body_codecs: Arc::new(WorkspaceBodyCodecResolver::new()),

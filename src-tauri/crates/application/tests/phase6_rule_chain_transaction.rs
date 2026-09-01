@@ -10,7 +10,7 @@ use intercept_proxy_application::{
     RuleChainInput, RuleChainPlan, RuleChainPlanEntry, RuleChainTransaction, WorkingHttpMessage,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentMutation, DocumentValue, HttpAction, JsonPointer,
+    Condition, Document, DocumentMutation, DocumentValue, HttpAction, JsonPointer,
     NthCounterSnapshot, Revision, RuleId, RuleLifecycle, RuleLifecycleSnapshot, RuleProgramEntry,
     TerminalIdentity, UnifiedAction,
 };
@@ -76,15 +76,19 @@ impl RuleChainCommitPort for CommitPort {
     }
 }
 
-fn rule(priority: i32, condition: ConditionTree, actions: Vec<UnifiedAction>) -> RuleProgramEntry {
-    RuleProgramEntry::new(RuleId::new(), priority, 1, condition, actions).expect("rule")
+fn rule(
+    priority: i32,
+    conditions: Vec<Condition>,
+    actions: Vec<UnifiedAction>,
+) -> RuleProgramEntry {
+    RuleProgramEntry::new(RuleId::new(), priority, 1, conditions, actions).expect("rule")
 }
 
 #[tokio::test]
 async fn transaction_exposes_prior_mutations_only_after_single_commit() {
     let first = rule(
         1,
-        ConditionTree::Leaf(Condition::Document {
+        vec![Condition::Document {
             path: JsonPointer::parse("/state").unwrap(),
             predicate: intercept_proxy_domain::DocumentPredicate::String(
                 intercept_proxy_domain::StringPredicate {
@@ -92,7 +96,7 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
                     value: "before".into(),
                 },
             ),
-        }),
+        }],
         vec![
             UnifiedAction::Document(DocumentMutation::Set {
                 path: JsonPointer::parse("/state").unwrap(),
@@ -106,8 +110,8 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
     );
     let second = rule(
         2,
-        ConditionTree::all(vec![
-            ConditionTree::Leaf(Condition::Document {
+        vec![
+            Condition::Document {
                 path: JsonPointer::parse("/state").unwrap(),
                 predicate: intercept_proxy_domain::DocumentPredicate::String(
                     intercept_proxy_domain::StringPredicate {
@@ -115,13 +119,12 @@ async fn transaction_exposes_prior_mutations_only_after_single_commit() {
                         value: "after".into(),
                     },
                 ),
-            }),
-            ConditionTree::Leaf(Condition::Http {
+            },
+            Condition::Http {
                 field: intercept_proxy_domain::MatchField::RequestTarget,
                 operator: intercept_proxy_domain::MatchOperator::Equals("ignored".into()),
-            }),
-        ])
-        .unwrap(),
+            },
+        ],
         vec![UnifiedAction::RecordMatch],
     );
     let commit = Arc::new(CommitPort {
@@ -163,7 +166,7 @@ async fn commit_conflict_returns_no_partial_output_and_is_not_retried() {
         terminal: terminal_identity(),
         plan: RuleChainPlan::new(vec![plan_entry(rule(
             1,
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+            vec![Condition::NthHit { count: 1 }],
             vec![UnifiedAction::RecordMatch],
         ))])
         .unwrap(),
@@ -198,7 +201,7 @@ async fn commit_validation_failure_returns_no_partial_output_and_is_not_retried(
     let error = transaction
         .execute(single_input(rule(
             1,
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+            vec![Condition::NthHit { count: 1 }],
             vec![UnifiedAction::RecordMatch],
         )))
         .await
@@ -211,10 +214,10 @@ async fn commit_validation_failure_returns_no_partial_output_and_is_not_retried(
 #[tokio::test]
 async fn condition_action_encode_and_cancel_fail_before_commit() {
     let http_condition = || {
-        ConditionTree::Leaf(Condition::Http {
+        vec![Condition::Http {
             field: intercept_proxy_domain::MatchField::RequestTarget,
             operator: intercept_proxy_domain::MatchOperator::Equals("x".into()),
-        })
+        }]
     };
     let http_action = || {
         vec![UnifiedAction::Http(HttpAction::SetHeader {
@@ -238,7 +241,7 @@ async fn condition_action_encode_and_cancel_fail_before_commit() {
                 ..HttpPort::default()
             },
             "RULE_INVALID",
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+            vec![Condition::NthHit { count: 1 }],
             http_action(),
         ),
         (
@@ -247,7 +250,7 @@ async fn condition_action_encode_and_cancel_fail_before_commit() {
                 ..HttpPort::default()
             },
             "BODY_ENCODE_FAILED",
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+            vec![Condition::NthHit { count: 1 }],
             vec![UnifiedAction::RecordMatch],
         ),
     ] {
@@ -277,7 +280,7 @@ async fn condition_action_encode_and_cancel_fail_before_commit() {
         .execute_cancellable(
             single_input(rule(
                 1,
-                ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+                vec![Condition::NthHit { count: 1 }],
                 vec![UnifiedAction::RecordMatch],
             )),
             &cancellation,
@@ -320,7 +323,7 @@ async fn concurrent_same_revision_has_one_winner_and_one_single_conflict() {
     let make = || {
         let mut input = single_input(rule(
             1,
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+            vec![Condition::NthHit { count: 1 }],
             vec![UnifiedAction::RecordMatch],
         ));
         input.expected_collection_revision = 4;
@@ -344,17 +347,17 @@ async fn terminal_is_pending_until_commit_and_stops_lower_rules() {
     let terminal = intercept_proxy_domain::TerminalAction::DisconnectBeforeUpstream;
     let mut input = single_input(rule(
         1,
-        ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+        vec![Condition::NthHit { count: 1 }],
         vec![UnifiedAction::Terminal(terminal.clone())],
     ));
     let second = plan_entry(rule(
         2,
-        ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+        vec![Condition::NthHit { count: 1 }],
         vec![UnifiedAction::RecordMatch],
     ));
     let first = plan_entry(rule(
         1,
-        ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+        vec![Condition::NthHit { count: 1 }],
         vec![UnifiedAction::Terminal(terminal.clone())],
     ));
     input.plan = RuleChainPlan::new(vec![first, second]).unwrap();

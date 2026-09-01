@@ -1,8 +1,6 @@
 use std::sync::Arc;
 
-use intercept_proxy_application::{
-    BreakpointBodyCodecResolver, MessageContentKind, MessageContentViewModel,
-};
+use intercept_proxy_application::MessageContentKind;
 use intercept_proxy_domain::BodyCodecKind;
 use intercept_proxy_product_api::{BodyCodec, ProductError};
 use intercept_proxy_runtime::Message;
@@ -62,26 +60,6 @@ pub(crate) fn decode_message_body(
     match body_codec.decode(&message.body) {
         Ok(text) => (metadata, Some(text), codec_id, None),
         Err(error) => (metadata, None, codec_id, Some(error.message)),
-    }
-}
-
-#[derive(Debug, Default)]
-pub struct HeaderBodyCodecResolver;
-
-impl BreakpointBodyCodecResolver for HeaderBodyCodecResolver {
-    fn resolve(&self, message: &MessageContentViewModel) -> Arc<dyn BodyCodec> {
-        let content_type = message.headers.iter().find_map(|(name, values)| {
-            name.eq_ignore_ascii_case("content-type")
-                .then(|| values.first())
-                .flatten()
-                .map(String::as_str)
-        });
-        match message.codec_id.as_deref() {
-            Some("utf-8" | "utf8") => Arc::new(Utf8BodyCodec),
-            Some("shift-jis" | "shift_jis") => Arc::new(ShiftJisBodyCodec),
-            Some("raw") => Arc::new(RawBodyCodec),
-            _ => automatic_codec_for_metadata(&parse_content_type(content_type)),
-        }
     }
 }
 

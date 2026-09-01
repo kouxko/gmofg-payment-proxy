@@ -15,6 +15,7 @@
 
 ## 待实现任务
 
+- [TASK-20260829-002：嵌套 Document、扁平规则条件与统一 JavaScript WebSocket 协议包](tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md)
 - [TASK-20260829-001：建立数据库版本 100 的 1.00 正式兼容基线](tasks/pending/2026-08-29/establish-database-version-100-baseline.md)
 
 ## 架构

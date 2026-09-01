@@ -7,9 +7,7 @@
 use std::{cmp::Ordering, collections::HashSet};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
-use intercept_proxy_domain::{
-    ListenerDataPlane, ProtocolPackageRef, ProxyWorkspace, SocketPayloadProcessing,
-};
+use intercept_proxy_domain::{ProtocolPackageRef, ProxyWorkspace};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
@@ -179,32 +177,12 @@ pub(crate) fn validate_configuration_package_references<T: PortablePackageEntry>
 }
 
 fn referenced_packages(workspaces: &[ProxyWorkspace]) -> HashSet<ProtocolPackageRef> {
-    let listeners = workspaces.iter().flat_map(|workspace| {
-        workspace.listeners.iter().filter_map(|listener| {
-            let ListenerDataPlane::Socket(socket) = &listener.data_plane else {
-                return None;
-            };
-            let SocketPayloadProcessing::Scripted(scripted) = &socket.processing else {
-                return None;
-            };
-            Some(scripted.package.clone())
-        })
-    });
-    let rules = workspaces.iter().flat_map(|workspace| {
-        workspace
-            .rule_definitions
-            .iter()
-            .filter_map(|rule| match rule.content() {
-                intercept_proxy_domain::RuleContent::Http(content) => content
-                    .document
-                    .as_ref()
-                    .map(|document| document.package.clone()),
-                intercept_proxy_domain::RuleContent::Socket(content) => {
-                    Some(content.package.clone())
-                }
-            })
-    });
-    listeners.chain(rules).collect()
+    workspaces
+        .iter()
+        .flat_map(|workspace| workspace.listeners.iter())
+        .filter_map(crate::listener_protocol_package)
+        .cloned()
+        .collect()
 }
 
 fn invalid(message: impl Into<String>) -> AppError {

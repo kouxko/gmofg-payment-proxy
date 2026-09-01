@@ -1,7 +1,7 @@
 use super::{
     AppError, AppMessageStage, CapturePublication, CaptureRowViewModel, ConnectionContext,
-    DisabledReason, Ordering, ProxyResult, RuntimePipelineAdapter, SessionRecord, SessionStore,
-    UiEventPayload, UiTone, Utc, result_text, result_tone,
+    Ordering, ProxyResult, RuntimePipelineAdapter, SessionRecord, SessionStore, UiEventPayload,
+    UiTone, Utc, result_text, result_tone,
 };
 
 impl RuntimePipelineAdapter {
@@ -33,7 +33,6 @@ impl RuntimePipelineAdapter {
             let summary = &mut record.detail.summary;
             summary.completed_at = Some(now);
             summary.duration_ms = Some(duration_ms);
-            summary.pending_breakpoint = false;
             summary.revision = summary.revision.saturating_add(1);
             match result {
                 Ok(()) => {
@@ -54,7 +53,6 @@ impl RuntimePipelineAdapter {
             }
         }
         record.detail.timings_ms.insert("total".into(), duration_ms);
-        record.breakpoint_draft = None;
         let summary = record.detail.summary.clone();
         if let Err(error) = self.sessions.upsert(record.clone()) {
             self.resource_exhausted(context, &error);
@@ -74,7 +72,6 @@ impl RuntimePipelineAdapter {
                 stage: AppMessageStage::Terminal,
                 result: &summary.result,
                 tone: summary.ui_tone,
-                breakpoint_id: None,
                 size_bytes: summary
                     .request_size_bytes
                     .saturating_add(summary.response_size_bytes),
@@ -111,14 +108,6 @@ impl RuntimePipelineAdapter {
             duration_ms: summary.duration_ms,
             matched_rule_ids: summary.matched_rule_ids.clone(),
             size_bytes: publication.size_bytes,
-            breakpoint_id: publication.breakpoint_id,
-            can_go_to_breakpoint: publication.breakpoint_id.is_some(),
-            breakpoint_disabled_reason: publication.breakpoint_id.is_none().then(|| {
-                DisabledReason {
-                    code: "BREAKPOINT_NOT_PENDING".into(),
-                    message: "该事件没有待处理断点。".into(),
-                }
-            }),
         };
         self.captures
             .push_for_epoch(row.clone(), context.runtime_epoch);

@@ -45,7 +45,6 @@ describe("page-specific usage guides", () => {
 
     expect(listenerGuide).toContain("HTTP 或 Socket");
     expect(listenerGuide).not.toContain("运行监控");
-    expect(listenerGuide).not.toContain("断点实验台");
   });
 
   it("documents the native and non-mutating protocol-package import boundary", () => {

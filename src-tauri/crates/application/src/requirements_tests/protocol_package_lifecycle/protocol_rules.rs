@@ -11,11 +11,11 @@ fn field(name: &str) -> JsonPointer {
     JsonPointer::property(name)
 }
 
-fn equals(name: &str, value: DocumentValue) -> ConditionTree {
-    ConditionTree::Leaf(Condition::Document {
+fn equals(name: &str, value: DocumentValue) -> Condition {
+    Condition::Document {
         path: field(name),
         predicate: document_equals_predicate(value),
-    })
+    }
 }
 
 fn set(name: &str, value: DocumentValue) -> UnifiedAction {

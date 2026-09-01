@@ -1,7 +1,7 @@
 //! 代理传输运行时与应用/领域服务之间的生产桥接层。
 //!
 //! 只有本模块同时理解“保留原始字节的代理消息”和应用/领域模型：请求按固定阶段经过抓包、
-//! 断点、规则匹配和动作执行。每个 epoch 使用快照隔离；锁只包围共享元数据，不跨网络
+//! 规则匹配和动作执行。每个 epoch 使用快照隔离；锁只包围共享元数据，不跨网络
 //! `await` 长时间持有。Tauri 只装配本适配器，不执行 pipeline 策略。
 
 use std::{
@@ -10,29 +10,25 @@ use std::{
         Arc,
         atomic::{AtomicU64, Ordering},
     },
-    time::Duration,
 };
 
 use async_trait::async_trait;
-use bytes::Bytes;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
-    AppError, AppResult, BreakpointCoordinator, BreakpointDecision, BreakpointDecisionKind,
-    BreakpointDetailViewModel, BreakpointOutcome, BreakpointState, BreakpointSummaryViewModel,
-    CaptureRowViewModel, ChannelId as AppChannelId, DisabledReason, EventHub, InMemorySessionStore,
-    MessageContentViewModel, MessageStage as AppMessageStage, SessionDetailViewModel,
-    SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
+    AppError, AppResult, CaptureRowViewModel, ChannelId as AppChannelId, EventHub,
+    InMemorySessionStore, MessageStage as AppMessageStage, SessionDetailViewModel, SessionRecord,
+    SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
 };
 use intercept_proxy_domain::{
-    ChannelId as DomainChannelId, HttpAction, MessageStage as DomainMessageStage,
-    RuleLifecycleDelta, RuleRuntimeSnapshot, RuntimeEpoch, TerminalAction,
+    ChannelId as DomainChannelId, MessageStage as DomainMessageStage, RuleLifecycleDelta,
+    RuleRuntimeSnapshot, RuntimeEpoch,
 };
 use intercept_proxy_product_api::{BodyCodec, RequestClassifier};
 use intercept_proxy_runtime::http::HttpRequestMetadata;
 use intercept_proxy_runtime::{
     ChannelId, ChannelRuntimeMetrics, ConnectionContext, ErrorCode, FaultAction, HandshakePolicy,
     Message, PipelinePorts, ProxyError, Result as ProxyResult, RuntimeMetricsProvider,
-    RuntimeMetricsSnapshot, TlsPeerIdentity, UpstreamSecurityEvidence,
+    RuntimeMetricsSnapshot, UpstreamSecurityEvidence,
     fault::{mock_response, project_response_for_observation},
 };
 use parking_lot::Mutex;
@@ -40,29 +36,18 @@ use uuid::Uuid;
 
 use super::listener_runtime::{JointDocumentEvaluation, JointHttpRuleRuntime};
 use super::{CaptureRepositoryAdapter, RuleRepositoryAdapter};
-use message_projection::{
-    breakpoint_content_view, classify_request, content_view, decode_json, encode_body,
-    header_value, message_method, message_target, proxy_message,
-};
 #[cfg(test)]
-use message_projection::{decode_body, display_headers, merge_edited_headers};
+use message_projection::decode_body;
+use message_projection::{
+    classify_request, content_view, decode_json, encode_body, header_value, message_method,
+    message_target,
+};
 use rule_runtime::{EvaluatedRules, RuleRuntimeService};
 
 mod message_projection;
 pub(super) mod rule_actions;
 mod rule_runtime;
 mod upstream_security;
-
-macro_rules! proxy_status {
-    ($status:expr) => {
-        $status.try_into().map_err(|error| {
-            ProxyError::new(
-                ErrorCode::ConfigInvalid,
-                format!("invalid HTTP status: {error}"),
-            )
-        })
-    };
-}
 
 /// One adapter instance is shared by both listeners for the lifetime of the app.
 #[async_trait]
@@ -124,7 +109,6 @@ pub struct RuntimePipelineAdapter {
     request_classifier: Arc<dyn RequestClassifier>,
     channel_labels: BTreeMap<String, String>,
     sessions: Arc<InMemorySessionStore>,
-    breakpoints: Arc<BreakpointCoordinator>,
     events: Arc<EventHub>,
     captures: Arc<CaptureRepositoryAdapter>,
     capture_cursor: AtomicU64,
@@ -179,7 +163,6 @@ impl PipelineState {
 struct ConnectionRuntime {
     channel: ChannelId,
     session_id: Option<Uuid>,
-    pending_breakpoints: Vec<Uuid>,
 }
 
 #[derive(Debug, Clone)]
@@ -193,11 +176,9 @@ struct CapturePublication<'a> {
     stage: AppMessageStage,
     result: &'a str,
     tone: UiTone,
-    breakpoint_id: Option<Uuid>,
     size_bytes: u64,
 }
 
-mod breakpoints;
 mod completion;
 mod core;
 mod mapping;
@@ -206,10 +187,7 @@ mod ports;
 mod session;
 
 pub(crate) use mapping::app_to_proxy;
-use mapping::{
-    app_channel, apply_breakpoint_decision, breakpoint_detail, domain_channel, fingerprint,
-    result_text, result_tone, tls_summary,
-};
+use mapping::{app_channel, domain_channel, fingerprint, result_text, result_tone, tls_summary};
 
 #[cfg(test)]
 #[path = "pipeline/tests.rs"]

@@ -1,0 +1,10 @@
+{
+  "method": "POST",
+  "path": "/final-layout-smoke?case=age18",
+  "headers": {
+    "host": "127.0.0.1:18083",
+    "content-type": "application/json",
+    "content-length": "23"
+  },
+  "body": "{\"customer\":{\"age\":18}}"
+}

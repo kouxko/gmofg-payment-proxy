@@ -12,7 +12,7 @@
 3. HTTP 与 Socket 可以共享 Exchange、Pipeline、规则列表和抓包界面，但不能混淆各自的协议语义。
 4. “代码编译通过”“端口正在监听”“外部包在线”和“真实交易成功”是不同层级的结论，必须分别验证。
 
-项目当前支持 HTTP/HTTPS、Socket TCP/TLS/mTLS、协议包、规则、断点、故障注入、Android 按应用透明
+项目当前支持 HTTP/HTTPS、Socket TCP/TLS/mTLS、协议包、规则、故障注入、Android 按应用透明
 路由、运行观测、MCP 查询/环境配置和应用级导入导出。当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket
 tunnel 和 CONNECT MITM；`/packages` 是协议包控制面，不是被代理的 WebSocket tunnel。完整边界以
 [需求与验收基线](requirements.md)为准。
@@ -32,7 +32,7 @@ flowchart TB
     INFRA --> RUNTIME[HTTP Socket TLS Runtime]
     RUNTIME --> EXCHANGE[Exchange 和 Pipeline]
     INFRA --> SCRIPT[内置或外部协议包]
-    DESKTOP --> MCP[36 个查询 + 5 个环境工具]
+    DESKTOP --> MCP[34 个查询 + 5 个环境工具]
     INFRA --> ANDROID[ADB 和 Android Companion]
     ANDROID --> TARGET[目标 Android App]
 ```
@@ -91,7 +91,7 @@ Encode 或 transport 失败要 fail-closed，结束当前 Exchange。
 | Envelope | 原始字节、Document 和协议上下文的单次处理载体 | `crates/exchange` |
 | Document | 协议包解析出的递归 JSON tree | `domain/document` |
 | HTTP 标准规则 | Header、Body、状态、延迟、断开等 HTTP 阶段动作 | `domain/rule` |
-| 统一规则 | `RuleDefinition` 的递归 `ConditionTree` 与有序 `UnifiedAction` | `domain/unified_rule` |
+| 统一规则 | `RuleDefinition` 的非空扁平 `conditions`（固定 AND）与有序 `UnifiedAction` | `domain/unified_rule` |
 | 协议包 | 提供 Frame、Decode、Encode、Display 能力的精确版本包 | package API 1 / external Sidecar |
 | LocalResponder | 使用同一 Server 接口的本地响应端，不是旁路流程 | `exchange/local_server` |
 | Observation | 面向抓包 UI 的有界内存 Exchange 事件 | Infrastructure store |
@@ -244,7 +244,7 @@ MCP 以明文 Streamable HTTP 监听 `0.0.0.0:17653`，并在平台支持时监�
 Host、Origin、Authorization、API key、Cookie、来源 IP 或 CIDR；任何网络可达方都能调用工具，
 传输中的私钥、密码和 confirmation token 也可能被网络观察者读取。
 
-原有 36 个工具继续只读调用 Application 查询 facade；ExchangeObservation 查询通过 Application 的
+现有 34 个工具继续只读调用 Application 查询 facade；ExchangeObservation 查询通过 Application 的
 `ExchangeObservationQueries` port facade，只有 composition root 会把 Infrastructure `ExchangeObservationStore`
 注入该 port。运行日志继续使用其专用只读边界。五个环境配置工具提供 capabilities、create、status、
 cancel、apply：create 完成分层验证并返回完整预览和一次性 token，
@@ -480,7 +480,7 @@ production build、品牌检查、Rust fmt/clippy、Windows Rust 检查和 Cargo
 
 ### 11.2 App 测试
 
-真实 App 回归至少覆盖：App 启动、MCP 36 个查询与五个环境工具合同、HTTP Fixed Server、
+真实 App 回归至少覆盖：App 启动、MCP 34 个查询与五个环境工具合同、HTTP Fixed Server、
 Socket Direct、Socket Scripted、不完整 Frame、成功/失败抓包、本地 Boa Sidecar、远端 package API 1，
 以及外部包断线重连不自动恢复 Listener。未执行的人机、真实设备或外部网络项必须记录为 `NOT_RUN`，
 不能用模块测试代替。

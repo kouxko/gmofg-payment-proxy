@@ -138,7 +138,7 @@ downstream Rules -> ProxyToApp working-state transaction
 协议包只处理 UTF-8 Body；`HttpContext.header` 由 Encode 原样保留，新的 Body 必须仍是
 UTF-8。未绑定协议包时，Plan 必须显式创建 `PlainHttpCapabilityFactory`，不能把
 `PipelinePorts` 或旧组合 processor 当作 Decode。`PipelinePorts::apply_request_policy` 与
-`apply_response_policy` 只保留产品级 HTTP wire mutation、breakpoint、session、capture 和
+`apply_response_policy` 只保留产品级 HTTP wire mutation、session、capture 和
 fault-action 职责，不执行协议包，也不承担 Exchange UI 观测。
 
 Wire policy 必须在该方向 Reader 创建 `HttpContext` 之前且仅执行一次；这样它的 Message

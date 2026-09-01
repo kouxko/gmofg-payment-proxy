@@ -1,12 +1,11 @@
 use super::*;
 
 #[tokio::test]
-async fn unified_or_wildcard_insert_append_rules_pass_portable_binding_preflight() {
+async fn unified_flat_wildcard_insert_append_rules_pass_portable_binding_preflight() {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentMatchPath, DocumentMutation, DocumentNumber,
-        DocumentPredicate, DocumentValue, JsonPointer, NumberOperator, NumberPredicate,
-        RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage, SocketRuleContent,
-        UnifiedAction,
+        Condition, DocumentMatchPath, DocumentMutation, DocumentNumber, DocumentPredicate,
+        DocumentValue, JsonPointer, NumberOperator, NumberPredicate, RuleContent, RuleDefinition,
+        RuleDefinitionDraft, RuleStage, SocketRuleContent, UnifiedAction,
     };
 
     let (application, portability, _, _) = prepared_application();
@@ -24,23 +23,23 @@ async fn unified_or_wildcard_insert_append_rules_pass_portable_binding_preflight
                 one_shot: false,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: package.clone(),
-                    condition: ConditionTree::Any(vec![
-                        ConditionTree::Leaf(Condition::DocumentPattern {
+                    conditions: vec![
+                        Condition::DocumentPattern {
                             path: DocumentMatchPath::parse("/raw/*").unwrap(),
                             predicate: DocumentPredicate::Number(NumberPredicate {
                                 operator: NumberOperator::Equal,
                                 value: DocumentNumber::new(7.0).unwrap(),
                             }),
-                        }),
-                        ConditionTree::Leaf(Condition::NthHit { count: 2 }),
-                        ConditionTree::Leaf(Condition::Document {
+                        },
+                        Condition::NthHit { count: 2 },
+                        Condition::Document {
                             path: JsonPointer::property("amount"),
                             predicate: DocumentPredicate::Number(NumberPredicate {
                                 operator: NumberOperator::Equal,
                                 value: DocumentNumber::new(1234.0).unwrap(),
                             }),
-                        }),
-                    ]),
+                        },
+                    ],
                     actions: vec![
                         UnifiedAction::Document(DocumentMutation::Insert {
                             path: JsonPointer::property("raw"),

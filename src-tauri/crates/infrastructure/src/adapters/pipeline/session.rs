@@ -1,9 +1,9 @@
 use super::{
     BTreeMap, BodyCodec, ConnectionContext, ErrorCode, EvaluatedRules, LiveSession, Message,
-    MessageContentViewModel, ProxyError, ProxyResult, RuntimeEpoch, RuntimePipelineAdapter,
-    SessionDetailViewModel, SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload,
-    UiTone, Utc, Uuid, app_channel, app_to_proxy, classify_request, content_view, fingerprint,
-    header_value, message_method, message_target, tls_summary,
+    ProxyError, ProxyResult, RuntimeEpoch, RuntimePipelineAdapter, SessionDetailViewModel,
+    SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone, Utc, Uuid,
+    app_channel, app_to_proxy, classify_request, content_view, fingerprint, header_value,
+    message_method, message_target, tls_summary,
 };
 
 impl RuntimePipelineAdapter {
@@ -64,7 +64,6 @@ impl RuntimePipelineAdapter {
             matched_rule_ids: Vec::new(),
             request_size_bytes: original.body.len() as u64,
             response_size_bytes: 0,
-            pending_breakpoint: false,
             revision: 1,
         };
         let detail = SessionDetailViewModel {
@@ -81,10 +80,7 @@ impl RuntimePipelineAdapter {
             response: None,
             rule_trace: Vec::new(),
         };
-        let record = SessionRecord {
-            detail,
-            breakpoint_draft: None,
-        };
+        let record = SessionRecord { detail };
         if let Err(error) = self.sessions.upsert(record.clone()) {
             self.resource_exhausted(context, &error);
             return Err(app_to_proxy(error));
@@ -113,29 +109,17 @@ impl RuntimePipelineAdapter {
         context: &ConnectionContext,
         effective: &Message,
         rules: &EvaluatedRules,
-        pending_breakpoint: bool,
-        breakpoint_draft: Option<MessageContentViewModel>,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
         self.update_live_session(context, move |record| {
             let summary = &mut record.detail.summary;
             summary.matched_rule_ids.clone_from(&rules.matched_ids);
             summary.request_size_bytes = effective.body.len() as u64;
-            summary.pending_breakpoint = pending_breakpoint;
-            summary.result = if pending_breakpoint {
-                "断点等待".into()
-            } else {
-                "请求已处理".into()
-            };
-            summary.ui_tone = if pending_breakpoint {
-                UiTone::Warning
-            } else {
-                UiTone::Info
-            };
+            summary.result = "请求已处理".into();
+            summary.ui_tone = UiTone::Info;
             summary.revision = summary.revision.saturating_add(1);
             record.detail.request = Some(content_view(body_codec, effective));
             record.detail.rule_trace.clone_from(&rules.traces);
-            record.breakpoint_draft = breakpoint_draft;
         })
     }
 
@@ -144,8 +128,6 @@ impl RuntimePipelineAdapter {
         context: &ConnectionContext,
         effective: &Message,
         rules: &EvaluatedRules,
-        pending_breakpoint: bool,
-        breakpoint_draft: Option<MessageContentViewModel>,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
         self.update_live_session(context, move |record| {
@@ -157,21 +139,11 @@ impl RuntimePipelineAdapter {
             }
             summary.response_size_bytes = effective.body.len() as u64;
             summary.http_status = effective.http_status();
-            summary.pending_breakpoint = pending_breakpoint;
-            summary.result = if pending_breakpoint {
-                "断点等待".into()
-            } else {
-                "响应已处理".into()
-            };
-            summary.ui_tone = if pending_breakpoint {
-                UiTone::Warning
-            } else {
-                UiTone::Info
-            };
+            summary.result = "响应已处理".into();
+            summary.ui_tone = UiTone::Info;
             summary.revision = summary.revision.saturating_add(1);
             record.detail.response = Some(content_view(body_codec, effective));
             record.detail.rule_trace.extend(rules.traces.clone());
-            record.breakpoint_draft = breakpoint_draft;
         })
     }
 
@@ -189,13 +161,11 @@ impl RuntimePipelineAdapter {
             }
             summary.response_size_bytes = 0;
             summary.http_status = None;
-            summary.pending_breakpoint = false;
             summary.result = "响应已丢弃".into();
             summary.ui_tone = UiTone::Danger;
             summary.revision = summary.revision.saturating_add(1);
             record.detail.response = None;
             record.detail.rule_trace.extend(rules.traces.clone());
-            record.breakpoint_draft = None;
         })
     }
 

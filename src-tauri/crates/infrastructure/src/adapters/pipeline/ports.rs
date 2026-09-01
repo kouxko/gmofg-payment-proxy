@@ -20,16 +20,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
     }
 
     async fn runtime_stopping(&self, epoch: Uuid) {
-        let resolved = self.breakpoints.proxy_stopped(epoch);
-        for summary in resolved {
-            self.events.publish(
-                Some(epoch),
-                Utc::now(),
-                Some(summary.breakpoint_id.to_string()),
-                Some(summary.revision),
-                UiEventPayload::BreakpointResolved(summary),
-            );
-        }
         self.rule_runtime.runtime_stopping(epoch).await;
         let epoch = RuntimeEpoch::from_uuid(epoch);
         let mut state = self.state.lock();
@@ -48,7 +38,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
             ConnectionRuntime {
                 channel: context.channel.clone(),
                 session_id: None,
-                pending_breakpoints: Vec::new(),
             },
         );
         let metrics = state
@@ -119,8 +108,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
         let body_codec = self.codec_for(context, DomainMessageStage::Request, message)?;
-        let original = message.clone();
-        self.begin_session(context, &original, body_codec.as_ref())?;
+        self.begin_session(context, message, body_codec.as_ref())?;
         let evaluated = self
             .evaluate(
                 context,
@@ -134,43 +122,20 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .prepared_message
             .clone()
             .expect("request evaluation returns a prepared message");
-        let mut actions = evaluated.fault_actions.clone();
-        let pause = evaluated.pause;
+        let actions = evaluated.fault_actions.clone();
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
-        if pause {
-            actions.extend(
-                self.pause(
-                    context,
-                    AppMessageStage::Request,
-                    &original,
-                    message,
-                    &evaluated,
-                    body_codec.as_ref(),
-                )
-                .await?,
-            );
-        } else {
-            let record = self.update_request(
-                context,
-                message,
-                &evaluated,
-                false,
-                None,
-                body_codec.as_ref(),
-            )?;
-            self.publish_capture(
-                context,
-                &record,
-                CapturePublication {
-                    stage: AppMessageStage::Request,
-                    result: "请求",
-                    tone: UiTone::Info,
-                    breakpoint_id: None,
-                    size_bytes: message.body.len() as u64,
-                },
-            );
-        }
+        let record = self.update_request(context, message, &evaluated, body_codec.as_ref())?;
+        self.publish_capture(
+            context,
+            &record,
+            CapturePublication {
+                stage: AppMessageStage::Request,
+                result: "请求",
+                tone: UiTone::Info,
+                size_bytes: message.body.len() as u64,
+            },
+        );
         if let Some(FaultAction::MockResponse {
             status,
             headers,
@@ -181,14 +146,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
         {
             let mock = mock_response(*status, headers, body.clone());
             let response_codec = self.codec_for(context, DomainMessageStage::Response, &mock)?;
-            let record = self.update_response(
-                context,
-                &mock,
-                &evaluated,
-                false,
-                None,
-                response_codec.as_ref(),
-            )?;
+            let record =
+                self.update_response(context, &mock, &evaluated, response_codec.as_ref())?;
             self.publish_capture(
                 context,
                 &record,
@@ -196,7 +155,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     stage: AppMessageStage::Response,
                     result: "Mock 响应",
                     tone: UiTone::Warning,
-                    breakpoint_id: None,
                     size_bytes: mock.body.len() as u64,
                 },
             );
@@ -218,7 +176,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 metrics.last_upstream_error = None;
             }
         }
-        let original = message.clone();
         let evaluated = self
             .evaluate(
                 context,
@@ -232,32 +189,12 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .prepared_message
             .clone()
             .expect("response evaluation returns a prepared message");
-        let mut actions = evaluated.fault_actions.clone();
-        let pause = evaluated.pause;
+        let actions = evaluated.fault_actions.clone();
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
-        if pause {
-            actions.extend(
-                self.pause(
-                    context,
-                    AppMessageStage::Response,
-                    &original,
-                    message,
-                    &evaluated,
-                    body_codec.as_ref(),
-                )
-                .await?,
-            );
-        }
         if let Some(observed) = project_response_for_observation(message.clone(), &actions)? {
-            let record = self.update_response(
-                context,
-                &observed,
-                &evaluated,
-                false,
-                None,
-                body_codec.as_ref(),
-            )?;
+            let record =
+                self.update_response(context, &observed, &evaluated, body_codec.as_ref())?;
             self.publish_capture(
                 context,
                 &record,
@@ -265,7 +202,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     stage: AppMessageStage::Response,
                     result: "响应",
                     tone: UiTone::Info,
-                    breakpoint_id: None,
                     size_bytes: observed.body.len() as u64,
                 },
             );
@@ -278,7 +214,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
                     stage: AppMessageStage::Response,
                     result: "响应已丢弃",
                     tone: UiTone::Danger,
-                    breakpoint_id: None,
                     size_bytes: 0,
                 },
             );
@@ -316,15 +251,6 @@ impl PipelinePorts for RuntimePipelineAdapter {
     }
 
     async fn connection_closed(&self, context: &ConnectionContext, result: &ProxyResult<()>) {
-        for summary in self.terminate_connection_breakpoints(context) {
-            self.events.publish(
-                Some(context.runtime_epoch),
-                Utc::now(),
-                Some(summary.breakpoint_id.to_string()),
-                Some(summary.revision),
-                UiEventPayload::BreakpointResolved(summary),
-            );
-        }
         {
             // Update health metrics before SessionUpdated is published so a UI
             // refresh triggered by that event observes the new global state.
@@ -390,6 +316,13 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 AppError::new(error.code, error.message.clone()).into(),
             ),
         );
+    }
+}
+
+#[async_trait]
+impl super::HandshakePolicy for RuntimePipelineAdapter {
+    async fn prepare_tls_handshake(&self, context: &ConnectionContext) -> ProxyResult<()> {
+        self.rule_runtime.prepare_epoch(context.runtime_epoch)
     }
 }
 

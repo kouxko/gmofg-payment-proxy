@@ -15,7 +15,6 @@ use intercept_proxy_runtime::{
 use super::pipeline::RuntimeBodyCodecResolver;
 
 mod content_type;
-pub use content_type::HeaderBodyCodecResolver;
 pub(crate) use content_type::decode_message_body;
 pub(crate) use content_type::resolve_message_codec;
 
@@ -222,16 +221,12 @@ impl BodyCodec for ShiftJisBodyCodec {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::BTreeMap, net::SocketAddr, time::SystemTime};
-
-    use intercept_proxy_application::{
-        BreakpointBodyCodecResolver, MessageContentKind, MessageContentViewModel,
-    };
     use intercept_proxy_domain::{
         BodyCodecKind, HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener,
         ProxyWorkspace,
     };
     use intercept_proxy_runtime::ChannelId;
+    use std::{net::SocketAddr, time::SystemTime};
     use uuid::Uuid;
 
     use super::*;
@@ -331,70 +326,6 @@ mod tests {
         let utf8 = resolve_message_codec(BodyCodecKind::Utf8, &shift_jis_message);
         assert_eq!(utf8.id(), "utf-8");
         assert_eq!(utf8.decode("成功".as_bytes()).unwrap(), "成功");
-    }
-
-    #[test]
-    fn breakpoint_resolver_uses_edited_content_type_instead_of_stale_codec_id() {
-        let resolver = HeaderBodyCodecResolver;
-        let message = MessageContentViewModel {
-            http_status: None,
-            start_line_bytes: b"POST / HTTP/1.1".to_vec(),
-            raw_headers: Vec::new(),
-            headers: BTreeMap::from([(
-                "Content-Type".into(),
-                vec!["application/json; charset=windows-31j".into()],
-            )]),
-            body_text: Some(r#"{"result":"成功"}"#.into()),
-            body_bytes: Vec::new(),
-            json: None,
-            content_length: 0,
-            media_type: Some("application/json".into()),
-            charset: Some("utf-8".into()),
-            content_kind: MessageContentKind::Json,
-            codec_id: Some("auto:utf-8".into()),
-            decode_error: None,
-            query_string: None,
-            protocol: None,
-            protocol_failure: None,
-        };
-
-        let codec = resolver.resolve(&message);
-        let encoded = codec.encode(message.body_text.as_deref().unwrap()).unwrap();
-
-        assert_eq!(codec.id(), "auto:shift-jis");
-        assert_eq!(SHIFT_JIS.decode(&encoded).0, message.body_text.unwrap());
-    }
-
-    #[test]
-    fn breakpoint_resolver_preserves_forced_codec_when_header_is_edited() {
-        let resolver = HeaderBodyCodecResolver;
-        let message = MessageContentViewModel {
-            http_status: None,
-            start_line_bytes: b"POST / HTTP/1.1".to_vec(),
-            raw_headers: Vec::new(),
-            headers: BTreeMap::from([(
-                "Content-Type".into(),
-                vec!["text/plain; charset=utf-8".into()],
-            )]),
-            body_text: Some("結果D48".into()),
-            body_bytes: Vec::new(),
-            json: None,
-            content_length: 0,
-            media_type: Some("text/plain".into()),
-            charset: Some("utf-8".into()),
-            content_kind: MessageContentKind::Text,
-            codec_id: Some("shift-jis".into()),
-            decode_error: None,
-            query_string: None,
-            protocol: None,
-            protocol_failure: None,
-        };
-
-        let codec = resolver.resolve(&message);
-
-        assert_eq!(codec.id(), "shift-jis");
-        let encoded = codec.encode("結果D48").unwrap();
-        assert_eq!(codec.decode(&encoded).unwrap(), "結果D48");
     }
 
     fn message_with_content_type(content_type: &str, body: &[u8]) -> Message {

@@ -42,7 +42,6 @@ async fn frozen_body_codec_pipeline_progresses_while_sqlite_executor_is_occupied
             snapshot: Mutex::new(RuleRuntimeSnapshot::new(Vec::new())),
         }),
         Arc::new(InMemorySessionStore::default()),
-        Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(8)),
         test_capture_repository(),
     )

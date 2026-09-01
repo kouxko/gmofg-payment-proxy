@@ -5,7 +5,7 @@
 //!
 //! This module is intentionally stateless. Keeping mutation/encoding and fault
 //! mapping separate from the pipeline coordinator makes the product boundary
-//! visible and lets the coordinator focus on session and breakpoint lifecycle.
+//! visible and lets the coordinator focus on session lifecycle.
 
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -43,9 +43,8 @@ pub(crate) fn apply_rule_actions(
     message: &mut Message,
     actions: &[HttpAction],
     seed: u64,
-) -> ProxyResult<(Vec<FaultAction>, bool)> {
+) -> ProxyResult<Vec<FaultAction>> {
     let mut faults = Vec::new();
-    let mut pause = false;
     for action in actions {
         match action {
             HttpAction::SetJsonField { path, value } => {
@@ -111,7 +110,6 @@ pub(crate) fn apply_rule_actions(
                 blocked: Duration::from_millis(*blocked_milliseconds),
                 direction: traffic_direction(*direction),
             }),
-            HttpAction::Pause => pause = true,
             HttpAction::CustomHttpStatus { status } => {
                 faults.push(FaultAction::CustomStatus(runtime_status!(*status)?));
             }
@@ -121,7 +119,7 @@ pub(crate) fn apply_rule_actions(
     if message.body_modified {
         message.set_content_length(message.body.len());
     }
-    Ok((faults, pause))
+    Ok(faults)
 }
 
 pub(super) fn weak_network_seed(
@@ -160,7 +158,6 @@ const fn traffic_direction(direction: DomainTrafficDirection) -> TrafficDirectio
 
 pub(super) fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
     Ok(match action {
-        TerminalAction::RejectTlsHandshake => FaultAction::RejectTls,
         TerminalAction::DisconnectBeforeUpstream => FaultAction::DisconnectBeforeUpstream,
         TerminalAction::UpstreamConnectTimeout { milliseconds } => {
             FaultAction::UpstreamConnectTimeout(Duration::from_millis(*milliseconds))

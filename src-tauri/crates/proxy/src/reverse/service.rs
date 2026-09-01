@@ -147,7 +147,7 @@ impl ReverseProxyService {
         })
     }
 
-    /// 兼容旧调用方：仅接受 HTTPS，并返回原有平铺 TLS 证据。
+    /// 仅接受 HTTPS，并返回平铺 TLS 证据。
     ///
     /// 该探测复用 Listener 启动时完全相同的 DNS、系统/自定义 CA、主机名验证、TLS 1.2
     /// 和可选客户端身份配置，因此可以在启动代理前识别错误密码、错误 CA、证书用途、
@@ -167,7 +167,7 @@ impl ReverseProxyService {
         })
     }
 
-    /// 为动态反向监听器启用与旧 supervisor 相同的抓包、规则、断点与故障动作管线。
+    /// 为动态反向监听器启用抓包、规则与故障动作管线。
     ///
     /// 未调用时仍保留纯字节流模式，便于非 HTTP 协议或底层传输测试；桌面 Workspace
     /// 的 HTTP/HTTPS Reverse Listener 必须调用此方法，确保 UI 中配置的规则真实生效。

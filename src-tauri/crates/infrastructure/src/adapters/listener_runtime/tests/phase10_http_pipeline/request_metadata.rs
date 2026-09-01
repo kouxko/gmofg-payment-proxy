@@ -5,15 +5,15 @@ use super::production_shape::{
 use super::*;
 
 #[tokio::test]
-async fn production_response_rule_matches_recursive_tree_against_associated_request_metadata() {
+async fn production_response_rule_matches_flat_condition_against_associated_request_metadata() {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, HttpAction, MatchField, MatchOperator, RuleStage, UnifiedAction,
+        Condition, HttpAction, MatchField, MatchOperator, RuleStage, UnifiedAction,
     };
 
     let listener = phase10_listener();
     let definition = RuleDefinition::create(
         RuleDefinitionDraft {
-            name: "response request-target OR".into(),
+            name: "response request-target".into(),
             enabled: true,
             priority: 1,
             listener_id: listener.id,
@@ -21,21 +21,14 @@ async fn production_response_rule_matches_recursive_tree_against_associated_requ
             one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: ConditionTree::Any(vec![
-                    ConditionTree::Leaf(Condition::Http {
-                        field: MatchField::Method,
-                        operator: MatchOperator::Equals("PATCH".into()),
-                    }),
-                    ConditionTree::Leaf(Condition::Http {
-                        field: MatchField::RequestTarget,
-                        operator: MatchOperator::Wildcard("/phase*".into()),
-                    }),
-                ]),
+                conditions: vec![Condition::Http {
+                    field: MatchField::RequestTarget,
+                    operator: MatchOperator::Wildcard("/phase*".into()),
+                }],
                 actions: vec![UnifiedAction::Http(HttpAction::SetHeader {
                     name: "x-response-rule".into(),
                     value: "matched".into(),
                 })],
-                document: None,
             }),
         },
         1,

@@ -1,5 +1,3 @@
-//! Protocol-neutral joint Document evaluation and lifecycle transaction state.
-
 use std::{collections::HashMap, sync::Arc};
 
 use async_trait::async_trait;
@@ -91,8 +89,10 @@ pub(crate) struct JointDocumentEvaluation {
     listener_transaction: Option<tokio::sync::OwnedMutexGuard<()>>,
 }
 
-#[derive(Clone)]
 enum JointDocumentEncoder {
+    PlainJson {
+        direction: ProtocolDirection,
+    },
     External {
         original_input: String,
         rpc: Arc<dyn ExternalPackageRpc>,
@@ -119,6 +119,22 @@ impl std::fmt::Debug for JointDocumentEvaluation {
 }
 
 impl JointDocumentEvaluation {
+    pub(crate) fn new_plain_json(
+        document: Document,
+        original_document: Document,
+        direction: ProtocolDirection,
+        programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
+    ) -> Self {
+        Self {
+            document,
+            original_document,
+            encoder: JointDocumentEncoder::PlainJson { direction },
+            programs: program_index(programs),
+            changes: RuleProcessingAccumulator::default(),
+            listener_transaction: None,
+        }
+    }
+
     #[allow(clippy::too_many_arguments)]
     pub(crate) fn new_external(
         document: Document,
@@ -130,16 +146,7 @@ impl JointDocumentEvaluation {
         package: ProtocolPackageRef,
         programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
     ) -> Self {
-        let programs = programs
-            .into_iter()
-            .flat_map(|program| {
-                program
-                    .rules()
-                    .iter()
-                    .map(|rule| (rule.rule_id(), Arc::clone(&program)))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        let programs = program_index(programs);
         Self {
             document,
             original_document,
@@ -165,16 +172,7 @@ impl JointDocumentEvaluation {
         package: ProtocolPackageRef,
         programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
     ) -> Self {
-        let programs = programs
-            .into_iter()
-            .flat_map(|program| {
-                program
-                    .rules()
-                    .iter()
-                    .map(|rule| (rule.rule_id(), Arc::clone(&program)))
-                    .collect::<Vec<_>>()
-            })
-            .collect();
+        let programs = program_index(programs);
         Self {
             document,
             original_document,
@@ -278,11 +276,21 @@ impl JointDocumentEvaluation {
 
     pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
         let direction = match &self.encoder {
-            JointDocumentEncoder::External { direction, .. }
+            JointDocumentEncoder::PlainJson { direction }
+            | JointDocumentEncoder::External { direction, .. }
             | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
         };
         rules_processed(direction, &self.changes, &self.document);
         let written = match self.encoder {
+            JointDocumentEncoder::PlainJson { .. } => {
+                if self.document == self.original_document {
+                    return Ok(());
+                }
+                self.document
+                    .to_json()
+                    .map_err(|error| Error::new(format!("{}\n{}", error.code, error.message)))?
+                    .into_bytes()
+            }
             JointDocumentEncoder::External {
                 original_input,
                 rpc,
@@ -327,7 +335,8 @@ impl JointDocumentEvaluation {
 
     async fn encode_socket(self) -> Result<SocketContext, Error> {
         let direction = match &self.encoder {
-            JointDocumentEncoder::External { direction, .. }
+            JointDocumentEncoder::PlainJson { direction }
+            | JointDocumentEncoder::External { direction, .. }
             | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
         };
         rules_processed(direction, &self.changes, &self.document);
@@ -374,6 +383,21 @@ impl JointDocumentEvaluation {
             data: encoded.bytes(),
         })
     }
+}
+
+fn program_index(
+    programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
+) -> HashMap<RuleId, Arc<UnifiedRuleProgram>> {
+    programs
+        .into_iter()
+        .flat_map(|program| {
+            program
+                .rules()
+                .iter()
+                .map(|rule| (rule.rule_id(), Arc::clone(&program)))
+                .collect::<Vec<_>>()
+        })
+        .collect()
 }
 
 #[async_trait]

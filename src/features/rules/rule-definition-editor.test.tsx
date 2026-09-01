@@ -1,11 +1,11 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RuleDefinitionSaveInput, RuleEditorContext } from "@/generated/rust-types";
+import type { Condition, RuleDefinitionSaveInput, RuleEditorContext } from "@/generated/rust-types";
 import { testListener } from "./rules-view-test-fixtures";
 import { RuleDefinitionEditor } from "./rule-definition-editor";
 
@@ -24,224 +24,185 @@ vi.mock("@/lib/ipc/client", () => ({
 }));
 
 const listener = testListener("http-listener", "HTTP Listener", "http");
-const httpLeaf = { operator: "leaf" as const, children: { source: "http" as const, field: "RequestTarget" as const, operator: { Equals: "/" } } };
-const documentLeaf = { operator: "leaf" as const, children: { source: "document" as const, path: "/amount", predicate: { type: "number" as const, value: { operator: "equal" as const, value: 1 } } } };
+const requestTarget: Condition = { source: "http", field: "RequestTarget", operator: { Equals: "/" } };
 
 const context: RuleEditorContext = {
   listener_id: listener.id,
-  local_document_types: [],
+  local_document_types: [{
+    value_type: "string",
+    predicates: ["equals", "contains", "starts_with", "ends_with"],
+    actions: [
+      { kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" },
+      { kind: "clear", target_kind: "node", target_value_type: "string", operand_value_type: null },
+    ],
+  }, {
+    value_type: "number",
+    predicates: ["equals", "less", "less_equal", "greater", "greater_equal"],
+    actions: [
+      { kind: "set", target_kind: "node", target_value_type: "number", operand_value_type: "number" },
+      { kind: "clear", target_kind: "node", target_value_type: "number", operand_value_type: null },
+    ],
+  }],
   document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
   content: { type: "http", value: { stages: [{
     stage: "proxy_to_upstream",
-    http: { stage: "request", match_fields: [
+    http: { stage: "proxy_to_upstream", match_fields: [
       { kind: "method", operators: ["equals"], selector: null },
       { kind: "request_target", operators: ["equals", "contains", "wildcard"], selector: null },
       { kind: "header", operators: ["equals", "contains"], selector: "header_name_pointer" },
     ], actions: [] },
-    package: null,
-    document_fields: [],
-    document_common_actions: [],
+    package: { id: "json", version: "1" },
+    document_fields: [{ path: "/customer/age", label: "Age", value_type: "number", item_template: false, predicates: ["equals"], actions: [] }],
+    document_common_actions: ["record_match"],
     new_rule_draft: {
       listener_id: listener.id,
       stage: "proxy_to_upstream",
-      content: input(httpLeaf).draft.content,
+      content: input([requestTarget]).draft.content,
     },
   }] } },
 };
 
-describe("RuleDefinitionEditor condition tree", () => {
-  beforeEach(() => {
-    vi.clearAllMocks();
-  });
+describe("RuleDefinitionEditor flat conditions", () => {
+  beforeEach(() => vi.clearAllMocks());
 
-  it("blocks a real empty Rust condition draft and keeps its typed repair factory available", async () => {
-    render(<Harness initial={input({ operator: "all", children: [] })} />);
-
-    expect(screen.getByRole("alert")).toHaveTextContent("条件树不能为空，请通过下方 Rust 条件工厂添加第一个条件");
-    expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "创建 HTTP 条件" })).toBeDisabled();
-    const user = userEvent.setup();
-    await selectMethodEquals(user);
-    await user.type(screen.getByRole("textbox", { name: "HTTP 匹配值" }), "POST");
-    expect(screen.getByRole("button", { name: "创建 HTTP 条件" })).toBeEnabled();
-  });
-
-  it("inserts a Rust-authored condition into the selected nested group without flattening the tree", async () => {
+  it("requires one condition and appends the Rust-authored HTTP condition", async () => {
     commandMocks.ruleDefinitionHttpConditionDraft.mockResolvedValue({ source: "http", field: "Method", operator: { Equals: "POST" } });
     const onSave = vi.fn();
-    const initial = input({ operator: "all", children: [httpLeaf, { operator: "any", children: [documentLeaf] }] });
     const user = userEvent.setup();
-    render(<Harness initial={initial} onSave={onSave} />);
+    render(<Harness initial={input([])} onSave={onSave} />);
 
-    await user.click(screen.getByRole("button", { name: "选择 OR 条件组 2 为添加目标" }));
-    await user.click(screen.getByRole("button", { name: "在目标组添加 AND 子组" }));
-    await selectMethodEquals(user);
+    expect(screen.getByRole("alert")).toHaveTextContent("至少需要一个条件");
+    expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
+    await selectOption(user, "HTTP 匹配字段", "Method");
+    await selectOption(user, "HTTP 匹配操作符", "equals");
     await user.type(screen.getByRole("textbox", { name: "HTTP 匹配值" }), "POST");
     await user.click(screen.getByRole("button", { name: "创建 HTTP 条件" }));
-    await waitFor(() => expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalled());
+    await waitFor(() => expect(screen.getByText(/Method · equals POST/)).toBeVisible());
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
-    expect(onSave).toHaveBeenCalledWith({
-      operator: "all",
-      children: [
-        httpLeaf,
-        {
-          operator: "any",
-          children: [
-            documentLeaf,
-            { operator: "all", children: [{ operator: "leaf", children: { source: "http", field: "Method", operator: { Equals: "POST" } } }] },
-          ],
-        },
-      ],
-    });
+    expect(onSave).toHaveBeenCalledWith([{ source: "http", field: "Method", operator: { Equals: "POST" } }]);
   });
 
-  it("uses only Rust-declared HTTP fields, selectors, and operators", async () => {
-    commandMocks.ruleDefinitionHttpConditionDraft.mockResolvedValue({ source: "http", field: { Header: "/x-request-id" }, operator: { Contains: "abc" } });
-    const user = userEvent.setup();
-    render(<Harness initial={input(httpLeaf)} />);
-
-    expect(screen.queryByRole("button", { name: "添加条件：字段" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("button", { name: /HTTP 匹配字段/ }));
-    await user.click(await screen.findByRole("option", { name: "Header" }));
-    await user.type(screen.getByRole("textbox", { name: "Header selector（/name）" }), "/x-request-id");
-    await user.click(screen.getByRole("button", { name: /HTTP 匹配操作符/ }));
-    await user.click(await screen.findByRole("option", { name: "contains" }));
-    await user.type(screen.getByRole("textbox", { name: "HTTP 匹配值" }), "abc");
-    await user.click(screen.getByRole("button", { name: "创建 HTTP 条件" }));
-
-    expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledWith("header", "/x-request-id", "contains", "abc", "request");
-    expect(screen.getAllByText("Request target（路径与查询参数）").length).toBeGreaterThan(0);
-  });
-
-  it("shows recursive Schema condition paths separately from the manual path", async () => {
-    const schemaContext = structuredClone(context);
-    if (schemaContext.content.type !== "http") throw new Error("HTTP context is invalid");
-    schemaContext.content.value.stages[0].document_fields = [
-      { path: "/payment", label: "/payment", value_type: "object", item_template: false, predicates: [], actions: [] },
-      { path: "/payment/method", label: "Payment method", value_type: "string", item_template: false, predicates: ["equals", "contains", "starts_with", "ends_with"], actions: [
-        { kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" },
-        { kind: "clear", target_kind: "node", target_value_type: "string", operand_value_type: null },
-      ] },
-      { path: "/items", label: "/items", value_type: "array", item_template: false, predicates: [], actions: [
-        { kind: "insert", target_kind: "array", target_value_type: "array", operand_value_type: "object" },
-        { kind: "append", target_kind: "array", target_value_type: "array", operand_value_type: "object" },
-      ] },
-      { path: "/items/*", label: "/items/*", value_type: "object", item_template: true, predicates: [], actions: [] },
-      { path: "/items/*/amount", label: "/items/*/amount", value_type: "number", item_template: true, predicates: ["equals"], actions: [] },
-    ];
-    schemaContext.content.value.stages[0].package = { id: "iso8583", version: "1.0.0" };
-    const withDocument = input(httpLeaf);
-    if (withDocument.draft.content.type !== "http") throw new Error("HTTP input is invalid");
-    withDocument.draft.content.value.document = { package: { id: "iso8583", version: "1.0.0" } };
-    const user = userEvent.setup();
-    render(<Harness contextOverride={schemaContext} initial={withDocument} />);
+  it("offers schema selection and manual RFC 6901 path input without a metadata tree", async () => {
+    render(<Harness initial={input([requestTarget])} />);
 
     expect(screen.getByRole("button", { name: /Document Schema 条件路径/ })).toBeVisible();
     expect(screen.getByRole("textbox", { name: "手动 Document 条件路径" })).toBeVisible();
-    expect(screen.getByText("* 仅匹配一层；展开多个节点时按 ANY 匹配。" )).toBeVisible();
-
-    await user.click(screen.getByRole("button", { name: /Document Schema 条件路径/ }));
-    await user.click(await screen.findByRole("option", { name: /Payment method/ }));
-    await user.click(screen.getByRole("button", { name: /规则本地动作/ }));
-    expect(await screen.findByRole("option", { name: "set" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "clear" })).toBeVisible();
-    expect(screen.queryByRole("option", { name: "insert" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "手动选择根路径 /" })).not.toBeInTheDocument();
+    expect(screen.queryByText(/metadata tree/i)).not.toBeInTheDocument();
+    expect(screen.getByText("所有条件固定为 AND；需要 OR 时请新建多条规则。")).toBeVisible();
   });
 
-  it("submits the root pointer as empty text and keeps the empty-name property as slash", async () => {
-    const schemaContext = structuredClone(context);
-    if (schemaContext.content.type !== "http") throw new Error("HTTP context is invalid");
-    schemaContext.content.value.stages[0].document_fields = [
-      { path: "", label: "Root", value_type: "string", item_template: false, predicates: ["equals"], actions: [
-        { kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" },
-      ] },
-      { path: "/", label: "Empty name", value_type: "string", item_template: false, predicates: ["equals"], actions: [
-        { kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" },
-      ] },
-    ];
-    schemaContext.content.value.stages[0].package = { id: "iso8583", version: "1.0.0" };
-    const withDocument = input(httpLeaf);
-    if (withDocument.draft.content.type !== "http") throw new Error("HTTP input is invalid");
-    withDocument.draft.content.value.document = { package: { id: "iso8583", version: "1.0.0" } };
-    commandMocks.ruleDefinitionDocumentConditionDraft.mockResolvedValue({ source: "document", path: "", predicate: { type: "string", value: { operator: "equal", value: "root" } } });
-    commandMocks.ruleDefinitionDocumentActionDraft.mockResolvedValue({ source: "document", value: { type: "set", path: "", value: "root" } });
+  it("creates a manual Body condition for Plain HTTP without Schema metadata", async () => {
+    commandMocks.ruleDefinitionDocumentConditionDraft.mockResolvedValue({
+      source: "document", path: "/customer/age", predicate: { type: "number", value: { operator: "equal", value: 18 } },
+    });
+    const plainContext = structuredClone(context);
+    if (plainContext.content.type !== "http") throw new Error("HTTP context required");
+    plainContext.content.value.stages[0].package = null;
+    plainContext.content.value.stages[0].document_fields = [];
+    const onSave = vi.fn();
     const user = userEvent.setup();
-    render(<Harness contextOverride={schemaContext} initial={withDocument} />);
+    render(<Harness contextValue={plainContext} initial={input([requestTarget])} onSave={onSave} />);
 
-    await user.click(screen.getByRole("button", { name: /Document Schema 条件路径/ }));
-    await user.click(await screen.findByRole("option", { name: "Root · /（根）" }));
-    await user.type(screen.getByRole("textbox", { name: "JSON 值" }), '"root"');
-    await user.click(screen.getByRole("button", { name: /规则本地谓词/ }));
-    await user.click(await screen.findByRole("option", { name: "equals" }));
-    await user.click(screen.getByRole("button", { name: "创建规则本地元数据条件" }));
-    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("", "string", "equals", '"root"'));
-    await user.click(screen.getByRole("button", { name: /规则本地动作/ }));
-    await user.click(await screen.findByRole("option", { name: "set" }));
-    await user.click(screen.getByRole("button", { name: "创建规则本地元数据动作" }));
-    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentActionDraft).toHaveBeenCalledWith("", "string", "set", '"root"', null));
+    await user.type(screen.getByRole("textbox", { name: "手动 Document 条件路径" }), "/customer/age");
+    await selectOption(user, "Document 值类型", "number");
+    await selectOption(user, "Document 谓词", "equals");
+    await user.type(screen.getByRole("textbox", { name: "匹配值" }), "18");
+    await user.click(screen.getByRole("button", { name: "添加 Document 条件" }));
 
-    await user.click(screen.getByRole("button", { name: /Document Schema 条件路径/ }));
-    await user.click(await screen.findByRole("option", { name: "Empty name · /（空名称属性）" }));
-    await user.click(screen.getByRole("button", { name: "创建规则本地元数据条件" }));
-    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenLastCalledWith("/", "string", "equals", '"root"'));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("/customer/age", "number", "equals", "18"));
+    await waitFor(() => expect(screen.getByText(/条件 2 个/)).toBeVisible());
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    expect(onSave).toHaveBeenCalledWith([requestTarget, {
+      source: "document", path: "/customer/age", predicate: { type: "number", value: { operator: "equal", value: 18 } },
+    }]);
+    expect(screen.queryByText(/没有协议 Body Document 能力/)).not.toBeInTheDocument();
   });
 
-  it("requires an explicit positive integer before creating an nth-hit condition", async () => {
-    commandMocks.ruleDefinitionNthHitConditionDraft.mockResolvedValue({ source: "nth_hit", count: 3 });
+  it("uses the manual slash input as the Document root without a separate button", async () => {
+    commandMocks.ruleDefinitionDocumentConditionDraft.mockResolvedValue({
+      source: "document", path: "", predicate: { type: "string", value: { operator: "equal", value: "root" } },
+    });
+    const plainContext = structuredClone(context);
+    if (plainContext.content.type !== "http") throw new Error("HTTP context required");
+    plainContext.content.value.stages[0].package = null;
+    plainContext.content.value.stages[0].document_fields = [];
     const user = userEvent.setup();
-    render(<Harness initial={input(httpLeaf)} />);
+    render(<Harness contextValue={plainContext} initial={input([requestTarget])} />);
 
-    const button = screen.getByRole("button", { name: "添加条件：第 N 次命中" });
-    const count = screen.getByRole("textbox", { name: "第 N 次命中" });
-    expect(button).toBeDisabled();
-    await user.type(count, "0");
-    expect(button).toBeDisabled();
-    await user.clear(count);
-    await user.type(count, "3");
-    expect(button).toBeEnabled();
-    await user.click(button);
+    expect(screen.queryByRole("button", { name: "手动选择根路径 /" })).not.toBeInTheDocument();
+    await user.type(screen.getByRole("textbox", { name: "手动 Document 条件路径" }), "/");
+    await selectOption(user, "Document 值类型", "string");
+    await selectOption(user, "Document 谓词", "equals");
+    await user.type(screen.getByRole("textbox", { name: "匹配值" }), "root");
+    await user.click(screen.getByRole("button", { name: "添加 Document 条件" }));
 
-    await waitFor(() => expect(commandMocks.ruleDefinitionNthHitConditionDraft).toHaveBeenCalledWith({ count: 3 }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("", "string", "equals", "root"));
+  });
+
+  it("keeps each HTTP and Document factory in its own aligned semantic row", async () => {
+    const layoutContext = structuredClone(context);
+    if (layoutContext.content.type !== "http") throw new Error("HTTP context required");
+    const layoutStage = layoutContext.content.value.stages[0];
+    if (!layoutStage?.http) throw new Error("HTTP stage required");
+    layoutStage.http.actions = [{ kind: "jitter", terminal: false, traffic_direction: null, parameters_required: true }];
+    const user = userEvent.setup();
+    render(<Harness contextValue={layoutContext} initial={input([requestTarget])} />);
+
+    const httpCondition = within(screen.getByTestId("http-condition-factory"));
+    expect(httpCondition.getByRole("button", { name: /HTTP 匹配字段/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expect(httpCondition.getByRole("button", { name: /HTTP 匹配操作符/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expect(httpCondition.getByRole("textbox", { name: "HTTP 匹配值" })).toHaveClass("h-10", "py-0", "w-full");
+    expect(httpCondition.getByRole("button", { name: "创建 HTTP 条件" })).toHaveClass("h-10", "w-full");
+    expect(httpCondition.queryByRole("textbox", { name: "第 N 次命中" })).not.toBeInTheDocument();
+
+    const nthCondition = within(screen.getByTestId("nth-condition-factory"));
+    expect(nthCondition.getByRole("textbox", { name: "第 N 次命中" })).toHaveClass("h-10", "py-0", "w-full");
+    expect(nthCondition.getByRole("button", { name: "添加条件：第 N 次命中" })).toHaveClass("h-10", "w-full");
+    expect(nthCondition.queryByRole("button", { name: /HTTP 匹配字段/ })).not.toBeInTheDocument();
+
+    await selectOption(user, "HTTP 动作类型", "Jitter");
+    const httpActionControls = within(screen.getByTestId("http-action-controls"));
+    expect(httpActionControls.getByRole("button", { name: /HTTP 动作类型/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expect(httpActionControls.getByRole("button", { name: "创建 HTTP 动作" })).toHaveClass("h-10", "w-full");
+    expect(httpActionControls.queryByRole("textbox", { name: "动作参数 JSON" })).not.toBeInTheDocument();
+    const httpActionParameters = within(screen.getByTestId("http-action-parameters"));
+    expect(httpActionParameters.getByRole("textbox", { name: "动作参数 JSON" })).toHaveClass("min-h-24", "w-full");
+    expect(httpActionParameters.queryByRole("button", { name: "创建 HTTP 动作" })).not.toBeInTheDocument();
+
+    const documentPath = within(screen.getByTestId("document-path-factory"));
+    expect(documentPath.getByRole("button", { name: /Document Schema 条件路径/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expect(documentPath.getByRole("textbox", { name: "手动 Document 条件路径" })).toHaveClass("h-10", "py-0", "w-full");
+    expect(documentPath.getByRole("button", { name: /Document 值类型/ })).toHaveClass("h-10", "min-h-10", "w-full");
+
+    const documentCondition = within(screen.getByTestId("document-condition-factory"));
+    expect(documentCondition.getByRole("textbox", { name: "匹配值" })).toHaveClass("h-10", "py-0", "w-full");
+    expect(documentCondition.getByRole("button", { name: "添加 Document 条件" })).toHaveClass("h-10", "w-full");
+    expect(documentCondition.queryByRole("button", { name: "添加 Document 动作" })).not.toBeInTheDocument();
+
+    const documentAction = within(screen.getByTestId("document-action-factory"));
+    expect(documentAction.getByRole("textbox", { name: "动作值" })).toHaveClass("h-10", "py-0", "w-full");
+    expect(documentAction.getByRole("button", { name: "添加 Document 动作" })).toHaveClass("h-10", "w-full");
+    expect(documentAction.queryByRole("button", { name: "添加 Document 条件" })).not.toBeInTheDocument();
   });
 });
 
-function Harness({ initial, onSave = vi.fn(), contextOverride = context }: { initial: RuleDefinitionSaveInput; onSave?: (condition: RuleDefinitionSaveInput["draft"]["content"]["value"]["condition"]) => void; contextOverride?: RuleEditorContext }) {
+function Harness({ initial, contextValue = context, onSave = vi.fn() }: { initial: RuleDefinitionSaveInput; contextValue?: RuleEditorContext; onSave?: (conditions: Condition[]) => void }) {
   const [value, setValue] = useState(initial);
-  return <RuleDefinitionEditor
-    context={contextOverride}
-    fieldErrors={{}}
-    input={value}
-    listener={listener}
-    loading={false}
-    pending={false}
+  return <RuleDefinitionEditor context={contextValue} fieldErrors={{}} input={value} listener={listener} loading={false} pending={false}
     onChange={(change) => setValue((current) => typeof change === "function" ? change(current) : change)}
-    onCopy={vi.fn()}
-    onDelete={vi.fn()}
-    onSave={() => onSave(value.draft.content.value.condition)}
-    onToggle={vi.fn()}
-  />;
+    onCopy={vi.fn()} onDelete={vi.fn()} onSave={() => onSave(value.draft.content.value.conditions)} onToggle={vi.fn()} />;
 }
 
-function input(condition: RuleDefinitionSaveInput["draft"]["content"]["value"]["condition"]): RuleDefinitionSaveInput {
-  return {
-    rule_id: "http-rule",
-    expected_revision: 1,
-    draft: {
-      name: "HTTP rule",
-      enabled: true,
-      priority: 1,
-      listener_id: listener.id,
-      stage: "proxy_to_upstream",
-      one_shot: false,
-      content: { type: "http", value: { description: "", condition, actions: [], document: null } },
-    },
-  };
+function input(conditions: Condition[]): RuleDefinitionSaveInput {
+  return { rule_id: "http-rule", expected_revision: 1, draft: {
+    name: "HTTP rule", enabled: true, priority: 1, listener_id: listener.id, stage: "proxy_to_upstream", one_shot: false,
+    content: { type: "http", value: { description: "", conditions, actions: [] } },
+  } };
 }
 
-async function selectMethodEquals(user: ReturnType<typeof userEvent.setup>) {
-  await user.click(screen.getByRole("button", { name: /HTTP 匹配字段/ }));
-  await user.click(await screen.findByRole("option", { name: "Method" }));
-  await user.click(screen.getByRole("button", { name: /HTTP 匹配操作符/ }));
-  await user.click(await screen.findByRole("option", { name: "equals" }));
+async function selectOption(user: ReturnType<typeof userEvent.setup>, control: string, option: string) {
+  await user.click(screen.getByRole("button", { name: new RegExp(control) }));
+  await user.click(await screen.findByRole("option", { name: option }));
 }

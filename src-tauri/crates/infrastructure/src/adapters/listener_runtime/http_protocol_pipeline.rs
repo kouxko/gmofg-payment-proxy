@@ -21,6 +21,7 @@ use parking_lot::RwLock;
 use super::{ListenerRuntimeAdapter, external_relay::RuntimeExternalSocketPackageBinding};
 
 mod external_http;
+mod plain_json;
 mod programs;
 pub(super) use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
 #[cfg(test)]
@@ -77,62 +78,65 @@ impl HttpProtocolRuntimeSnapshot {
         let intercept_proxy_domain::ListenerDataPlane::Http(http) = &listener.data_plane else {
             return Ok(None);
         };
-        let HttpBodyProcessing::Protocol { package } = &http.body_processing else {
-            return Ok(None);
+        let (binding, upstream_schema, downstream_schema) = match &http.body_processing {
+            HttpBodyProcessing::Plain => (None, None, None),
+            HttpBodyProcessing::Protocol { package } => {
+                let provider = adapter
+                    .external_package_provider
+                    .read()
+                    .clone()
+                    .ok_or_else(|| {
+                        AppError::new(
+                            "EXTERNAL_PACKAGE_PROVIDER_MISSING",
+                            "HTTP 协议包注册表尚未装配。",
+                        )
+                        .entity(listener.id.to_string())
+                    })?;
+                let binding = provider.resolve(package).await?.ok_or_else(|| {
+                    AppError::new(
+                        "EXTERNAL_PACKAGE_NOT_FOUND",
+                        "HTTP 协议包未在统一注册表中找到。",
+                    )
+                    .entity(format!("{}@{}", package.id, package.version))
+                })?;
+                if binding.registration().kind() != PackageKind::Http {
+                    return Err(AppError::new(
+                        "PROTOCOL_PACKAGE_KIND_MISMATCH",
+                        "HTTP Body 必须绑定 HTTP 协议包。",
+                    )
+                    .entity(listener.id.to_string()));
+                }
+                let upstream_schema = binding
+                    .registration()
+                    .document()
+                    .upstream()
+                    .schema()
+                    .cloned();
+                let downstream_schema = binding
+                    .registration()
+                    .document()
+                    .downstream()
+                    .schema()
+                    .cloned();
+                (Some(binding), upstream_schema, downstream_schema)
+            }
         };
-        let provider = adapter
-            .external_package_provider
-            .read()
-            .clone()
-            .ok_or_else(|| {
-                AppError::new(
-                    "EXTERNAL_PACKAGE_PROVIDER_MISSING",
-                    "HTTP 协议包注册表尚未装配。",
-                )
-                .entity(listener.id.to_string())
-            })?;
-        let binding = provider.resolve(package).await?.ok_or_else(|| {
-            AppError::new(
-                "EXTERNAL_PACKAGE_NOT_FOUND",
-                "HTTP 协议包未在统一注册表中找到。",
-            )
-            .entity(format!("{}@{}", package.id, package.version))
-        })?;
-        if binding.registration().kind() != PackageKind::Http {
-            return Err(AppError::new(
-                "PROTOCOL_PACKAGE_KIND_MISMATCH",
-                "HTTP Body 必须绑定 HTTP 协议包。",
-            )
-            .entity(listener.id.to_string()));
-        }
+        let owns_all_http = binding.is_some();
         let workspace_for_compile = workspace.clone();
         let listener_for_compile = listener.clone();
-        let package_for_compile = package.clone();
-        let upstream_schema = binding
-            .registration()
-            .document()
-            .upstream()
-            .schema()
-            .cloned();
-        let downstream_schema = binding
-            .registration()
-            .document()
-            .downstream()
-            .schema()
-            .cloned();
         let programs = adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
                     &workspace_for_compile,
                     &listener_for_compile,
-                    &package_for_compile,
                     upstream_schema.as_ref(),
                     downstream_schema.as_ref(),
+                    owns_all_http,
                 )
             })
             .await?;
         Ok(Some(Arc::new(Self {
-            external: Some(binding),
+            external: binding,
             request_codec: http.request_body_codec,
             response_codec: http.response_body_codec,
             programs: Arc::new(RwLock::new(programs)),
@@ -158,41 +162,41 @@ impl HttpProtocolRuntimeSnapshot {
         let intercept_proxy_domain::ListenerDataPlane::Http(http) = &listener.data_plane else {
             return Ok(self.programs.read().clone());
         };
-        let HttpBodyProcessing::Protocol { package } = &http.body_processing else {
-            return Ok(self.programs.read().clone());
-        };
+        let owns_all_http = self.external.is_some();
         let workspace = workspace.clone();
         let listener = listener.clone();
-        let package = package.clone();
-        let Some(binding) = &self.external else {
-            return Err(AppError::new(
-                "EXTERNAL_PACKAGE_NOT_FOUND",
-                "HTTP 协议包统一注册绑定不存在。",
-            )
-            .entity(listener.id.to_string()));
+        let (upstream_schema, downstream_schema) = match (&http.body_processing, &self.external) {
+            (HttpBodyProcessing::Plain, None) => (None, None),
+            (HttpBodyProcessing::Protocol { .. }, Some(binding)) => (
+                binding
+                    .registration()
+                    .document()
+                    .upstream()
+                    .schema()
+                    .cloned(),
+                binding
+                    .registration()
+                    .document()
+                    .downstream()
+                    .schema()
+                    .cloned(),
+            ),
+            _ => {
+                return Err(AppError::new(
+                    "HTTP_BODY_PROCESSING_RUNTIME_MISMATCH",
+                    "HTTP Body 处理模式与运行快照不一致。",
+                )
+                .entity(listener.id.to_string()));
+            }
         };
-        let (upstream_schema, downstream_schema) = (
-            binding
-                .registration()
-                .document()
-                .upstream()
-                .schema()
-                .cloned(),
-            binding
-                .registration()
-                .document()
-                .downstream()
-                .schema()
-                .cloned(),
-        );
         adapter
             .compile_document_rules_on_blocking_owner(move || {
                 compile_programs(
                     &workspace,
                     &listener,
-                    &package,
                     upstream_schema.as_ref(),
                     downstream_schema.as_ref(),
+                    owns_all_http,
                 )
             })
             .await
@@ -207,9 +211,9 @@ impl HttpProtocolRuntimeSnapshot {
         connection: &HttpConnectionIdentity,
         direction: ProtocolDirection,
         response: bool,
-    ) -> Result<HttpDirectionCapabilities<D>, Error> {
+    ) -> HttpDirectionCapabilities<D> {
         if let Some(binding) = &self.external {
-            return Ok(external_http::build_capabilities(
+            return external_http::build_capabilities(
                 Arc::clone(&self.joint_rules),
                 connection,
                 direction,
@@ -222,11 +226,16 @@ impl HttpProtocolRuntimeSnapshot {
                 binding,
                 Arc::clone(&self.programs),
                 Arc::clone(&self.listener_transaction),
-            ));
+            );
         }
-        Err(Error::new(
-            "EXTERNAL_PACKAGE_NOT_FOUND\nHTTP 协议包统一注册绑定不存在",
-        ))
+        plain_json::build_capabilities(
+            Arc::clone(&self.joint_rules),
+            connection,
+            direction,
+            response,
+            Arc::clone(&self.programs),
+            Arc::clone(&self.listener_transaction),
+        )
     }
 }
 
@@ -239,13 +248,32 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Upstream>, Error> {
-        self.build(&connection, ProtocolDirection::Upstream, false)
+        if self.external.is_none() && !self.programs.read().has_rules(ProtocolDirection::Upstream) {
+            return intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+                self.metadata.workspace_id.clone(),
+                self.metadata.listener_id.clone(),
+            )
+            .create_upstream(connection);
+        }
+        Ok(self.build(&connection, ProtocolDirection::Upstream, false))
     }
 
     fn create_downstream(
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Downstream>, Error> {
-        self.build(&connection, ProtocolDirection::Downstream, true)
+        if self.external.is_none()
+            && !self
+                .programs
+                .read()
+                .has_rules(ProtocolDirection::Downstream)
+        {
+            return intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+                self.metadata.workspace_id.clone(),
+                self.metadata.listener_id.clone(),
+            )
+            .create_downstream(connection);
+        }
+        Ok(self.build(&connection, ProtocolDirection::Downstream, true))
     }
 }

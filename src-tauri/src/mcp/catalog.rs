@@ -260,27 +260,6 @@ fn traffic_tools() -> Vec<Tool> {
                 &["session_id", "runtime_epoch"],
             ),
         ),
-        tool(
-            "breakpoint_query",
-            "Pending breakpoints",
-            "Read pending HTTP breakpoints, optionally scoped to one runtime epoch.",
-            object_schema(
-                json!({"runtime_epoch": {"type": "string", "format": "uuid"}}),
-                &[],
-            ),
-        ),
-        tool(
-            "breakpoint_get",
-            "Breakpoint detail",
-            "Read one pending HTTP breakpoint without resolving it.",
-            object_schema(
-                json!({
-                    "breakpoint_id": {"type": "string", "format": "uuid"},
-                    "runtime_epoch": {"type": "string", "format": "uuid"}
-                }),
-                &["breakpoint_id", "runtime_epoch"],
-            ),
-        ),
     ]
 }
 

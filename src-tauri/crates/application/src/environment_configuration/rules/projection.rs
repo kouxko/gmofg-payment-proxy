@@ -84,16 +84,7 @@ fn restore_rule(
 
 fn validate_immutable_binding(existing: &RuleContent, candidate: &RuleContent) -> AppResult<()> {
     match (existing, candidate) {
-        (RuleContent::Http(existing), RuleContent::Http(candidate)) => {
-            match (&existing.document, &candidate.document) {
-                (None, None) => Ok(()),
-                (Some(existing), Some(candidate)) if existing.package == candidate.package => {
-                    Ok(())
-                }
-                (Some(_), Some(_)) => Err(selector_error("EXISTING_RULE_ID_PACKAGE_MISMATCH")),
-                _ => Err(selector_error("EXISTING_RULE_ID_KIND_MISMATCH")),
-            }
-        }
+        (RuleContent::Http(_), RuleContent::Http(_)) => Ok(()),
         (RuleContent::Socket(existing), RuleContent::Socket(candidate))
             if existing.package == candidate.package =>
         {

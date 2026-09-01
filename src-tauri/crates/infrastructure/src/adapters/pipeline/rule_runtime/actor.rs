@@ -1,7 +1,4 @@
-use std::{
-    collections::BTreeMap,
-    sync::{Arc, mpsc as std_mpsc},
-};
+use std::{collections::BTreeMap, sync::Arc};
 
 use intercept_proxy_application::EventHub;
 use intercept_proxy_domain::{
@@ -51,14 +48,12 @@ pub(super) struct EvaluationInput {
 
 pub(super) enum Reply {
     Async(oneshot::Sender<ProxyResult<EvaluatedRules>>),
-    Handshake(std_mpsc::SyncSender<ProxyResult<EvaluatedRules>>),
 }
 
 impl Reply {
     fn send(self, result: ProxyResult<EvaluatedRules>) {
         match self {
             Self::Async(reply) => drop(reply.send(result)),
-            Self::Handshake(reply) => drop(reply.send(result)),
         }
     }
 }
@@ -169,7 +164,7 @@ async fn evaluate_owned(
         input.body_codec.as_deref(),
     )?;
     let hit_rules = matched_rule_summaries(&evaluation, &current.snapshot.rules, channel_labels);
-    let (prepared_message, prepared_socket, fault_actions, pause) =
+    let (prepared_message, prepared_socket, fault_actions) =
         match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -213,14 +208,12 @@ async fn evaluate_owned(
         .map(|trace| trace.rule_id.as_uuid())
         .collect();
     Ok(EvaluatedRules {
-        actions: evaluation.composed_actions,
         traces,
         matched_ids,
         hit_rules,
         prepared_message,
         prepared_socket,
         fault_actions,
-        pause,
     })
 }
 
@@ -232,7 +225,6 @@ async fn prepare_evaluated_message(
     Option<intercept_proxy_runtime::Message>,
     Option<SocketContext>,
     Vec<intercept_proxy_runtime::FaultAction>,
-    bool,
 )> {
     let mut prepared_message = input.message.clone();
     let Some(message) = prepared_message.as_mut() else {
@@ -247,7 +239,7 @@ async fn prepare_evaluated_message(
             })?),
             None => None,
         };
-        return Ok((prepared_message, prepared_socket, Vec::new(), false));
+        return Ok((prepared_message, prepared_socket, Vec::new()));
     };
     if let Some(joint) = input.joint_document.take() {
         joint.encode_into(message).await.map_err(|error| {
@@ -267,13 +259,13 @@ async fn prepare_evaluated_message(
         input.stage,
         hit_rules,
     );
-    let (fault_actions, pause) = crate::adapters::pipeline::rule_actions::apply_rule_actions(
+    let fault_actions = crate::adapters::pipeline::rule_actions::apply_rule_actions(
         body_codec.as_ref(),
         message,
         &evaluation.composed_actions,
         seed,
     )?;
-    Ok((prepared_message, None, fault_actions, pause))
+    Ok((prepared_message, None, fault_actions))
 }
 
 async fn prepare_runtime(
@@ -327,6 +319,5 @@ const fn message_stage(stage: RuleStage) -> MessageStage {
     match stage {
         RuleStage::ProxyToUpstream => MessageStage::Request,
         RuleStage::ProxyToApp => MessageStage::Response,
-        RuleStage::TlsHandshake => MessageStage::TlsHandshake,
     }
 }

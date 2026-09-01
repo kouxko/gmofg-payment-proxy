@@ -5,8 +5,8 @@
 
 use intercept_proxy_application::{ExternalPackageApplicationPort, ListenerRuntimePort};
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
-    NumberOperator, NumberPredicate, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
+    Condition, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer, NumberOperator,
+    NumberPredicate, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
     SocketRuleContent, UnifiedAction,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
@@ -265,10 +265,7 @@ fn configure_nth_one_shot_chain(workspace: &mut intercept_proxy_domain::ProxyWor
             let RuleContent::Socket(content) = &mut draft.content else {
                 panic!("production Socket fixture must stay Socket-owned");
             };
-            content.condition = ConditionTree::All(vec![
-                ConditionTree::Leaf(Condition::NthHit { count: 2 }),
-                content.condition.clone(),
-            ]);
+            content.conditions.insert(0, Condition::NthHit { count: 2 });
         }
         definition.update(definition.revision(), draft).unwrap();
     }
@@ -344,13 +341,13 @@ fn two_stage_one_shot_rules(
                     one_shot: false,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: package.clone(),
-                        condition: ConditionTree::Leaf(Condition::Document {
+                        conditions: vec![Condition::Document {
                             path: condition_path,
                             predicate: DocumentPredicate::Number(NumberPredicate {
                                 operator: NumberOperator::Equal,
                                 value: document_number(condition_value),
                             }),
-                        }),
+                        }],
                         actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                             path: field,
                             value: DocumentValue::integer(i64::from(value)).unwrap(),

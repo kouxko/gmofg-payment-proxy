@@ -10,7 +10,7 @@ use super::{
 };
 use crate::{
     AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStageViewModel, ListenerDataPlane,
-    ListenerId, MessageStage, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
+    ListenerId, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
     ProtocolPackageRef, ProxyListener, RuleAction as AppRuleAction, RuleCommonActionCapability,
     RuleContent, RuleDocumentConditionPathCapability, RuleEditorContentContext, RuleEditorContext,
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
@@ -20,9 +20,9 @@ use crate::{
     local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
-    HttpDocumentRuleContent, HttpRuleContent, JitterScope, MatchField, MatchOperator,
-    SocketRuleContent, TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
+    Condition, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
+    HttpRuleContent, JitterScope, MatchField, MatchOperator, SocketRuleContent,
+    TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
 };
 
 impl Application {
@@ -133,7 +133,7 @@ impl Application {
         selector: Option<&str>,
         operator_kind: RuleMatchOperatorKind,
         value: &str,
-        stage: MessageStage,
+        stage: RuleStage,
     ) -> AppResult<Condition> {
         let capability = stage_capability(stage)
             .match_fields
@@ -171,7 +171,7 @@ impl Application {
     pub fn rule_definition_action_draft(
         &self,
         input: RuleHttpActionDraftInput,
-        stage: MessageStage,
+        stage: RuleStage,
     ) -> AppResult<DomainRuleAction> {
         let capability = action_capability(stage, input.kind)
             .ok_or_else(|| AppError::new("RULE_INVALID", "动作与当前规则阶段不兼容。"))?;
@@ -278,7 +278,6 @@ pub(super) fn domain_action(action: AppRuleAction) -> AppResult<DomainRuleAction
             blocked_milliseconds,
             direction: domain_direction(direction),
         },
-        AppRuleAction::Pause => DomainRuleAction::Pause,
         AppRuleAction::CustomHttpStatus { status } => DomainRuleAction::CustomHttpStatus { status },
         AppRuleAction::Terminal { action } => {
             DomainRuleAction::Terminal(domain_terminal_action(action))
@@ -295,7 +294,6 @@ fn domain_direction(direction: crate::RuleTrafficDirection) -> TrafficDirection 
 
 fn domain_terminal_action(action: RuleTerminalAction) -> DomainTerminalAction {
     match action {
-        RuleTerminalAction::RejectTlsHandshake => DomainTerminalAction::RejectTlsHandshake,
         RuleTerminalAction::DisconnectBeforeUpstream => {
             DomainTerminalAction::DisconnectBeforeUpstream
         }
@@ -351,55 +349,39 @@ fn http_stages(
     listener_id: ListenerId,
     description: Option<&ProtocolPackageDescriptionViewModel>,
 ) -> Vec<HttpRuleEditorStageViewModel> {
-    [
-        RuleStage::TlsHandshake,
-        RuleStage::ProxyToUpstream,
-        RuleStage::ProxyToApp,
-    ]
-    .into_iter()
-    .filter_map(|stage| {
-        let http = Some(http_capability(stage));
-        let document = description.and_then(|value| document_capability(value, stage));
-        if http.is_none() && document.is_none() {
-            return None;
-        }
-        let package = document.as_ref().map(|_| {
-            description
-                .expect("document requires description")
-                .package
-                .clone()
-        });
-        let document_fields = document
-            .as_ref()
-            .and_then(|value| value.schema.as_ref())
-            .map(document_schema_field_capabilities)
-            .unwrap_or_default();
-        let document_common_actions = document
-            .as_ref()
-            .map(|value| value.common_actions.clone())
-            .unwrap_or_default();
-        let embedded_document = document.as_ref().map(|_| HttpDocumentRuleContent {
-            package: package.clone().expect("document stage has a package"),
-        });
-        Some(HttpRuleEditorStageViewModel {
-            stage,
-            http,
-            package,
-            document_fields,
-            document_common_actions,
-            new_rule_draft: RuleNewDefinitionDraft {
-                listener_id,
+    [RuleStage::ProxyToUpstream, RuleStage::ProxyToApp]
+        .into_iter()
+        .map(|stage| {
+            let http = Some(http_capability(stage));
+            let document = description.map(|value| document_capability(value, stage));
+            let package = description.map(|value| value.package.clone());
+            let document_fields = document
+                .as_ref()
+                .and_then(|value| value.schema.as_ref())
+                .map(document_schema_field_capabilities)
+                .unwrap_or_default();
+            let document_common_actions = document.map_or_else(
+                || vec![RuleCommonActionCapability::RecordMatch],
+                |value| value.common_actions.clone(),
+            );
+            HttpRuleEditorStageViewModel {
                 stage,
-                content: RuleContent::Http(HttpRuleContent {
-                    description: String::new(),
-                    condition: ConditionTree::All(Vec::new()),
-                    actions: Vec::new(),
-                    document: embedded_document,
-                }),
-            },
+                http,
+                package,
+                document_fields,
+                document_common_actions,
+                new_rule_draft: RuleNewDefinitionDraft {
+                    listener_id,
+                    stage,
+                    content: RuleContent::Http(HttpRuleContent {
+                        description: String::new(),
+                        conditions: Vec::new(),
+                        actions: Vec::new(),
+                    }),
+                },
+            }
         })
-    })
-    .collect()
+        .collect()
 }
 
 fn socket_stages(
@@ -411,9 +393,7 @@ fn socket_stages(
     let stages: &[RuleStage] = &[RuleStage::ProxyToUpstream, RuleStage::ProxyToApp];
     stages
         .iter()
-        .filter_map(|&stage| {
-            document_capability(description, stage).map(|catalog| (stage, catalog))
-        })
+        .map(|&stage| (stage, document_capability(description, stage)))
         .map(|(stage, catalog)| SocketRuleEditorStageViewModel {
             stage,
             document_fields: catalog
@@ -427,7 +407,7 @@ fn socket_stages(
                 stage,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: description.package.clone(),
-                    condition: ConditionTree::All(Vec::new()),
+                    conditions: Vec::new(),
                     actions: Vec::new(),
                 }),
             },
@@ -436,11 +416,7 @@ fn socket_stages(
 }
 
 fn http_capability(stage: RuleStage) -> crate::RuleStageCapabilityViewModel {
-    match stage {
-        RuleStage::TlsHandshake => stage_capability(MessageStage::TlsHandshake),
-        RuleStage::ProxyToUpstream => stage_capability(MessageStage::Request),
-        RuleStage::ProxyToApp => stage_capability(MessageStage::Response),
-    }
+    stage_capability(stage)
 }
 
 #[derive(Clone)]
@@ -452,14 +428,13 @@ struct DocumentCapability {
 fn document_capability(
     description: &ProtocolPackageDescriptionViewModel,
     stage: RuleStage,
-) -> Option<DocumentCapability> {
+) -> DocumentCapability {
     let schema = match stage {
         RuleStage::ProxyToUpstream => &description.upstream_schema,
         RuleStage::ProxyToApp => &description.downstream_schema,
-        RuleStage::TlsHandshake => return None,
     };
-    Some(DocumentCapability {
+    DocumentCapability {
         schema: schema.as_ref().map(|schema| schema.root.clone()),
         common_actions: vec![RuleCommonActionCapability::RecordMatch],
-    })
+    }
 }

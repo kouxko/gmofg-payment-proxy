@@ -97,12 +97,12 @@ flowchart LR
 - `models/`：前端、MCP 和其他展示适配器共享的 ViewModel。
 - `ports/`：存储、Listener runtime、证书和 Android 等端口。
 - `events/`：有界回放与实时 `EventHub`。
-- `capacity`、`breakpoints`、`sessions`：进程级业务协调与资源合同。
+- `capacity`、`sessions`：进程级业务协调与资源合同。
 
 HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯一 Rust 真相源：
 
-- TLS 握手阶段只暴露证书指纹匹配和拒绝握手动作。
-- Request/Response 各自暴露合法匹配字段、普通动作和终止动作。
+- 规则只保留 Proxy → Server 与 Proxy → App 两个写出阶段；TLS 握手不属于规则系统。
+- 两个阶段各自暴露合法匹配字段、普通动作和终止动作。
 - Throttle/Intermittent 的方向由阶段固定为 Upstream 或 Downstream。
 - 前端通过 `rule_capabilities`、草稿命令和生成 DTO 渲染选项。
 - `rule_save` 仍调用领域与 application 校验，防止旧客户端或损坏输入绕过矩阵。
@@ -134,7 +134,7 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 
 - `sqlite/`：Workspace、规则、协议包、证书引用和设置持久化。
 - `adapters/listener_runtime/`：领域 Listener 到真实 runtime 的装配与校验。
-- `adapters/pipeline/`：HTTP 标准规则、抓包、会话、断点和故障动作桥接。
+- `adapters/pipeline/`：HTTP 标准规则、抓包、会话和故障动作桥接。
 - `sqlite/external_packages.rs`：外部包注册、本地 ZIP、生命周期状态和精确版本持久化。
 - `adapters/external_packages/`：外部 WebSocket/RPC 协议能力。
 - `adapters/exchange_observation.rs`：有界内存中的连接事件记录，不写 SQLite。
@@ -145,11 +145,12 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 `src-tauri/crates/host/src/lib.rs` 先构造不依赖 UI 的 `ApplicationHost`：
 
 1. 校验 `ProductProfile`，再创建数据目录。
-2. 打开 SQLite；Phase17 后仅保留 Schema 100 preserve/fail-closed 路径。`<100`、未来、缺失、重复或
-   损坏 Schema 均在不改写数据库 bytes 或数据的前提下拒绝启动；发布 checker 禁止 reset policy、
-   marker 或 recreate 分支重新进入生产组合根。
+2. 打开 SQLite；Schema 100 原样保留。唯一有效版本标记 `<100` 时删除 SQLite 主文件、WAL 与 SHM，
+   再创建全新的 Schema 100；未来版本、缺失、重复或损坏标记均在不改写数据库或用户数据的前提下
+   fail-closed。跨进程启动所有权串行覆盖分类、复验、清除与重建，后启动实例必须在获得所有权后重新
+   读取当前 Schema 状态。发布 checker 锁定这条单一路径，不允许临时 policy、兼容迁移或其他 reset 分支。
 3. 根据产品存储命名空间选择 Keychain 或 DPAPI secret protector。
-4. 创建 Infrastructure service bundle、容量账本、断点协调器和 EventHub。
+4. 创建 Infrastructure service bundle、容量账本和 EventHub。
 5. 构造 `RuntimePipelineAdapter` 并注入 Listener runtime。
 6. 创建 Android ADB adapter、协议包服务和外部软件包 WebSocket 服务。
 7. 创建 `Application` facade，并由 Host 持有后台任务和唯一关闭门闩。
@@ -187,7 +188,7 @@ sequenceDiagram
 - `features/shell`：I18n、Toast、Bootstrap、内存导航、全局状态和 WorkspaceContent。
 - `features/workspaces`、`listeners`、`protocol-packages`：配置和运行入口。
 - `features/capture`：HTTP 抓包与 Socket Exchange 连接时间线。
-- `features/rules`、`faults`、`breakpoints`：规则草稿、故障预设和断点交互。
+- `features/rules`、`faults`：规则草稿和故障预设。
 - `features/certificates`、`android-network`、`settings`：平台配置页面。
 - `features/diagnostics`：有界结构化诊断事件与复现报告导出；完整进程 RuntimeLog 由 MCP/报告读取。
 - `features/shared`：真正跨 feature 的无业务所有权组件。

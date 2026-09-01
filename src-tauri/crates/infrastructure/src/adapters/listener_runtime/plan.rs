@@ -382,7 +382,7 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             .ok_or_else(|| {
                 AppError::new(
                     "LISTENER_RUNTIME_NOT_READY",
-                    "通用规则、抓包与断点管线尚未完成装配。",
+                    "通用规则与抓包管线尚未完成装配。",
                 )
                 .entity(listener.id.to_string())
             })

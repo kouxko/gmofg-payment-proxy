@@ -1,7 +1,7 @@
 use super::*;
 
 #[test]
-fn schema_19_is_rejected_without_modifying_legacy_data() {
+fn schema_19_is_cleared_and_recreated_as_schema100() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let connection = Connection::open(&path).expect("open legacy database");
@@ -17,22 +17,16 @@ fn schema_19_is_rejected_without_modifying_legacy_data() {
         )
         .expect("seed schema 19");
     drop(connection);
-    let before = std::fs::read(&path).expect("read legacy database before rejection");
-
     assert_eq!(CURRENT_APPLICATION_SCHEMA_VERSION, 100);
-    SqliteStore::open(&path).expect_err("schema 19 must fail closed");
-    assert_eq!(
-        std::fs::read(&path).expect("read legacy database after rejection"),
-        before
-    );
-    let connection = Connection::open(&path).expect("reopen legacy database");
+    drop(SqliteStore::open(&path).expect("schema 19 must recreate current storage"));
+    let connection = Connection::open(&path).expect("reopen recreated database");
     let version = connection
         .query_row(
             "SELECT version FROM application_schema WHERE singleton_id = 1",
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("legacy schema marker");
+        .expect("Schema100 marker");
     let legacy_exists = connection
         .query_row(
             "SELECT EXISTS(SELECT 1 FROM sqlite_master WHERE type = 'table' AND name = 'legacy_listener_policy')",
@@ -40,12 +34,12 @@ fn schema_19_is_rejected_without_modifying_legacy_data() {
             |row| row.get::<_, bool>(0),
         )
         .expect("legacy table probe");
-    assert_eq!(version, 19);
-    assert!(legacy_exists, "pre-1.0 table must remain after rejection");
+    assert_eq!(version, 100);
+    assert!(!legacy_exists, "pre-1.0 table must be deleted");
 }
 
 #[test]
-fn committed_version_99_wal_data_is_rejected_without_modification() {
+fn committed_version_99_data_is_cleared_and_recreated_as_schema100() {
     let directory = tempfile::tempdir().expect("tempdir");
     let path = directory.path().join("state.sqlite");
     let seed = Connection::open(&path).expect("open version 99 database");
@@ -61,34 +55,26 @@ fn committed_version_99_wal_data_is_rejected_without_modification() {
          INSERT INTO wal_sentinel(value) VALUES ('committed in WAL');",
     )
     .expect("commit version 99 WAL data");
-    let wal_path = path.with_extension("sqlite-wal");
-    assert!(wal_path.exists());
-    let database_before = std::fs::read(&path).expect("read database before rejection");
-    let wal_before = std::fs::read(&wal_path).expect("read WAL before rejection");
+    drop(seed);
 
-    SqliteStore::open(&path).expect_err("version 99 WAL database must fail closed");
-    assert_eq!(
-        std::fs::read(&path).expect("read database after rejection"),
-        database_before
-    );
-    assert_eq!(
-        std::fs::read(&wal_path).expect("read WAL after rejection"),
-        wal_before
-    );
-    let version = seed
+    drop(SqliteStore::open(&path).expect("version 99 must recreate current storage"));
+    let connection = Connection::open(&path).expect("reopen recreated database");
+    let version = connection
         .query_row(
             "SELECT version FROM application_schema WHERE singleton_id = 1",
             [],
             |row| row.get::<_, i64>(0),
         )
-        .expect("version 99 marker");
-    let sentinel = seed
-        .query_row("SELECT value FROM wal_sentinel", [], |row| {
-            row.get::<_, String>(0)
-        })
-        .expect("WAL sentinel");
-    assert_eq!(version, 99);
-    assert_eq!(sentinel, "committed in WAL");
+        .expect("Schema100 marker");
+    let sentinel_exists = connection
+        .query_row(
+            "SELECT EXISTS(SELECT 1 FROM sqlite_schema WHERE type = 'table' AND name = 'wal_sentinel')",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .expect("legacy WAL sentinel probe");
+    assert_eq!(version, 100);
+    assert!(!sentinel_exists);
 }
 
 #[test]

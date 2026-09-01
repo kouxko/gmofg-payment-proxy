@@ -111,15 +111,12 @@ async fn builds_and_invokes_application_without_tauri() {
     assert_eq!(draft.listener_id, listener_id);
     assert_eq!(
         draft.stage,
-        intercept_proxy_application::RuleStage::TlsHandshake
+        intercept_proxy_application::RuleStage::ProxyToUpstream
     );
     let intercept_proxy_application::RuleContent::Http(http_draft_content) = &draft.content else {
         panic!("HTTP structural draft expected");
     };
-    assert!(matches!(
-        http_draft_content.condition,
-        intercept_proxy_application::ConditionTree::All(ref children) if children.is_empty()
-    ));
+    assert!(http_draft_content.conditions.is_empty());
     assert!(http_draft_content.actions.is_empty());
 
     host.shutdown().await.expect("shutdown UI-neutral host");
@@ -247,7 +244,7 @@ async fn external_package_bind_failure_is_visible_without_blocking_host_startup(
 }
 
 #[tokio::test]
-async fn pre_1_0_schema_is_rejected_without_changing_any_sqlite_file() {
+async fn pre_1_0_schema_is_cleared_and_recreated_as_schema100() {
     let temp = tempfile::tempdir().expect("temporary host directory");
     let database = temp.path().join("intercept-proxy.sqlite3");
     let connection = Connection::open(&database).expect("create pre-1.0 database");
@@ -263,21 +260,37 @@ async fn pre_1_0_schema_is_rejected_without_changing_any_sqlite_file() {
         )
         .expect("write pre-1.0 schema");
     drop(connection);
-    let before = sqlite_files(&database);
     assert_eq!(CURRENT_APPLICATION_SCHEMA_VERSION, 100);
-    let error = ApplicationHostBuilder::new(
+    let host = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
         Arc::new(InterceptProxyProfile),
     )
     .build()
     .await
-    .expect_err("pre-1.0 schema must fail closed");
-    assert!(matches!(
-        error,
-        HostBuildError::Infrastructure(InfrastructureError::DatabaseSchemaInvalid { .. })
-    ));
-    assert_sqlite_files_unchanged(&database, &before);
+    .expect("pre-1.0 schema must recreate current storage");
+    host.shutdown().await.expect("shutdown recreated Host");
+
+    let connection = Connection::open(&database).expect("open recreated database");
+    let version = connection
+        .query_row(
+            "SELECT version FROM application_schema WHERE singleton_id = 1",
+            [],
+            |row| row.get::<_, i64>(0),
+        )
+        .expect("Schema100 marker");
+    let sentinel_exists = connection
+        .query_row(
+            "SELECT EXISTS(
+                SELECT 1 FROM sqlite_schema
+                WHERE type = 'table' AND name = 'pre_1_0_sentinel'
+            )",
+            [],
+            |row| row.get::<_, bool>(0),
+        )
+        .expect("legacy sentinel probe");
+    assert_eq!(version, 100);
+    assert!(!sentinel_exists, "pre-1.0 data must be deleted");
 }
 
 #[tokio::test]

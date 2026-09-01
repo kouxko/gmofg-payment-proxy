@@ -279,9 +279,6 @@ mod tests {
             duration_ms: Some(event_id),
             matched_rule_ids: Vec::new(),
             size_bytes: event_id,
-            breakpoint_id: None,
-            can_go_to_breakpoint: false,
-            breakpoint_disabled_reason: None,
         }
     }
 

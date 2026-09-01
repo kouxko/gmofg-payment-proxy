@@ -8,14 +8,13 @@ use std::{collections::BTreeMap, sync::Arc};
 use chrono::Utc;
 
 use crate::{
-    AndroidControlPort, AppError, AppResult, BreakpointCoordinator, BreakpointValidationPort,
-    BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
-    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
-    ExternalPackageApplicationPort, FaultServicePort, ListenerCertificateImportPort,
-    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
-    ProtocolPackageApplicationServices, ProtocolPackageImportPort, ProtocolPackageUsageQueryPort,
-    SessionQueryPort, SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
-    WorkspaceRepositoryPort,
+    AndroidControlPort, AppError, AppResult, BuiltinProtocolPackagePort,
+    CertificateOverviewViewModel, CertificateServicePort, CertificateValidationViewModel,
+    ChannelPresentationViewModel, EventHub, ExternalPackageApplicationPort, FaultServicePort,
+    ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
+    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageImportPort,
+    ProtocolPackageUsageQueryPort, SessionQueryPort, SettingsRepositoryPort, SettingsViewModel,
+    UiEventPayload, WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -58,8 +57,6 @@ pub struct Application {
     product_name: String,
     capture: Arc<dyn crate::CaptureRepositoryPort>,
     sessions: Arc<dyn SessionQueryPort>,
-    breakpoints: Arc<BreakpointCoordinator>,
-    breakpoint_validation: Arc<dyn BreakpointValidationPort>,
     faults: Arc<dyn FaultServicePort>,
     certificates: Arc<dyn CertificateServicePort>,
     settings: Arc<dyn SettingsRepositoryPort>,
@@ -115,8 +112,6 @@ impl std::fmt::Debug for Application {
 pub struct ApplicationDependencies {
     pub capture: Arc<dyn crate::CaptureRepositoryPort>,
     pub sessions: Arc<dyn SessionQueryPort>,
-    pub breakpoints: Arc<BreakpointCoordinator>,
-    pub breakpoint_validation: Arc<dyn BreakpointValidationPort>,
     pub faults: Arc<dyn FaultServicePort>,
     pub certificates: Arc<dyn CertificateServicePort>,
     pub settings: Arc<dyn SettingsRepositoryPort>,
@@ -175,8 +170,6 @@ impl Application {
             product_name,
             capture: dependencies.capture,
             sessions: dependencies.sessions,
-            breakpoints: dependencies.breakpoints,
-            breakpoint_validation: dependencies.breakpoint_validation,
             faults: dependencies.faults,
             certificates: dependencies.certificates,
             settings: dependencies.settings,

@@ -64,18 +64,13 @@ async fn persisted_joint_http_shape(
     store: &InMemoryWorkspaceStore,
 ) -> (ProxyWorkspace, serde_json::Value) {
     let mut value: serde_json::Value = serde_json::from_slice(FULL_SHAPE).unwrap();
-    value["workspace"]["rules"][0]["content"]["value"]["document"] =
-        serde_json::json!({"package": {"id": "au-eftex", "version": "1.1.0"}});
-    value["workspace"]["rules"][0]["content"]["value"]["condition"]["children"]
+    value["workspace"]["rules"][0]["content"]["value"]["conditions"]
         .as_array_mut()
         .unwrap()
         .push(serde_json::json!({
-            "operator":"leaf",
-            "children":{
-                "source":"document",
-                "path":"/amount",
-                "predicate":{"type":"number","value":{"operator":"equal","value":1000}}
-            }
+            "source":"document",
+            "path":"/amount",
+            "predicate":{"type":"number","value":{"operator":"equal","value":1000}}
         }));
     value["workspace"]["rules"][0]["content"]["value"]["actions"]
         .as_array_mut()
@@ -111,7 +106,7 @@ fn retain_all_ids(candidate: &mut serde_json::Value, persisted: &ProxyWorkspace)
     let protocol_rules = protocol_rule_definitions(persisted);
     candidate["workspace"]["rules"][0]["existing_rule_id"] =
         serde_json::json!(http_rules[0].rule_id());
-    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+    rule_named_mut(candidate, "Protocol Document values")["existing_rule_id"] =
         serde_json::json!(protocol_rules[0].rule_id());
 }
 
@@ -314,7 +309,7 @@ async fn existing_protocol_rule_package_mismatch_fails_with_exact_code() {
     let store = Arc::new(InMemoryWorkspaceStore::new_empty());
     let (persisted, mut candidate) = persisted_full_shape(&store).await;
     retain_all_ids(&mut candidate, &persisted);
-    candidate["workspace"]["rules"][14]["content"]["value"]["package"]["version"] =
+    rule_named_mut(&mut candidate, "Protocol Document values")["content"]["value"]["package"]["version"] =
         serde_json::json!("1.2.0");
 
     assert_existing_domain_code(
@@ -335,7 +330,8 @@ async fn existing_protocol_rule_can_change_stage_without_changing_binding_or_con
     let original_created_order = original.created_order();
     let original_listener_id = original.listener_id();
     let original_content = original.content().clone();
-    candidate["workspace"]["rules"][14]["stage"] = serde_json::json!("proxy_to_app");
+    rule_named_mut(&mut candidate, "Protocol Document values")["stage"] =
+        serde_json::json!("proxy_to_app");
     let capture = Arc::new(CapturingBaseline::default());
     let report = validate_existing(store, capture.clone(), candidate).await;
 
@@ -389,7 +385,8 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
         .find(|rule| {
             matches!(
                 rule.content(),
-                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_some()
+                intercept_proxy_domain::RuleContent::Http(content)
+                    if intercept_proxy_domain::contains_document_condition(&content.conditions)
             )
         })
         .unwrap();
@@ -404,7 +401,7 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
             )
         })
         .unwrap();
-    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+    rule_named_mut(&mut candidate, "Protocol Document values")["existing_rule_id"] =
         serde_json::json!(original_socket.rule_id());
     candidate["workspace"]["rules"][0]["name"] = serde_json::json!("Joint HTTP updated");
     candidate["workspace"]["rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
@@ -430,7 +427,9 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
     let intercept_proxy_domain::RuleContent::Http(content) = updated.content() else {
         panic!("joint HTTP rule must remain HTTP content");
     };
-    assert!(content.document.is_some());
+    assert!(intercept_proxy_domain::contains_document_condition(
+        &content.conditions
+    ));
 }
 
 #[tokio::test]

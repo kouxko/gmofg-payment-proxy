@@ -4,7 +4,6 @@
 //! 运行时职责拆分；本模块统一重导出，保持原有 `models::*` 公共 API 稳定。
 
 mod application_snapshot;
-mod breakpoint;
 mod capture;
 mod certificate_settings;
 mod common;
@@ -21,7 +20,6 @@ mod unified_rule;
 mod workspace;
 
 pub use application_snapshot::*;
-pub use breakpoint::*;
 pub use capture::*;
 pub use certificate_settings::*;
 pub use common::*;

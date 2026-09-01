@@ -50,9 +50,8 @@ test("canonical repository passes", () => {
 });
 
 for (const [name, file, mutate, message] of [
-  ["created_order comparator", "src/features/rules/rule-definition-model.ts", (s) => s.replace("left.priority - right.priority || left.rule_id.localeCompare(right.rule_id)", "left.priority - right.priority || left.created_order - right.created_order"), "created_order"],
-  ["generated discriminator", "src/generated/rust-types.ts", (s) => s.replace('operator: "all"', 'operator: "all_drift"'), "generated semantic drift"],
-  ["flat condition owner", "src-tauri/crates/domain/src/unified_rule.rs", (s) => `${s}\npub struct Bad { pub conditions: Vec<MatchCondition> }\n`, "flat condition owner"],
+  ["generated discriminator", "src/generated/rust-types.ts", (s) => s.replace('source: "document"', 'source: "document_drift"'), "generated semantic drift"],
+  ["parallel condition owner", "src-tauri/crates/domain/src/unified_rule.rs", (s) => `${s}\npub struct Bad { pub conditions: Vec<MatchCondition> }\n`, "parallel condition owner"],
   ["parallel action owner", "src-tauri/crates/domain/src/unified_rule.rs", (s) => `${s}\npub struct Bad { pub actions: Vec<RuleAction> }\n`, "parallel action owner"],
   ["ignored test", "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs", (s) => s.replace("#[test]", "#[test]\n#[ignore]"), "ignored"],
   ["restored allowlist", "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/contract-inventory.json", (source) => source.replace('"phase12_legacy_owner_allowlist": []', '"phase12_legacy_owner_allowlist": [{"file":"x.rs","symbol":"RuleAction","reason":"legacy"}]'), "allowlist must be empty"],

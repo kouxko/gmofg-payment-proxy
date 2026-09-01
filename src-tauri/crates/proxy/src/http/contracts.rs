@@ -9,7 +9,7 @@ use intercept_proxy_exchange::SocketContext;
 /// Application-facing HTTP wire policy and lifecycle hooks.
 ///
 /// `apply_*_policy` runs once on the framed HTTP `Message` before that direction enters Exchange
-/// Decode. It may implement product HTTP mutation, breakpoint, session, capture and fault-action
+/// Decode. It may implement product HTTP mutation, session, capture and fault-action
 /// semantics, but it must never invoke a protocol package or an Exchange capability. Consequently
 /// Decode/Display/Rules/Encode remain the only protocol stages and cannot be hidden behind this
 /// port. Implementations must not block on UI subscribers.

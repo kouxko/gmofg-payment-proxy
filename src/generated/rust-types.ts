@@ -135,19 +135,13 @@ export const commands = {
 	exchangeObservationQuery: (query: ExchangeObservationQuery) => typedError<ExchangeObservationPage, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_query", { query })),
 	exchangeObservationGet: (exchangeId: string) => typedError<ExchangeObservationRecord, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_get", { exchangeId })),
 	exchangeObservationClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_clear", { workspaceId, confirmed })),
-	breakpointQuery: (runtimeEpoch: string | null) => typedError<BreakpointSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("breakpoint_query", { runtimeEpoch })),
-	breakpointGet: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_get", { breakpointId, runtimeEpoch })),
-	breakpointFormatJson: (draft: BreakpointDraft) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_format_json", { draft })),
-	breakpointRestoreOriginal: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_restore_original", { breakpointId, runtimeEpoch })),
-	breakpointValidate: (draft: BreakpointDraft, runtimeEpoch: string) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_validate", { draft, runtimeEpoch })),
-	breakpointResolve: (runtimeEpoch: string, decision: BreakpointDecision) => typedError<BreakpointSummaryViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_resolve", { runtimeEpoch, decision })),
 	ruleDefinitionList: () => typedError<RuleDefinition_Serialize[], AppErrorViewModel>(__TAURI_INVOKE("rule_definition_list")),
 	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
 	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
 	ruleDefinitionNthHitConditionDraft: (input: RuleNthHitConditionDraftInput) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_nth_hit_condition_draft", { input })),
-	ruleDefinitionHttpConditionDraft: (fieldKind: RuleMatchFieldKind, selector: string | null, operatorKind: RuleMatchOperatorKind, value: string, stage: MessageStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_http_condition_draft", { fieldKind, selector, operatorKind, value, stage })),
-	ruleDefinitionActionDraft: (input: RuleHttpActionDraftInput, stage: MessageStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { input, stage })),
+	ruleDefinitionHttpConditionDraft: (fieldKind: RuleMatchFieldKind, selector: string | null, operatorKind: RuleMatchOperatorKind, value: string, stage: RuleStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_http_condition_draft", { fieldKind, selector, operatorKind, value, stage })),
+	ruleDefinitionActionDraft: (input: RuleHttpActionDraftInput, stage: RuleStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { input, stage })),
 	ruleDefinitionDocumentConditionDraft: (path: string, valueType: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_condition_draft", { path, valueType, predicate, raw })),
 	ruleDefinitionDocumentActionDraft: (path: string, valueType: RuleLocalDocumentValueType, action: RuleLocalDocumentActionKind, raw: string | null, index: number | null) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_action_draft", { path, valueType, action, raw, index })),
 	ruleDefinitionDocumentCommonActionDraft: (action: RuleCommonActionCapability) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_common_action_draft", { action })),
@@ -370,7 +364,6 @@ export type AppBootstrapViewModel = {
 	product_name: string,
 	channel_catalog: ChannelPresentationViewModel[],
 	recent_capture: CapturePageViewModel,
-	pending_breakpoints: BreakpointSummaryViewModel[],
 	certificate: CertificateOverviewViewModel,
 	settings: SettingsViewModel,
 	event_cursor: number,
@@ -459,68 +452,6 @@ export type BooleanPredicate =
 /**  Exact boolean equality. */
 { equal: boolean };
 
-export type BreakpointActionOptionViewModel = {
-	kind: BreakpointDecisionKind,
-	label: string,
-	enabled: boolean,
-	disabled_reason: DisabledReason | null,
-	default_delay_ms: number | null,
-	default_http_status: number | null,
-	default_content_length_delta: number | null,
-	default_truncate_at: number | null,
-};
-
-/**  用户提交的断点决定。所有可选参数最终仍由 Rust 按 `kind` 校验。 */
-export type BreakpointDecision = {
-	breakpoint_id: string,
-	expected_revision: number,
-	kind: BreakpointDecisionKind,
-	message: MessageContentViewModel | null,
-	delay_ms: number | null,
-	http_status: number | null,
-	content_length_delta: number | null,
-	truncate_at: number | null,
-};
-
-export type BreakpointDecisionKind = "forward_original" | "forward_modified" | "mock_response" | "delay" | "disconnect_before_upstream" | "custom_http_status" | "invalid_json" | "wrong_content_length" | "truncate" | "drop_response";
-
-/**  断点详情：原始报文用于恢复，有效报文用于当前编辑和最终转发。 */
-export type BreakpointDetailViewModel = {
-	summary: BreakpointSummaryViewModel,
-	original: MessageContentViewModel,
-	effective: MessageContentViewModel,
-	can_resolve: boolean,
-	resolve_disabled_reason: DisabledReason | null,
-	available_actions: BreakpointActionOptionViewModel[],
-};
-
-export type BreakpointDraft = {
-	breakpoint_id: string,
-	expected_revision: number,
-	message: MessageContentViewModel,
-};
-
-export type BreakpointState = "pending" | "resolved" | "client_disconnected" | "proxy_stopped";
-
-export type BreakpointSummaryViewModel = {
-	breakpoint_id: string,
-	session_id: string,
-	runtime_epoch: string,
-	stage: MessageStage,
-	title: string,
-	terminal_ip: string,
-	channel: ChannelId,
-	channel_text: string,
-	method: string,
-	target: string,
-	waiting_since: string,
-	certificate_fingerprint_suffix: string,
-	state: BreakpointState,
-	state_text: string,
-	ui_tone: UiTone,
-	revision: number,
-};
-
 /**  Gilbert-Elliott 两状态突发丢包模型，概率统一使用 0..=10000 基点。 */
 export type BurstLossProfile = {
 	enter_bad_state_basis_points: number,
@@ -597,9 +528,6 @@ export type CaptureRowViewModel = {
 	duration_ms: number | null,
 	matched_rule_ids: string[],
 	size_bytes: number,
-	breakpoint_id: string | null,
-	can_go_to_breakpoint: boolean,
-	breakpoint_disabled_reason: DisabledReason | null,
 };
 
 export type CaptureSort = "occurred_at" | "terminal_ip" | "duration" | "size";
@@ -656,7 +584,7 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-/**  One typed leaf in a unified condition tree. */
+/**  One typed condition in a flat rule condition list. */
 export type Condition =
 /**  A typed RFC 6901 Document predicate. */
 { source: "document";
@@ -670,7 +598,7 @@ predicate: DocumentPredicate } |
 path: DocumentMatchPath;
 /**  Strict predicate applied with ANY semantics to expanded values. */
 predicate: DocumentPredicate } |
-/**  Existing typed HTTP/runtime condition, retained as a leaf rather than a parallel tree. */
+/**  Existing typed HTTP/runtime condition. */
 { source: "http";
 /**  Typed HTTP field. */
 field: MatchField;
@@ -680,15 +608,6 @@ operator: MatchOperator } |
 { source: "nth_hit";
 /**  Exact next successful hit number. */
 count: number };
-
-/**  Recursive non-empty AND/OR condition tree. NOT is intentionally not representable. */
-export type ConditionTree =
-/**  All child nodes must match. */
-{ operator: "all"; children: ConditionTree[] } |
-/**  At least one child node must match. */
-{ operator: "any"; children: ConditionTree[] } |
-/**  Typed leaf condition. */
-{ operator: "leaf"; children: Condition };
 
 /**  Positive number of bytes consumed by one complete frame. */
 export type ConsumedBytes = number;
@@ -939,7 +858,7 @@ export type ErrorCode = "PROXY_ALREADY_RUNNING" | "PROXY_NOT_RUNNING" | "OPERATI
 /**  字段已声明，但当前 Frame 尚未给它赋值。 */
 "DOCUMENT_FIELD_UNASSIGNED" |
 /**  写入值的类型与 Schema 声明不一致。 */
-"DOCUMENT_FIELD_TYPE_MISMATCH" | "BREAKPOINT_NOT_FOUND" | "BREAKPOINT_ALREADY_RESOLVED" | "BREAKPOINT_CLIENT_DISCONNECTED" | "BREAKPOINT_PROXY_STOPPED" | "RESOURCE_EXHAUSTED" | "EVENT_CURSOR_EXPIRED" | "EXPORT_FAILED" | "IMPORT_FAILED" | "DATABASE_SCHEMA_INVALID" | "INVALID_STATE_TRANSITION" | "INTERNAL_ERROR";
+"DOCUMENT_FIELD_TYPE_MISMATCH" | "RESOURCE_EXHAUSTED" | "EVENT_CURSOR_EXPIRED" | "EXPORT_FAILED" | "IMPORT_FAILED" | "DATABASE_SCHEMA_INVALID" | "INVALID_STATE_TRANSITION" | "INTERNAL_ERROR";
 
 /**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
 export type ExchangeContext = { protocol: "http"; header: string; body: string;
@@ -1109,7 +1028,7 @@ export type FaultTemplateViewModel = {
 	ui_tone: UiTone,
 };
 
-/**  可复用于规则、设置、证书和断点的字段校验结果。 */
+/**  可复用于规则、设置和证书的字段校验结果。 */
 export type FieldValidationViewModel = {
 	valid: boolean,
 	field_errors: { [key in string]: string[] },
@@ -1182,7 +1101,7 @@ export type HttpAction = ({ SetJsonField: {
 	available_milliseconds: number,
 	blocked_milliseconds: number,
 	direction: TrafficDirection,
-} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | "Pause" | ({ CustomHttpStatus: {
+} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ CustomHttpStatus: {
 	status: number,
 } }) & { Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Terminal: TerminalAction }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Throttle?: never };
 
@@ -1193,10 +1112,6 @@ export type HttpAction = ({ SetJsonField: {
  *  Document，并在 Document 实际变化时重新编码。未命中规则时不会重写 Body。
  */
 export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package: ProtocolPackageRef };
-
-export type HttpDocumentRuleContent = {
-	package: ProtocolPackageRef,
-};
 
 export type HttpListenerSettings = {
 	authentication: ForwardProxyAuthentication,
@@ -1246,9 +1161,8 @@ export type HttpProtocolFailureViewModel = {
 
 export type HttpRuleContent = {
 	description: string,
-	condition: ConditionTree,
+	conditions: Condition[],
 	actions: UnifiedAction[],
-	document: HttpDocumentRuleContent | null,
 };
 
 export type HttpRuleEditorStageViewModel = {
@@ -2086,7 +2000,7 @@ export type ProxyWorkspace = {
  *  Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
  */
 export type RawHttpHeaderViewModel = {
-	/**  字段名的精确线上字节，是断点转发时的权威表示；普通 `headers` 只是有损展示投影。 */
+	/**  字段名的精确线上字节，是无损转发时的权威表示；普通 `headers` 只是有损展示投影。 */
 	name_bytes: number[],
 	/**  字段值的精确字节，不含可选空白和 CRLF。 */
 	value_bytes: number[],
@@ -2110,7 +2024,7 @@ export type RuleActionCapabilityViewModel = {
 	parameters_required: boolean,
 };
 
-export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
+export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "custom_http_status" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
 export type RuleCommonActionCapability = "record_match";
 
@@ -2263,11 +2177,11 @@ export type RuleNthHitConditionDraftInput = {
 	count: number,
 };
 
-export type RuleStage = "proxy_to_upstream" | "proxy_to_app" | "tls_handshake";
+export type RuleStage = "proxy_to_upstream" | "proxy_to_app";
 
 /**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
 export type RuleStageCapabilityViewModel = {
-	stage: MessageStage,
+	stage: RuleStage,
 	match_fields: RuleMatchFieldCapabilityViewModel[],
 	actions: RuleActionCapabilityViewModel[],
 };
@@ -2322,7 +2236,6 @@ export type SessionSummaryViewModel = {
 	matched_rule_ids: string[],
 	request_size_bytes: number,
 	response_size_bytes: number,
-	pending_breakpoint: boolean,
 	revision: number,
 };
 
@@ -2454,7 +2367,7 @@ export type SocketRelayTopology = {
 
 export type SocketRuleContent = {
 	package: ProtocolPackageRef,
-	condition: ConditionTree,
+	conditions: Condition[],
 	actions: UnifiedAction[],
 };
 
@@ -2525,7 +2438,7 @@ export type SubscriptionAckViewModel = {
 /**  需要精确计数的 TCP 标志位。 */
 export type TcpFlag = "syn" | "syn_ack" | "ack" | "fin" | "rst";
 
-export type TerminalAction = "RejectTlsHandshake" | "DisconnectBeforeUpstream" | ({ UpstreamConnectTimeout: {
+export type TerminalAction = "DisconnectBeforeUpstream" | ({ UpstreamConnectTimeout: {
 	milliseconds: number,
 } }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ UpstreamWriteTimeout: {
 	milliseconds: number,
@@ -2564,7 +2477,7 @@ export type UiEventEnvelope = {
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
 export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
 /**  一条连接级 Exchange 观测证据已成功写入内存；正文仍由查询接口按需读取。 */
-{ type: "exchange_observation_changed" } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
+{ type: "exchange_observation_changed" } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
 /**  外部软件包服务绑定状态或在线连接数发生变化。 */
 { type: "external_package_service_status_changed"; data: ExternalPackageServiceStatusViewModel } |
 /**  外部精确版本注册、断线、启停或删除后，目录消费者应重新读取权威快照。 */
@@ -2654,4 +2567,4 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
 }
 
 
-export const PACKAGE_CONTRACT_VALIDATION = {"packageIdPattern":"^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)*$","packageIdMaxBytes":64,"packageVersionPattern":"^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$","packageVersionMaxBytes":128,"packageVersionCoreNumericMax":"18446744073709551615","schemaTitleMaxChars":128,"stableErrorCodes":["PROXY_ALREADY_RUNNING","PROXY_NOT_RUNNING","OPERATION_IN_PROGRESS","PORT_IN_USE","CONFIG_INVALID","REVISION_CONFLICT","CERTIFICATE_NOT_READY","CERTIFICATE_INVALID","PKCS12_PASSWORD_INVALID","DPAPI_PROTECT_FAILED","DPAPI_UNPROTECT_FAILED","TLS_HANDSHAKE_FAILED","UPSTREAM_CONNECT_TIMEOUT","UPSTREAM_WRITE_TIMEOUT","UPSTREAM_READ_TIMEOUT","BODY_TOO_LARGE","HEADER_LIMIT_EXCEEDED","BODY_DECODE_FAILED","BODY_ENCODE_FAILED","JSON_INVALID","RULE_INVALID","RULE_EXECUTION_CANCELLED","RULE_CONFLICT_WARNING","PROTOCOL_PACKAGE_INVALID","DOCUMENT_SCHEMA_INVALID","DOCUMENT_NUMBER_INVALID","DOCUMENT_UNSAFE_INTEGER","DOCUMENT_POINTER_INVALID","DOCUMENT_PATH_MISSING","DOCUMENT_PATH_TYPE_MISMATCH","DOCUMENT_FIELD_UNDECLARED","DOCUMENT_FIELD_UNASSIGNED","DOCUMENT_FIELD_TYPE_MISMATCH","BREAKPOINT_NOT_FOUND","BREAKPOINT_ALREADY_RESOLVED","BREAKPOINT_CLIENT_DISCONNECTED","BREAKPOINT_PROXY_STOPPED","RESOURCE_EXHAUSTED","EVENT_CURSOR_EXPIRED","EXPORT_FAILED","IMPORT_FAILED","DATABASE_SCHEMA_INVALID","INVALID_STATE_TRANSITION","INTERNAL_ERROR"]} as const;
+export const PACKAGE_CONTRACT_VALIDATION = {"packageIdPattern":"^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)*$","packageIdMaxBytes":64,"packageVersionPattern":"^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$","packageVersionMaxBytes":128,"packageVersionCoreNumericMax":"18446744073709551615","schemaTitleMaxChars":128,"stableErrorCodes":["PROXY_ALREADY_RUNNING","PROXY_NOT_RUNNING","OPERATION_IN_PROGRESS","PORT_IN_USE","CONFIG_INVALID","REVISION_CONFLICT","CERTIFICATE_NOT_READY","CERTIFICATE_INVALID","PKCS12_PASSWORD_INVALID","DPAPI_PROTECT_FAILED","DPAPI_UNPROTECT_FAILED","TLS_HANDSHAKE_FAILED","UPSTREAM_CONNECT_TIMEOUT","UPSTREAM_WRITE_TIMEOUT","UPSTREAM_READ_TIMEOUT","BODY_TOO_LARGE","HEADER_LIMIT_EXCEEDED","BODY_DECODE_FAILED","BODY_ENCODE_FAILED","JSON_INVALID","RULE_INVALID","RULE_EXECUTION_CANCELLED","RULE_CONFLICT_WARNING","PROTOCOL_PACKAGE_INVALID","DOCUMENT_SCHEMA_INVALID","DOCUMENT_NUMBER_INVALID","DOCUMENT_UNSAFE_INTEGER","DOCUMENT_POINTER_INVALID","DOCUMENT_PATH_MISSING","DOCUMENT_PATH_TYPE_MISMATCH","DOCUMENT_FIELD_UNDECLARED","DOCUMENT_FIELD_UNASSIGNED","DOCUMENT_FIELD_TYPE_MISMATCH","RESOURCE_EXHAUSTED","EVENT_CURSOR_EXPIRED","EXPORT_FAILED","IMPORT_FAILED","DATABASE_SCHEMA_INVALID","INVALID_STATE_TRANSITION","INTERNAL_ERROR"]} as const;

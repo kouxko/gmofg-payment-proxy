@@ -9,10 +9,11 @@ const checker = resolve(import.meta.dirname, "check-task-20260829-002-phase15-ui
 const repo = resolve(import.meta.dirname, "..");
 const files = [
   "src/features/rules/rules-view.tsx",
+  "src/features/rules/rules-workspace-shell.tsx",
+  "src/features/rules/rule-definition-list.tsx",
   "src/features/rules/rule-definition-editor.tsx",
-  "src/features/rules/rule-document-fields.ts",
   "src/features/rules/rule-definition-model.ts",
-  "src/features/rules/rule-tree-editors.tsx",
+  "src/features/rules/rule-list-editors.tsx",
   "src/features/capture/exchange-observation-detail.tsx",
   "src/features/protocol-packages/protocol-package-detail.tsx",
   "src-tauri/crates/application/src/models/unified_rule.rs",
@@ -32,6 +33,7 @@ const files = [
   "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
   "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/runtime_rule_bundle.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/port.rs",
@@ -76,7 +78,7 @@ test("checker rejects legacy Document runtime projection re-entry", () => {
 test("checker rejects loss of unified portability schema validation", () => {
   for (const token of [
     "workspace.rule_definitions",
-    "condition.validate_document_schema",
+    "validate_document_conditions_schema",
     "validate_unified_actions_schema",
   ]) {
     const root = fixture((directory) => {
@@ -172,16 +174,22 @@ test("checker rejects retired runtime owner re-entry", () => {
   }
 });
 
-test("checker rejects removal of each recursive editor and modal owner", () => {
+test("checker rejects removal of each flat inline editor owner", () => {
   for (const [relative, token] of [
-    ["src/features/rules/rules-view.tsx", "<Modal isOpen={editorOpen}"],
-    ["src/features/rules/rule-definition-editor.tsx", "<ConditionTreeEditor"],
+    ["src/features/rules/rules-view.tsx", "<RulesWorkspaceShell>"],
+    ["src/features/rules/rules-view.tsx", "<RuleDefinitionEditor"],
+    ["src/features/rules/rules-workspace-shell.tsx", "grid-cols-[minmax(600px,1fr)_560px]"],
+    ["src/features/rules/rule-definition-list.tsx", "上行与下行规则统一显示"],
+    ["src/features/rules/rule-definition-list.tsx", "ruleDirectionLabel(rule.stage)"],
+    ["src/features/rules/rule-list-editors.tsx", "所有条件固定为 AND"],
+    ["src/features/rules/rule-definition-editor.tsx", "<FlatConditionList"],
     ["src/features/rules/rule-definition-editor.tsx", "<OrderedActionList"],
-    ["src/features/rules/rule-tree-editors.tsx", "role=\"tree\""],
-    ["src/features/rules/rule-tree-editors.tsx", "Array items"],
-    ["src/features/rules/rule-definition-editor.tsx", "创建规则本地元数据条件"],
     ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentConditionDraft"],
     ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentActionDraft"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs", "rule_definitions"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs", "Document::parse_json"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs", "JointDocumentEvaluation::new_plain_json"],
+    ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs", "BODY_DECODE_FAILED"],
     ["src-tauri/crates/application/src/models/unified_rule.rs", "local_document_type_capabilities"],
     ["src-tauri/crates/application/src/models/unified_rule.rs", "RuleDocumentActionCapability"],
     ["src-tauri/crates/application/src/models/unified_rule.rs", "document_schema_field_capabilities"],
@@ -190,13 +198,9 @@ test("checker rejects removal of each recursive editor and modal owner", () => {
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "condition_draft"],
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "action_draft"],
     ["src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs", "value_type: domain_value_type(value_type)"],
-    ["src/features/rules/rule-document-fields.ts", "capabilities.get(type)"],
-    ["src/features/rules/rule-document-fields.ts", "condition.predicate.type === \"null_equal\" ? \"null\""],
-    ["src/features/rules/rule-document-fields.ts", "action.type === \"clear\" ? action.value_type"],
     ["src/features/rules/rule-definition-model.ts", "descriptor.kind !== mutation.type"],
     ["src/features/rules/rule-definition-model.ts", "descriptor.target_value_type"],
     ["src/features/rules/rule-definition-model.ts", "descriptor.operand_value_type"],
-    ["src/features/rules/rule-definition-editor.tsx", "action.operand_value_type ?? action.target_value_type"],
     ["src/generated/rust-types.ts", "export type RuleDocumentActionCapability"],
     ["src/generated/rust-types.ts", "document_fields: RuleDocumentSchemaFieldCapability[]"],
     ["src/generated/rust-types.ts", "{ type: \"clear\"; path: JsonPointer; value_type: DocumentValueType }"],
@@ -283,6 +287,38 @@ test("checker rejects frontend variant defaults", () => {
     } finally {
       rmSync(root, { recursive: true, force: true });
     }
+  }
+});
+
+test("checker rejects TLS rule wire re-entry", () => {
+  for (const mutation of [
+    (source) => source.replace(
+      'export type RuleStage = "proxy_to_upstream" | "proxy_to_app";',
+      'export type RuleStage = "proxy_to_upstream" | "proxy_to_app" | "tls_handshake";',
+    ),
+    (source) => `${source}\nexport type RemovedTlsRuleAction = "RejectTlsHandshake";\n`,
+  ]) {
+    const root = fixture((directory) => {
+      const path = join(directory, "src/generated/rust-types.ts");
+      writeFileSync(path, mutation(readFileSync(path, "utf8")));
+    });
+    try {
+      assert.notEqual(run(root).status, 0);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
+test("checker rejects restoring stage-grouped rule lists", () => {
+  const root = fixture((directory) => {
+    const path = join(directory, "src/features/rules/rule-definition-list.tsx");
+    writeFileSync(path, `${readFileSync(path, "utf8")}\n// rule-stage-heading\n`);
+  });
+  try {
+    assert.notEqual(run(root).status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
   }
 });
 

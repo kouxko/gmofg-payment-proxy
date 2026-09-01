@@ -165,7 +165,7 @@ async fn total_deadline_at_a_cpu_checkpoint_reports_before_candidate_buffer_drop
     let protocol_rules = protocol_rule_definitions(&persisted);
     candidate["workspace"]["rules"][0]["existing_rule_id"] =
         serde_json::json!(http_rules[0].rule_id());
-    candidate["workspace"]["rules"][14]["existing_rule_id"] =
+    rule_named_mut(&mut candidate, "Protocol Document values")["existing_rule_id"] =
         serde_json::json!(protocol_rules[0].rule_id());
     let bytes = serde_json::to_vec(&candidate).unwrap();
     let typed = crate::parse_environment_configuration_candidate_v1(&bytes).unwrap();

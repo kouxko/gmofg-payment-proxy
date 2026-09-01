@@ -114,13 +114,13 @@ async fn exercise_unified_rule_lifecycle(
         panic!("HTTP rule draft expected");
     };
     http_content.description = "Application facade matrix".into();
-    http_content.condition = intercept_proxy_application::ConditionTree::Leaf(
+    http_content.conditions = vec![
         application
             .rule_definition_nth_hit_condition_draft(
                 intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
             )
             .expect("explicit positive nth-hit condition"),
-    );
+    ];
     http_content.actions = vec![intercept_proxy_application::UnifiedAction::from(
         application
             .rule_definition_action_draft(
@@ -128,7 +128,7 @@ async fn exercise_unified_rule_lifecycle(
                     kind: RuleActionKind::Delay,
                     parameters_json: Some(r#"{"milliseconds":100}"#.into()),
                 },
-                MessageStage::Request,
+                RuleStage::ProxyToUpstream,
             )
             .expect("explicit delay action"),
     )];

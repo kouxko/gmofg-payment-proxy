@@ -6,9 +6,8 @@ use serde_json::Value;
 use specta::Type;
 
 use super::{
-    BreakpointId, ChannelId, DisabledReason, Document, MessageStage, PageRequest,
-    ProtocolPackageRef, Revision, RuleId, RuleStage, RuntimeEpoch, SessionId, SortDirection,
-    UiTone,
+    ChannelId, Document, MessageStage, PageRequest, ProtocolPackageRef, Revision, RuleId,
+    RuleStage, RuntimeEpoch, SessionId, SortDirection, UiTone,
 };
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -58,9 +57,6 @@ pub struct CaptureRowViewModel {
     pub duration_ms: Option<u64>,
     pub matched_rule_ids: Vec<RuleId>,
     pub size_bytes: u64,
-    pub breakpoint_id: Option<BreakpointId>,
-    pub can_go_to_breakpoint: bool,
-    pub breakpoint_disabled_reason: Option<DisabledReason>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
@@ -81,7 +77,7 @@ pub struct CapturePageViewModel {
 /// 为无损 HTTP/1 往返保留的一条原始 Header。
 /// Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
 pub struct RawHttpHeaderViewModel {
-    /// 字段名的精确线上字节，是断点转发时的权威表示；普通 `headers` 只是有损展示投影。
+    /// 字段名的精确线上字节，是无损转发时的权威表示；普通 `headers` 只是有损展示投影。
     pub name_bytes: Vec<u8>,
     /// 字段值的精确字节，不含可选空白和 CRLF。
     pub value_bytes: Vec<u8>,

@@ -131,8 +131,6 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
           "连接、写入和读取超时默认均为 70 秒；根据目标故障场景调整，避免把预期的长延迟误判为网络故障。",
           "单个请求或响应 Body 默认上限为 4 MiB，超过上限会被拒绝并记录 BODY_TOO_LARGE。",
           "最多保留的 HTTP 交换默认 500，逻辑内存上限默认 256 MiB。",
-          "达到容量时优先淘汰最旧的已完成交换；待处理断点对应的交换永不被容量淘汰。",
-          "如果容量全部被 Pending 断点占用，系统会拒绝新连接并产生 RESOURCE_EXHAUSTED 事件。",
           "提高容量会增加内存使用，长时间压力测试应同时观察控制台运行信息。",
         ],
       },

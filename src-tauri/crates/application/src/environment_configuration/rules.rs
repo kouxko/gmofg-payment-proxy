@@ -30,13 +30,4 @@ impl RuleTemplate {
     pub(super) const fn is_http(&self) -> bool {
         matches!(self.content, RuleContent::Http(_))
     }
-
-    pub(super) fn package_ref(&self) -> Option<&intercept_proxy_domain::ProtocolPackageRef> {
-        match &self.content {
-            RuleContent::Http(content) => {
-                content.document.as_ref().map(|document| &document.package)
-            }
-            RuleContent::Socket(content) => Some(&content.package),
-        }
-    }
 }

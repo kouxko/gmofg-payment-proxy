@@ -105,7 +105,6 @@ impl ProxyWorkspace {
             let direction = match definition.stage() {
                 RuleStage::ProxyToUpstream => 0,
                 RuleStage::ProxyToApp => 1,
-                RuleStage::TlsHandshake => 2,
             };
             (direction, definition.priority(), definition.rule_id())
         });

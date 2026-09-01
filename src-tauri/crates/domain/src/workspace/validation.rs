@@ -3,8 +3,8 @@
 use std::collections::BTreeSet;
 
 use super::{
-    DomainError, HttpBodyProcessing, ListenerDataPlane, ListenerId, ProxyWorkspace,
-    SocketPayloadProcessing, SocketTopology,
+    DomainError, ListenerDataPlane, ListenerId, ProxyWorkspace, SocketPayloadProcessing,
+    SocketTopology,
 };
 use crate::{
     MAX_JAVASCRIPT_SAFE_INTEGER, MAX_RULE_DEFINITIONS, RuleContent, RuleDefinition, RuleStage,
@@ -90,25 +90,7 @@ fn validate_rule_listener_binding(
     error: &mut DomainError,
 ) {
     match (rule.content(), data_plane) {
-        (RuleContent::Http(content), ListenerDataPlane::Http(settings)) => {
-            if let Some(document) = &content.document {
-                match &settings.body_processing {
-                    HttpBodyProcessing::Plain => push_field_error(
-                        error,
-                        format!("{prefix}.listener_id"),
-                        "HTTP Body Document 规则只能绑定已选择协议方案的入口",
-                    ),
-                    HttpBodyProcessing::Protocol { package } if package != &document.package => {
-                        push_field_error(
-                            error,
-                            format!("{prefix}.content.value.document.package"),
-                            "规则包版本必须与入口精确绑定一致",
-                        );
-                    }
-                    HttpBodyProcessing::Protocol { .. } => {}
-                }
-            }
-        }
+        (RuleContent::Http(_), ListenerDataPlane::Http(_)) => {}
         (RuleContent::Http(_), ListenerDataPlane::Socket(_)) => push_field_error(
             error,
             format!("{prefix}.listener_id"),

@@ -50,7 +50,7 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         "mode":"scripted",
         "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
     });
-    value["workspace"]["rules"][14]["content"]["value"]["package"] =
+    rule_named_mut(&mut value, "Protocol Document values")["content"]["value"]["package"] =
         serde_json::json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
     value["materials"] = serde_json::json!({"certificates":[],"secrets":[]});
 
@@ -62,7 +62,7 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         .unwrap_or_else(|error| panic!("packaged resource projection failed: {error:?}"));
 
     assert_eq!(projected.workspace().listeners.len(), 2);
-    assert_eq!(http_rule_definitions(projected.workspace()).len(), 14);
+    assert_eq!(http_rule_definitions(projected.workspace()).len(), 13);
     assert_eq!(protocol_rule_definitions(projected.workspace()).len(), 1);
     assert_eq!(projected.workspace().android_network_profiles.len(), 1);
 }

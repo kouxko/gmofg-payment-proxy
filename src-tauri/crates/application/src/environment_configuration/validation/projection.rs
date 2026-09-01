@@ -61,21 +61,6 @@ impl ValidationProjection {
             };
             packages.insert((package.id.clone(), package.version.clone()), package_ref);
         }
-        for package in candidate
-            .workspace
-            .rules
-            .iter()
-            .filter_map(crate::environment_configuration::rules::RuleTemplate::package_ref)
-        {
-            ensure_running(checkpoint)?;
-            packages.insert(
-                (
-                    package.id.as_str().to_owned(),
-                    package.version.as_str().to_owned(),
-                ),
-                package.clone(),
-            );
-        }
         let mut dns = BTreeMap::new();
         let mut tls = BTreeMap::new();
         for listener in &candidate.workspace.listeners {

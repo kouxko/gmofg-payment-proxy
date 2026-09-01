@@ -179,10 +179,12 @@ fn ordinary_http_condition(
         headers: &headers,
         ..match_context.clone()
     };
-    let condition = http_rule
-        .condition
-        .evaluate_http_context_with_nth(nth_attempt, &current)
-        .map_err(|error| app_to_proxy(error.into()))?;
+    let condition = intercept_proxy_domain::evaluate_http_context_conditions_with_nth(
+        &http_rule.conditions,
+        nth_attempt,
+        &current,
+    )
+    .map_err(|error| app_to_proxy(error.into()))?;
     Ok(JointRuleConditionEvaluation::UnifiedOwned(
         JointConditionEvaluation {
             matched: condition.matched,
@@ -232,7 +234,6 @@ fn execute_actions(
                 | HttpAction::Jitter { .. }
                 | HttpAction::Throttle { .. }
                 | HttpAction::Intermittent { .. }
-                | HttpAction::Pause
                 | HttpAction::CustomHttpStatus { .. }),
             ) => {
                 executed.push(action.clone());

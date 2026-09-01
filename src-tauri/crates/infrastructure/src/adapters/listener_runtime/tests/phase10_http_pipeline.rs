@@ -11,12 +11,12 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use intercept_proxy_domain::{
-    BodyCodecKind, Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate,
-    DocumentValue, ErrorCode as PackageErrorCode, HttpBodyProcessing, HttpDocumentRuleContent,
-    HttpListenerSettings, HttpRuleContent, JsonPointer, ListenerDataPlane, ProtocolDirection,
-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ProxyWorkspace,
-    RuleContent, RuleDefinition, RuleDefinitionDraft, RuleId, RuleRuntimeSnapshot, RuleStage,
-    StringOperator, StringPredicate, UnifiedAction,
+    BodyCodecKind, Condition, Document, DocumentMutation, DocumentPredicate, DocumentValue,
+    ErrorCode as PackageErrorCode, HttpBodyProcessing, HttpListenerSettings, HttpRuleContent,
+    JsonPointer, ListenerDataPlane, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition,
+    RuleDefinitionDraft, RuleId, RuleRuntimeSnapshot, RuleStage, StringOperator, StringPredicate,
+    UnifiedAction,
 };
 use intercept_proxy_exchange::{ExternalPackageCallStage, HttpContext};
 use intercept_proxy_package_contract::{
@@ -49,35 +49,27 @@ use super::super::{
 };
 use super::{SqliteStore, test_listener_runtime};
 
-fn phase10_package() -> ProtocolPackageRef {
-    ProtocolPackageRef {
-        id: ProtocolPackageId::new("http-pipeline-test").unwrap(),
-        version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-    }
-}
-
 fn set_string_rule(
     listener: &ProxyListener,
     id: RuleId,
     stage: RuleStage,
     created_order: u64,
     field: &str,
-    mut conditions: Vec<ConditionTree>,
+    mut conditions: Vec<Condition>,
     value: &str,
 ) -> RuleDefinition {
     if conditions.is_empty() {
         let decoded_field = match stage {
             RuleStage::ProxyToUpstream => "route",
             RuleStage::ProxyToApp => "result",
-            RuleStage::TlsHandshake => panic!("Document fixture cannot target TLS handshake"),
         };
-        conditions.push(ConditionTree::Leaf(Condition::Document {
+        conditions.push(Condition::Document {
             path: JsonPointer::property(decoded_field),
             predicate: DocumentPredicate::String(StringPredicate {
                 operator: StringOperator::Equal,
                 value: "decoded".into(),
             }),
-        }));
+        });
     }
     RuleDefinition::restore(
         id,
@@ -90,14 +82,11 @@ fn set_string_rule(
             one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: ConditionTree::All(conditions),
+                conditions,
                 actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property(field),
                     value: DocumentValue::String(value.into()),
                 })],
-                document: Some(HttpDocumentRuleContent {
-                    package: phase10_package(),
-                }),
             }),
         },
         intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
@@ -355,6 +344,17 @@ async fn prepared_external_snapshot(
     let listener = phase10_listener();
     let workspace = ProxyWorkspace::default();
     production_shape::prepared_external_snapshot_for(rpc, &workspace, &listener).await
+}
+
+async fn prepared_plain_snapshot(
+    workspace: &ProxyWorkspace,
+    listener: &ProxyListener,
+) -> Arc<HttpProtocolRuntimeSnapshot> {
+    let adapter = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
+    HttpProtocolRuntimeSnapshot::prepare_async(&adapter, workspace, listener)
+        .await
+        .unwrap()
+        .unwrap()
 }
 
 fn phase10_listener() -> ProxyListener {

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
-import { groupRulesByStage, NEW_MESSAGE_RULE_STAGES, ruleStageIncompatibility, RULE_STAGE_ORDER } from "./rule-definition-model";
+import { ruleDirectionLabel, ruleStageIncompatibility } from "./rule-definition-model";
 
 const documentAction = (kind: "set" | "clear" | "insert" | "append", target: "string" | "array", operand: "string" | null) => ({
   kind,
@@ -10,8 +10,7 @@ const documentAction = (kind: "set" | "clear" | "insert" | "append", target: "st
 });
 
 const stringCondition = (path = "/value", value = "value") => ({
-  operator: "leaf" as const,
-  children: { source: "document" as const, path, predicate: { type: "string" as const, value: { operator: "equal" as const, value } } },
+  source: "document" as const, path, predicate: { type: "string" as const, value: { operator: "equal" as const, value } },
 });
 const lifecycle = { hit_count: 0, last_hit_at: null };
 
@@ -19,36 +18,25 @@ function rule(stage: RuleDefinition_Serialize["stage"], priority: number, create
   return {
     rule_id: `${stage}-${createdOrder}`, revision: 1, name: stage, enabled: true, priority,
     created_order: createdOrder, listener_id: "listener", stage, one_shot: false, lifecycle,
-    content: { type: "socket", value: { package: { id: "pkg", version: "1" }, condition: stringCondition(), actions: [{ source: "record_match" }] } },
+    content: { type: "socket", value: { package: { id: "pkg", version: "1" }, conditions: [stringCondition()], actions: [{ source: "record_match" }] } },
   };
 }
 
-describe("groupRulesByStage", () => {
-  it("keeps display groups fixed and sorts runtime/read order by priority then rule id", () => {
-    const grouped = groupRulesByStage([
-      rule("proxy_to_app", 999, 1), rule("proxy_to_upstream", 10, 2),
-      rule("proxy_to_upstream", 20, 4), rule("proxy_to_upstream", 20, 3),
-    ]);
-    expect(grouped.map((group) => group.stage)).toEqual(RULE_STAGE_ORDER);
-    expect(grouped[0].rules.map((item) => [item.priority, item.rule_id])).toEqual([
-      [10, "proxy_to_upstream-2"], [20, "proxy_to_upstream-3"], [20, "proxy_to_upstream-4"],
-    ]);
-    expect(grouped[1].rules[0].priority).toBe(999);
+describe("ruleDirectionLabel", () => {
+  it("labels the two message directions shown in the unified rule list", () => {
+    expect(ruleDirectionLabel("proxy_to_upstream")).toBe("上行");
+    expect(ruleDirectionLabel("proxy_to_app")).toBe("下行");
   });
 });
 
 describe("ruleStageIncompatibility", () => {
-  it("exposes only the two proxy write stages for new message rules", () => {
-    expect(NEW_MESSAGE_RULE_STAGES).toEqual(["proxy_to_upstream", "proxy_to_app"]);
-  });
   it("keeps a Schema-undeclared Document action as rule-local metadata", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
         name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_upstream", one_shot: false,
         content: { type: "http", value: {
-          description: "", condition: stringCondition(), actions: [{ source: "document", value: { type: "set", path: "/amount", value: 1 } }],
-          document: { package: { id: "pkg", version: "1" } },
+          description: "", conditions: [stringCondition()], actions: [{ source: "document", value: { type: "set", path: "/amount", value: 1 } }],
         } },
       },
     };
@@ -74,7 +62,7 @@ describe("ruleStageIncompatibility", () => {
         name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          condition: stringCondition("/value", "Null"), actions: [{ source: "record_match" }],
+          conditions: [stringCondition("/value", "Null")], actions: [{ source: "record_match" }],
         } },
       },
     };
@@ -96,7 +84,7 @@ describe("ruleStageIncompatibility", () => {
     expect(ruleStageIncompatibility(base, context, "proxy_to_app")).toBeNull();
     const actualNull = structuredClone(base);
     if (actualNull.draft.content.type !== "socket") throw new Error("invalid fixture");
-    actualNull.draft.content.value.condition = { operator: "leaf", children: { source: "document", path: "/value", predicate: { type: "null_equal" } } };
+    actualNull.draft.content.value.conditions = [{ source: "document", path: "/value", predicate: { type: "null_equal" } }];
     expect(ruleStageIncompatibility(actualNull, context, "proxy_to_app")).toBe(
       "目标阶段不能编辑 Document 条件字段 /value。",
     );
@@ -109,7 +97,7 @@ describe("ruleStageIncompatibility", () => {
         name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          condition: { operator: "leaf", children: { source: "nth_hit", count: 1 } },
+          conditions: [{ source: "nth_hit", count: 1 }],
           actions: [
             { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } },
             { source: "document", value: { type: "append", path: "/items", value: "last" } },
@@ -137,7 +125,7 @@ describe("ruleStageIncompatibility", () => {
         name: "schema action", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          condition: { operator: "leaf", children: { source: "nth_hit", count: 1 } },
+          conditions: [{ source: "nth_hit", count: 1 }],
           actions: [{ source: "document", value: { type: "insert", path: "/name", index: 0, value: "first" } }],
         } },
       },
@@ -174,7 +162,7 @@ describe("ruleStageIncompatibility", () => {
         name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          condition: { operator: "leaf", children: { source: "nth_hit", count: 1 } },
+          conditions: [{ source: "nth_hit", count: 1 }],
           actions: [{ source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } }],
         } },
       },
@@ -214,13 +202,10 @@ describe("unified lifecycle wire", () => {
       type: "socket",
       value: {
         package: { id: "pkg", version: "1" },
-        condition: { operator: "leaf", children: { source: "nth_hit", count: 2 } },
+        conditions: [{ source: "nth_hit", count: 2 }],
         actions: [{ source: "record_match" }],
       },
     };
-    expect(nthHit.value.condition).toEqual({
-      operator: "leaf",
-      children: { source: "nth_hit", count: 2 },
-    });
+    expect(nthHit.value.conditions).toEqual([{ source: "nth_hit", count: 2 }]);
   });
 });

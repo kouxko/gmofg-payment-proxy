@@ -14,8 +14,9 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
 
 1. 协议中立数据模型是递归 JSON `Document`，支持 null、boolean、number、string、object 和 array；
    Schema 描述递归能力，规则本地叶子仍由其类型化 condition/action 携带，不另建持久化字段。
-2. HTTP 与 Socket 共享 `RuleDefinition`、递归 AND/OR 条件树和有序 action。每个方向只在写出边界
-   执行一次规则事务：`Proxy -> Server` 与 `Proxy -> App`。
+2. HTTP 与 Socket 共享 `RuleDefinition`、非空扁平条件列表和有序 action。同一规则内所有条件固定
+   为 AND；需要 OR 时创建多条规则。每个方向只在写出边界执行一次规则事务：`Proxy -> Server` 与
+   `Proxy -> App`。
 3. 每个方向开始时创建私有 working Document。规则按确定顺序执行，每条 condition 读取当前 working
    state；命中 action 立即更新它并对后序规则可见。方向完成后只 Encode 一次，成功才提交
    NthHit/one-shot；失败或 Encode 失败回滚 Document 与 actor 生命周期。
@@ -27,9 +28,9 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
    `package.register`；Frame/Decode/Encode 使用字节 wire，Document 与 Display 使用类型化 JSON/text。
 6. Exchange observation 记录 received Document、类型化 operation summary、final working Document、
    Encode/result 和稳定错误；达到共享观测预算时设置 `changes_truncated`，业务继续且最终输出不受影响。
-7. SQLite Schema 100 是产品 1.00 兼容基线。Phase17 已删除 pre-100 recreate/reset policy、marker 和
-   启动分支；Schema 100 原样保留，其他版本或损坏标记 fail-closed 且不得改写数据库 bytes/data，
-   发布 checker 阻止临时 reset 合同重新进入生产路径。
+7. SQLite Schema 100 是产品 1.00 兼容基线。Schema 100 原样保留；唯一有效版本标记 `<100` 时删除
+   SQLite 主文件、WAL 与 SHM，并创建全新的 Schema 100。未来版本、缺失、重复或损坏标记 fail-closed；
+   该行为是旧开发数据清理，不是迁移或兼容路径，发布 checker 锁定这一唯一合同。
 
 ## Why
 
@@ -48,5 +49,5 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
 ## Alternatives
 
 - Rejected：保留四阶段并把两阶段作为 UI 别名；会形成双路径并继续错置事务边界。
-- Rejected：继续扁平字段并把 object/array 存成 blob；会丢失递归 Schema 与条件树语义。
+- Rejected：继续扁平 Document 字段并把 object/array 存成 blob；会丢失递归 Document 与 Schema 语义。
 - Rejected：同时保留 Rhai、进程内 JavaScript 或 Deno 默认；没有兼容需求，且会产生多个运行 owner。

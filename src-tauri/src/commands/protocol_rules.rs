@@ -4,11 +4,11 @@
 include!("protocol_rules/tests.rs");
 
 use intercept_proxy_application::{
-    DocumentValue, MessageStage, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
+    DocumentValue, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
     RuleCommonActionCapability, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
     RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
-    RuleNthHitConditionDraftInput, parse_protocol_rule_value,
+    RuleNthHitConditionDraftInput, RuleStage, parse_protocol_rule_value,
 };
 use intercept_proxy_domain::{Condition, HttpAction, ListenerId, Revision, RuleId, UnifiedAction};
 use tauri::State;
@@ -48,7 +48,7 @@ pub fn rule_definition_http_condition_draft(
     selector: Option<String>,
     operator_kind: RuleMatchOperatorKind,
     value: String,
-    stage: MessageStage,
+    stage: RuleStage,
 ) -> CommandResult<Condition> {
     app_state
         .application
@@ -68,7 +68,7 @@ pub fn rule_definition_http_condition_draft(
 pub fn rule_definition_action_draft(
     app_state: State<'_, AppState>,
     input: RuleHttpActionDraftInput,
-    stage: MessageStage,
+    stage: RuleStage,
 ) -> CommandResult<HttpAction> {
     app_state
         .application

@@ -51,7 +51,6 @@ pub struct SessionSummaryViewModel {
     pub matched_rule_ids: Vec<RuleId>,
     pub request_size_bytes: u64,
     pub response_size_bytes: u64,
-    pub pending_breakpoint: bool,
     pub revision: Revision,
 }
 
@@ -83,7 +82,6 @@ pub struct SessionDetailViewModel {
 /// 内存仓储实际保存的会话记录，并提供精确逻辑容量计算。
 pub struct SessionRecord {
     pub detail: SessionDetailViewModel,
-    pub breakpoint_draft: Option<MessageContentViewModel>,
 }
 
 impl SessionRecord {
@@ -91,10 +89,6 @@ impl SessionRecord {
 
     pub fn id(&self) -> SessionId {
         self.detail.summary.session_id
-    }
-
-    pub fn is_pending(&self) -> bool {
-        self.detail.summary.pending_breakpoint
     }
 
     pub fn logical_bytes(&self) -> u64 {
@@ -121,10 +115,6 @@ impl SessionRecord {
             + self
                 .detail
                 .response
-                .as_ref()
-                .map_or(0, MessageContentViewModel::logical_bytes)
-            + self
-                .breakpoint_draft
                 .as_ref()
                 .map_or(0, MessageContentViewModel::logical_bytes);
         Self::ENTITY_FIXED_OVERHEAD_BYTES

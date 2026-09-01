@@ -30,7 +30,7 @@ async fn close_after_request_write_sends_the_complete_request_without_waiting_fo
     .await
     .expect("close-after-write must not wait for response headers")
     .expect_err("close-after-write terminates the upstream exchange");
-    assert_eq!(error.code, "BREAKPOINT_CLIENT_DISCONNECTED");
+    assert_eq!(error.code, "CLIENT_DISCONNECTED");
     assert_eq!(
         error.message,
         "upstream request intentionally closed after complete write"

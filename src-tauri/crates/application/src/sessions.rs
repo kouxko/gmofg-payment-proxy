@@ -1,7 +1,6 @@
 //! 内存会话仓储及容量淘汰策略。
 //!
-//! Payload 按需求只保存在内存。达到数量或字节上限时优先淘汰最旧的已完成会话；仍被
-//! 断点占用的会话不能为了腾空间而丢失。
+//! Payload 按需求只保存在内存。达到数量或字节上限时优先淘汰最旧的已完成会话。
 
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
@@ -232,9 +231,9 @@ impl SessionStore for InMemorySessionStore {
     fn clear_completed(&self) -> usize {
         let mut state = self.state.write();
         let before = state.records.len();
-        state.records.retain(|_, record| {
-            record.detail.summary.completed_at.is_none() || record.is_pending()
-        });
+        state
+            .records
+            .retain(|_, record| record.detail.summary.completed_at.is_none());
         state.record_bytes = state
             .records
             .values()
@@ -301,9 +300,7 @@ fn eviction_plan(
         .records
         .values()
         .filter(|record| {
-            record.detail.summary.completed_at.is_some()
-                && !record.is_pending()
-                && Some(record.id()) != protected
+            record.detail.summary.completed_at.is_some() && Some(record.id()) != protected
         })
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| eviction_order(left, right));
@@ -321,7 +318,7 @@ fn eviction_plan(
                 "RESOURCE_EXHAUSTED",
                 "会话或内存容量已耗尽，且没有可淘汰的已完成会话。",
             )
-            .retryable("请先处理待处理断点或清空已完成会话。"));
+            .retryable("请先清空已完成会话。"));
         };
         candidate_index += 1;
         record_count = record_count.saturating_sub(1);

@@ -7,8 +7,8 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use crate::{
-    ConditionTree, DomainError, ErrorCode, ListenerId, ProtocolDirection, ProtocolPackageRef,
-    Revision, RuleId, RuleProgramEntry, UnifiedAction,
+    Condition, DomainError, ErrorCode, ListenerId, ProtocolDirection, ProtocolPackageRef, Revision,
+    RuleId, RuleProgramEntry, UnifiedAction,
 };
 
 mod lifecycle;
@@ -31,40 +31,31 @@ pub use lifecycle::{
 pub enum RuleStage {
     ProxyToUpstream,
     ProxyToApp,
-    TlsHandshake,
 }
 
 impl RuleStage {
     #[must_use]
-    pub const fn direction(self) -> Option<ProtocolDirection> {
+    pub const fn direction(self) -> ProtocolDirection {
         match self {
-            Self::ProxyToUpstream => Some(ProtocolDirection::Upstream),
-            Self::ProxyToApp => Some(ProtocolDirection::Downstream),
-            Self::TlsHandshake => None,
+            Self::ProxyToUpstream => ProtocolDirection::Upstream,
+            Self::ProxyToApp => ProtocolDirection::Downstream,
         }
     }
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
-pub struct HttpDocumentRuleContent {
-    pub package: ProtocolPackageRef,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
 pub struct HttpRuleContent {
     pub description: String,
-    pub condition: ConditionTree,
+    pub conditions: Vec<Condition>,
     pub actions: Vec<UnifiedAction>,
-    pub document: Option<HttpDocumentRuleContent>,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct SocketRuleContent {
     pub package: ProtocolPackageRef,
-    pub condition: ConditionTree,
+    pub conditions: Vec<Condition>,
     pub actions: Vec<UnifiedAction>,
 }
 
@@ -85,13 +76,7 @@ impl RuleContent {
 
     fn immutable_binding_matches(&self, other: &Self) -> bool {
         match (self, other) {
-            (Self::Http(current), Self::Http(candidate)) => {
-                match (&current.document, &candidate.document) {
-                    (None, None) => true,
-                    (Some(current), Some(candidate)) => current.package == candidate.package,
-                    _ => false,
-                }
-            }
+            (Self::Http(_), Self::Http(_)) => true,
             (Self::Socket(current), Self::Socket(candidate)) => {
                 current.package == candidate.package
             }
@@ -280,46 +265,22 @@ impl RuleDefinition {
         }
         match &self.content {
             RuleContent::Http(content) => {
-                if self.stage == RuleStage::TlsHandshake && content.document.is_some() {
-                    return Err(rule_binding_error(
-                        "content.document",
-                        "TLS 握手阶段不能执行 HTTP Body Document 规则",
-                    ));
-                }
-                if content.document.is_none()
-                    && (content.condition.contains_document_condition()
-                        || content
-                            .actions
-                            .iter()
-                            .any(|action| matches!(action, UnifiedAction::Document(_))))
-                {
-                    return Err(rule_binding_error(
-                        "content.document",
-                        "HTTP 规则未绑定 Document 软件包时不能包含 Document 条件或动作",
-                    ));
-                }
                 validate_http_runtime_content(self, content)?;
                 RuleProgramEntry::new(
                     self.rule_id,
                     self.priority,
                     self.created_order,
-                    content.condition.clone(),
+                    content.conditions.clone(),
                     content.actions.clone(),
                 )?;
             }
             RuleContent::Socket(content) => {
-                if self.stage == RuleStage::TlsHandshake {
-                    return Err(rule_binding_error(
-                        "stage",
-                        "Socket 消息规则不能使用 TLS 握手阶段",
-                    ));
-                }
-                ensure_socket_only(&content.condition, &content.actions)?;
+                ensure_socket_only(&content.conditions, &content.actions)?;
                 RuleProgramEntry::new(
                     self.rule_id,
                     self.priority,
                     self.created_order,
-                    content.condition.clone(),
+                    content.conditions.clone(),
                     content.actions.clone(),
                 )?;
             }
@@ -333,22 +294,7 @@ impl RuleDefinition {
     /// this save boundary. Callers projecting a new save from an existing identity still invoke
     /// this validation before persistence.
     pub fn validate_for_save(&self) -> Result<(), DomainError> {
-        self.validate()?;
-        self.validate_new_save_stage()
-    }
-
-    fn validate_new_save_stage(&self) -> Result<(), DomainError> {
-        match (&self.content, self.stage) {
-            (RuleContent::Http(_), RuleStage::TlsHandshake)
-            | (
-                RuleContent::Http(_) | RuleContent::Socket(_),
-                RuleStage::ProxyToUpstream | RuleStage::ProxyToApp,
-            ) => Ok(()),
-            (RuleContent::Socket(_), RuleStage::TlsHandshake) => Err(rule_binding_error(
-                "stage",
-                "Socket 消息规则不能使用 TLS 握手阶段",
-            )),
-        }
+        self.validate()
     }
 
     #[must_use]

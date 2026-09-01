@@ -80,7 +80,7 @@
 
 | ID | Body | 编解码模式 | 必须断言 |
 | --- | --- | --- | --- |
-| H-BODY-JSON | JSON object/array/nested | plain auto | 嵌套 JSONPath、数值/字符串/布尔/null 保持 |
+| H-BODY-JSON | JSON object/array/nested | plain auto | RFC 6901 路径匹配；数值/字符串/布尔/null 保持 |
 | H-BODY-TEXT | UTF-8 text | plain text | ReplaceBodyText 和 Content-Length 正确 |
 | H-BODY-XML | XML text | plain text | 未配置协议包时不错误解释或改写 |
 | H-BODY-HEX | arbitrary bytes | plain/binary | 未命中规则时逐字节保持 |
@@ -92,12 +92,14 @@ HTTP Hook 使用 string；Socket RPC wire 使用 canonical padded Base64，本�
 
 ### 4.3 HTTP 条件穷举
 
-每个字段至少分别验证 `Equals`、`Contains`、`Regex` 的命中和不命中：
+每个字段按 Rust 返回的可用操作符分别验证命中和不命中：
 
 - Terminal IP
 - Certificate fingerprint
-- Path / request type
-- JSONPath，包括嵌套对象和数组索引
+- Method
+- Request target（只含 path 与 query）
+- Header name/value
+- Body Document RFC 6901 精确路径与单层 `*` 通配符
 - NthHit：命中前、目标次数、目标次数之后
 - channel、stage、priority、created order、enabled、one-shot
 
@@ -112,9 +114,7 @@ HTTP Hook 使用 string；Socket RPC wire 使用 canonical padded Base64，本�
 - `Jitter`：before-message / per-chunk
 - `Throttle`：upstream / downstream
 - `Intermittent`：upstream / downstream
-- `Pause`
 - `CustomHttpStatus`
-- `RejectTlsHandshake`
 - `DisconnectBeforeUpstream`
 - `UpstreamConnectTimeout`
 - `UpstreamWriteTimeout`
@@ -160,7 +160,7 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 ### 5.3 统一 Document 规则穷举
 
 - 仅两个写出阶段：`Proxy -> Server`、`Proxy -> App`。
-- 条件树：递归 AND/OR、Document string/有限 number/boolean/null、HTTP typed condition 和 NthHit；类型不匹配为 false。
+- 条件：非空扁平列表且固定 AND；OR 通过多条规则表达；覆盖 Document string/有限 number/boolean/null、HTTP typed condition 和 NthHit，类型不匹配为 false。
 - RFC 6901 路径覆盖 object、array 和规则本地 metadata；Schema 是编辑元数据，不是 Decode 完整性门。
 - action：RecordMatch、Set、Clear、Insert、Append；严格验证 array index、缺失路径和类型错误。
 - 多规则按权威顺序执行；有序 action 保留完整 payload，成功 transaction 最多 Encode 一次。
@@ -190,10 +190,10 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 
 - 空数据库创建唯一 Schema 100；`external_protocol_packages` 保存 registration、fingerprint、可选本地 ZIP、
   enabled、首次/最后连接、最后远端地址和三字段原子的最近错误。
-- 低于 Schema 100 的开发数据库只允许通过明确 recreate 分支重建；Schema 100+、未知、损坏或未来
-  版本必须 fail closed，禁止把开发 reset 当成发布迁移。
+- 唯一有效版本标记低于 Schema 100 时，启动必须删除 SQLite 主文件、WAL 与 SHM，再创建全新的
+  Schema 100；Schema 100 原样保留，未来、缺失、重复或损坏标记必须 fail closed。
 - Preserve 启动必须逐字段、逐字节保持 package identity、Manifest、local archive 和 lifecycle；
-  recreate 启动只证明开发分支，不证明产品迁移兼容。
+  `<100` 清除重建只证明正式旧数据清理合同，不证明产品迁移兼容。
 
 ### 6.2 AU EFTEX / DUKPT 特殊验收
 
@@ -252,7 +252,7 @@ pnpm scan:architecture-docs
 
 定向套件必须同时锁定：
 
-- 36 个只读工具和五个环境配置工具名唯一，并与后端分发清单完全一致；
+- 34 个只读工具和五个环境配置工具名唯一，并与后端分发清单完全一致；
 - 每个输入字段（包括 `page`、`package` 等嵌套字段）有说明，所有对象层级均封闭未知字段；
 - object、array、object/null 三类成功根类型与生产返回合同一致，运行时拒绝错误根类型；
 - 原有查询/capabilities 的 256 KiB 输入、8 MiB 输出、8 秒期限，create 的 1 MiB 输入/输出、30 秒

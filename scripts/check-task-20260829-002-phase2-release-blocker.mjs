@@ -1,4 +1,5 @@
 import { readFile } from "node:fs/promises";
+import { spawnSync } from "node:child_process";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -28,9 +29,13 @@ const temporaryResetContract = new RegExp(
     "\\bRecreateCurrent\\b",
     "\\bwith_database_startup_policy\\b",
     "\\bopen_with_startup_policy\\b",
-    "启动时仅清空(?:合法的)?发布前版本",
   ].join("|"),
   "gu",
+);
+
+const sqliteCorePath = path.join(
+  repositoryRoot,
+  "src-tauri/crates/infrastructure/src/sqlite/core.rs",
 );
 
 export async function findPhase2ReleaseBlockers({
@@ -66,14 +71,74 @@ export async function findPhase2ReleaseBlockers({
   return blockers;
 }
 
-const currentResetDocumentation =
-  /development recreate|当前开发启动[^。\n]*(?:重建|清理)|开发启动重建|Phase17 (?:删除前|必须删除)|Phase17[^。\n]*发布前删除/iu;
+const schema100StartupRequirements = [
+  ["cross-process startup ownership", "acquire_startup_ownership(path)?"],
+  ["exclusive startup ownership lock", "BEGIN EXCLUSIVE;"],
+  ["pre-baseline schema revalidation", "match inspect_existing_schema(&connection)?", 2],
+  ["pre-baseline version classification", "*version < CURRENT_SCHEMA_VERSION"],
+  ["pre-baseline database cleanup call", "clear_pre_baseline_database(path)?"],
+  ["SQLite WAL cleanup", 'sqlite_sidecar_path(path, "-wal")'],
+  ["SQLite SHM cleanup", 'sqlite_sidecar_path(path, "-shm")'],
+  ["SQLite main database cleanup", "std::fs::remove_file(path)"],
+  ["invalid/future marker rejection", "InfrastructureError::DatabaseSchemaInvalid"],
+];
+
+export async function findSchema100StartupContractBlockers({
+  coreSource,
+  read = readFile,
+} = {}) {
+  const source = coreSource ?? (await read(sqliteCorePath, "utf8"));
+  const missing = schema100StartupRequirements
+    .filter(([, token, minimumCount = 1]) => source.split(token).length - 1 < minimumCount)
+    .map(([label]) => label);
+  return missing.length === 0
+    ? []
+    : [`Schema100 startup contract is missing: ${missing.join(", ")}`];
+}
+
+const currentSchema100Documentation = [
+  /Schema 100[^。\n]*(?:原样保留|preserv)/iu,
+  /(?:唯一有效版本标记[^。\n]*)?`?<\s*100`?[^。\n]*(?:清除|删除)[^。\n]*(?:重建|创建|recreat)[^。\n]*Schema 100/iu,
+  /(?:未来版本|future)[^。\n]*(?:缺失|missing)[^。\n]*(?:重复|duplicate)[^。\n]*(?:损坏|malformed|corrupt)[^。\n]*fail-closed/iu,
+];
 const releaseFixtureName =
   "tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts";
+const infrastructureCleanupFixtureName =
+  "sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100";
+const hostCleanupFixtureName = "tests::pre_1_0_schema_is_cleared_and_recreated_as_schema100";
+
+function discoverCargoTests(args) {
+  const result = spawnSync("cargo", args, { cwd: repositoryRoot, encoding: "utf8" });
+  if (result.status !== 0) {
+    throw new Error(result.stderr || `cargo exited with status ${result.status}`);
+  }
+  return result.stdout
+    .split("\n")
+    .filter((line) => line.endsWith(": test"))
+    .map((line) => line.slice(0, -6));
+}
+
+function discoverPhase17Fixtures() {
+  return {
+    infrastructure: discoverCargoTests([
+      "test", "--manifest-path", "src-tauri/Cargo.toml", "-p",
+      "intercept-proxy-infrastructure", "--lib", "--", "--list", "--format", "terse",
+    ]),
+    host: discoverCargoTests([
+      "test", "--manifest-path", "src-tauri/Cargo.toml", "-p",
+      "intercept-proxy-host", "--lib", "--", "--list", "--format", "terse",
+    ]),
+    release: discoverCargoTests([
+      "test", "--release", "--manifest-path", "src-tauri/Cargo.toml", "-p",
+      "intercept-proxy-host", "--lib", "--", "--list", "--format", "terse",
+    ]),
+  };
+}
 
 export async function findPhase17ReleaseContractBlockers({
   currentDocs,
   phase17Command,
+  discoveredFixtures,
   read = readFile,
 } = {}) {
   const documents =
@@ -85,15 +150,52 @@ export async function findPhase17ReleaseContractBlockers({
     ];
   const blockers = [];
 
-  if (documents.some((document) => currentResetDocumentation.test(document))) {
-    blockers.push("current architecture documentation reintroduces pre-100 reset semantics");
+  if (
+    documents.some((document) => {
+      const normalized = document.replace(/\s+/gu, " ");
+      return currentSchema100Documentation.some((requirement) => !requirement.test(normalized));
+    })
+  ) {
+    blockers.push("current architecture documentation is missing the complete Schema100 startup contract");
   }
   if (documents.some((document) => /WAL\/SHM bytes/iu.test(document))) {
     blockers.push("current architecture documentation makes an unproven SHM byte-preservation claim");
   }
-  const releaseExact = `cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib ${releaseFixtureName} -- --exact`;
-  if (!command?.includes(releaseExact)) {
-    blockers.push("Phase 17 aggregate must run the actual cargo test --release exact fixture");
+  const requiredExactCommands = [
+    [
+      `cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib ${infrastructureCleanupFixtureName} -- --exact`,
+      "Phase 17 aggregate must run the current pre-Schema100 cleanup exact fixture",
+    ],
+    [
+      `cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib ${hostCleanupFixtureName} -- --exact`,
+      "Phase 17 aggregate must run the current Host pre-1.0 cleanup exact fixture",
+    ],
+    [
+      `cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib ${releaseFixtureName} -- --exact`,
+      "Phase 17 aggregate must run the actual cargo test --release exact fixture",
+    ],
+  ];
+  for (const [exactCommand, blocker] of requiredExactCommands) {
+    if (!command?.includes(exactCommand)) blockers.push(blocker);
+  }
+  let discovered = discoveredFixtures;
+  if (!discovered) {
+    try {
+      discovered = discoverPhase17Fixtures();
+    } catch (error) {
+      blockers.push(`Phase 17 Cargo discovery failed: ${error.message}`);
+      return blockers;
+    }
+  }
+  for (const [kind, fixtureName, label] of [
+    ["infrastructure", infrastructureCleanupFixtureName, "Infrastructure cleanup"],
+    ["host", hostCleanupFixtureName, "Host cleanup"],
+    ["release", releaseFixtureName, "Release preserve"],
+  ]) {
+    const count = (discovered[kind] ?? []).filter((name) => name === fixtureName).length;
+    if (count !== 1) {
+      blockers.push(`Phase 17 Cargo discovery expected exactly one ${label} fixture, found ${count}`);
+    }
   }
   return blockers;
 }
@@ -101,10 +203,11 @@ export async function findPhase17ReleaseContractBlockers({
 async function main() {
   const blockers = [
     ...(await findPhase2ReleaseBlockers()),
+    ...(await findSchema100StartupContractBlockers()),
     ...(await findPhase17ReleaseContractBlockers()),
   ];
   if (blockers.length === 0) {
-    process.stdout.write("PASS no temporary Phase 2 database reset remains\n");
+    process.stdout.write("PASS Schema100 startup contract is release ready\n");
     return;
   }
   for (const blocker of blockers) process.stderr.write(`NOT_RELEASE_READY ${blocker}\n`);

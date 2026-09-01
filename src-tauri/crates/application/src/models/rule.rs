@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use super::{MessageStage, Revision, RuleId, UiTone};
+use super::{Revision, RuleId, UiTone};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]
@@ -48,7 +48,6 @@ pub enum RuleJitterScope {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum RuleTerminalAction {
-    RejectTlsHandshake,
     DisconnectBeforeUpstream,
     UpstreamConnectTimeout {
         milliseconds: u64,
@@ -116,7 +115,6 @@ pub enum RuleAction {
         blocked_milliseconds: u64,
         direction: RuleTrafficDirection,
     },
-    Pause,
     CustomHttpStatus {
         status: u16,
     },
@@ -135,9 +133,7 @@ pub enum RuleActionKind {
     Jitter,
     Throttle,
     Intermittent,
-    Pause,
     CustomHttpStatus,
-    RejectTlsHandshake,
     DisconnectBeforeUpstream,
     UpstreamConnectTimeout,
     UpstreamWriteTimeout,
@@ -178,7 +174,7 @@ pub struct RuleMatchFieldCapabilityViewModel {
 /// HTTP 规则编辑器针对一个阶段的完整能力表。
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct RuleStageCapabilityViewModel {
-    pub stage: MessageStage,
+    pub stage: crate::RuleStage,
     pub match_fields: Vec<RuleMatchFieldCapabilityViewModel>,
     pub actions: Vec<RuleActionCapabilityViewModel>,
 }

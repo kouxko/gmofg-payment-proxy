@@ -56,7 +56,7 @@ fn document_predicate(value: Value) -> Value {
 }
 
 #[test]
-fn rules_use_authoritative_recursive_condition_tree_and_unified_actions_wire() {
+fn rules_use_authoritative_flat_conditions_and_unified_actions_wire() {
     let mut value = full_shape_value();
     workspace_rules_mut(&mut value)[0] = json!({
         "name": "Nested request rule",
@@ -68,34 +68,24 @@ fn rules_use_authoritative_recursive_condition_tree_and_unified_actions_wire() {
         "content": {
             "type": "http",
             "value": {
-                "description": "authoritative tree",
-                "condition": {
-                    "operator": "any",
-                    "children": [
-                        {
-                            "operator": "leaf",
-                            "children": {
-                                "source": "http",
-                                "field": "Method",
-                                "operator": { "Equals": "POST" }
-                            }
-                        },
-                        {
-                            "operator": "leaf",
-                            "children": {
-                                "source": "nth_hit",
-                                "count": 2
-                            }
-                        }
-                    ]
-                },
-                "actions": [{ "source": "http", "value": "Pause" }],
-                "document": null
+                "description": "authoritative flat AND conditions",
+                "conditions": [
+                    {
+                        "source": "http",
+                        "field": "Method",
+                        "operator": { "Equals": "POST" }
+                    },
+                    {
+                        "source": "nth_hit",
+                        "count": 2
+                    }
+                ],
+                "actions": [{ "source": "http", "value": { "Delay": { "milliseconds": 1 } } }]
             }
         }
     });
 
-    parse(&value).expect("environment wire accepts the authoritative rule tree directly");
+    parse(&value).expect("environment wire accepts authoritative flat conditions directly");
 }
 
 #[test]
@@ -249,14 +239,14 @@ fn protocol_document_values_use_native_recursive_json_and_reject_unsafe_integers
         json!({"nested": "value"}),
     ] {
         let mut value = full_shape_value();
-        first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["children"][0]["children"]
-            ["predicate"] = document_predicate(valid);
+        first_rule_mut(&mut value, "socket")["content"]["value"]["conditions"][0]["predicate"] =
+            document_predicate(valid);
         parse(&value).expect("native recursive JSON Document value is canonical");
     }
 
     let mut value = full_shape_value();
-    first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["children"][0]["children"]
-        ["predicate"] = document_predicate(json!(9_007_199_254_740_992_u64));
+    first_rule_mut(&mut value, "socket")["content"]["value"]["conditions"][0]["predicate"] =
+        document_predicate(json!(9_007_199_254_740_992_u64));
     assert!(parse(&value).is_err(), "unsafe Document integer accepted");
 }
 
@@ -357,7 +347,7 @@ fn canonical_fixture_contains_every_terminal_action_variant_once() {
 
     assert_eq!(
         actions.len(),
-        12,
+        11,
         "each terminal variant appears exactly once"
     );
     let actions = actions
@@ -374,7 +364,6 @@ fn canonical_fixture_contains_every_terminal_action_variant_once() {
             "IncorrectContentLength",
             "InvalidJson",
             "MockResponse",
-            "RejectTlsHandshake",
             "TruncateResponse",
             "UpstreamConnectTimeout",
             "UpstreamReadTimeout",

@@ -17,7 +17,6 @@ use chrono::{DateTime, TimeZone, Utc};
 use intercept_proxy_domain::{
     DownstreamClientAuthentication, FixedServerSettings, UpstreamTlsSettings,
 };
-use intercept_proxy_product_api::{BodyCodec, ProductError};
 use uuid::Uuid;
 
 use crate::*;
@@ -29,7 +28,6 @@ use support::*;
 mod android_multi_device;
 mod android_runtime;
 mod application_snapshot;
-mod breakpoints;
 mod capacity;
 mod diagnostic_report;
 mod diagnostics;

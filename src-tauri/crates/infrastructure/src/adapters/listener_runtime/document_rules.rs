@@ -85,18 +85,12 @@ pub(super) fn compile_document_rules(
         let schema = match stage {
             RuleStage::ProxyToUpstream => upstream_schema,
             RuleStage::ProxyToApp => downstream_schema,
-            RuleStage::TlsHandshake => {
-                return Err(AppError::new(
-                    "PROTOCOL_RULE_DIRECTION_INVALID",
-                    "协议报文规则不支持 TLS 握手阶段。",
-                ));
-            }
         };
         let mut entries = Vec::new();
         for definition in &workspace.rule_definitions {
             let RuleContent::Socket(SocketRuleContent {
                 package: rule_package,
-                condition,
+                conditions,
                 actions,
             }) = definition.content()
             else {
@@ -113,14 +107,14 @@ pub(super) fn compile_document_rules(
                 .entity(definition.rule_id().to_string()));
             }
             if let Some(schema) = schema {
-                condition.validate_document_schema(schema)?;
+                intercept_proxy_domain::validate_document_conditions_schema(conditions, schema)?;
                 validate_unified_actions_schema(actions, schema)?;
             }
             entries.push(RuleProgramEntry::new(
                 definition.rule_id(),
                 definition.priority(),
                 definition.created_order(),
-                condition.clone(),
+                conditions.clone(),
                 actions.clone(),
             )?);
         }
@@ -153,7 +147,7 @@ fn validate_rule_direction(stage: RuleStage, topology: &SocketTopology) -> AppRe
 #[cfg(test)]
 mod tests {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
+        Condition, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
         ProtocolPackageId, ProtocolPackageVersion, RuleDefinition, RuleDefinitionDraft,
         StringOperator, StringPredicate, UnifiedAction,
     };
@@ -177,13 +171,13 @@ mod tests {
                 one_shot: false,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: package.clone(),
-                    condition: ConditionTree::Leaf(Condition::Document {
+                    conditions: vec![Condition::Document {
                         path: JsonPointer::root(),
                         predicate: DocumentPredicate::String(StringPredicate {
                             operator: StringOperator::Equal,
                             value: "before".into(),
                         }),
-                    }),
+                    }],
                     actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::root(),
                         value: DocumentValue::String("after".into()),

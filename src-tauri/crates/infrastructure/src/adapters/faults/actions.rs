@@ -5,14 +5,6 @@ use super::{
 };
 
 #[allow(clippy::unnecessary_wraps)]
-pub(super) fn reject_tls(_: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
-    Ok((
-        MessageStage::TlsHandshake,
-        HttpAction::Terminal(TerminalAction::RejectTlsHandshake),
-    ))
-}
-
-#[allow(clippy::unnecessary_wraps)]
 pub(super) fn disconnect(_: &FaultParameters) -> AppResult<(MessageStage, HttpAction)> {
     Ok((
         MessageStage::Request,

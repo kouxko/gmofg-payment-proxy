@@ -120,7 +120,7 @@ impl Message {
     /// Hyper's semantic model normalizes header names and groups duplicates.
     /// This parser is intentionally small because Hyper still owns framing and
     /// protocol validation; it only recovers the already-accepted start line
-    /// and ordered field bytes for capture and breakpoint round trips.
+    /// and ordered field bytes for capture round trips.
     pub fn from_raw_http1_head(head: &[u8], body: Bytes) -> Result<Self> {
         let head = head.strip_suffix(b"\r\n\r\n").ok_or_else(|| {
             ProxyError::new(

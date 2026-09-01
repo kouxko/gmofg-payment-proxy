@@ -1,31 +1,5 @@
 use super::*;
 
-#[derive(Debug)]
-pub(in crate::requirements_tests) struct Utf8TestCodec;
-
-impl BodyCodec for Utf8TestCodec {
-    fn id(&self) -> &'static str {
-        "utf-8-test"
-    }
-
-    fn name(&self) -> &'static str {
-        "UTF-8 Test"
-    }
-
-    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
-        String::from_utf8(bytes.to_vec())
-            .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
-    }
-
-    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
-        Ok(text.as_bytes().to_vec())
-    }
-}
-
-pub(in crate::requirements_tests) fn breakpoint_validator() -> BreakpointValidator {
-    BreakpointValidator::new(Arc::new(Utf8TestCodec))
-}
-
 pub(in crate::requirements_tests) fn test_channel(id: &str) -> ChannelId {
     ChannelId::new(id).unwrap()
 }
@@ -104,7 +78,6 @@ pub(in crate::requirements_tests) fn session(
                 matched_rule_ids: Vec::new(),
                 request_size_bytes: body.len() as u64,
                 response_size_bytes: 0,
-                pending_breakpoint: pending,
                 revision: 1,
             },
             runtime_epoch: Uuid::nil(),
@@ -119,39 +92,6 @@ pub(in crate::requirements_tests) fn session(
             response: None,
             rule_trace: vec!["规则轨迹".into()],
         },
-        breakpoint_draft: pending.then(|| content(b"draft")),
-    }
-}
-
-pub(in crate::requirements_tests) fn breakpoint(
-    id: BreakpointId,
-    epoch: RuntimeEpoch,
-    second: u32,
-) -> BreakpointDetailViewModel {
-    BreakpointDetailViewModel {
-        summary: BreakpointSummaryViewModel {
-            breakpoint_id: id,
-            session_id: Uuid::new_v4(),
-            runtime_epoch: epoch,
-            stage: MessageStage::Request,
-            title: "请求断点·发送至服务器前".into(),
-            terminal_ip: "10.0.0.1".into(),
-            channel: test_channel("alpha"),
-            channel_text: "Alpha".into(),
-            method: "POST".into(),
-            target: "/payment".into(),
-            waiting_since: timestamp(second),
-            certificate_fingerprint_suffix: "A1:B2".into(),
-            state: BreakpointState::Pending,
-            state_text: String::new(),
-            ui_tone: UiTone::Neutral,
-            revision: 7,
-        },
-        original: content(br#"{"a":1}"#),
-        effective: content(br#"{"a":1}"#),
-        can_resolve: true,
-        resolve_disabled_reason: None,
-        available_actions: Vec::new(),
     }
 }
 
@@ -174,12 +114,6 @@ pub(in crate::requirements_tests) fn capture_row(event_id: u64) -> CaptureRowVie
         duration_ms: Some(1),
         matched_rule_ids: Vec::new(),
         size_bytes: 1,
-        breakpoint_id: None,
-        can_go_to_breakpoint: false,
-        breakpoint_disabled_reason: Some(DisabledReason {
-            code: "NO_BREAKPOINT".into(),
-            message: "该会话没有待处理断点。".into(),
-        }),
     }
 }
 
@@ -306,11 +240,11 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                 one_shot: false,
                 content: RuleContent::Socket(intercept_proxy_domain::SocketRuleContent {
                     package,
-                    condition: ConditionTree::All(vec![
+                    conditions: vec![
                         document_equals("text", DocumentValue::String("sale".into())),
                         document_equals("amount", DocumentValue::integer(1234).unwrap()),
                         document_equals("approved", DocumentValue::Boolean(true)),
-                    ]),
+                    ],
                     actions: vec![
                         UnifiedAction::RecordMatch,
                         document_set("text", DocumentValue::String("reply".into())),
@@ -338,7 +272,12 @@ pub(in crate::requirements_tests) fn http_rule_definitions(
         .filter(|rule| {
             matches!(
                 rule.content(),
-                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_none()
+                intercept_proxy_domain::RuleContent::Http(content)
+                    if !intercept_proxy_domain::contains_document_condition(&content.conditions)
+                        && !content.actions.iter().any(|action| matches!(
+                            action,
+                            intercept_proxy_domain::UnifiedAction::Document(_)
+                        ))
             )
         })
         .collect()
@@ -353,14 +292,19 @@ pub(in crate::requirements_tests) fn protocol_rule_definitions(
         .filter(|rule| {
             !matches!(
                 rule.content(),
-                intercept_proxy_domain::RuleContent::Http(content) if content.document.is_none()
+                intercept_proxy_domain::RuleContent::Http(content)
+                    if !intercept_proxy_domain::contains_document_condition(&content.conditions)
+                        && !content.actions.iter().any(|action| matches!(
+                            action,
+                            intercept_proxy_domain::UnifiedAction::Document(_)
+                        ))
             )
         })
         .collect()
 }
 
-fn document_equals(name: &str, value: DocumentValue) -> ConditionTree {
-    ConditionTree::Leaf(Condition::Document {
+fn document_equals(name: &str, value: DocumentValue) -> Condition {
+    Condition::Document {
         path: JsonPointer::property(name),
         predicate: match value {
             DocumentValue::String(value) => DocumentPredicate::String(StringPredicate {
@@ -379,7 +323,7 @@ fn document_equals(name: &str, value: DocumentValue) -> ConditionTree {
                 panic!("fixture equality requires a scalar value")
             }
         },
-    })
+    }
 }
 
 fn document_set(name: &str, value: DocumentValue) -> UnifiedAction {

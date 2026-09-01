@@ -48,5 +48,5 @@ async fn production_host_covers_certificate_overview_and_validation_without_ui()
     host.shutdown().await.expect("shutdown UI-neutral host");
 }
 
-// STATE-001~016, BREAKPOINT-001~016, TEST-STATE, TEST-BREAKPOINT, TEST-HOST:
-// only the network supervisor is replaced; Application and breakpoint logic are real.
+// STATE-001~016, TEST-STATE, TEST-HOST:
+// only the network supervisor is replaced; Application logic is real.

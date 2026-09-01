@@ -329,8 +329,8 @@ for (const required of ["成功结果", "错误结果", "additionalProperties", 
     failures.push(`docs/mcp/tool-reference.md: missing contract term ${required}`);
   }
 }
-if (toolNames.length !== 36 || new Set(toolNames).size !== toolNames.length) {
-  failures.push(`src-tauri/src/mcp/catalog.rs: expected 36 unique documented tools, found ${toolNames.length}`);
+if (toolNames.length !== 34 || new Set(toolNames).size !== toolNames.length) {
+  failures.push(`src-tauri/src/mcp/catalog.rs: expected 34 unique documented tools, found ${toolNames.length}`);
 }
 
 for (const name of currentDocuments) {

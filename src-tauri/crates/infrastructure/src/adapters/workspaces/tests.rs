@@ -228,13 +228,10 @@ fn referenced_workspace() -> ProxyWorkspace {
                 content: intercept_proxy_domain::RuleContent::Http(
                     intercept_proxy_domain::HttpRuleContent {
                         description: String::new(),
-                        condition: intercept_proxy_domain::ConditionTree::Leaf(Condition::NthHit {
-                            count: 1,
-                        }),
+                        conditions: vec![Condition::NthHit { count: 1 }],
                         actions: vec![intercept_proxy_domain::UnifiedAction::Http(
                             HttpAction::Delay { milliseconds: 1 },
                         )],
-                        document: None,
                     },
                 ),
             },

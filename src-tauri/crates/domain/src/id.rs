@@ -1,6 +1,6 @@
 //! 强类型标识符。
 //!
-//! 会话、报文、断点、连接和规则底层都使用 UUID，但业务含义不同。分别包装后，编译器
+//! 会话、报文、连接和规则底层都使用 UUID，但业务含义不同。分别包装后，编译器
 //! 可以阻止“把会话 ID 误传成规则 ID”这类低级错误。
 
 use serde::{Deserialize, Serialize};
@@ -51,7 +51,6 @@ uuid_id!(RuntimeEpoch);
 uuid_id!(ConnectionId);
 uuid_id!(SessionId);
 uuid_id!(MessageId);
-uuid_id!(BreakpointId);
 uuid_id!(RuleId);
 uuid_id!(CertificateId);
 uuid_id!(EventId);

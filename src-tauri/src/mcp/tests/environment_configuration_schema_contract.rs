@@ -10,7 +10,6 @@ use support::{
     contains_key, expected_preview, extract_contract_literals, extract_positive_contract_literals,
     literal_array, literal_coverage, published_schemas, schema_snapshot, string_set,
 };
-
 #[test]
 fn published_input_and_output_schemas_equal_checked_in_snapshot_exactly() {
     assert_eq!(
@@ -77,10 +76,28 @@ fn schema_snapshot_covers_required_unions_enums_and_nullable_fields() {
     assert!(defs["workspace"]["properties"]["http_rules"].is_null());
     assert!(defs["workspace"]["properties"]["protocol_rules"].is_null());
     assert_eq!(defs["ruleContent"]["oneOf"].as_array().unwrap().len(), 2);
-    assert_eq!(defs["conditionTree"]["oneOf"].as_array().unwrap().len(), 3);
+    assert!(defs.get("conditionTree").is_none());
+    for content in ["httpRuleContent", "socketRuleContent"] {
+        let conditions = &defs[content]["properties"]["conditions"];
+        assert_eq!(conditions["type"], "array");
+        assert_eq!(conditions["minItems"], 1);
+        assert_eq!(conditions["items"]["$ref"], "#/$defs/condition");
+        assert!(
+            defs[content]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("conditions"))
+        );
+        assert!(
+            !defs[content]["required"]
+                .as_array()
+                .unwrap()
+                .contains(&json!("condition"))
+        );
+    }
     assert_eq!(
         defs["rule"]["properties"]["stage"]["enum"],
-        json!(["proxy_to_upstream", "proxy_to_app", "tls_handshake"])
+        json!(["proxy_to_upstream", "proxy_to_app"])
     );
     assert!(
         !defs["rule"]["required"]

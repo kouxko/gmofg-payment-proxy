@@ -1,7 +1,7 @@
 use crate::{
-    BooleanPredicate, Condition, ConditionTree, Document, DocumentMatchPath, DocumentPredicate,
-    HttpHeader, MatchContext, MatchField, MatchOperator, MessageStage, RuleId, RuntimeEpoch,
-    TerminalIdentity, UnifiedRuleProgram,
+    BooleanPredicate, Condition, Document, DocumentMatchPath, DocumentPredicate, HttpHeader,
+    MatchContext, MatchField, MatchOperator, MessageStage, RuleId, RuntimeEpoch, TerminalIdentity,
+    UnifiedRuleProgram,
 };
 
 fn context<'a>(
@@ -65,34 +65,25 @@ fn document_wildcard_path_matches_any_single_level_only() {
         r#"{"customer":{"first":{"active":false},"second":{"active":true},"deep":{"child":{"active":true}}}}"#,
     )
     .expect("document");
-    let condition = ConditionTree::Leaf(Condition::DocumentPattern {
+    let condition = Condition::DocumentPattern {
         path: DocumentMatchPath::parse("/customer/*/active").expect("match path"),
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
-    });
+    };
 
-    assert!(
-        condition
-            .matches_document(&document)
-            .expect("wildcard match")
-    );
+    assert!(crate::matches_document_conditions(&[condition], &document).expect("wildcard match"));
 
-    let too_shallow = ConditionTree::Leaf(Condition::DocumentPattern {
+    let too_shallow = Condition::DocumentPattern {
         path: DocumentMatchPath::parse("/customer/*/child/active").expect("match path"),
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
-    });
-    assert!(
-        too_shallow
-            .matches_document(&document)
-            .expect("exact depth")
-    );
+    };
+    assert!(crate::matches_document_conditions(&[too_shallow], &document).expect("exact depth"));
 
-    let does_not_cross_levels = ConditionTree::Leaf(Condition::DocumentPattern {
+    let does_not_cross_levels = Condition::DocumentPattern {
         path: DocumentMatchPath::parse("/customer/*/active/value").expect("match path"),
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
-    });
+    };
     assert!(
-        !does_not_cross_levels
-            .matches_document(&document)
+        !crate::matches_document_conditions(&[does_not_cross_levels], &document)
             .expect("wildcard must not cross levels")
     );
 }

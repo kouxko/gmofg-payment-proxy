@@ -75,6 +75,48 @@ test("checker rejects reintroducing only a public Rule aggregate", () => {
   }
 });
 
+test("checker rejects reintroducing a recursive ConditionTree aggregate", () => {
+  const root = mkdtempSync(resolve(tmpdir(), "unified-rule-model-"));
+  try {
+    const model = resolve(root, "src-tauri/crates/domain/src/alternate.rs");
+    mkdirSync(dirname(model), { recursive: true });
+    mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
+    mkdirSync(resolve(root, "test-support"), { recursive: true });
+    writeFileSync(model, "pub enum ConditionTree { All(Vec<ConditionTree>) }\n");
+    const result = spawnSync(process.execPath, [checker, root], {
+      cwd: root,
+      encoding: "utf8",
+    });
+    assert.notEqual(result.status, 0, result.stdout);
+    assert.match(result.stderr, /ConditionTree/u);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
+test("checker rejects reintroducing the removed TLS rule stage or action", () => {
+  for (const source of [
+    "let stage = RuleStage::TlsHandshake;\n",
+    "let action = TerminalAction::RejectTlsHandshake;\n",
+  ]) {
+    const root = mkdtempSync(resolve(tmpdir(), "unified-rule-model-"));
+    try {
+      const model = resolve(root, "src-tauri/crates/domain/src/alternate.rs");
+      mkdirSync(dirname(model), { recursive: true });
+      mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
+      mkdirSync(resolve(root, "test-support"), { recursive: true });
+      writeFileSync(model, source);
+      const result = spawnSync(process.execPath, [checker, root], {
+        cwd: root,
+        encoding: "utf8",
+      });
+      assert.notEqual(result.status, 0, result.stdout);
+    } finally {
+      rmSync(root, { recursive: true, force: true });
+    }
+  }
+});
+
 test("checker rejects a legacy HTTP condition projection helper", () => {
   const root = mkdtempSync(resolve(tmpdir(), "unified-rule-model-"));
   try {
