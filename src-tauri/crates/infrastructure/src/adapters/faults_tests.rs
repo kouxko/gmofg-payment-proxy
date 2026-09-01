@@ -52,7 +52,6 @@ fn required_terminal_faults_use_domain_compatible_stages() {
         "product-api capability contract and infrastructure actions must stay aligned"
     );
     for required in [
-        "reject_tls_handshake",
         "drop_upstream_response",
         "upstream_connect_timeout",
         "upstream_write_timeout",
@@ -68,10 +67,6 @@ fn required_terminal_faults_use_domain_compatible_stages() {
     ] {
         assert!(ids.contains(&required), "missing template {required}");
     }
-    assert_eq!(
-        reject_tls(&BTreeMap::new()).expect("tls").0,
-        MessageStage::TlsHandshake
-    );
     assert_eq!(
         drop_response(&BTreeMap::from([(
             "close_after_request_write".into(),
@@ -246,17 +241,12 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
                     definition.view.template_id
                 )
             });
-        let domain_stage = match stage {
-            MessageStage::TlsHandshake => intercept_proxy_domain::RuleStage::TlsHandshake,
-            MessageStage::Request => intercept_proxy_domain::RuleStage::ProxyToUpstream,
-            MessageStage::Response => intercept_proxy_domain::RuleStage::ProxyToApp,
-            MessageStage::Terminal => {
-                panic!(
-                    "{} default unexpectedly targets a terminal event",
-                    definition.view.template_id
-                )
-            }
-        };
+        let domain_stage = rule_stage(stage).unwrap_or_else(|error| {
+            panic!(
+                "{} default targets a non-rule stage: {error}",
+                definition.view.template_id
+            )
+        });
         let draft = intercept_proxy_domain::RuleDefinitionDraft {
             name: definition.view.name.clone(),
             enabled: true,
@@ -267,18 +257,15 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
             content: intercept_proxy_domain::RuleContent::Http(
                 intercept_proxy_domain::HttpRuleContent {
                     description: definition.view.behavior_text.clone(),
-                    condition: intercept_proxy_domain::ConditionTree::Leaf(
-                        intercept_proxy_domain::Condition::NthHit {
-                            count: u64::from(definition.view.default_nth_hit),
-                        },
-                    ),
+                    conditions: vec![intercept_proxy_domain::Condition::NthHit {
+                        count: u64::from(definition.view.default_nth_hit),
+                    }],
                     actions: vec![match action {
                         intercept_proxy_domain::HttpAction::Terminal(action) => {
                             intercept_proxy_domain::UnifiedAction::Terminal(action)
                         }
                         action => intercept_proxy_domain::UnifiedAction::Http(action),
                     }],
-                    document: None,
                 },
             ),
         };
@@ -288,43 +275,6 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
                 definition.view.template_id
             )
         });
-    }
-}
-
-// ACTION-001, FAULT-005~006, TEST-FAULT:
-// TLS faults preserve the same per-terminal Nth-hit contract as HTTP rules.
-#[test]
-fn tls_template_preserves_nth_hit_and_rejects_http_only_filters() {
-    let defaults = FaultConfigurationDraft {
-        template_id: "reject_tls_handshake".into(),
-        existing_rule_id: None,
-        expected_revision: None,
-        channel: Some(intercept_proxy_domain::ChannelId::new("beta").unwrap()),
-        terminal: None,
-        target: None,
-        nth_hit: Some(1),
-        one_shot: false,
-        priority: 100,
-        parameters: BTreeMap::new(),
-    };
-    assert_eq!(
-        configuration_conditions(&defaults, MessageStage::TlsHandshake)
-            .expect("default TLS configuration"),
-        vec![intercept_proxy_domain::Condition::NthHit { count: 1 }]
-    );
-
-    let invalid = FaultConfigurationDraft {
-        terminal: Some("10.0.34.94".into()),
-        target: Some("/".into()),
-        ..defaults
-    };
-    let error = configuration_conditions(&invalid, MessageStage::TlsHandshake)
-        .expect_err("HTTP-only TLS filters");
-    for field in ["terminal", "target"] {
-        assert!(
-            error.view_model.field_errors.contains_key(field),
-            "missing field error for {field}"
-        );
     }
 }
 

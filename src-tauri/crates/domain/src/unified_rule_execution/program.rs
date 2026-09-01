@@ -1,8 +1,9 @@
 use std::collections::BTreeSet;
 
 use super::{
-    ConditionEvaluation, ConditionTree, Document, DomainError, HttpAction, MatchField,
-    MatchOperator, RuleId, TerminalAction, UnifiedAction, rule_error,
+    Condition, ConditionEvaluation, Document, DomainError, HttpAction, MatchField, MatchOperator,
+    RuleId, TerminalAction, UnifiedAction, evaluate_conditions_with_nth, rule_error,
+    validate_conditions,
 };
 
 /// Immutable rule program input. `created_order` is history/UI metadata only.
@@ -11,7 +12,7 @@ pub struct RuleProgramEntry {
     rule_id: RuleId,
     priority: i32,
     created_order: u64,
-    condition: ConditionTree,
+    conditions: Vec<Condition>,
     actions: Vec<UnifiedAction>,
 }
 
@@ -21,16 +22,16 @@ impl RuleProgramEntry {
         rule_id: RuleId,
         priority: i32,
         created_order: u64,
-        condition: ConditionTree,
+        conditions: Vec<Condition>,
         actions: Vec<UnifiedAction>,
     ) -> Result<Self, DomainError> {
-        condition.validate()?;
+        validate_conditions(&conditions)?;
         validate_actions(&actions)?;
         Ok(Self {
             rule_id,
             priority,
             created_order,
-            condition,
+            conditions,
             actions,
         })
     }
@@ -51,8 +52,8 @@ impl RuleProgramEntry {
     }
 
     #[must_use]
-    pub const fn condition(&self) -> &ConditionTree {
-        &self.condition
+    pub fn conditions(&self) -> &[Condition] {
+        &self.conditions
     }
 
     #[must_use]
@@ -60,9 +61,9 @@ impl RuleProgramEntry {
         &self.actions
     }
 
-    pub fn replace_condition(&mut self, condition: ConditionTree) -> Result<(), DomainError> {
-        condition.validate()?;
-        self.condition = condition;
+    pub fn replace_conditions(&mut self, conditions: Vec<Condition>) -> Result<(), DomainError> {
+        validate_conditions(&conditions)?;
+        self.conditions = conditions;
         Ok(())
     }
 }
@@ -105,7 +106,7 @@ impl UnifiedRuleProgram {
             if !rule_ids.insert(rule.rule_id) {
                 return Err(rule_error("rules.rule_id", "规则 ID 不能重复"));
             }
-            rule.condition.validate()?;
+            validate_conditions(&rule.conditions)?;
             validate_actions(&rule.actions)?;
         }
         rules.sort_by_key(|rule| (rule.priority, rule.rule_id));
@@ -115,7 +116,7 @@ impl UnifiedRuleProgram {
     pub fn execute(&self, document: Document) -> Result<UnifiedRuleExecution, DomainError> {
         self.execute_with_http(document, |_, _| {
             Err(rule_error(
-                "condition",
+                "conditions",
                 "HTTP 条件需要应用层提供类型化 HTTP 上下文",
             ))
         })
@@ -134,9 +135,12 @@ impl UnifiedRuleProgram {
         mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<ConditionEvaluation, DomainError> {
         let rule = self.rule_or_error(rule_id)?;
-        let evaluation =
-            rule.condition
-                .evaluate_with_nth(document, nth_attempt, &mut http_matches)?;
+        let evaluation = evaluate_conditions_with_nth(
+            &rule.conditions,
+            document,
+            nth_attempt,
+            &mut http_matches,
+        )?;
         if evaluation.matched {
             for action in &rule.actions {
                 if let UnifiedAction::Document(mutation) = action {
@@ -155,8 +159,7 @@ impl UnifiedRuleProgram {
         mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<ConditionEvaluation, DomainError> {
         let rule = self.rule_or_error(rule_id)?;
-        rule.condition
-            .evaluate_with_nth(document, nth_attempt, &mut http_matches)
+        evaluate_conditions_with_nth(&rule.conditions, document, nth_attempt, &mut http_matches)
     }
 
     #[must_use]
@@ -179,9 +182,8 @@ impl UnifiedRuleProgram {
         let mut http_actions = Vec::new();
         let mut terminal_action = None;
         'rules: for rule in &self.rules {
-            if !rule
-                .condition
-                .matches_with(&working, 1, &mut http_matches)?
+            if !evaluate_conditions_with_nth(&rule.conditions, &working, 1, &mut http_matches)?
+                .matched
             {
                 continue;
             }

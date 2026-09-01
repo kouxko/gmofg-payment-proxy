@@ -30,10 +30,12 @@ UI 用户意图
 HTTP capture、Socket ExchangeObservation 和运行时报文不创建数据库表；它们保存在有界内存。普通
 运行日志使用独立 JSONL 文件，不写入 SQLite。
 
-Phase17 已物理删除 pre-100 recreate/reset policy、marker 和启动分支。版本 `100` 的数据库及其数据
-原样保留；`<100`、`>100`、缺失、重复或损坏 Schema 标记均 fail-closed，失败不得改写主数据库与
-WAL bytes，也不得改变 owner/user data。发布 checker 会阻止临时 reset 合同重新进入生产启动路径；
-不存在产品兼容、隐式迁移或清库恢复合同。
+Schema 100 的数据库及其数据原样保留。非空数据库只有在存在唯一、有效且 `<100` 的 Schema 标记时，
+才会删除 SQLite 主文件、WAL 与 SHM，并创建全新的 Schema 100；这是一条正式的旧开发数据清理合同，
+不是迁移或兼容路径。未来版本、缺失、重复或损坏 Schema 标记均 fail-closed，失败不得改写主数据库、
+WAL 或 owner/user data。跨进程启动所有权覆盖分类、关闭、复验、清除、重开和建表全过程，等待中的
+实例只能在前一实例释放后重新读取当前状态，不能删除前一实例刚创建的 Schema 100。发布 checker
+同时锁定 `<100` 清理和其余情况的拒绝边界。
 
 从版本 `100` 开始，任何后续 Schema 升级都必须提供显式、可回滚验证的兼容迁移，不得再次通过
 清空数据库完成升级。当前版本尚无 `100` 之后的迁移步骤；版本常量提升时必须同步增加迁移和回归。
@@ -103,7 +105,7 @@ Proxy 需要 Server Identity 向 App 出示证书。mTLS 可配置：
 - Optional：按指定 Client Trust 验证，允许未提供；
 - Required：必须提供且通过 Client Trust 验证。
 
-App 证书指纹属于 downstream peer 事实，可供 TLS 握手规则和诊断使用。
+App 证书指纹属于 downstream peer 事实，仅用于 TLS 连接诊断和证书展示，不进入规则系统。
 
 ### 5.2 upstream：Proxy 作为 Client
 

@@ -147,21 +147,19 @@ async fn listener_validation_accepts_current_unified_document_rule_shapes() {
     let listener_id = configure_relay(&services, &workspaces, &package).await;
     let selected = workspaces.list().await.unwrap().remove(0);
     let mut workspace = workspaces.get(selected.id).await.unwrap();
-    workspace.rule_definitions =
-        vec![
-            intercept_proxy_domain::RuleDefinition::create(
-                intercept_proxy_domain::RuleDefinitionDraft {
-                    name: "listener unified rule".into(),
-                    enabled: true,
-                    priority: 0,
-                    listener_id,
-                    stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
-                    one_shot: false,
-                    content: intercept_proxy_domain::RuleContent::Socket(
-                        intercept_proxy_domain::SocketRuleContent {
-                            package: package.clone(),
-                            condition: intercept_proxy_domain::ConditionTree::Any(vec![
-                        intercept_proxy_domain::ConditionTree::Leaf(
+    workspace.rule_definitions = vec![
+        intercept_proxy_domain::RuleDefinition::create(
+            intercept_proxy_domain::RuleDefinitionDraft {
+                name: "listener unified rule".into(),
+                enabled: true,
+                priority: 0,
+                listener_id,
+                stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
+                one_shot: false,
+                content: intercept_proxy_domain::RuleContent::Socket(
+                    intercept_proxy_domain::SocketRuleContent {
+                        package: package.clone(),
+                        conditions: vec![
                             intercept_proxy_domain::Condition::DocumentPattern {
                                 path: intercept_proxy_domain::DocumentMatchPath::parse("/raw/*")
                                     .unwrap(),
@@ -173,35 +171,32 @@ async fn listener_validation_accepts_current_unified_document_rule_shapes() {
                                     },
                                 ),
                             },
-                        ),
-                        intercept_proxy_domain::ConditionTree::Leaf(
                             intercept_proxy_domain::Condition::NthHit { count: 2 },
-                        ),
-                    ]),
-                            actions: vec![
-                                intercept_proxy_domain::UnifiedAction::Document(
-                                    intercept_proxy_domain::DocumentMutation::Insert {
-                                        path: intercept_proxy_domain::JsonPointer::property("raw"),
-                                        index: 0,
-                                        value: intercept_proxy_domain::DocumentValue::integer(1)
-                                            .unwrap(),
-                                    },
-                                ),
-                                intercept_proxy_domain::UnifiedAction::Document(
-                                    intercept_proxy_domain::DocumentMutation::Append {
-                                        path: intercept_proxy_domain::JsonPointer::property("raw"),
-                                        value: intercept_proxy_domain::DocumentValue::integer(2)
-                                            .unwrap(),
-                                    },
-                                ),
-                            ],
-                        },
-                    ),
-                },
-                1,
-            )
-            .unwrap(),
-        ];
+                        ],
+                        actions: vec![
+                            intercept_proxy_domain::UnifiedAction::Document(
+                                intercept_proxy_domain::DocumentMutation::Insert {
+                                    path: intercept_proxy_domain::JsonPointer::property("raw"),
+                                    index: 0,
+                                    value: intercept_proxy_domain::DocumentValue::integer(1)
+                                        .unwrap(),
+                                },
+                            ),
+                            intercept_proxy_domain::UnifiedAction::Document(
+                                intercept_proxy_domain::DocumentMutation::Append {
+                                    path: intercept_proxy_domain::JsonPointer::property("raw"),
+                                    value: intercept_proxy_domain::DocumentValue::integer(2)
+                                        .unwrap(),
+                                },
+                            ),
+                        ],
+                    },
+                ),
+            },
+            1,
+        )
+        .unwrap(),
+    ];
     workspace.rule_created_order_high_water = 1;
     workspace = workspaces.save(workspace).await.unwrap();
     let listener = workspace

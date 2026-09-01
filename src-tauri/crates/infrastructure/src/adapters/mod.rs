@@ -45,7 +45,7 @@ pub use crate::package_transport::{
     PackageTransportClient, PackageTransportConfig, PackageTransportError,
 };
 pub use android_adb::AndroidAdbAdapter;
-pub use body_codecs::{HeaderBodyCodecResolver, WorkspaceBodyCodecResolver};
+pub use body_codecs::WorkspaceBodyCodecResolver;
 pub use builtin_protocol_package::BuiltinProtocolPackageAdapter;
 pub(crate) use builtin_protocol_package::PackageArchiveLimits;
 pub use bundle::InfrastructureServiceBundle;

@@ -3,9 +3,9 @@ use super::{
     HttpAction, MessageStage, ProductFaultTemplate, UiTone, connect_timeout, custom_status,
     disconnect, disconnect_downstream_mid_body, disconnect_upstream_mid_body, drop_response,
     encoded_template, intermittent_downstream, intermittent_upstream, invalid_json,
-    jitter_downstream, jitter_upstream, mock_response, modify_json, read_timeout, reject_tls,
-    request_delay, response_delay, template, throttle_downstream, throttle_upstream, truncate,
-    write_timeout, wrong_length,
+    jitter_downstream, jitter_upstream, mock_response, modify_json, read_timeout, request_delay,
+    response_delay, template, throttle_downstream, throttle_upstream, truncate, write_timeout,
+    wrong_length,
 };
 
 pub(super) struct TemplateDefinition {
@@ -35,15 +35,6 @@ impl TemplateAction {
 #[allow(clippy::too_many_lines)]
 pub(super) fn generic_template_definitions() -> Vec<TemplateDefinition> {
     vec![
-        template(
-            "reject_tls_handshake",
-            "拒绝 TLS 握手",
-            "TLS 握手阶段",
-            "在 HTTP 消息进入规则管线前拒绝客户端握手",
-            "客户端",
-            "高",
-            reject_tls,
-        ),
         template(
             "disconnect_before_upstream",
             "不连接上游并断开",

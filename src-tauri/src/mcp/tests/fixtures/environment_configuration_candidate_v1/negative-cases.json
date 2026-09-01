@@ -24,8 +24,20 @@
     "value": "response"
   },
   {
+    "name": "legacy_recursive_condition",
+    "pointer": "/workspace/rules/0/content/value/condition",
+    "operation": "add",
+    "value": {
+      "operator": "leaf",
+      "children": {
+        "source": "nth_hit",
+        "count": 1
+      }
+    }
+  },
+  {
     "name": "truncate_uses_after_bytes",
-    "pointer": "/workspace/rules/12/content/value/actions/0/value/TruncateResponse",
+    "pointer": "/workspace/rules/11/content/value/actions/0/value/TruncateResponse",
     "operation": "replace",
     "value": {
       "after_bytes": 1
@@ -33,7 +45,7 @@
   },
   {
     "name": "disconnect_uses_bytes",
-    "pointer": "/workspace/rules/6/content/value/actions/0/value/DisconnectDuringUpstreamWrite",
+    "pointer": "/workspace/rules/5/content/value/actions/0/value/DisconnectDuringUpstreamWrite",
     "operation": "replace",
     "value": {
       "bytes": 1
@@ -41,19 +53,13 @@
   },
   {
     "name": "terminal_alternate_tag",
-    "pointer": "/workspace/rules/12/content/value/actions/0/value",
+    "pointer": "/workspace/rules/11/content/value/actions/0/value",
     "operation": "replace",
     "value": {
       "truncate_response": {
         "bytes": 1
       }
     }
-  },
-  {
-    "name": "terminal_alternate_case",
-    "pointer": "/workspace/rules/2/content/value/actions/0/value",
-    "operation": "replace",
-    "value": "reject_tls_handshake"
   },
   {
     "name": "weak_network_scalar",

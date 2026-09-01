@@ -1,8 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { Button, Modal, toast } from "@heroui/react";
-import { Xmark } from "@gravity-ui/icons";
+import { toast } from "@heroui/react";
 import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
@@ -11,6 +10,7 @@ import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
 import { RuleCreationDialog } from "./rule-creation-dialog";
 import { RuleDefinitionEditor } from "./rule-definition-editor";
 import { RuleDefinitionList } from "./rule-definition-list";
+import { RulesWorkspaceShell } from "./rules-workspace-shell";
 import { useRuleDefinitionSource } from "./use-rule-definition-source";
 
 export function RulesView() {
@@ -27,7 +27,6 @@ export function RulesView() {
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
   const editorGeneration = useRef(0);
   const listener = source.listeners.find((item) => item.id === input?.draft.listener_id);
-  const editorOpen = loadingEditor || input !== undefined;
   useAppEventRefresh(["rule_hit", "snapshot_required"], source.refresh);
 
   useEffect(() => {
@@ -154,53 +153,35 @@ export function RulesView() {
   return (
     <div aria-label="统一规则工作区" className="h-full min-h-0 overflow-auto p-3">
       <div className="h-full min-h-[42rem] max-[1280px]:h-auto">
-        <RuleDefinitionList
-          error={source.error}
-          loading={source.isLoading}
-          onNew={() => setCreationOpen(true)}
-          onRefresh={() => void source.refresh()}
-          onSelect={(rule) => void selectRule(rule)}
-          pending={pending || loadingEditor}
-          rules={source.rules}
-          selectedId={selected?.rule_id}
-        />
+        <RulesWorkspaceShell>
+          <RuleDefinitionList
+            error={source.error}
+            loading={source.isLoading}
+            onNew={() => setCreationOpen(true)}
+            onRefresh={() => void source.refresh()}
+            onSelect={(rule) => void selectRule(rule)}
+            pending={pending || loadingEditor}
+            rules={source.rules}
+            selectedId={selected?.rule_id}
+          />
+          <RuleDefinitionEditor
+            context={context}
+            fieldErrors={fieldErrors}
+            input={input}
+            listener={listener}
+            loading={loadingEditor}
+            onChange={(change) => {
+              setInput((current) => typeof change === "function" ? (current ? change(current) : current) : change);
+              setFieldErrors({});
+            }}
+            onCopy={() => void copy()}
+            onDelete={() => void remove()}
+            onSave={() => void save()}
+            onToggle={(enabled) => void toggle(enabled)}
+            pending={pending}
+          />
+        </RulesWorkspaceShell>
       </div>
-      <Modal isOpen={editorOpen} onOpenChange={(open) => {
-        if (open || pending) return;
-        editorGeneration.current += 1;
-        setLoadingEditor(false);
-        setSelected(undefined);
-        setInput(undefined);
-        setContext(undefined);
-        setFieldErrors({});
-      }}>
-        <Button className="hidden" aria-hidden="true">打开规则编辑器</Button>
-        <Modal.Backdrop isDismissable={!pending}><Modal.Container size="cover" scroll="inside"><Modal.Dialog>
-          <Modal.Header className="items-start gap-1 pr-12 text-left">
-            <Modal.Heading className="text-left text-lg font-semibold">{input?.rule_id ? "编辑规则" : "新建规则"}</Modal.Heading>
-            <p className="text-left text-xs text-[var(--telemetry-muted)]">统一规则编辑器</p>
-            <Modal.CloseTrigger aria-label="关闭规则编辑器" isDisabled={pending}><Xmark className="size-4" /></Modal.CloseTrigger>
-          </Modal.Header>
-          <Modal.Body className="min-h-0 overflow-y-auto">
-            <RuleDefinitionEditor
-              context={context}
-              fieldErrors={fieldErrors}
-              input={input}
-              listener={listener}
-              loading={loadingEditor}
-              onChange={(change) => {
-                setInput((current) => typeof change === "function" ? (current ? change(current) : current) : change);
-                setFieldErrors({});
-              }}
-              onCopy={() => void copy()}
-              onDelete={() => void remove()}
-              onSave={() => void save()}
-              onToggle={(enabled) => void toggle(enabled)}
-              pending={pending}
-            />
-          </Modal.Body>
-        </Modal.Dialog></Modal.Container></Modal.Backdrop>
-      </Modal>
       <RuleCreationDialog listeners={source.listeners} onClose={() => setCreationOpen(false)} onCreate={startCreation} open={creationOpen} />
     </div>
   );

@@ -122,8 +122,6 @@ export function BootstrapProvider({
       if (
         [
           "session_updated",
-          "breakpoint_queued",
-          "breakpoint_resolved",
           "certificate_status_changed",
           "settings_changed",
         ].includes(event.payload.type)

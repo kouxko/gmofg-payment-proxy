@@ -107,7 +107,6 @@ pub struct MessageData {
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum MessageChangeSource {
     Rule,
-    Manual,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -188,12 +187,6 @@ impl Message {
         created_at: DateTime<Utc>,
     ) -> Result<Revision, DomainError> {
         self.revision.verify(expected_revision)?;
-        if source == MessageChangeSource::Manual && self.state != MessageState::BreakpointPending {
-            return Err(DomainError::new(
-                ErrorCode::InvalidStateTransition,
-                "只有待处理断点允许人工修改报文",
-            ));
-        }
         let parent_revision = self.revision;
         self.revision = self.revision.next();
         self.versions.push(MessageVersion {
@@ -259,11 +252,10 @@ mod tests {
             data(&[0x81, 0x40]),
         );
         message.transition(MessageState::RulesEvaluated).unwrap();
-        message.transition(MessageState::BreakpointPending).unwrap();
         let next = message
             .add_version(
                 Revision::INITIAL,
-                MessageChangeSource::Manual,
+                MessageChangeSource::Rule,
                 data(b"changed"),
                 Utc::now(),
             )

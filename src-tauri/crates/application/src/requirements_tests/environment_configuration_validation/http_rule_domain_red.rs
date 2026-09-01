@@ -1,19 +1,10 @@
 use super::*;
 
-fn protocol_document() -> serde_json::Value {
-    serde_json::json!({
-        "package": {"id": "au-eftex", "version": "1.1.0"},
-    })
-}
-
 fn document_condition() -> serde_json::Value {
     serde_json::json!({
-        "operator": "leaf",
-        "children": {
-            "source": "document",
-            "path": "/amount",
-            "predicate": {"type":"number","value":{"operator":"equal","value":1000}}
-        }
+        "source": "document",
+        "path": "/amount",
+        "predicate": {"type":"number","value":{"operator":"equal","value":1000}}
     })
 }
 
@@ -28,8 +19,7 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
         let candidate = domain_contract_red::candidate_json_with(|candidate| {
             let rule = &mut candidate["workspace"]["rules"][0];
             rule["stage"] = serde_json::json!(stage);
-            rule["content"]["value"]["document"] = protocol_document();
-            rule["content"]["value"]["condition"] = document_condition();
+            rule["content"]["value"]["conditions"] = serde_json::json!([document_condition()]);
             if pure_document {
                 rule["content"]["value"]["actions"] =
                     serde_json::json!([{"source":"record_match"}]);
@@ -49,6 +39,20 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
             "stage={stage}"
         );
     }
+}
+
+#[tokio::test]
+async fn empty_conditions_fail_with_exact_http_rule_code() {
+    let candidate = domain_contract_red::candidate_json_with(|candidate| {
+        candidate["workspace"]["rules"][0]["content"]["value"]["conditions"] =
+            serde_json::json!([]);
+    });
+
+    domain_contract_red::assert_domain_code_before_preview(
+        &candidate,
+        EnvironmentStatusCode::HttpRuleInvalid,
+    )
+    .await;
 }
 
 #[tokio::test]
@@ -115,7 +119,7 @@ async fn non_terminal_action_after_terminal_fails_with_exact_http_rule_code() {
         candidate["workspace"]["rules"][3]["content"]["value"]["actions"]
             .as_array_mut()
             .unwrap()
-            .push(serde_json::json!({"source":"http","value":"Pause"}));
+            .push(serde_json::json!({"source":"http","value":{"Delay":{"milliseconds":1}}}));
     });
 
     domain_contract_red::assert_domain_code_before_preview(

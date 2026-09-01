@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -429,21 +429,8 @@ if (tauriProtocolRuleRegistrationCodes(tauriCommandsSource).length > 0) {
   );
 }
 
-const breakpointSource = featureModuleSource("breakpoints");
-if (/decisionRequires(?:JsonFormatting|Validation)/.test(breakpointSource)) {
-  failures.push(
-    "src/features/breakpoints/breakpoints-view.tsx: 断点决策预处理策略必须由 Rust 提供",
-  );
-}
-if (
-  !breakpointSource.includes("available_actions") ||
-  /<ListBox\.Item\s+id=["'](?:forward_|mock_response|delay|disconnect_|custom_http_status|invalid_json|wrong_content_length|truncate|drop_response)/.test(
-    breakpointSource,
-  )
-) {
-  failures.push(
-    "src/features/breakpoints/breakpoints-view.tsx: 断点可执行动作和默认参数必须由 Rust ViewModel 提供",
-  );
+if (existsSync(join(sourceRoot, "features", "breakpoints"))) {
+  failures.push("src/features/breakpoints: removed breakpoint product feature must stay absent");
 }
 
 const faultSource = featureModuleSource("faults");
@@ -472,7 +459,6 @@ if (
 }
 
 const productChannelUiContracts = [
-  ["breakpoints", "features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
   ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
 ];
 for (const [featureName, relativePath, requiredContracts] of productChannelUiContracts) {

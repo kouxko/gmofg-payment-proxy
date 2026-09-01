@@ -3,10 +3,9 @@ use serde::{Deserialize, Serialize};
 use specta::Type;
 
 use super::{
-    BreakpointSummaryViewModel, CapturePageViewModel, CaptureRowViewModel,
-    CertificateOverviewViewModel, ChannelPresentationViewModel, ListenerStatusViewModel, Revision,
-    RuleSummaryViewModel, RuntimeEpoch, SessionSummaryViewModel, SettingsViewModel,
-    WorkspaceChangedViewModel,
+    CapturePageViewModel, CaptureRowViewModel, CertificateOverviewViewModel,
+    ChannelPresentationViewModel, ListenerStatusViewModel, Revision, RuleSummaryViewModel,
+    RuntimeEpoch, SessionSummaryViewModel, SettingsViewModel, WorkspaceChangedViewModel,
 };
 
 #[derive(Debug, Clone, PartialEq, Serialize, Deserialize, Type)]
@@ -15,7 +14,6 @@ pub struct AppBootstrapViewModel {
     pub product_name: String,
     pub channel_catalog: Vec<ChannelPresentationViewModel>,
     pub recent_capture: CapturePageViewModel,
-    pub pending_breakpoints: Vec<BreakpointSummaryViewModel>,
     pub certificate: CertificateOverviewViewModel,
     pub settings: SettingsViewModel,
     pub event_cursor: u64,
@@ -40,8 +38,6 @@ pub enum UiEventPayload {
     ExchangeObservationChanged,
     DiagnosticLogAdded(Box<crate::DiagnosticLogEntryViewModel>),
     SessionUpdated(SessionSummaryViewModel),
-    BreakpointQueued(BreakpointSummaryViewModel),
-    BreakpointResolved(BreakpointSummaryViewModel),
     RuleHit(RuleSummaryViewModel),
     AndroidVpnStatusChanged(crate::AndroidNetworkStatusViewModel),
     CertificateStatusChanged(CertificateOverviewViewModel),

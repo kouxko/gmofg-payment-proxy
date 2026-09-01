@@ -14,9 +14,8 @@ use intercept_proxy_application::{
     WorkingHttpMessage,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentValue, HttpAction, NthCounterSnapshot, Revision,
-    RuleId, RuleLifecycle, RuleLifecycleSnapshot, RuleProgramEntry, TerminalIdentity,
-    UnifiedAction,
+    Condition, Document, DocumentValue, HttpAction, NthCounterSnapshot, Revision, RuleId,
+    RuleLifecycle, RuleLifecycleSnapshot, RuleProgramEntry, TerminalIdentity, UnifiedAction,
 };
 
 #[derive(Debug, Default)]
@@ -65,8 +64,8 @@ fn terminal(ip: &str, certificate: &str) -> TerminalIdentity {
     }
 }
 
-fn program(rule_id: RuleId, condition: ConditionTree) -> RuleProgramEntry {
-    RuleProgramEntry::new(rule_id, 1, 1, condition, vec![UnifiedAction::RecordMatch]).unwrap()
+fn program(rule_id: RuleId, conditions: Vec<Condition>) -> RuleProgramEntry {
+    RuleProgramEntry::new(rule_id, 1, 1, conditions, vec![UnifiedAction::RecordMatch]).unwrap()
 }
 
 fn lifecycle(rule_id: RuleId) -> RuleLifecycleSnapshot {
@@ -86,10 +85,7 @@ fn plan_entry(
     nth: u64,
 ) -> RuleChainPlanEntry {
     RuleChainPlanEntry::new(
-        program(
-            rule_id,
-            ConditionTree::Leaf(Condition::NthHit { count: nth }),
-        ),
+        program(rule_id, vec![Condition::NthHit { count: nth }]),
         lifecycle(rule_id),
         NthCounterSnapshot {
             rule_id,
@@ -186,10 +182,7 @@ fn plan_rejects_mismatched_and_duplicate_rule_owners_before_execution() {
     let program_id = RuleId::new();
     let lifecycle_id = RuleId::new();
     let error = RuleChainPlanEntry::new(
-        program(
-            program_id,
-            ConditionTree::Leaf(Condition::NthHit { count: 1 }),
-        ),
+        program(program_id, vec![Condition::NthHit { count: 1 }]),
         lifecycle(lifecycle_id),
         NthCounterSnapshot {
             rule_id: program_id,
@@ -230,10 +223,10 @@ async fn condition_error_preserves_the_complete_application_error() {
     let entry = RuleChainPlanEntry::new(
         program(
             rule_id,
-            ConditionTree::Leaf(Condition::Http {
+            vec![Condition::Http {
                 field: intercept_proxy_domain::MatchField::RequestTarget,
                 operator: intercept_proxy_domain::MatchOperator::Equals("/".into()),
-            }),
+            }],
         ),
         lifecycle(rule_id),
         NthCounterSnapshot {

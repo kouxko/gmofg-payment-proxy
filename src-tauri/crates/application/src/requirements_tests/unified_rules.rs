@@ -1,12 +1,8 @@
 use super::*;
 use intercept_proxy_domain::{
-    ConditionTree, HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator,
-    TerminalAction, UnifiedAction,
+    HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator, TerminalAction,
+    UnifiedAction,
 };
-
-fn http_tree(conditions: Vec<Condition>) -> ConditionTree {
-    ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
-}
 
 fn http_actions(actions: Vec<DomainRuleAction>) -> Vec<UnifiedAction> {
     actions.into_iter().map(UnifiedAction::from).collect()
@@ -101,9 +97,8 @@ async fn unified_copy_persists_an_independent_rule_with_monotonic_order() {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "source".into(),
-                    condition: http_tree(vec![Condition::NthHit { count: 1 }]),
+                    conditions: vec![Condition::NthHit { count: 1 }],
                     actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
-                    document: None,
                 }),
             },
         })
@@ -131,7 +126,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
             None,
             crate::RuleMatchOperatorKind::Equals,
             "/",
-            MessageStage::Request,
+            RuleStage::ProxyToUpstream,
         )
         .unwrap();
     assert!(matches!(
@@ -147,7 +142,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
             Some("/content-type"),
             crate::RuleMatchOperatorKind::Wildcard,
             "application/*",
-            MessageStage::Response,
+            RuleStage::ProxyToApp,
         )
         .unwrap();
     assert!(matches!(
@@ -164,7 +159,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
                 None,
                 crate::RuleMatchOperatorKind::Contains,
                 "PO",
-                MessageStage::Request,
+                RuleStage::ProxyToUpstream,
             )
             .is_err()
     );
@@ -175,7 +170,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
                 None,
                 crate::RuleMatchOperatorKind::Equals,
                 "application/json",
-                MessageStage::Request,
+                RuleStage::ProxyToUpstream,
             )
             .is_err()
     );
@@ -199,7 +194,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
                         r#"{"status":201,"headers":[["x-test","explicit"]],"body_bytes":[98,111,100,121]}"#.into(),
                     ),
                 },
-                MessageStage::Request,
+                RuleStage::ProxyToUpstream,
             )
             .unwrap(),
         DomainRuleAction::Terminal(intercept_proxy_domain::TerminalAction::MockResponse {
@@ -229,6 +224,33 @@ fn nth_hit_factory_requires_an_explicit_positive_count() {
             .unwrap(),
         Condition::NthHit { count: 3 }
     );
+}
+
+#[tokio::test]
+async fn plain_http_editor_exposes_schema_free_body_document_capability() {
+    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
+    let selected = application
+        .workspace_list()
+        .await
+        .unwrap()
+        .into_iter()
+        .find(|workspace| workspace.selected)
+        .unwrap();
+    let workspace = application.workspace_get(selected.id).await.unwrap();
+
+    let context = application
+        .rule_editor_context(workspace.listeners[0].id)
+        .await
+        .unwrap();
+    let RuleEditorContentContext::Http { stages } = context.content else {
+        panic!("default listener must be HTTP");
+    };
+
+    assert_eq!(stages.len(), 2);
+    assert!(stages.iter().all(|stage| stage.document_fields.is_empty()));
+    assert!(stages.iter().all(|stage| {
+        stage.document_common_actions == vec![RuleCommonActionCapability::RecordMatch]
+    }));
 }
 
 #[tokio::test]
@@ -263,9 +285,8 @@ async fn unified_runtime_failure_does_not_persist_or_advance_revision() {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: http_tree(vec![Condition::NthHit { count: 1 }]),
+                    conditions: vec![Condition::NthHit { count: 1 }],
                     actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
-                    document: None,
                 }),
             },
         })
@@ -328,9 +349,8 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
                     one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        condition: http_tree(conditions),
+                        conditions,
                         actions: http_actions(actions),
-                        document: None,
                     }),
                 },
             })

@@ -41,7 +41,8 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
         &mut self,
         _rule_id: Uuid,
         _nth_attempt: u64,
-    ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::JointRuleConditionEvaluation> {
+    ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::JointRuleConditionEvaluation>
+    {
         Ok(
             intercept_proxy_runtime::JointRuleConditionEvaluation::UnifiedOwned(
                 intercept_proxy_runtime::JointConditionEvaluation {
@@ -86,9 +87,7 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
                         version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0")
                             .expect("package version"),
                     },
-                    condition: intercept_proxy_domain::ConditionTree::Leaf(
-                        intercept_proxy_domain::Condition::NthHit { count: 1 },
-                    ),
+                    conditions: vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
                     actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
                 },
             ),
@@ -104,7 +103,6 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
         test_product_hooks(),
         rules.clone(),
         Arc::new(InMemorySessionStore::default()),
-        Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(16)),
         test_capture_repository(),
     );

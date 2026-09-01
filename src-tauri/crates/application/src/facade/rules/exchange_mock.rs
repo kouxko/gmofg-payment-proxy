@@ -2,8 +2,8 @@ use std::collections::BTreeSet;
 
 use http::{HeaderName, HeaderValue};
 use intercept_proxy_domain::{
-    Condition, ConditionTree, HttpRuleContent, MatchField, MatchOperator, ProtocolDirection,
-    TerminalAction, UnifiedAction,
+    Condition, HttpRuleContent, MatchField, MatchOperator, ProtocolDirection, TerminalAction,
+    UnifiedAction,
 };
 
 use super::Application;
@@ -105,16 +105,15 @@ impl<'a> MockDraftSource<'a> {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("由 HTTP 抓包 {} 的服务器响应生成。", record.exchange_id),
-                    condition: ConditionTree::Leaf(Condition::Http {
+                    conditions: vec![Condition::Http {
                         field: MatchField::RequestTarget,
                         operator: MatchOperator::Equals(self.request_target),
-                    }),
+                    }],
                     actions: vec![UnifiedAction::Terminal(TerminalAction::MockResponse {
                         status,
                         headers,
                         body_bytes: self.response_body.as_bytes().to_vec(),
                     })],
-                    document: None,
                 }),
             },
         })

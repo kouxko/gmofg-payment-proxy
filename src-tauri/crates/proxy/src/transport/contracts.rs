@@ -29,14 +29,6 @@ pub trait HandshakePolicy: Debug + Send + Sync {
     async fn prepare_tls_handshake(&self, _context: &ConnectionContext) -> Result<()> {
         Ok(())
     }
-
-    fn reject_tls_handshake(
-        &self,
-        _context: &ConnectionContext,
-        _peer: &TlsPeerIdentity,
-    ) -> Result<bool> {
-        Ok(false)
-    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]

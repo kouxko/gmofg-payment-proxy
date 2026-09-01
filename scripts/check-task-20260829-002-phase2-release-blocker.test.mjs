@@ -7,6 +7,7 @@ import test from "node:test";
 import {
   findPhase2ReleaseBlockers,
   findPhase17ReleaseContractBlockers,
+  findSchema100StartupContractBlockers,
   phase2ProductionSourcePaths,
 } from "./check-task-20260829-002-phase2-release-blocker.mjs";
 
@@ -16,6 +17,24 @@ const fixturePaths = [
   "/fixture/src-tauri/crates/host/src/lib.rs",
   "/fixture/src-tauri/crates/infrastructure/src/sqlite.rs",
 ];
+const infrastructureCleanupExact =
+  "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100 -- --exact";
+const hostCleanupExact =
+  "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::pre_1_0_schema_is_cleared_and_recreated_as_schema100 -- --exact";
+const releaseExact =
+  "cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact";
+const currentPhase17Command = [infrastructureCleanupExact, hostCleanupExact, releaseExact].join(
+  " && ",
+);
+const currentPhase17Discovery = {
+  infrastructure: [
+    "sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100",
+  ],
+  host: ["tests::pre_1_0_schema_is_cleared_and_recreated_as_schema100"],
+  release: [
+    "tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts",
+  ],
+};
 
 async function scanFixture(sources) {
   return findPhase2ReleaseBlockers({
@@ -59,14 +78,6 @@ test("release scan blocks a marker even when the reset contract is absent", asyn
   assert.match(blockers[0], /temporary Phase 2 database reset marker/u);
 });
 
-test("release scan blocks source comments that reintroduce clearing pre-release databases", async () => {
-  const blockers = await scanFixture(
-    new Map([[fixturePaths[2], "// 启动时仅清空合法的发布前版本。\n"]]),
-  );
-  assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /temporary database startup reset contract/u);
-});
-
 test("release scan reports each blocker category once and scans production Rust only", async () => {
   const reads = [];
   const blockers = await findPhase2ReleaseBlockers({
@@ -83,9 +94,43 @@ test("release scan reports each blocker category once and scans production Rust 
   assert.ok(phase2ProductionSourcePaths.every((sourcePath) => !sourcePath.includes("/docs/")));
 });
 
-test("current Phase 17 source is release ready after the temporary reset contract is removed", async () => {
+test("Schema100 startup contract requires exact pre-baseline cleanup and invalid-marker rejection", async () => {
+  const source = `
+    let _startup_ownership = acquire_startup_ownership(path)?;
+    "BEGIN EXCLUSIVE;";
+    match inspect_existing_schema(&connection)? {}
+    match inspect_existing_schema(&connection)? {}
+    [(1, version)] if *version < CURRENT_SCHEMA_VERSION => ExistingSchema::PreBaseline(*version),
+    clear_pre_baseline_database(path)?;
+    sqlite_sidecar_path(path, "-wal");
+    sqlite_sidecar_path(path, "-shm");
+    std::fs::remove_file(path);
+    InfrastructureError::DatabaseSchemaInvalid;
+  `;
+  assert.deepEqual(await findSchema100StartupContractBlockers({ coreSource: source }), []);
+
+  for (const removed of [
+    "acquire_startup_ownership(path)?",
+    "BEGIN EXCLUSIVE;",
+    "match inspect_existing_schema(&connection)?",
+    "*version < CURRENT_SCHEMA_VERSION",
+    "clear_pre_baseline_database(path)?",
+    'sqlite_sidecar_path(path, "-wal")',
+    'sqlite_sidecar_path(path, "-shm")',
+    "std::fs::remove_file(path)",
+    "InfrastructureError::DatabaseSchemaInvalid",
+  ]) {
+    const blockers = await findSchema100StartupContractBlockers({
+      coreSource: source.replace(removed, ""),
+    });
+    assert.equal(blockers.length, 1, `removing ${removed} must fail closed`);
+  }
+});
+
+test("current Schema100 startup source is release ready", async () => {
   const blockers = await findPhase2ReleaseBlockers();
   assert.deepEqual(blockers, []);
+  assert.deepEqual(await findSchema100StartupContractBlockers(), []);
 
   const result = spawnSync(
     process.execPath,
@@ -94,7 +139,7 @@ test("current Phase 17 source is release ready after the temporary reset contrac
   );
   assert.equal(result.status, 0, result.stderr);
   assert.equal(result.stderr, "");
-  assert.match(result.stdout, /PASS no temporary Phase 2 database reset remains/u);
+  assert.match(result.stdout, /PASS Schema100 startup contract is release ready/u);
 });
 
 test("tauri build cannot bypass the release readiness gate", async () => {
@@ -120,7 +165,7 @@ test("tauri build cannot bypass the release readiness gate", async () => {
   );
 });
 
-test("Tauri composition has one preserve-only Host startup path", async () => {
+test("Tauri composition delegates the single Schema100 startup path to Host", async () => {
   const source = await readFile(
     path.join(import.meta.dirname, "../src-tauri/src/lib.rs"),
     "utf8",
@@ -130,31 +175,65 @@ test("Tauri composition has one preserve-only Host startup path", async () => {
   assert.doesNotMatch(source, /remove_file|\.sqlite3-wal|\.sqlite3-shm/u);
 });
 
-test("Phase 17 release scan blocks current docs that reintroduce a pre-100 reset path", async () => {
+test("Phase 17 release scan requires the complete current Schema100 startup contract", async () => {
   const blockers = await findPhase17ReleaseContractBlockers({
-    currentDocs: ["当前 development recreate branch 可重建 Schema 100。"],
-    phase17Command:
-      "cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact",
+    currentDocs: ["Schema 100 is preserved; pre-100 fails closed without mutation."],
+    phase17Command: currentPhase17Command,
+    discoveredFixtures: currentPhase17Discovery,
   });
   assert.equal(blockers.length, 1);
-  assert.match(blockers[0], /current architecture documentation reintroduces pre-100 reset/u);
+  assert.match(blockers[0], /complete Schema100 startup contract/u);
 });
 
 test("Phase 17 release scan blocks an aggregate command that drops the release profile", async () => {
   const blockers = await findPhase17ReleaseContractBlockers({
-    currentDocs: ["Schema 100 is preserved; pre-100 fails closed without mutation."],
-    phase17Command:
-      "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact",
+    currentDocs: [
+      "Schema 100 原样保留；唯一有效版本标记 <100 时清除旧数据库并重建 Schema 100；未来版本、缺失、重复或损坏标记 fail-closed。",
+    ],
+    phase17Command: [
+      infrastructureCleanupExact,
+      hostCleanupExact,
+      releaseExact.replace("cargo test --release", "cargo test"),
+    ].join(" && "),
+    discoveredFixtures: currentPhase17Discovery,
   });
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /actual cargo test --release exact fixture/u);
 });
 
+test("Phase 17 release scan rejects stale exact filters that execute zero tests", async () => {
+  const blockers = await findPhase17ReleaseContractBlockers({
+    currentDocs: [
+      "Schema 100 原样保留；唯一有效版本标记 <100 时清除旧数据库并重建 Schema 100；未来版本、缺失、重复或损坏标记 fail-closed。",
+    ],
+    phase17Command:
+      "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib sqlite::core::tests::preserve_only_startup_rejects_pre_schema100_without_modifying_it -- --exact && cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::pre_1_0_schema_is_rejected_without_changing_any_sqlite_file -- --exact && cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact",
+    discoveredFixtures: currentPhase17Discovery,
+  });
+  assert.equal(blockers.length, 2);
+  assert.match(blockers[0], /pre-Schema100 cleanup exact fixture/u);
+  assert.match(blockers[1], /Host pre-1\.0 cleanup exact fixture/u);
+});
+
+test("Phase 17 release scan rejects zero-test Cargo discovery", async () => {
+  const blockers = await findPhase17ReleaseContractBlockers({
+    currentDocs: [
+      "Schema 100 原样保留；唯一有效版本标记 <100 时清除旧数据库并重建 Schema 100；未来版本、缺失、重复或损坏标记 fail-closed。",
+    ],
+    phase17Command: currentPhase17Command,
+    discoveredFixtures: { infrastructure: [], host: [], release: [] },
+  });
+  assert.equal(blockers.length, 3);
+  assert.ok(blockers.every((blocker) => /Cargo discovery expected exactly one/u.test(blocker)));
+});
+
 test("Phase 17 release scan blocks unproven SHM byte preservation claims", async () => {
   const blockers = await findPhase17ReleaseContractBlockers({
-    currentDocs: ["失败不得改写主数据库、WAL/SHM bytes 或用户数据。"],
-    phase17Command:
-      "cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact",
+    currentDocs: [
+      "Schema 100 原样保留；唯一有效版本标记 <100 时清除旧数据库并重建 Schema 100；未来版本、缺失、重复或损坏标记 fail-closed。失败不得改写主数据库、WAL/SHM bytes 或用户数据。",
+    ],
+    phase17Command: currentPhase17Command,
+    discoveredFixtures: currentPhase17Discovery,
   });
   assert.equal(blockers.length, 1);
   assert.match(blockers[0], /unproven SHM byte-preservation/u);

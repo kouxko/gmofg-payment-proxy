@@ -285,8 +285,6 @@ async fn application_shutdown_stops_every_dynamic_workspace_listener() {
         ApplicationDependencies {
             capture: ports.clone(),
             sessions: ports.clone(),
-            breakpoints: Arc::new(BreakpointCoordinator::default()),
-            breakpoint_validation: ports.clone(),
             faults: ports.clone(),
             certificates: ports.clone(),
             settings: ports.clone(),
@@ -320,16 +318,13 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
     let capabilities = application.rule_capabilities();
     let request = capabilities
         .iter()
-        .find(|capability| capability.stage == MessageStage::Request)
+        .find(|capability| capability.stage == RuleStage::ProxyToUpstream)
         .expect("request capability");
     let response = capabilities
         .iter()
-        .find(|capability| capability.stage == MessageStage::Response)
+        .find(|capability| capability.stage == RuleStage::ProxyToApp)
         .expect("response capability");
-    let tls = capabilities
-        .iter()
-        .find(|capability| capability.stage == MessageStage::TlsHandshake)
-        .expect("TLS capability");
+    assert_eq!(capabilities.len(), 2);
     assert!(
         request
             .actions
@@ -348,21 +343,14 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
             .iter()
             .any(|action| action.kind == RuleActionKind::CustomHttpStatus)
     );
+    assert_eq!(request.actions.len(), 14);
+    assert_eq!(response.actions.len(), 12);
     assert!(
         !response
             .actions
             .iter()
             .any(|action| action.kind == RuleActionKind::MockResponse)
     );
-    assert_eq!(
-        tls.match_fields
-            .iter()
-            .map(|capability| capability.kind)
-            .collect::<Vec<_>>(),
-        vec![RuleMatchFieldKind::CertificateFingerprint]
-    );
-    assert_eq!(tls.actions.len(), 1);
-    assert_eq!(tls.actions[0].kind, RuleActionKind::RejectTlsHandshake);
     assert_eq!(
         application
             .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {

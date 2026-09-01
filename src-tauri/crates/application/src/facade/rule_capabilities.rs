@@ -5,27 +5,23 @@
 
 use super::Application;
 use crate::{
-    MessageStage, RuleActionCapabilityViewModel, RuleActionKind, RuleMatchFieldCapabilityViewModel,
-    RuleMatchFieldKind, RuleMatchOperatorKind, RuleMatchSelectorKind, RuleStageCapabilityViewModel,
-    RuleTrafficDirection,
+    RuleActionCapabilityViewModel, RuleActionKind, RuleMatchFieldCapabilityViewModel,
+    RuleMatchFieldKind, RuleMatchOperatorKind, RuleMatchSelectorKind, RuleStage,
+    RuleStageCapabilityViewModel, RuleTrafficDirection,
 };
 
 impl Application {
     #[must_use]
     pub fn rule_capabilities(&self) -> Vec<RuleStageCapabilityViewModel> {
-        [
-            MessageStage::TlsHandshake,
-            MessageStage::Request,
-            MessageStage::Response,
-        ]
-        .into_iter()
-        .map(stage_capability)
-        .collect()
+        [RuleStage::ProxyToUpstream, RuleStage::ProxyToApp]
+            .into_iter()
+            .map(stage_capability)
+            .collect()
     }
 }
 
 pub(super) fn action_capability(
-    stage: MessageStage,
+    stage: RuleStage,
     kind: RuleActionKind,
 ) -> Option<RuleActionCapabilityViewModel> {
     stage_capability(stage)
@@ -34,7 +30,7 @@ pub(super) fn action_capability(
         .find(|capability| capability.kind == kind)
 }
 
-pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewModel {
+pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel {
     use RuleActionKind as Action;
     use RuleMatchFieldKind as Field;
 
@@ -51,29 +47,21 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
         operators,
         selector,
     };
-    let match_fields = match stage {
-        MessageStage::TlsHandshake => vec![capability(
+    let match_fields = vec![
+        capability(Field::TerminalIp, string_operators.clone(), None),
+        capability(
             Field::CertificateFingerprint,
             string_operators.clone(),
             None,
-        )],
-        MessageStage::Request | MessageStage::Response => vec![
-            capability(Field::TerminalIp, string_operators.clone(), None),
-            capability(
-                Field::CertificateFingerprint,
-                string_operators.clone(),
-                None,
-            ),
-            capability(Field::Method, vec![Operator::Equals], None),
-            capability(Field::RequestTarget, string_operators.clone(), None),
-            capability(
-                Field::Header,
-                string_operators,
-                Some(RuleMatchSelectorKind::HeaderNamePointer),
-            ),
-        ],
-        MessageStage::Terminal => Vec::new(),
-    };
+        ),
+        capability(Field::Method, vec![Operator::Equals], None),
+        capability(Field::RequestTarget, string_operators.clone(), None),
+        capability(
+            Field::Header,
+            string_operators,
+            Some(RuleMatchSelectorKind::HeaderNamePointer),
+        ),
+    ];
     let common = [
         Action::SetJsonField,
         Action::ReplaceBodyText,
@@ -82,11 +70,9 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
         Action::Jitter,
         Action::Throttle,
         Action::Intermittent,
-        Action::Pause,
     ];
     let kinds: Vec<(RuleActionKind, bool)> = match stage {
-        MessageStage::TlsHandshake => vec![(Action::RejectTlsHandshake, true)],
-        MessageStage::Request => common
+        RuleStage::ProxyToUpstream => common
             .into_iter()
             .map(|kind| (kind, false))
             .chain([
@@ -99,7 +85,7 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
                 (Action::DisconnectDuringUpstreamWrite, true),
             ])
             .collect(),
-        MessageStage::Response => common
+        RuleStage::ProxyToApp => common
             .into_iter()
             .map(|kind| (kind, false))
             .chain([
@@ -110,12 +96,10 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
                 (Action::DisconnectDuringDownstreamWrite, true),
             ])
             .collect(),
-        MessageStage::Terminal => Vec::new(),
     };
     let traffic_direction = match stage {
-        MessageStage::Request => Some(RuleTrafficDirection::Upstream),
-        MessageStage::Response => Some(RuleTrafficDirection::Downstream),
-        MessageStage::TlsHandshake | MessageStage::Terminal => None,
+        RuleStage::ProxyToUpstream => RuleTrafficDirection::Upstream,
+        RuleStage::ProxyToApp => RuleTrafficDirection::Downstream,
     };
     RuleStageCapabilityViewModel {
         stage,
@@ -124,8 +108,7 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
             .into_iter()
             .map(|(kind, terminal)| RuleActionCapabilityViewModel {
                 traffic_direction: matches!(kind, Action::Throttle | Action::Intermittent)
-                    .then_some(traffic_direction)
-                    .flatten(),
+                    .then_some(traffic_direction),
                 kind,
                 terminal,
                 parameters_required: action_parameters_required(kind),
@@ -137,7 +120,7 @@ pub(super) fn stage_capability(stage: MessageStage) -> RuleStageCapabilityViewMo
 const fn action_parameters_required(kind: RuleActionKind) -> bool {
     use RuleActionKind as Action;
     match kind {
-        Action::Pause | Action::RejectTlsHandshake | Action::DisconnectBeforeUpstream => false,
+        Action::DisconnectBeforeUpstream => false,
         Action::SetJsonField
         | Action::ReplaceBodyText
         | Action::SetHeader

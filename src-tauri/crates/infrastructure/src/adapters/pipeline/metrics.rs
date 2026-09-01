@@ -31,11 +31,9 @@ impl RuntimeMetricsProvider for RuntimePipelineAdapter {
             .filter(|session| runtime_epoch.is_none_or(|epoch| session.runtime_epoch == epoch))
             .count();
         drop(state);
-        let pending_breakpoints = self.breakpoints.query(runtime_epoch).len();
         Ok(RuntimeMetricsSnapshot {
             channels,
             active_sessions,
-            pending_breakpoints,
             logical_memory_bytes: self.sessions.logical_bytes(),
         })
     }

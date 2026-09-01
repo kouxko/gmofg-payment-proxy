@@ -1,19 +1,18 @@
 //! Epoch-owned rule actors serialize evaluation and durable metadata commits.
 use std::{
     collections::{BTreeMap, BTreeSet},
-    sync::{Arc, mpsc as std_mpsc},
+    sync::Arc,
 };
 
 use chrono::Utc;
 use intercept_proxy_application::{
     AppError, EventHub, RuleSummaryViewModel, UiEventPayload, UiTone,
 };
-use intercept_proxy_domain::{HttpAction, MessageStage, RuleContent, RuleDefinition, RuleStage};
+use intercept_proxy_domain::{MessageStage, RuleContent, RuleDefinition, RuleStage};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::http::HttpRequestMetadata;
 use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, Message, ProxyError, Result as ProxyResult,
-    TLS_HANDSHAKE_POLICY_TIMEOUT,
 };
 use parking_lot::Mutex;
 use tokio::sync::oneshot;
@@ -42,14 +41,12 @@ struct ActorRegistry {
 
 #[derive(Debug)]
 pub(super) struct EvaluatedRules {
-    pub(super) actions: Vec<HttpAction>,
     pub(super) traces: Vec<String>,
     pub(super) matched_ids: Vec<Uuid>,
     pub(super) hit_rules: Vec<RuleSummaryViewModel>,
     pub(super) prepared_message: Option<Message>,
     pub(super) prepared_socket: Option<intercept_proxy_exchange::SocketContext>,
     pub(super) fault_actions: Vec<intercept_proxy_runtime::FaultAction>,
-    pub(super) pause: bool,
 }
 
 impl RuleRuntimeService {
@@ -140,49 +137,6 @@ impl RuleRuntimeService {
         response.await.map_err(|_| unavailable(epoch))?
     }
 
-    pub(super) fn evaluate_handshake(
-        &self,
-        context: &ConnectionContext,
-    ) -> ProxyResult<EvaluatedRules> {
-        let sender = self.existing_sender(context.runtime_epoch)?;
-        let (reply, response) = std_mpsc::sync_channel(1);
-        sender
-            .try_send(Command::Evaluate {
-                input: Box::new(EvaluationInput {
-                    context: context.clone(),
-                    stage: MessageStage::TlsHandshake,
-                    method: None,
-                    request_target: None,
-                    joint_document: None,
-                    socket_joint: None,
-                    message: None,
-                    body_codec: None,
-                }),
-                reply: Reply::Handshake(reply),
-            })
-            .map_err(|error| {
-                self.publish_failure(
-                    context.runtime_epoch,
-                    "TLS_RULE_ACTOR_UNAVAILABLE",
-                    format!("TLS 规则 actor 无法接收握手策略请求：{error}"),
-                );
-                unavailable(context.runtime_epoch)
-            })?;
-        response
-            .recv_timeout(TLS_HANDSHAKE_POLICY_TIMEOUT)
-            .map_err(|error| {
-                self.publish_failure(
-                    context.runtime_epoch,
-                    "TLS_RULE_POLICY_TIMEOUT",
-                    format!("TLS 握手规则策略未在限定时间内完成：{error}"),
-                );
-                ProxyError::new(
-                    ErrorCode::TlsHandshakeFailed,
-                    "TLS handshake rule policy timed out",
-                )
-            })?
-    }
-
     fn sender_for(&self, epoch: Uuid) -> ProxyResult<RuleActorSender> {
         let mut actors = self.actors.lock();
         if !actors.active_epochs.contains(&epoch) {
@@ -199,26 +153,6 @@ impl RuleRuntimeService {
         );
         actors.senders.insert(epoch, sender.clone());
         Ok(sender)
-    }
-
-    fn existing_sender(&self, epoch: Uuid) -> ProxyResult<RuleActorSender> {
-        self.actors
-            .lock()
-            .senders
-            .get(&epoch)
-            .cloned()
-            .ok_or_else(|| unavailable(epoch))
-    }
-
-    fn publish_failure(&self, epoch: Uuid, code: &'static str, message: String) {
-        let error = AppError::new(code, message);
-        self.events.publish(
-            Some(epoch),
-            Utc::now(),
-            None,
-            None,
-            UiEventPayload::OperationFailed((*error.view_model).clone()),
-        );
     }
 
     pub(super) async fn runtime_stopping(&self, epoch: Uuid) {
@@ -305,8 +239,8 @@ fn rule_summary(
     channel_labels: &BTreeMap<String, String>,
 ) -> RuleSummaryViewModel {
     let (condition_count, action_count) = match rule.content() {
-        RuleContent::Http(content) => (content.condition.leaf_count(), content.actions.len()),
-        RuleContent::Socket(content) => (content.condition.leaf_count(), content.actions.len()),
+        RuleContent::Http(content) => (content.conditions.len(), content.actions.len()),
+        RuleContent::Socket(content) => (content.conditions.len(), content.actions.len()),
     };
     let listener = rule.listener_id().to_string();
     RuleSummaryViewModel {
@@ -320,7 +254,6 @@ fn rule_summary(
         stage_text: match rule.stage() {
             RuleStage::ProxyToUpstream => "请求",
             RuleStage::ProxyToApp => "响应",
-            RuleStage::TlsHandshake => "TLS 握手",
         }
         .into(),
         match_summary: format!("{condition_count} 个条件"),

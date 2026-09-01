@@ -91,7 +91,6 @@ impl ChannelState {
 pub enum MessageState {
     Captured,
     RulesEvaluated,
-    BreakpointPending,
     Ready,
     Forwarded,
     TerminalActionApplied,
@@ -105,13 +104,6 @@ impl MessageState {
             (Self::Captured, Self::RulesEvaluated | Self::Cancelled)
                 | (
                     Self::RulesEvaluated,
-                    Self::BreakpointPending
-                        | Self::Ready
-                        | Self::TerminalActionApplied
-                        | Self::Cancelled
-                )
-                | (
-                    Self::BreakpointPending,
                     Self::Ready | Self::TerminalActionApplied | Self::Cancelled
                 )
                 | (

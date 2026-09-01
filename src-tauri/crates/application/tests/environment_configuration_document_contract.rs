@@ -1,7 +1,7 @@
 use intercept_proxy_application::{
     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
 };
-use intercept_proxy_domain::{ConditionTree, DocumentNumber, DocumentValue, UnifiedAction};
+use intercept_proxy_domain::{Condition, DocumentNumber, DocumentValue, UnifiedAction};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -47,15 +47,12 @@ fn document_value_recursive_json_wire_round_trips_without_drift() {
 
 #[test]
 fn document_condition_and_action_use_authoritative_typed_wire() {
-    round_trip::<ConditionTree>(&json!({
-        "operator": "leaf",
-        "children": {
-            "source": "document",
-            "path": "/amount",
-            "predicate": {
-                "type": "number",
-                "value": { "operator": "equal", "value": 7.0 }
-            }
+    round_trip::<Condition>(&json!({
+        "source": "document",
+        "path": "/amount",
+        "predicate": {
+            "type": "number",
+            "value": { "operator": "equal", "value": 7.0 }
         }
     }));
     round_trip::<UnifiedAction>(&json!({
@@ -67,12 +64,12 @@ fn document_condition_and_action_use_authoritative_typed_wire() {
 #[test]
 fn document_contract_rejects_variant_and_tag_drift() {
     for invalid in [
-        json!({"operator":"leaf","children":{"source":"document","path":"amount","predicate":{"type":"number","value":{"operator":"equal","value":7}}}}),
-        json!({"operator":"leaf","children":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"Equals","value":7}}}}),
+        json!({"source":"document","path":"amount","predicate":{"type":"number","value":{"operator":"equal","value":7}}}),
+        json!({"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"Equals","value":7}}}),
         json!({"source":"document","value":{"type":"Set","path":"/amount","value":7}}),
         json!({"source":"document","value":{"type":"set","path":"amount","value":7}}),
     ] {
-        let accepted = serde_json::from_value::<ConditionTree>(invalid.clone()).is_ok()
+        let accepted = serde_json::from_value::<Condition>(invalid.clone()).is_ok()
             || serde_json::from_value::<UnifiedAction>(invalid).is_ok();
         assert!(!accepted);
     }

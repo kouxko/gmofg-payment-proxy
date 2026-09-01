@@ -5,18 +5,14 @@
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use async_trait::async_trait;
 use intercept_proxy_runtime::{
-    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
-    MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock, TlsPeerIdentity,
-    TokioListenerBinder, UpstreamConnector,
+    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, MessageLimits,
+    ProxyConfig, ProxySupervisor, Result, SystemClock, TokioListenerBinder, UpstreamConnector,
     http::{ConnectionService, ForwardRequest, NoopPipelinePorts, PipelinePorts},
     tls::{ClientTlsAdapter, ServerTlsAdapter},
     transport::{AcceptedConnection, BoxIo, ConnectionAcceptor},
@@ -25,7 +21,6 @@ use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
     Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
 };
-use ring::digest::{SHA256, digest};
 use rustls::{
     ClientConfig, RootCertStore,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
@@ -262,72 +257,46 @@ async fn missing_client_certificate_and_tls13_only_client_are_rejected() {
     }
 }
 
-#[derive(Debug)]
-struct RejectPolicy {
-    called: Arc<AtomicBool>,
-}
-
-impl HandshakePolicy for RejectPolicy {
-    fn reject_tls_handshake(&self, _: &ConnectionContext, _: &TlsPeerIdentity) -> Result<bool> {
-        self.called.store(true, Ordering::SeqCst);
-        Ok(true)
-    }
-}
-
 #[tokio::test]
-async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
+async fn fingerprint_rejects_before_http_handler_can_open() {
     let server = identity("proxy.local", "localhost", false);
     let client = identity("alpha-client", "alpha-client", true);
-    for (pin, reject_policy) in [
-        (Some(vec![0; 32]), false),
-        (Some(digest(&SHA256, &client.cert).as_ref().to_vec()), true),
-    ] {
-        let policy_called = Arc::new(AtomicBool::new(false));
-        let handler_opened = Arc::new(AtomicBool::new(false));
-        let policy: Arc<dyn HandshakePolicy> = if reject_policy {
-            Arc::new(RejectPolicy {
-                called: Arc::clone(&policy_called),
-            })
-        } else {
-            Arc::new(NoopPipelinePorts)
-        };
-        let server_tls = ServerTlsAdapter::build(
-            vec![server.cert.clone(), server.ca.clone()],
-            server.key.clone(),
-            client.ca.clone(),
-            pin,
-            policy,
-        )
-        .unwrap();
-        let client_tls = ClientTlsAdapter::build(
-            vec![client.cert.clone(), client.ca.clone()],
-            client.key.clone(),
-            server.ca.clone(),
-        )
-        .unwrap();
-        let (listener, address) = listener().await;
-        let opened = Arc::clone(&handler_opened);
-        let server_task = tokio::spawn(async move {
-            let (tcp, _) = listener.accept().await.unwrap();
-            let result = server_tls.accept(Box::new(tcp) as BoxIo, &context()).await;
-            if result.is_ok() {
-                opened.store(true, Ordering::SeqCst);
-            }
-            result
-        });
-        let tcp = TcpStream::connect(address).await.unwrap();
-        let client_result = tokio::time::timeout(
-            Duration::from_secs(2),
-            client_tls.connect("localhost", Box::new(tcp)),
-        )
-        .await
-        .unwrap();
-        assert!(client_result.is_err());
-        let error: ProxyError = server_task.await.unwrap().unwrap_err();
-        assert_eq!(error.code, "TLS_HANDSHAKE_FAILED");
-        assert!(!handler_opened.load(Ordering::SeqCst));
-        assert_eq!(policy_called.load(Ordering::SeqCst), reject_policy);
-    }
+    let handler_opened = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_tls = ServerTlsAdapter::build(
+        vec![server.cert.clone(), server.ca.clone()],
+        server.key.clone(),
+        client.ca.clone(),
+        Some(vec![0; 32]),
+        Arc::new(NoopPipelinePorts),
+    )
+    .unwrap();
+    let client_tls = ClientTlsAdapter::build(
+        vec![client.cert.clone(), client.ca.clone()],
+        client.key.clone(),
+        server.ca.clone(),
+    )
+    .unwrap();
+    let (listener, address) = listener().await;
+    let opened = Arc::clone(&handler_opened);
+    let server_task = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let result = server_tls.accept(Box::new(tcp) as BoxIo, &context()).await;
+        if result.is_ok() {
+            opened.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        result
+    });
+    let tcp = TcpStream::connect(address).await.unwrap();
+    let client_result = tokio::time::timeout(
+        Duration::from_secs(2),
+        client_tls.connect("localhost", Box::new(tcp)),
+    )
+    .await
+    .unwrap();
+    assert!(client_result.is_err());
+    let error = server_task.await.unwrap().unwrap_err();
+    assert_eq!(error.code, "TLS_HANDSHAKE_FAILED");
+    assert!(!handler_opened.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test]

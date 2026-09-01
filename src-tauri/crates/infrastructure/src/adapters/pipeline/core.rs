@@ -1,7 +1,7 @@
 use super::{
-    Arc, AtomicU64, BodyCodec, BreakpointCoordinator, CaptureRepositoryAdapter, ConnectionContext,
-    DomainMessageStage, EvaluatedRules, EventHub, HttpRequestMetadata, InMemorySessionStore,
-    Message, Mutex, PipelineState, ProxyResult, RuleRuntimeService, RuntimeBodyCodecResolver,
+    Arc, AtomicU64, BodyCodec, CaptureRepositoryAdapter, ConnectionContext, DomainMessageStage,
+    EvaluatedRules, EventHub, HttpRequestMetadata, InMemorySessionStore, Message, Mutex,
+    PipelineState, ProxyResult, RuleRuntimeService, RuntimeBodyCodecResolver,
     RuntimePipelineAdapter, RuntimePipelineProductHooks, RuntimeRuleRepository,
 };
 
@@ -10,7 +10,6 @@ impl RuntimePipelineAdapter {
         product: RuntimePipelineProductHooks,
         rules: Arc<dyn RuntimeRuleRepository>,
         sessions: Arc<InMemorySessionStore>,
-        breakpoints: Arc<BreakpointCoordinator>,
         events: Arc<EventHub>,
         captures: Arc<CaptureRepositoryAdapter>,
     ) -> Self {
@@ -22,7 +21,6 @@ impl RuntimePipelineAdapter {
             request_classifier: product.request_classifier,
             channel_labels: product.channel_labels,
             sessions,
-            breakpoints,
             events,
             captures,
             capture_cursor: AtomicU64::new(0),

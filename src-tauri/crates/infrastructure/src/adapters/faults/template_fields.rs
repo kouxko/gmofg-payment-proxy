@@ -271,7 +271,7 @@ pub(super) fn parameter_definitions(
             0,
             i64::MAX,
         ),
-        "reject_tls_handshake" | "disconnect_before_upstream" => (BTreeMap::new(), Vec::new()),
+        "disconnect_before_upstream" => (BTreeMap::new(), Vec::new()),
         _ => panic!("fault template {template_id} has no parameter definition"),
     }
 }

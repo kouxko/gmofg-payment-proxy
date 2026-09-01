@@ -18,13 +18,12 @@ pub use protocol_packages::{
 };
 
 use crate::{
-    ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, BreakpointDecision,
-    BreakpointDetailViewModel, BreakpointDraft, BreakpointValidationViewModel,
-    CaptureDetailViewModel, CapturePageViewModel, CaptureQuery, CertificateItemViewModel,
-    CertificateOverviewViewModel, CertificateReference, CertificateValidationViewModel,
-    ExchangeObservationPage, ExchangeObservationQuery, ExchangeObservationRecord,
-    FaultConfigurationDraft, FaultTemplateViewModel, ListenerCertificateImportViewModel,
-    ListenerId, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, CaptureDetailViewModel,
+    CapturePageViewModel, CaptureQuery, CertificateItemViewModel, CertificateOverviewViewModel,
+    CertificateReference, CertificateValidationViewModel, ExchangeObservationPage,
+    ExchangeObservationQuery, ExchangeObservationRecord, FaultConfigurationDraft,
+    FaultTemplateViewModel, ListenerCertificateImportViewModel, ListenerId,
+    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
     ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
     ProxyListener, ProxyWorkspace, RuleDefinition, RuleDefinitionSaveInput, RuntimeEpoch,
     SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
@@ -259,23 +258,4 @@ pub trait SessionQueryPort: Send + Sync + std::fmt::Debug {
     async fn query(&self, query: SessionQuery) -> AppResult<SessionListViewModel>;
     async fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
     async fn clear_completed(&self) -> AppResult<usize>;
-}
-
-/// 断点编辑校验端口。
-///
-/// 任何展示层都只能提交意图，而不能自行重建报文。
-pub trait BreakpointValidationPort: Send + Sync + std::fmt::Debug {
-    fn format_json(&self, draft: BreakpointDraft) -> AppResult<BreakpointDraft>;
-    fn normalize(&self, draft: BreakpointDraft) -> AppResult<BreakpointDraft>;
-    fn restore_original(&self, detail: &BreakpointDetailViewModel) -> AppResult<BreakpointDraft>;
-    fn validate(
-        &self,
-        detail: &BreakpointDetailViewModel,
-        draft: &BreakpointDraft,
-    ) -> AppResult<BreakpointValidationViewModel>;
-    fn validate_decision(
-        &self,
-        detail: &BreakpointDetailViewModel,
-        decision: &BreakpointDecision,
-    ) -> AppResult<BreakpointValidationViewModel>;
 }

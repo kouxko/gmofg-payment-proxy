@@ -225,7 +225,6 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "android_runtime_owner_list"
         | "android_profile_list"
         | "workspace_certificate_overview"
-        | "breakpoint_query"
         | "rule_list"
         | "workspace_rule_list"
         | "protocol_package_list"
@@ -250,7 +249,6 @@ fn output_root(name: &str) -> Option<OutputRoot> {
         | "certificate_overview"
         | "http_capture_query"
         | "http_capture_get"
-        | "breakpoint_get"
         | "rule_get"
         | "protocol_package_catalog"
         | "protocol_package_detail" => Some(OutputRoot::Object),
@@ -291,8 +289,7 @@ fn property_description(name: &str) -> &'static str {
         "profile_id" => "Android network profile ID; omit where the active profile is allowed.",
         "package_name" => "Android application package name.",
         "session_id" => "HTTP capture session UUID.",
-        "runtime_epoch" => "Runtime epoch UUID that prevents stale capture or breakpoint reads.",
-        "breakpoint_id" => "Pending HTTP breakpoint UUID.",
+        "runtime_epoch" => "Runtime epoch UUID that prevents stale capture reads.",
         "rule_id" => "HTTP rule UUID or optional capture rule filter.",
         "terminal_ip" => "Terminal IP address filter.",
         "channel" => "Capture channel filter.",

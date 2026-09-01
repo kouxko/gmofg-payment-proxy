@@ -5,7 +5,6 @@
 #![allow(clippy::missing_errors_doc)]
 
 pub mod android_network;
-pub mod breakpoint;
 pub mod certificate;
 pub mod document;
 pub mod error;
@@ -29,7 +28,6 @@ mod android_network_tests;
 mod unified_matching_contract_tests;
 
 pub use android_network::*;
-pub use breakpoint::*;
 pub use certificate::*;
 pub use document::*;
 pub use error::*;

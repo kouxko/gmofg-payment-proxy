@@ -11,11 +11,11 @@
     "rust": "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs",
     "typescript": "src/features/rules/rule-definition-model.test.ts",
     "rust_names": [
-      "arbitrary_nested_nonempty_trees_and_long_action_lists_are_valid",
       "clear_document_value_type_survives_strict_serde_round_trip",
       "cloned_rule_configuration_is_deeply_independent",
-      "condition_tree_rejects_empty_groups_and_supports_nested_and_or",
       "document_actions_apply_in_order_with_strict_set_clear_insert_and_append",
+      "flat_conditions_reject_empty_and_apply_fixed_and_semantics",
+      "large_flat_condition_and_action_lists_are_valid",
       "number_equal_uses_javascript_numeric_equality_for_signed_zero",
       "runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation",
       "schema_declared_paths_validate_and_undeclared_paths_keep_rule_local_type",
@@ -26,7 +26,7 @@
       "typed_predicate_operator_matrix_is_strict_and_missing_or_mismatch_is_false"
     ],
     "typescript_names": [
-      "groupRulesByStage > keeps display groups fixed and sorts runtime/read order by priority then rule id",
+      "ruleDirectionLabel > labels the two message directions shown in the unified rule list",
       "ruleStageIncompatibility > exposes only the two proxy write stages for new message rules",
       "ruleStageIncompatibility > keeps a Schema-undeclared Document action as rule-local metadata",
       "ruleStageIncompatibility > treats the JSON string Null as a string and actual null as null",
@@ -39,7 +39,7 @@
   "generated_wire_golden": "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/generated-wire-golden.json",
   "phase12_legacy_owner_allowlist": [],
   "contracts": [
-    "nonempty recursive all/any condition tree without not",
+    "one nonempty flat condition list with fixed AND semantics; OR is represented by multiple rules",
     "typed predicates use RFC6901 and fail false on missing or runtime type mismatch",
     "declared schema paths require matching types and undeclared paths preserve rule-local types",
     "one nonempty ordered unified action list with strict document mutation primitives",

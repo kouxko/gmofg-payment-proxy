@@ -246,32 +246,6 @@ impl SessionQueryPort for FakePorts {
     }
 }
 
-impl BreakpointValidationPort for FakePorts {
-    fn format_json(&self, _: BreakpointDraft) -> AppResult<BreakpointDraft> {
-        unused()
-    }
-    fn normalize(&self, _: BreakpointDraft) -> AppResult<BreakpointDraft> {
-        unused()
-    }
-    fn restore_original(&self, _: &BreakpointDetailViewModel) -> AppResult<BreakpointDraft> {
-        unused()
-    }
-    fn validate(
-        &self,
-        _: &BreakpointDetailViewModel,
-        _: &BreakpointDraft,
-    ) -> AppResult<BreakpointValidationViewModel> {
-        unused()
-    }
-    fn validate_decision(
-        &self,
-        _: &BreakpointDetailViewModel,
-        _: &BreakpointDecision,
-    ) -> AppResult<BreakpointValidationViewModel> {
-        unused()
-    }
-}
-
 #[async_trait]
 impl FaultServicePort for FakePorts {
     async fn templates(&self) -> AppResult<Vec<FaultTemplateViewModel>> {

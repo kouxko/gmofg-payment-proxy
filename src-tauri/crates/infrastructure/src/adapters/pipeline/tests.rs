@@ -1,5 +1,4 @@
 include!("tests/support.rs");
-include!("tests/wire_mutation.rs");
 include!("tests/runtime_support.rs");
 include!("tests/runtime_cancellation.rs");
 include!("tests/socket_joint_transaction.rs");

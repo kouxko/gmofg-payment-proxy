@@ -23,7 +23,6 @@ pub struct ChannelRuntimeMetrics {
 pub struct RuntimeMetricsSnapshot {
     pub channels: BTreeMap<ChannelId, ChannelRuntimeMetrics>,
     pub active_sessions: usize,
-    pub pending_breakpoints: usize,
     pub logical_memory_bytes: u64,
 }
 

@@ -1,7 +1,7 @@
 use std::{net::TcpListener, path::PathBuf, sync::Arc};
 use intercept_proxy_application::{
     AppResult, CaptureQuery, CaptureSort, ChannelId, ChannelSettingsDraft,
-    FaultConfigurationDraft, MessageStage, PageRequest, RuleActionKind, RuleContent,
+    FaultConfigurationDraft, PageRequest, RuleActionKind, RuleContent,
     RuleEditorContentContext, RuleStage, SessionQuery, SessionSort, SettingsDraft, SortDirection,
 };
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};

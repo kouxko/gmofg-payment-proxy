@@ -41,7 +41,6 @@ pub struct ProductFaultTemplate {
 }
 
 pub const STANDARD_FAULT_CAPABILITY_IDS: &[&str] = &[
-    "reject_tls_handshake",
     "disconnect_before_upstream",
     "request_delay",
     "modify_request_json",

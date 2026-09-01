@@ -5,7 +5,7 @@
 
 ## 1. 所有权
 
-- Domain 拥有 `RuleDefinition`、递归 `Document`、Schema、条件树、action 与验证。
+- Domain 拥有 `RuleDefinition`、递归 `Document`、Schema、扁平条件列表、action 与验证。
 - Application 提供 rule editor context 和 typed factory；UI 只消费 predicate/action capability，不生成默认。
 - Exchange 拥有 Reader/Writer 顺序与观察事件，Infrastructure 把统一规则接入 HTTP/Socket actor。
 - Proxy 拥有 `/packages` WebSocket、业务连接和网络写出；Boa Sidecar 拥有本地 JavaScript 执行。
@@ -26,9 +26,10 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 
 ## 3. 条件与 action
 
-条件是递归 AND/OR 树，叶子使用 Rust capability 给出的 predicate。action 是有序列表；Set、Clear、
-Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
-不能依赖前端隐藏非法选项。
+条件是非空扁平列表，同一规则内所有条件固定为 AND；需要 OR 时创建多条规则。每个条件使用 Rust
+capability 给出的 field、selector、operator 和 typed value。action 是有序列表；Set、Clear、Insert、
+Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，不能依赖
+前端隐藏非法选项。
 
 HTTP 条件只有一套当前合同：Method、request target、Header、终端 IP 和证书指纹。request target 是
 请求入口捕获的原始 `/path?query`；同一 transaction 把这份不可变请求元数据传给请求与响应两个阶段，
@@ -38,7 +39,10 @@ HTTP 条件只有一套当前合同：Method、request target、Header、终端 
 
 Document 条件路径使用 RFC 6901 扩展：完整 token `*` 只展开一个 object/array 层，多个结果按 ANY
 判断。Schema 只提供递归路径选择能力，手动路径始终由同一 Rust factory 校验；无 Schema 时不生成
-前端默认字段。Document mutation 继续只接受精确 RFC 6901 路径。旧 `PathOrRequestType`、HTTP
+前端默认字段。普通 HTTP Body 使用内建 JSON Decode/Encode 提供 schema-free Document；只有规则实际
+包含 Document 条件或动作时才进入该事务，非法 JSON 按 Decode 失败终止 Exchange，不回退到文本匹配。
+协议模式的精确包只由 Listener 绑定决定，规则不复制包身份。Document mutation 继续只接受精确 RFC
+6901 路径。旧 `PathOrRequestType`、HTTP
 `JsonPath` field 和 Regex operator 已物理删除，不存在 alias、fallback 或双执行路径。
 
 每个 Listener/epoch 使用不可变规则快照，规则排序为：
@@ -106,15 +110,16 @@ UI 直接展示 typed 事件，不用占位文案伪造缺失阶段。Display HT
 
 ## 7. 持久化和发布边界
 
-SQLite Schema 100 是产品 1.00 兼容基线。Phase17 已删除 pre-100 recreate/reset policy、marker 和
-启动分支：Schema 100 数据原样保留；Schema `<100`、未来 Schema、缺失/重复/损坏标记均 fail-closed，
-且失败不得改写数据库 bytes 或数据。发布 checker 会阻止临时 reset 合同重新进入生产启动路径。
+SQLite Schema 100 是产品 1.00 兼容基线。Schema 100 数据原样保留；非空数据库存在唯一有效版本标记
+`<100` 时，删除 SQLite 主文件、WAL 与 SHM，再创建全新的 Schema 100。未来版本、缺失、重复或损坏
+标记均 fail-closed，失败不得改写数据库或用户数据。发布 checker 锁定该单一路径；不存在迁移、兼容
+别名或其他 reset 分支。
 
 ## 8. 验证重点
 
-- recursive Schema、schema-free first leaf、AND/OR、Insert/Append/Clear typed capability；
+- recursive Schema、schema-free first condition、扁平 AND 与多规则 OR、Insert/Append/Clear typed capability；
 - 当前 working state 按序匹配、ordered action、前序可见、NthHit/one-shot 成功提交与 Encode rollback；
 - HTTP 与 Socket 两个写出阶段共用统一规则但保持 transport DTO 隔离；
 - ZIP/API 1、Boa sandbox、`package.register`、超时/额度/断线与精确版本生命周期；
 - received/process/final/encoded typed evidence、`changes_truncated` 和 stable error；
-- Schema 100 preserve、pre-100 fail-closed/no-mutation 与发布 checker 门禁。
+- Schema 100 preserve、唯一有效 `<100` 清除重建、未来/缺失/重复/损坏标记 fail-closed 与发布 checker 门禁。

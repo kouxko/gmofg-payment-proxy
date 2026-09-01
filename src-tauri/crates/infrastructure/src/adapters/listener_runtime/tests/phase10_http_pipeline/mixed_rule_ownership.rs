@@ -5,7 +5,7 @@ use super::*;
 
 #[tokio::test]
 async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
-    use intercept_proxy_domain::{Condition, ConditionTree, MatchField, MatchOperator};
+    use intercept_proxy_domain::{Condition, MatchField, MatchOperator};
 
     let listener = phase10_listener();
     let unified = set_string_rule(
@@ -24,10 +24,10 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
             "ordinary false",
             20,
             2,
-            ConditionTree::Leaf(Condition::Http {
+            vec![Condition::Http {
                 field: MatchField::TerminalIp,
                 operator: MatchOperator::Equals("192.0.2.1".into()),
-            }),
+            }],
             "x-ordinary-false",
         ),
         ordinary_header_rule(
@@ -35,16 +35,10 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
             "ordinary true",
             30,
             3,
-            ConditionTree::Any(vec![
-                ConditionTree::Leaf(Condition::Http {
-                    field: MatchField::Method,
-                    operator: MatchOperator::Equals("PATCH".into()),
-                }),
-                ConditionTree::Leaf(Condition::Http {
-                    field: MatchField::TerminalIp,
-                    operator: MatchOperator::Equals("127.0.0.1".into()),
-                }),
-            ]),
+            vec![Condition::Http {
+                field: MatchField::TerminalIp,
+                operator: MatchOperator::Equals("127.0.0.1".into()),
+            }],
             "x-ordinary-true",
         ),
         ordinary_header_rule(
@@ -52,7 +46,7 @@ async fn production_http_joint_leaves_ordinary_false_rule_to_actor_matching() {
             "ordinary nth",
             40,
             4,
-            ConditionTree::Leaf(Condition::NthHit { count: 2 }),
+            vec![Condition::NthHit { count: 2 }],
             "x-ordinary-nth",
         ),
     ]);
@@ -103,7 +97,7 @@ fn ordinary_header_rule(
     name: &str,
     priority: i32,
     created_order: u64,
-    condition: intercept_proxy_domain::ConditionTree,
+    conditions: Vec<intercept_proxy_domain::Condition>,
     header: &str,
 ) -> RuleDefinition {
     use intercept_proxy_domain::{HttpAction, RuleStage, UnifiedAction};
@@ -118,12 +112,11 @@ fn ordinary_header_rule(
             one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition,
+                conditions,
                 actions: vec![UnifiedAction::Http(HttpAction::SetHeader {
                     name: header.into(),
                     value: "executed".into(),
                 })],
-                document: None,
             }),
         },
         created_order,

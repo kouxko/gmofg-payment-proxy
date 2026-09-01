@@ -52,7 +52,6 @@ import type {
 } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { BreakpointModal } from "@/features/breakpoints/breakpoints-view";
 
 export const navigation = [
   {
@@ -345,7 +344,6 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
         )}
         {children}
       </main>
-      <BreakpointModal />
     </div>
   );
 }

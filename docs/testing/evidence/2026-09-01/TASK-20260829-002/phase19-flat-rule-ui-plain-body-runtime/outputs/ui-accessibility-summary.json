@@ -1,0 +1,13 @@
+{
+  "rule_list": "上行与下行规则统一显示；优先级只在同一方向内比较。",
+  "rule_card_direction": "上行",
+  "plain_body_label": "Plain JSON Body（无 Schema）",
+  "condition_label": "匹配值",
+  "action_label": "动作值",
+  "removed_label_present": false,
+  "removed_label": "JSON 值",
+  "http_action_layout": {
+    "first_row": ["HTTP 动作类型", "创建 HTTP 动作"],
+    "second_row": ["动作参数 JSON"]
+  }
+}

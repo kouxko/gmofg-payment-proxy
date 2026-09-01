@@ -5,10 +5,10 @@ use serde_json::Value;
 use super::{
     AndroidDeviceArguments, AndroidEndpointArguments, AndroidPackageArguments,
     AndroidProfileArguments, ApplicationBackend, ApplicationLogDetailArguments,
-    BreakpointDetailArguments, BreakpointQueryArguments, EnvironmentApplyArguments,
-    EnvironmentCandidateArguments, EnvironmentCreateArguments, EnvironmentToolRequest,
-    HttpCaptureDetailArguments, HttpRuleArguments, McpCallContext, ProtocolPackageArguments,
-    ToolFailure, ToolResult, WorkspaceArguments, json_value, parse, query, unknown_tool,
+    EnvironmentApplyArguments, EnvironmentCandidateArguments, EnvironmentCreateArguments,
+    EnvironmentToolRequest, HttpCaptureDetailArguments, HttpRuleArguments, McpCallContext,
+    ProtocolPackageArguments, ToolFailure, ToolResult, WorkspaceArguments, json_value, parse,
+    query, unknown_tool,
 };
 use crate::{reproduction_report, runtime_logs::ApplicationLogQuery};
 use intercept_proxy_application::{
@@ -179,17 +179,6 @@ impl ApplicationBackend {
                     self.application
                         .capture_get_detail(args.session_id, args.runtime_epoch)
                         .await?,
-                )
-            }
-            "breakpoint_query" => {
-                let args: BreakpointQueryArguments = parse(arguments)?;
-                json_value(self.application.breakpoint_query(args.runtime_epoch))
-            }
-            "breakpoint_get" => {
-                let args: BreakpointDetailArguments = parse(arguments)?;
-                json_value(
-                    self.application
-                        .breakpoint_get(args.breakpoint_id, args.runtime_epoch)?,
                 )
             }
             _ => unknown_tool(name),

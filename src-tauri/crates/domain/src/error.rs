@@ -79,10 +79,6 @@ define_error_codes! {
     DocumentFieldUnassigned => "DOCUMENT_FIELD_UNASSIGNED",
     /// 写入值的类型与 Schema 声明不一致。
     DocumentFieldTypeMismatch => "DOCUMENT_FIELD_TYPE_MISMATCH",
-    BreakpointNotFound => "BREAKPOINT_NOT_FOUND",
-    BreakpointAlreadyResolved => "BREAKPOINT_ALREADY_RESOLVED",
-    BreakpointClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
-    BreakpointProxyStopped => "BREAKPOINT_PROXY_STOPPED",
     ResourceExhausted => "RESOURCE_EXHAUSTED",
     EventCursorExpired => "EVENT_CURSOR_EXPIRED",
     ExportFailed => "EXPORT_FAILED",

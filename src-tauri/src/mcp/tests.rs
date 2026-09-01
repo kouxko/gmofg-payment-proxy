@@ -88,7 +88,7 @@ fn tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_t
     }
     assert_eq!(
         read_tools.len(),
-        38,
+        36,
         "unified reads plus capabilities/status"
     );
     for forbidden in [

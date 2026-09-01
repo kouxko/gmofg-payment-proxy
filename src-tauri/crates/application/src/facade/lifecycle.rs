@@ -26,9 +26,6 @@ impl Application {
                 },
             })
             .await?;
-        // 动态入口各自拥有运行 epoch；启动快照必须聚合全部待处理断点，不能再以已退役
-        // 的单实例代理 epoch 过滤，否则界面会漏掉真实入口产生的断点。
-        let pending_breakpoints = self.breakpoints.query(None).into_iter().collect();
         // 启动快照只读取证书的非敏感元数据。不能为了画状态栏就解密私钥并触发
         // Keychain/DPAPI 授权，否则用户取消系统提示会让整个展示层无法启动。
         let certificate = self.certificates.status().await?;
@@ -40,7 +37,6 @@ impl Application {
             product_name: self.product_name.clone(),
             channel_catalog,
             recent_capture,
-            pending_breakpoints,
             certificate,
             settings,
             event_cursor: self.events.current_cursor(),

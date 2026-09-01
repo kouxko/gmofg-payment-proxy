@@ -1,8 +1,8 @@
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DocumentMutation, DocumentPredicate, DropResponseMode, HttpAction,
-    HttpDocumentRuleContent, HttpRuleContent, JsonPointer, ListenerId, ProtocolPackageId,
-    ProtocolPackageRef, ProxyWorkspace, RuleContent, RuleDefinition, RuleDefinitionDraft,
-    RuleStage, SocketRuleContent, StringOperator, StringPredicate, TerminalAction, UnifiedAction,
+    Condition, DocumentMutation, DocumentPredicate, DropResponseMode, HttpAction, HttpRuleContent,
+    JsonPointer, ListenerId, ProtocolPackageId, ProtocolPackageRef, ProxyWorkspace, RuleContent,
+    RuleDefinition, RuleDefinitionDraft, RuleStage, SocketRuleContent, StringOperator,
+    StringPredicate, TerminalAction, UnifiedAction,
 };
 
 fn package() -> ProtocolPackageRef {
@@ -12,18 +12,18 @@ fn package() -> ProtocolPackageRef {
     }
 }
 
-fn http_condition() -> ConditionTree {
-    ConditionTree::Leaf(Condition::NthHit { count: 1 })
+fn http_condition() -> Condition {
+    Condition::NthHit { count: 1 }
 }
 
-fn document_condition() -> ConditionTree {
-    ConditionTree::Leaf(Condition::Document {
+fn document_condition() -> Condition {
+    Condition::Document {
         path: JsonPointer::parse("/value").expect("pointer"),
         predicate: DocumentPredicate::String(StringPredicate {
             operator: StringOperator::Equal,
             value: "x".into(),
         }),
-    })
+    }
 }
 
 fn document_action() -> UnifiedAction {
@@ -45,9 +45,8 @@ fn unified_rule_serializes_one_tagged_content_variant() {
             one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: http_condition(),
+                conditions: vec![http_condition()],
                 actions: vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
-                document: None,
             }),
         },
         7,
@@ -73,12 +72,11 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: ConditionTree::All(vec![http_condition(), document_condition()]),
+                    conditions: vec![http_condition(), document_condition()],
                     actions: vec![
                         UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 }),
                         document_action(),
                     ],
-                    document: Some(HttpDocumentRuleContent { package: package() }),
                 }),
             },
             1,
@@ -88,12 +86,9 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
 }
 
 #[test]
-fn http_without_document_binding_rejects_recursive_document_conditions_and_actions_on_save() {
-    let nested_document_condition = ConditionTree::All(vec![ConditionTree::Any(vec![
-        http_condition(),
-        document_condition(),
-    ])]);
-    let draft = |condition, actions| RuleDefinitionDraft {
+fn http_document_conditions_and_actions_do_not_require_a_duplicate_package_binding() {
+    let document_conditions = vec![http_condition(), document_condition()];
+    let draft = |conditions, actions| RuleDefinitionDraft {
         name: "HTTP without Document".into(),
         enabled: true,
         priority: 5,
@@ -102,52 +97,47 @@ fn http_without_document_binding_rejects_recursive_document_conditions_and_actio
         one_shot: false,
         content: RuleContent::Http(HttpRuleContent {
             description: String::new(),
-            condition,
+            conditions,
             actions,
-            document: None,
         }),
     };
 
-    assert!(
-        RuleDefinition::create(
-            draft(
-                nested_document_condition,
-                vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
-            ),
-            1,
-        )
-        .is_err()
-    );
-    assert!(RuleDefinition::create(draft(http_condition(), vec![document_action()]), 1).is_err());
+    RuleDefinition::create(
+        draft(
+            document_conditions,
+            vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
+        ),
+        1,
+    )
+    .expect("Document conditions derive their body owner from the Listener");
+    RuleDefinition::create(draft(vec![http_condition()], vec![document_action()]), 1)
+        .expect("Document actions derive their body owner from the Listener");
 
     let listener_id = ListenerId::new();
     let mut rule = RuleDefinition::create(
         RuleDefinitionDraft {
             listener_id,
             ..draft(
-                http_condition(),
+                vec![http_condition()],
                 vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
             )
         },
         1,
     )
     .expect("valid HTTP-only rule");
-    assert!(
-        rule.update(
-            rule.revision(),
-            RuleDefinitionDraft {
-                listener_id,
-                ..draft(document_condition(), vec![document_action()])
-            },
-        )
-        .is_err()
-    );
+    rule.update(
+        rule.revision(),
+        RuleDefinitionDraft {
+            listener_id,
+            ..draft(vec![document_condition()], vec![document_action()])
+        },
+    )
+    .expect("HTTP rules may add schema-free Body Document work");
 }
 
 #[test]
 fn socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_one() {
     let terminals = vec![
-        TerminalAction::RejectTlsHandshake,
         TerminalAction::DisconnectBeforeUpstream,
         TerminalAction::UpstreamConnectTimeout { milliseconds: 1 },
         TerminalAction::UpstreamWriteTimeout { milliseconds: 1 },
@@ -180,7 +170,7 @@ fn socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_o
                 one_shot: false,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: package(),
-                    condition: document_condition(),
+                    conditions: vec![document_condition()],
                     actions: vec![UnifiedAction::Terminal(terminal.clone())],
                 }),
             },
@@ -206,7 +196,7 @@ fn listener_and_content_kind_are_immutable_after_creation() {
             one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package: package(),
-                condition: document_condition(),
+                conditions: vec![document_condition()],
                 actions: vec![document_action()],
             }),
         },
@@ -226,9 +216,8 @@ fn listener_and_content_kind_are_immutable_after_creation() {
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    condition: http_condition(),
+                    conditions: vec![http_condition()],
                     actions: vec![UnifiedAction::Http(HttpAction::Delay { milliseconds: 1 })],
-                    document: None,
                 }),
             },
         )
@@ -236,28 +225,6 @@ fn listener_and_content_kind_are_immutable_after_creation() {
     assert_eq!(error.code.as_str(), "RULE_INVALID");
     assert_eq!(rule.listener_id(), listener_id);
     assert!(matches!(rule.content(), RuleContent::Socket(_)));
-}
-
-#[test]
-fn socket_content_rejects_tls_stage_and_unknown_fields() {
-    let json = serde_json::json!({
-        "name": "Socket",
-        "enabled": true,
-        "priority": 0,
-        "listener_id": ListenerId::new(),
-        "stage": "tls_handshake",
-        "content": {
-            "type": "socket",
-            "value": {
-                "package": package(),
-                "schema_version": 1,
-                "conditions": [],
-                "actions": [{"type": "record_match"}],
-                "http_status": 500
-            }
-        }
-    });
-    assert!(serde_json::from_value::<RuleDefinitionDraft>(json).is_err());
 }
 
 #[test]

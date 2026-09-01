@@ -1,15 +1,13 @@
 use chrono::{TimeZone, Utc};
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentValue, ErrorCode, HttpRuleContent, ListenerId,
-    NthCounterAdvance, Revision, RuleContent, RuleDefinition, RuleDefinitionDraft,
-    RuleDefinitionRestoreSnapshot, RuleLifecycle, RuleLifecycleDelta, RuleStage, TerminalIdentity,
+    Condition, Document, DocumentValue, ErrorCode, HttpRuleContent, ListenerId, NthCounterAdvance,
+    Revision, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleDefinitionRestoreSnapshot,
+    RuleLifecycle, RuleLifecycleDelta, RuleStage, TerminalIdentity, validate_conditions,
 };
 
 #[test]
 fn common_nth_hit_rejects_zero_at_the_domain_owner() {
-    let error = ConditionTree::Leaf(Condition::NthHit { count: 0 })
-        .validate()
-        .expect_err("zero nth-hit");
+    let error = validate_conditions(&[Condition::NthHit { count: 0 }]).expect_err("zero nth-hit");
     assert_eq!(error.code, ErrorCode::RuleInvalid);
 }
 
@@ -47,11 +45,10 @@ fn definition(one_shot: bool, hit_count: u64) -> RuleDefinition {
             one_shot,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                condition: ConditionTree::Leaf(Condition::NthHit {
+                conditions: vec![Condition::NthHit {
                     count: hit_count + 1,
-                }),
+                }],
                 actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
-                document: None,
             }),
         },
         1,
@@ -174,12 +171,16 @@ fn nth_hit_is_a_common_leaf_and_a_miss_does_not_consume_lifecycle() {
     let document = Document::new(DocumentValue::Null(()));
 
     let matched = match baseline.content() {
-        RuleContent::Http(content) => content
-            .condition
-            .matches_with(&document, 2, &mut |_, _| {
-                Ok::<_, intercept_proxy_domain::DomainError>(false)
-            })
-            .expect("match"),
+        RuleContent::Http(content) => {
+            intercept_proxy_domain::evaluate_conditions_with_nth(
+                &content.conditions,
+                &document,
+                2,
+                &mut |_, _| Ok::<_, intercept_proxy_domain::DomainError>(false),
+            )
+            .expect("match")
+            .matched
+        }
         RuleContent::Socket(_) => unreachable!(),
     };
 

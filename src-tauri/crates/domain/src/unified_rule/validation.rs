@@ -1,4 +1,4 @@
-use crate::{Condition, ConditionTree, DomainError, HttpAction, MessageStage, UnifiedAction};
+use crate::{Condition, DomainError, HttpAction, MessageStage, UnifiedAction};
 
 use super::{HttpRuleContent, RuleDefinition, RuleStage, rule_binding_error};
 
@@ -6,8 +6,12 @@ pub(super) fn validate_http_runtime_content(
     definition: &RuleDefinition,
     content: &HttpRuleContent,
 ) -> Result<(), DomainError> {
-    let mut conditions = Vec::new();
-    collect_http_conditions(&content.condition, &mut conditions);
+    let conditions = content
+        .conditions
+        .iter()
+        .filter(|condition| matches!(condition, Condition::Http { .. }))
+        .cloned()
+        .collect::<Vec<_>>();
     let actions = content
         .actions
         .iter()
@@ -23,34 +27,17 @@ pub(super) fn validate_http_runtime_content(
     let stage = match definition.stage {
         RuleStage::ProxyToUpstream => MessageStage::Request,
         RuleStage::ProxyToApp => MessageStage::Response,
-        RuleStage::TlsHandshake => MessageStage::TlsHandshake,
     };
-    crate::validate_http_rule(stage, &content.condition, &actions)
-}
-
-fn collect_http_conditions(tree: &ConditionTree, output: &mut Vec<Condition>) {
-    match tree {
-        ConditionTree::All(children) | ConditionTree::Any(children) => {
-            for child in children {
-                collect_http_conditions(child, output);
-            }
-        }
-        ConditionTree::Leaf(condition @ Condition::Http { .. }) => output.push(condition.clone()),
-        ConditionTree::Leaf(
-            Condition::Document { .. }
-            | Condition::DocumentPattern { .. }
-            | Condition::NthHit { .. },
-        ) => {}
-    }
+    crate::validate_http_rule(stage, &content.conditions, &actions)
 }
 
 pub(super) fn ensure_socket_only(
-    tree: &ConditionTree,
+    conditions: &[Condition],
     actions: &[UnifiedAction],
 ) -> Result<(), DomainError> {
-    let mut http = Vec::new();
-    collect_http_conditions(tree, &mut http);
-    if !http.is_empty()
+    if conditions
+        .iter()
+        .any(|condition| matches!(condition, Condition::Http { .. }))
         || actions
             .iter()
             .any(|action| matches!(action, UnifiedAction::Http(_) | UnifiedAction::Terminal(_)))

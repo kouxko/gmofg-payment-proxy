@@ -1,18 +1,8 @@
 use super::*;
-use intercept_proxy_domain::{
-    ConditionTree, HttpDocumentRuleContent, HttpRuleContent, SocketRuleContent, UnifiedAction,
-};
-
-fn document_tree(conditions: Vec<ConditionTree>) -> ConditionTree {
-    ConditionTree::All(conditions)
-}
+use intercept_proxy_domain::{HttpRuleContent, SocketRuleContent, UnifiedAction};
 
 fn document_actions(actions: Vec<UnifiedAction>) -> Vec<UnifiedAction> {
     actions
-}
-
-fn http_tree(conditions: Vec<intercept_proxy_domain::Condition>) -> ConditionTree {
-    ConditionTree::All(conditions.into_iter().map(ConditionTree::Leaf).collect())
 }
 
 fn http_actions(actions: Vec<intercept_proxy_domain::HttpAction>) -> Vec<UnifiedAction> {
@@ -36,10 +26,7 @@ fn unified_socket_input(
             one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                condition: document_tree(vec![equals(
-                    "trace_id",
-                    DocumentValue::String("abc".into()),
-                )]),
+                conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
                 actions: document_actions(vec![set("amount", DocumentValue::integer(2).unwrap())]),
             }),
         },
@@ -87,10 +74,7 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
     let RuleContent::Socket(content) = &mut input.draft.content else {
         unreachable!()
     };
-    content.condition = document_tree(vec![equals(
-        "missing_field",
-        DocumentValue::String("abc".into()),
-    )]);
+    content.conditions = vec![equals("missing_field", DocumentValue::String("abc".into()))];
     content.actions = document_actions(vec![set("extension_value", DocumentValue::Boolean(true))]);
 
     application
@@ -168,13 +152,10 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                 one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "header + document".into(),
-                    condition: ConditionTree::All(vec![
-                        http_tree(vec![intercept_proxy_domain::Condition::NthHit { count: 1 }]),
-                        document_tree(vec![equals(
-                            "trace_id",
-                            DocumentValue::String("abc".into()),
-                        )]),
-                    ]),
+                    conditions: vec![
+                        intercept_proxy_domain::Condition::NthHit { count: 1 },
+                        equals("trace_id", DocumentValue::String("abc".into())),
+                    ],
                     actions: http_actions(vec![intercept_proxy_domain::HttpAction::Delay {
                         milliseconds: 1,
                     }])
@@ -184,9 +165,6 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                         DocumentValue::integer(2).unwrap(),
                     )]))
                     .collect(),
-                    document: Some(HttpDocumentRuleContent {
-                        package: http_package,
-                    }),
                 }),
             },
         })
@@ -218,10 +196,7 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                     one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        condition: document_tree(vec![equals(
-                            "trace_id",
-                            DocumentValue::String("abc".into()),
-                        )]),
+                        conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
                         actions: http_actions(
                             joint
                                 .then_some(intercept_proxy_domain::HttpAction::Delay {
@@ -233,7 +208,6 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                         .into_iter()
                         .chain([UnifiedAction::RecordMatch])
                         .collect(),
-                        document: Some(HttpDocumentRuleContent { package }),
                     }),
                 },
             })

@@ -259,8 +259,5 @@ fn start_cancelled(listener_id: ListenerId) -> AppError {
 }
 
 fn is_orderly_stop(code: &'static str) -> bool {
-    matches!(
-        code,
-        "PROXY_STOPPED" | "BREAKPOINT_PROXY_STOPPED" | "SOCKET_RELAY_CANCELLED"
-    )
+    matches!(code, "PROXY_STOPPED" | "SOCKET_RELAY_CANCELLED")
 }

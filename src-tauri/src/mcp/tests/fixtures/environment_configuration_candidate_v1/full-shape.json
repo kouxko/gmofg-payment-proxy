@@ -161,45 +161,7 @@
           "type": "http",
           "value": {
             "description": "Canonical request-stage non-terminal actions",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "http",
-                    "field": "TerminalIp",
-                    "operator": {
-                      "Equals": "192.0.2.10"
-                    }
-                  }
-                },
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "http",
-                    "field": {
-                      "Header": "/x-amount"
-                    },
-                    "operator": {
-                      "Wildcard": "12*"
-                    }
-                  }
-                },
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
-              {
-                "source": "http",
-                "value": "Pause"
-              },
               {
                 "source": "http",
                 "value": {
@@ -253,7 +215,28 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "http",
+                "field": "TerminalIp",
+                "operator": {
+                  "Equals": "192.0.2.10"
+                }
+              },
+              {
+                "source": "http",
+                "field": {
+                  "Header": "/x-amount"
+                },
+                "operator": {
+                  "Wildcard": "12*"
+                }
+              },
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -268,18 +251,6 @@
           "type": "http",
           "value": {
             "description": "Canonical response-stage non-terminal actions",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "http",
@@ -300,40 +271,12 @@
                 }
               }
             ],
-            "document": null
-          }
-        }
-      },
-      {
-        "name": "Reject TLS handshake",
-        "enabled": true,
-        "priority": 12,
-        "listener_alias": "http-entry",
-        "stage": "tls_handshake",
-        "one_shot": false,
-        "content": {
-          "type": "http",
-          "value": {
-            "description": "TLS terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
-            "actions": [
+            "conditions": [
               {
-                "source": "terminal",
-                "value": "RejectTlsHandshake"
+                "source": "nth_hit",
+                "count": 1
               }
-            ],
-            "document": null
+            ]
           }
         }
       },
@@ -348,25 +291,18 @@
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
                 "value": "DisconnectBeforeUpstream"
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -381,18 +317,6 @@
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -403,7 +327,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -418,18 +347,6 @@
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -440,7 +357,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -455,18 +377,6 @@
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -477,7 +387,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -492,18 +407,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -514,7 +417,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -529,18 +437,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -551,7 +447,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -566,18 +467,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -598,7 +487,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -613,18 +507,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -637,7 +519,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -652,18 +539,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -674,7 +549,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -689,18 +569,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -711,7 +579,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -726,18 +599,6 @@
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "nth_hit",
-                    "count": 1
-                  }
-                }
-              ]
-            },
             "actions": [
               {
                 "source": "terminal",
@@ -748,7 +609,12 @@
                 }
               }
             ],
-            "document": null
+            "conditions": [
+              {
+                "source": "nth_hit",
+                "count": 1
+              }
+            ]
           }
         }
       },
@@ -765,38 +631,6 @@
             "package": {
               "id": "au-eftex",
               "version": "1.1.0"
-            },
-            "condition": {
-              "operator": "all",
-              "children": [
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "document",
-                    "path": "/amount",
-                    "predicate": {
-                      "type": "number",
-                      "value": {
-                        "operator": "equal",
-                        "value": 1000
-                      }
-                    }
-                  }
-                },
-                {
-                  "operator": "leaf",
-                  "children": {
-                    "source": "document",
-                    "path": "/approved",
-                    "predicate": {
-                      "type": "boolean",
-                      "value": {
-                        "equal": true
-                      }
-                    }
-                  }
-                }
-              ]
             },
             "actions": [
               {
@@ -820,6 +654,29 @@
               },
               {
                 "source": "record_match"
+              }
+            ],
+            "conditions": [
+              {
+                "source": "document",
+                "path": "/amount",
+                "predicate": {
+                  "type": "number",
+                  "value": {
+                    "operator": "equal",
+                    "value": 1000
+                  }
+                }
+              },
+              {
+                "source": "document",
+                "path": "/approved",
+                "predicate": {
+                  "type": "boolean",
+                  "value": {
+                    "equal": true
+                  }
+                }
               }
             ]
           }

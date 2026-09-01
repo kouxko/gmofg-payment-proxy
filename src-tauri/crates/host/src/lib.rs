@@ -13,8 +13,8 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    AppError, AppResult, Application, BreakpointCoordinator, CapacityLedger,
-    EnvironmentConfigurationApplicationServices, EventHub, OperationResultViewModel,
+    AppError, AppResult, Application, CapacityLedger, EnvironmentConfigurationApplicationServices,
+    EventHub, OperationResultViewModel,
 };
 use intercept_proxy_infrastructure::{
     ApplicationBackupImportPreparer, ExternalPackageServer, InfrastructureError,
@@ -110,7 +110,6 @@ pub struct ApplicationHostBuilder {
     builtin_protocol_package: Option<Arc<[u8]>>,
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
-    breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
     environment_configuration_services: Option<EnvironmentConfigurationApplicationServices>,
 }
 
@@ -127,7 +126,6 @@ impl ApplicationHostBuilder {
             builtin_protocol_package: None,
             platform,
             product,
-            breakpoint_coordinator: None,
             environment_configuration_services: None,
         }
     }
@@ -146,15 +144,6 @@ impl ApplicationHostBuilder {
     #[must_use]
     pub fn with_builtin_protocol_package(mut self, archive: Arc<[u8]>) -> Self {
         self.builtin_protocol_package = Some(archive);
-        self
-    }
-
-    /// 注入 application 与 runtime 管线共用的断点协调器。
-    ///
-    /// 测试可保留同一个 `Arc` 来创建处理中断点，无需在 Host 构建后暴露应用内部字段。
-    #[must_use]
-    pub fn with_breakpoint_coordinator(mut self, breakpoints: Arc<BreakpointCoordinator>) -> Self {
-        self.breakpoint_coordinator = Some(breakpoints);
         self
     }
 
@@ -204,11 +193,8 @@ impl ApplicationHostBuilder {
         );
         services.initialize_installation_state().await?;
 
-        let breakpoints = self
-            .breakpoint_coordinator
-            .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
         let events = host_event_hub(&capacity);
-        services.configure_runtime(self.product.as_ref(), breakpoints.clone(), events.clone());
+        services.configure_runtime(self.product.as_ref(), events.clone());
         let external_package_server = Arc::new(services.start_external_package_server().await?);
         let application = Arc::new(match self.environment_configuration_services {
             Some(environment) => {
@@ -216,7 +202,6 @@ impl ApplicationHostBuilder {
                     .into_application_with_environment_configuration_services(
                         self.product.name().to_owned(),
                         self.android_companion_apk,
-                        breakpoints,
                         events.clone(),
                         environment,
                     )
@@ -227,7 +212,6 @@ impl ApplicationHostBuilder {
                     .into_application(
                         self.product.name().to_owned(),
                         self.android_companion_apk,
-                        breakpoints,
                         events.clone(),
                     )
                     .await?

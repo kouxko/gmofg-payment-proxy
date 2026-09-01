@@ -57,7 +57,7 @@ impl FaultServicePort for FaultServiceAdapter {
         let (stage, action) = definition
             .action
             .invoke(&configuration.parameters, self.body_codec.as_ref())?;
-        let conditions = configuration_conditions(&configuration, stage)?;
+        let conditions = configuration_conditions(&configuration);
         let channel = configuration
             .channel
             .ok_or_else(|| AppError::new("RULE_INVALID", "故障规则必须绑定 Listener。"))?;
@@ -79,14 +79,8 @@ impl FaultServicePort for FaultServiceAdapter {
                 one_shot: configuration.one_shot,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("fault:{}", definition.view.template_id),
-                    condition: intercept_proxy_domain::ConditionTree::All(
-                        conditions
-                            .into_iter()
-                            .map(intercept_proxy_domain::ConditionTree::Leaf)
-                            .collect(),
-                    ),
+                    conditions,
                     actions: vec![intercept_proxy_domain::UnifiedAction::from(action)],
-                    document: None,
                 }),
             },
         })
@@ -103,7 +97,7 @@ impl FaultServicePort for FaultServiceAdapter {
         Some(ActiveFaultViewModel {
             rule_id: rule.rule_id().as_uuid(),
             template_name: template_name.into(),
-            target_summary: format!("{} 个条件", content.condition.leaf_count()),
+            target_summary: format!("{} 个条件", content.conditions.len()),
             priority: rule.priority(),
             hit_count: rule.lifecycle().hit_count,
             enabled: rule.enabled(),
@@ -126,57 +120,14 @@ fn rule_stage(stage: MessageStage) -> AppResult<RuleStage> {
     match stage {
         MessageStage::Request => Ok(RuleStage::ProxyToUpstream),
         MessageStage::Response => Ok(RuleStage::ProxyToApp),
-        MessageStage::TlsHandshake => Ok(RuleStage::TlsHandshake),
-        MessageStage::Terminal => Err(AppError::new(
+        MessageStage::TlsHandshake | MessageStage::Terminal => Err(AppError::new(
             "RULE_INVALID",
-            "故障模板不能使用仅适用于终端视图的内部阶段。",
+            "故障模板阶段不是规则写出方向。",
         )),
     }
 }
 
-fn configuration_conditions(
-    configuration: &FaultConfigurationDraft,
-    stage: MessageStage,
-) -> AppResult<Vec<Condition>> {
-    if stage == MessageStage::TlsHandshake {
-        let mut field_errors = BTreeMap::new();
-        if configuration
-            .terminal
-            .as_ref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            field_errors.insert(
-                "terminal".into(),
-                vec!["TLS 握手阶段不能按终端 IP 匹配，请在规则页面使用客户端证书指纹。".into()],
-            );
-        }
-        if configuration
-            .target
-            .as_ref()
-            .is_some_and(|value| !value.trim().is_empty())
-        {
-            field_errors.insert(
-                "target".into(),
-                vec!["TLS 握手阶段尚未解析 HTTP 路径，不能配置路径条件。".into()],
-            );
-        }
-        if !field_errors.is_empty() {
-            return Err(AppError::field(
-                "RULE_INVALID",
-                "TLS 握手故障包含不支持的匹配条件。",
-                field_errors,
-            ));
-        }
-        return Ok(configuration
-            .nth_hit
-            .map(|nth| {
-                vec![Condition::NthHit {
-                    count: u64::from(nth),
-                }]
-            })
-            .unwrap_or_default());
-    }
-
+fn configuration_conditions(configuration: &FaultConfigurationDraft) -> Vec<Condition> {
     let mut conditions = Vec::new();
     if let Some(terminal) = configuration
         .terminal
@@ -203,7 +154,7 @@ fn configuration_conditions(
             count: u64::from(nth),
         });
     }
-    Ok(conditions)
+    conditions
 }
 
 mod actions;
@@ -214,8 +165,8 @@ use actions::{
     connect_timeout, custom_status, disconnect, disconnect_downstream_mid_body,
     disconnect_upstream_mid_body, drop_response, intermittent_downstream, intermittent_upstream,
     invalid_json, jitter_downstream, jitter_upstream, mock_response, modify_json, read_timeout,
-    reject_tls, request_delay, response_delay, throttle_downstream, throttle_upstream, truncate,
-    write_timeout, wrong_length,
+    request_delay, response_delay, throttle_downstream, throttle_upstream, truncate, write_timeout,
+    wrong_length,
 };
 use template_fields::{encoded_template, template};
 #[cfg(test)]

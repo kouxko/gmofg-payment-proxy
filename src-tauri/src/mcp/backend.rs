@@ -8,8 +8,8 @@ use std::{fmt::Debug, sync::Arc};
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::{
-    AppError, AppErrorViewModel, Application, BreakpointId, ExchangeObservationQueries,
-    ProtocolPackageRef, RuleId, RuntimeEpoch, SessionId, WorkspaceId,
+    AppError, AppErrorViewModel, Application, ExchangeObservationQueries, ProtocolPackageRef,
+    RuleId, RuntimeEpoch, SessionId, WorkspaceId,
 };
 use serde::{Deserialize, de::DeserializeOwned};
 use serde_json::{Value, json};
@@ -113,8 +113,6 @@ pub(super) const DISPATCHED_TOOL_NAMES: &[&str] = &[
     "workspace_certificate_overview",
     "http_capture_query",
     "http_capture_get",
-    "breakpoint_query",
-    "breakpoint_get",
     "rule_list",
     "rule_get",
     "workspace_rule_list",
@@ -265,7 +263,7 @@ impl McpBackend for ApplicationBackend {
             | "entry_status_list"
             | "diagnostics_query"
             | "diagnose_recent_failures" => self.call_general_tool(name, arguments).await,
-            "http_capture_query" | "http_capture_get" | "breakpoint_query" | "breakpoint_get" => {
+            "http_capture_query" | "http_capture_get" => {
                 self.call_traffic_tool(name, arguments).await
             }
             "rule_list"
@@ -351,19 +349,6 @@ struct HttpRuleArguments {
 #[serde(deny_unknown_fields)]
 struct ProtocolPackageArguments {
     package: ProtocolPackageRef,
-}
-
-#[derive(Debug, Default, Deserialize)]
-#[serde(default, deny_unknown_fields)]
-struct BreakpointQueryArguments {
-    runtime_epoch: Option<RuntimeEpoch>,
-}
-
-#[derive(Debug, Deserialize)]
-#[serde(deny_unknown_fields)]
-struct BreakpointDetailArguments {
-    breakpoint_id: BreakpointId,
-    runtime_epoch: RuntimeEpoch,
 }
 
 #[derive(Debug, Deserialize)]

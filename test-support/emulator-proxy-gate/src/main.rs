@@ -8,12 +8,12 @@ use std::{env, error::Error, fs, path::PathBuf, sync::Arc, time::Duration};
 use encoding_rs::SHIFT_JIS;
 use intercept_proxy_application::{
     AppError, AppResult, BodyCodecKind, CaptureQuery, CaptureSort, ListenerId, PageRequest,
-    RuleDefinitionSaveInput, RuleEditorContentContext, SessionDetailViewModel, SessionQuery,
-    SessionSort, SortDirection,
+    RuleDefinitionDraft, RuleDefinitionSaveInput, RuleEditorContentContext, SessionDetailViewModel,
+    SessionQuery, SessionSort, SortDirection,
 };
 use intercept_proxy_domain::{
-    Condition, ConditionTree, DropResponseMode, FixedServerSettings, HttpAction, MatchField,
-    MatchOperator, RuleContent, RuleStage, TerminalAction, UnifiedAction, UpstreamTlsSettings,
+    Condition, DropResponseMode, FixedServerSettings, HttpAction, MatchField, MatchOperator,
+    RuleContent, RuleStage, TerminalAction, UnifiedAction, UpstreamTlsSettings,
 };
 use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};
 use intercept_proxy_infrastructure::{
@@ -222,10 +222,10 @@ fn path_rule(
         unreachable!("HTTP Listener must produce an HTTP rule draft");
     };
     content.description = "Android emulator proxy gate scenario".into();
-    content.condition = ConditionTree::Leaf(Condition::Http {
+    content.conditions = vec![Condition::Http {
         field: MatchField::RequestTarget,
         operator: MatchOperator::Contains(path.into()),
-    });
+    }];
     content.actions = actions.into_iter().map(UnifiedAction::from).collect();
     input
 }
@@ -245,10 +245,10 @@ fn response_target_rule(
         unreachable!("HTTP Listener must produce an HTTP rule draft");
     };
     content.description = "Android emulator proxy gate response scenario".into();
-    content.condition = ConditionTree::Leaf(Condition::Http {
+    content.conditions = vec![Condition::Http {
         field: MatchField::RequestTarget,
         operator: MatchOperator::Equals(scenario.into()),
-    });
+    }];
     content.actions = actions.into_iter().map(UnifiedAction::from).collect();
     input
 }
@@ -268,7 +268,22 @@ async fn new_http_rule_draft(
     stages
         .into_iter()
         .find(|candidate| candidate.stage == stage)
-        .map(|candidate| candidate.new_rule_draft)
+        .map(|candidate| {
+            let structural = candidate.new_rule_draft;
+            RuleDefinitionSaveInput {
+                rule_id: None,
+                expected_revision: None,
+                draft: RuleDefinitionDraft {
+                    name: String::new(),
+                    enabled: false,
+                    priority: 0,
+                    listener_id: structural.listener_id,
+                    stage: structural.stage,
+                    one_shot: false,
+                    content: structural.content,
+                },
+            }
+        })
         .ok_or_else(|| {
             AppError::new(
                 "EMULATOR_GATE_HTTP_STAGE_REQUIRED",
@@ -470,10 +485,9 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
     let RuleContent::Http(nth_hit_content) = &mut nth_hit.draft.content else {
         unreachable!("HTTP Listener must produce an HTTP rule draft");
     };
-    nth_hit_content.condition = ConditionTree::All(vec![
-        nth_hit_content.condition.clone(),
-        ConditionTree::Leaf(Condition::NthHit { count: 2 }),
-    ]);
+    nth_hit_content
+        .conditions
+        .push(Condition::NthHit { count: 2 });
     nth_hit.draft.one_shot = true;
     let nth_hit_rule = application.rule_definition_save(nth_hit).await?;
 

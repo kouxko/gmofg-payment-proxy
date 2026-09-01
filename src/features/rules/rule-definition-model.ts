@@ -1,6 +1,5 @@
 import type {
   Condition,
-  ConditionTree,
   DocumentMutation,
   DocumentValue,
   HttpRuleEditorStageViewModel,
@@ -21,34 +20,22 @@ import type {
 } from "@/generated/rust-types";
 import { documentSchemaFields, type DocumentSchemaField } from "./rule-document-schema";
 
-export const RULE_STAGE_ORDER = [
-  "proxy_to_upstream",
-  "proxy_to_app",
-  "tls_handshake",
-] as const satisfies readonly RuleStage[];
-
-export const NEW_MESSAGE_RULE_STAGES = [
-  "proxy_to_upstream",
-  "proxy_to_app",
-] as const satisfies readonly RuleStage[];
-
 const STAGE_LABELS: Record<RuleStage, string> = {
   proxy_to_upstream: "Proxy → Server",
   proxy_to_app: "Proxy → App",
-  tls_handshake: "TLS 握手",
 };
 
 export function ruleStageLabel(stage: RuleStage) {
   return STAGE_LABELS[stage];
 }
 
-export function groupRulesByStage(rules: readonly RuleDefinition_Serialize[]) {
-  return RULE_STAGE_ORDER.map((stage) => ({
-    stage,
-    rules: rules
-      .filter((rule) => rule.stage === stage)
-      .sort((left, right) => left.priority - right.priority || left.rule_id.localeCompare(right.rule_id)),
-  }));
+const DIRECTION_LABELS: Record<RuleStage, string> = {
+  proxy_to_upstream: "上行",
+  proxy_to_app: "下行",
+};
+
+export function ruleDirectionLabel(stage: RuleStage) {
+  return DIRECTION_LABELS[stage];
 }
 
 export function ruleContentLabel(rule: RuleDefinition_Serialize) {
@@ -72,8 +59,7 @@ export function ruleStageIncompatibility(
 }
 
 function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "http" }>["value"], stage: HttpRuleEditorStageViewModel, localTypes: RuleLocalDocumentTypeCapability[]) {
-  const leaves = conditionLeaves(content.condition);
-  const httpConditions = leaves.filter((leaf): leaf is Extract<Condition, { source: "http" }> => leaf.source === "http");
+  const httpConditions = content.conditions.filter((condition): condition is Extract<Condition, { source: "http" }> => condition.source === "http");
   const httpActions = content.actions.filter((action) => action.source === "http" || action.source === "terminal");
   if (httpConditions.length > 0 || httpActions.length > 0) {
     if (!stage.http) return "目标阶段没有可编辑当前 HTTP 条件或动作的能力。";
@@ -91,27 +77,25 @@ function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draf
       if (!actionKinds.includes(kind)) return `目标阶段不支持 HTTP 动作 ${ruleActionKindLabel(kind)}。`;
     }
   }
-  return content.document ? documentIncompatibility(content.condition, content.actions, content.document.package, stage.package, stage.document_fields, stage.document_common_actions, localTypes) : null;
+  return documentIncompatibility(content.conditions, content.actions, stage.document_fields, stage.document_common_actions, localTypes);
 }
 
 function socketStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "socket" }>["value"], expectedPackage: ProtocolPackageRef, stage: SocketRuleEditorStageViewModel, localTypes: RuleLocalDocumentTypeCapability[]) {
-  return documentIncompatibility(content.condition, content.actions, content.package, expectedPackage, stage.document_fields, stage.common_actions, localTypes);
+  if (content.package.id !== expectedPackage.id || content.package.version !== expectedPackage.version) {
+    return "目标阶段的 Document 协议包与当前内容不一致。";
+  }
+  return documentIncompatibility(content.conditions, content.actions, stage.document_fields, stage.common_actions, localTypes);
 }
 
 function documentIncompatibility(
-  condition: ConditionTree,
+  conditions: Condition[],
   actions: import("@/generated/rust-types").UnifiedAction[],
-  packageRef: ProtocolPackageRef,
-  expectedPackage: ProtocolPackageRef | null,
   fieldCapabilities: import("@/generated/rust-types").RuleDocumentSchemaFieldCapability[],
   commonActions: RuleCommonActionCapability[],
   localTypes: RuleLocalDocumentTypeCapability[],
 ) {
-  if (!expectedPackage || packageRef.id !== expectedPackage.id || packageRef.version !== expectedPackage.version) {
-    return "目标阶段的 Document 协议包与当前内容不一致。";
-  }
   const fields = documentSchemaFields(fieldCapabilities);
-  for (const leaf of conditionLeaves(condition).filter((item) => item.source === "document" || item.source === "document_pattern")) {
+  for (const leaf of conditions.filter((item) => item.source === "document" || item.source === "document_pattern")) {
     const field = fields.find((item) => item.name === leaf.path);
     if (field && !predicateMatchesType(leaf.predicate, field.type)) {
       return `目标阶段不能编辑 Document 条件字段 ${leaf.path}。`;
@@ -178,10 +162,6 @@ function documentValueType(value: DocumentValue): RuleLocalDocumentValueType {
   return value === null ? "null" : "object";
 }
 
-function conditionLeaves(tree: ConditionTree): Condition[] {
-  return tree.operator === "leaf" ? [tree.children] : tree.children.flatMap(conditionLeaves);
-}
-
 function predicateMatchesType(predicate: import("@/generated/rust-types").DocumentPredicate, type: DocumentSchemaField["type"]): boolean {
   return predicate.type === type || (predicate.type === "null_equal" && false);
 }
@@ -207,7 +187,6 @@ function matchOperatorKind(operator: import("@/generated/rust-types").MatchOpera
 }
 
 function ruleActionKind(action: HttpAction): RuleActionKind {
-  if (action === "Pause") return "pause";
   if ("SetJsonField" in action) return "set_json_field";
   if ("ReplaceBodyText" in action) return "replace_body_text";
   if ("SetHeader" in action) return "set_header";
@@ -221,7 +200,6 @@ function ruleActionKind(action: HttpAction): RuleActionKind {
 }
 
 function terminalActionKind(action: TerminalAction): RuleActionKind {
-  if (action === "RejectTlsHandshake") return "reject_tls_handshake";
   if (action === "DisconnectBeforeUpstream") return "disconnect_before_upstream";
   if ("UpstreamConnectTimeout" in action) return "upstream_connect_timeout";
   if ("UpstreamWriteTimeout" in action) return "upstream_write_timeout";
@@ -247,7 +225,7 @@ const MATCH_FIELD_LABELS = {
 const RULE_ACTION_LABELS = {
   set_json_field: "Set JSON Field", replace_body_text: "Replace Body", set_header: "Set Header",
   delay: "Delay", jitter: "Jitter", throttle: "Throttle", intermittent: "Intermittent",
-  pause: "Pause", custom_http_status: "Custom HTTP Status", reject_tls_handshake: "Reject TLS Handshake",
+  custom_http_status: "Custom HTTP Status",
   disconnect_before_upstream: "Disconnect Before Upstream", upstream_connect_timeout: "Upstream Connect Timeout",
   upstream_write_timeout: "Upstream Write Timeout", upstream_read_timeout: "Upstream Read Timeout",
   drop_upstream_response: "Drop Upstream Response", mock_response: "Mock Response", invalid_json: "Invalid JSON",

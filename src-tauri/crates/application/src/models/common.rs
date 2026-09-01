@@ -1,13 +1,14 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
+use std::collections::BTreeMap;
 use uuid::Uuid;
 
 pub use intercept_proxy_domain::{
     BodyCodecKind, BooleanPredicate, CertificateReference, CertificateReferenceId,
-    CertificateReferenceKind, ChannelId, Condition, ConditionTree, Document, DocumentMutation,
-    DocumentPredicate, DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings,
-    FixedServerSettings, ForwardProxyAuthentication, HttpBodyProcessing, HttpListenerSettings,
-    JsonPointer, ListenerDataPlane, ListenerId, MitmSettings, NumberOperator, NumberPredicate,
+    CertificateReferenceKind, ChannelId, Condition, Document, DocumentMutation, DocumentPredicate,
+    DocumentValue, DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings,
+    ForwardProxyAuthentication, HttpBodyProcessing, HttpListenerSettings, JsonPointer,
+    ListenerDataPlane, ListenerId, MitmSettings, NumberOperator, NumberPredicate,
     ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     ProxyListener, ProxyWorkspace, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
     ScriptedSocketProcessing, SecretReference, SocketDownstreamSecurity,
@@ -17,16 +18,26 @@ pub use intercept_proxy_domain::{
     UpstreamTlsSettings, WorkspaceId,
 };
 
-/// 标识一次代理启动周期。代理重启后旧周期的事件和断点不得继续操作。
+/// 标识一次代理启动周期。代理重启后旧周期的事件不得继续操作。
 pub type RuntimeEpoch = Uuid;
 /// 应用 DTO 使用的乐观并发版本号。
 pub type Revision = u64;
 /// 应用层会话标识。
 pub type SessionId = Uuid;
-/// 应用层断点标识。
-pub type BreakpointId = Uuid;
 /// 应用层规则标识。
 pub type RuleId = Uuid;
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 可复用于规则、设置和证书的字段校验结果。
+pub struct FieldValidationViewModel {
+    pub valid: bool,
+    pub field_errors: BTreeMap<String, Vec<String>>,
+    pub warnings: Vec<String>,
+}
+
+pub type RuleValidationViewModel = FieldValidationViewModel;
+pub type CertificateValidationViewModel = FieldValidationViewModel;
+pub type SettingsValidationViewModel = FieldValidationViewModel;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize, Type)]
 #[serde(rename_all = "snake_case")]

@@ -1760,64 +1760,6 @@
               }
             ]
           },
-          "conditionTree": {
-            "oneOf": [
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "children": {
-                    "items": {
-                      "$ref": "#/$defs/conditionTree"
-                    },
-                    "type": "array"
-                  },
-                  "operator": {
-                    "const": "all"
-                  }
-                },
-                "required": [
-                  "operator",
-                  "children"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "children": {
-                    "items": {
-                      "$ref": "#/$defs/conditionTree"
-                    },
-                    "type": "array"
-                  },
-                  "operator": {
-                    "const": "any"
-                  }
-                },
-                "required": [
-                  "operator",
-                  "children"
-                ],
-                "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "children": {
-                    "$ref": "#/$defs/condition"
-                  },
-                  "operator": {
-                    "const": "leaf"
-                  }
-                },
-                "required": [
-                  "operator",
-                  "children"
-                ],
-                "type": "object"
-              }
-            ]
-          },
           "documentMutation": {
             "oneOf": [
               {
@@ -2053,11 +1995,6 @@
           },
           "httpAction": {
             "oneOf": [
-              {
-                "enum": [
-                  "Pause"
-                ]
-              },
               {
                 "additionalProperties": false,
                 "properties": {
@@ -2540,37 +2477,21 @@
                 },
                 "type": "array"
               },
-              "condition": {
-                "$ref": "#/$defs/conditionTree"
+              "conditions": {
+                "items": {
+                  "$ref": "#/$defs/condition"
+                },
+                "minItems": 1,
+                "type": "array"
               },
               "description": {
                 "type": "string"
-              },
-              "document": {
-                "oneOf": [
-                  {
-                    "type": "null"
-                  },
-                  {
-                    "additionalProperties": false,
-                    "properties": {
-                      "package": {
-                        "$ref": "#/$defs/packageRef"
-                      }
-                    },
-                    "required": [
-                      "package"
-                    ],
-                    "type": "object"
-                  }
-                ]
               }
             },
             "required": [
               "description",
-              "condition",
-              "actions",
-              "document"
+              "conditions",
+              "actions"
             ],
             "type": "object"
           },
@@ -2796,8 +2717,7 @@
               "stage": {
                 "enum": [
                   "proxy_to_upstream",
-                  "proxy_to_app",
-                  "tls_handshake"
+                  "proxy_to_app"
                 ]
               }
             },
@@ -3438,8 +3358,12 @@
                 },
                 "type": "array"
               },
-              "condition": {
-                "$ref": "#/$defs/conditionTree"
+              "conditions": {
+                "items": {
+                  "$ref": "#/$defs/condition"
+                },
+                "minItems": 1,
+                "type": "array"
               },
               "package": {
                 "$ref": "#/$defs/packageRef"
@@ -3447,7 +3371,7 @@
             },
             "required": [
               "package",
-              "condition",
+              "conditions",
               "actions"
             ],
             "type": "object"
@@ -3498,7 +3422,6 @@
             "oneOf": [
               {
                 "enum": [
-                  "RejectTlsHandshake",
                   "DisconnectBeforeUpstream"
                 ]
               },

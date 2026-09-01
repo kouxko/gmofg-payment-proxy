@@ -1,3 +1,5 @@
+use std::{ffi::OsString, path::PathBuf};
+
 use super::{
     Connection, DateTime, InfrastructureError, Mutex, OptionalExtension, Path,
     ProtectedSecretRecord, SqliteStore, StoredSettings, TransactionBehavior, Utc,
@@ -9,13 +11,36 @@ use crate::sqlite::schema::CURRENT_SCHEMA_VERSION;
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 enum ExistingSchema {
     Current,
+    PreBaseline(i64),
 }
 
 impl SqliteStore {
     pub fn open(path: &Path) -> Result<Self, InfrastructureError> {
+        let _startup_ownership = acquire_startup_ownership(path)?;
         let connection =
             Connection::open(path).map_err(|source| InfrastructureError::Database { source })?;
-        Self::from_connection(connection)
+        match inspect_existing_schema(&connection)? {
+            None | Some(ExistingSchema::Current) => Self::from_connection(connection),
+            Some(ExistingSchema::PreBaseline(_)) => {
+                connection
+                    .close()
+                    .map_err(|(_, source)| InfrastructureError::Database { source })?;
+                let connection = Connection::open(path)
+                    .map_err(|source| InfrastructureError::Database { source })?;
+                match inspect_existing_schema(&connection)? {
+                    None | Some(ExistingSchema::Current) => Self::from_connection(connection),
+                    Some(ExistingSchema::PreBaseline(_)) => {
+                        connection
+                            .close()
+                            .map_err(|(_, source)| InfrastructureError::Database { source })?;
+                        clear_pre_baseline_database(path)?;
+                        let connection = Connection::open(path)
+                            .map_err(|source| InfrastructureError::Database { source })?;
+                        Self::from_connection(connection)
+                    }
+                }
+            }
+        }
     }
 
     pub fn in_memory() -> Result<Self, InfrastructureError> {
@@ -31,9 +56,12 @@ impl SqliteStore {
                  PRAGMA busy_timeout = 5000;",
             )
             .map_err(|source| InfrastructureError::Database { source })?;
-        let database_is_empty = database_is_empty(&connection)?;
-        if !database_is_empty {
-            classify_existing_schema(&connection)?;
+        let existing_schema = inspect_existing_schema(&connection)?;
+        if let Some(ExistingSchema::PreBaseline(version)) = existing_schema {
+            return Err(InfrastructureError::DatabaseSchemaInvalid {
+                current: CURRENT_SCHEMA_VERSION,
+                found: vec![(1, version)],
+            });
         }
         connection
             .execute_batch("PRAGMA journal_mode = WAL;")
@@ -42,7 +70,7 @@ impl SqliteStore {
             connection: Mutex::new(connection),
             blocking_gate: std::sync::Arc::new(tokio::sync::Semaphore::new(1)),
         };
-        if database_is_empty {
+        if existing_schema.is_none() {
             store.create_schema()?;
         }
         Ok(store)
@@ -63,6 +91,12 @@ impl SqliteStore {
             ExistingSchema::Current => transaction
                 .commit()
                 .map_err(|source| InfrastructureError::DatabaseSchema { source }),
+            ExistingSchema::PreBaseline(version) => {
+                Err(InfrastructureError::DatabaseSchemaInvalid {
+                    current: CURRENT_SCHEMA_VERSION,
+                    found: vec![(1, version)],
+                })
+            }
         }
     }
 
@@ -193,6 +227,48 @@ impl SqliteStore {
     }
 }
 
+fn acquire_startup_ownership(path: &Path) -> Result<Connection, InfrastructureError> {
+    let connection = Connection::open(sqlite_sidecar_path(path, ".startup-lock"))
+        .map_err(|source| InfrastructureError::Database { source })?;
+    connection
+        .execute_batch("PRAGMA busy_timeout = 5000;")
+        .map_err(|source| InfrastructureError::Database { source })?;
+    #[cfg(test)]
+    if STARTUP_OWNERSHIP_CONTENTION_PROBE_ENABLED.load(std::sync::atomic::Ordering::SeqCst) {
+        connection
+            .busy_handler(Some(startup_ownership_contention_probe))
+            .map_err(|source| InfrastructureError::Database { source })?;
+    }
+    connection
+        .execute_batch("BEGIN EXCLUSIVE;")
+        .map_err(|source| InfrastructureError::Database { source })?;
+    Ok(connection)
+}
+
+#[cfg(test)]
+static STARTUP_OWNERSHIP_CONTENTION_PROBE_ENABLED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+#[cfg(test)]
+static STARTUP_OWNERSHIP_CONTENTION_OBSERVED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+#[cfg(test)]
+fn startup_ownership_contention_probe(attempt: i32) -> bool {
+    STARTUP_OWNERSHIP_CONTENTION_OBSERVED.store(true, std::sync::atomic::Ordering::SeqCst);
+    std::thread::sleep(std::time::Duration::from_millis(1));
+    attempt < 5_000
+}
+
+fn inspect_existing_schema(
+    connection: &Connection,
+) -> Result<Option<ExistingSchema>, InfrastructureError> {
+    if database_is_empty(connection)? {
+        Ok(None)
+    } else {
+        classify_existing_schema(connection).map(Some)
+    }
+}
+
 fn database_is_empty(connection: &Connection) -> Result<bool, InfrastructureError> {
     connection
         .query_row(
@@ -236,11 +312,42 @@ fn classify_existing_schema(
         .map_err(|source| InfrastructureError::DatabaseSchema { source })?;
     match markers.as_slice() {
         [(1, version)] if *version == CURRENT_SCHEMA_VERSION => Ok(ExistingSchema::Current),
+        [(1, version)] if *version < CURRENT_SCHEMA_VERSION => {
+            Ok(ExistingSchema::PreBaseline(*version))
+        }
         _ => Err(InfrastructureError::DatabaseSchemaInvalid {
             current: CURRENT_SCHEMA_VERSION,
             found: markers,
         }),
     }
+}
+
+fn clear_pre_baseline_database(path: &Path) -> Result<(), InfrastructureError> {
+    for sidecar in [
+        sqlite_sidecar_path(path, "-shm"),
+        sqlite_sidecar_path(path, "-wal"),
+    ] {
+        match std::fs::remove_file(&sidecar) {
+            Ok(()) => {}
+            Err(source) if source.kind() == std::io::ErrorKind::NotFound => {}
+            Err(source) => {
+                return Err(InfrastructureError::DatabaseReset {
+                    path: sidecar,
+                    source,
+                });
+            }
+        }
+    }
+    std::fs::remove_file(path).map_err(|source| InfrastructureError::DatabaseReset {
+        path: path.to_path_buf(),
+        source,
+    })
+}
+
+fn sqlite_sidecar_path(path: &Path, suffix: &str) -> PathBuf {
+    let mut value = OsString::from(path.as_os_str());
+    value.push(suffix);
+    PathBuf::from(value)
 }
 
 fn initialize_current_schema(

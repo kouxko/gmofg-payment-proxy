@@ -3,6 +3,8 @@
 /** 验证桌面外壳导航、移动 Drawer 和选中态不会触发整页刷新。 */
 
 import "@testing-library/jest-dom/vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -73,10 +75,6 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
         },
 }));
 
-vi.mock("@/features/breakpoints/breakpoints-view", () => ({
-  BreakpointModal: () => null,
-}));
-
 describe("UI-001 fixed navigation order", () => {
   it("matches the frozen requirement document", () => {
     expect(navigation.map((item) => item.href)).toEqual([
@@ -118,6 +116,21 @@ describe("shell content boundary", () => {
   it("keeps the full-width Rust error alert inside the right page edge", () => {
     expect(shellErrorRegionClassName).toContain("px-5");
     expect(shellErrorRegionClassName).not.toContain("m-");
+  });
+});
+
+describe("breakpoint product removal", () => {
+  it("does not ship a breakpoint feature or global overlay", () => {
+    const repositoryRoot = resolve(process.cwd());
+    const appShellSource = readFileSync(
+      resolve(repositoryRoot, "src/features/shell/app-shell.tsx"),
+      "utf8",
+    );
+
+    expect(
+      existsSync(resolve(repositoryRoot, "src/features/breakpoints")),
+    ).toBe(false);
+    expect(appShellSource).not.toMatch(/BreakpointModal|features\/breakpoints/);
   });
 });
 

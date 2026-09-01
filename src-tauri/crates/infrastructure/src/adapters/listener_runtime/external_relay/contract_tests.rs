@@ -1,8 +1,8 @@
 use super::*;
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, DocumentMutation, DocumentPredicate, DocumentValue,
-    JsonPointer, ListenerId, ProtocolDirection, RuleContent, RuleDefinition, RuleDefinitionDraft,
-    RuleStage, SocketRuleContent, StringOperator, StringPredicate, UnifiedAction,
+    Condition, Document, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
+    ListenerId, ProtocolDirection, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
+    SocketRuleContent, StringOperator, StringPredicate, UnifiedAction,
 };
 
 fn socket_rule(
@@ -19,13 +19,13 @@ fn socket_rule(
             one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                condition: ConditionTree::Leaf(Condition::Document {
+                conditions: vec![Condition::Document {
                     path: JsonPointer::property("request"),
                     predicate: DocumentPredicate::String(StringPredicate {
                         operator: StringOperator::Equal,
                         value: "original".to_owned(),
                     }),
-                }),
+                }],
                 actions: vec![UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property("request"),
                     value: DocumentValue::String("updated".to_owned()),

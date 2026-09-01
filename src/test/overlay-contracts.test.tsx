@@ -78,9 +78,9 @@ function OverlayContractHarness() {
           <Drawer.Content placement="right">
             <Drawer.Dialog>
               <Drawer.Header>
-                <Drawer.Heading>处理断点</Drawer.Heading>
+                <Drawer.Heading>查看请求</Drawer.Heading>
               </Drawer.Header>
-              <Drawer.Body>断点详情。</Drawer.Body>
+              <Drawer.Body>请求详情。</Drawer.Body>
               <Drawer.Footer>
                 <Button slot="close" variant="outline">
                   取消处理
@@ -112,12 +112,12 @@ describe("HeroUI overlay contracts", () => {
 
     await user.click(screen.getByRole("button", { name: "打开抽屉" }));
     expect(
-      screen.getByRole("dialog", { name: "处理断点" }),
+      screen.getByRole("dialog", { name: "查看请求" }),
     ).toBeVisible();
     await user.click(screen.getByRole("button", { name: "取消处理" }));
     await waitFor(() =>
       expect(
-        screen.queryByRole("dialog", { name: "处理断点" }),
+        screen.queryByRole("dialog", { name: "查看请求" }),
       ).not.toBeInTheDocument(),
     );
   });

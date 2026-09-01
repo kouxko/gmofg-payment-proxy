@@ -225,7 +225,7 @@ impl ListenerRuntimeAdapter {
         self
     }
 
-    /// 由 Host 在通用规则、会话和断点服务完成装配后注入共享管线。
+    /// 由 Host 在通用规则和会话服务完成装配后注入共享管线。
     ///
     /// `InfrastructureServiceBundle` 创建时这些服务尚未全部存在，因此使用一次性显式
     /// setter；运行中的 Listener 会克隆不可变 `Arc`，不会在连接处理中热换实现。

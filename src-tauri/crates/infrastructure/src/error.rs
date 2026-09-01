@@ -40,6 +40,12 @@ pub enum InfrastructureError {
         current: i64,
         found: Vec<(i64, i64)>,
     },
+    #[error("旧数据库清除失败：{path}")]
+    DatabaseReset {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("数据库操作失败")]
     Database {
         #[source]
@@ -105,9 +111,9 @@ impl InfrastructureError {
     #[must_use]
     pub const fn code(&self) -> InfrastructureErrorCode {
         match self {
-            Self::DatabaseSchema { .. } | Self::DatabaseSchemaInvalid { .. } => {
-                InfrastructureErrorCode::DatabaseSchemaFailed
-            }
+            Self::DatabaseSchema { .. }
+            | Self::DatabaseSchemaInvalid { .. }
+            | Self::DatabaseReset { .. } => InfrastructureErrorCode::DatabaseSchemaFailed,
             Self::Database { .. }
             | Self::DatabaseExecutorTerminated { .. }
             | Self::DatabaseExecutorUnavailable => InfrastructureErrorCode::DatabaseWriteFailed,

@@ -33,8 +33,7 @@ fn logical_byte_accounting_is_exact_and_repeatable() {
     let expected = SessionRecord::ENTITY_FIXED_OVERHEAD_BYTES
         + strings as u64
         + trace_bytes
-        + expected_message
-        + content(b"draft").logical_bytes();
+        + expected_message;
     assert_eq!(record.logical_bytes(), expected);
 }
 
@@ -101,14 +100,13 @@ fn capacity_evicts_completed_in_order_and_rejects_when_all_are_pending() {
     assert_eq!(store.len(), 2, "failed insert rolls back atomically");
 }
 
-// DATA-009~011: an active session without a breakpoint is never an eviction candidate.
+// DATA-009~011: an active session is never an eviction candidate.
 #[test]
-fn capacity_never_evicts_active_sessions_without_breakpoints() {
+fn capacity_never_evicts_active_sessions() {
     let store = InMemorySessionStore::new(1, u64::MAX);
     let active_id = Uuid::from_u128(1);
     let mut active = session(active_id, 1, false, b"active");
     active.detail.summary.completed_at = None;
-    active.detail.summary.pending_breakpoint = false;
     store.upsert(active).expect("insert active session");
 
     let completed_id = Uuid::from_u128(2);
@@ -196,7 +194,7 @@ fn session_query_is_deterministic() {
     );
 }
 
-// DATA-004~006, BREAKPOINT-013~015, TEST-BREAKPOINT.
+// DATA-004~006.
 #[tokio::test]
 async fn event_admission_reclaims_replay_and_slow_queues_without_overcommit() {
     let payload = UiEventPayload::ResourceWarning {

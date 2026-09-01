@@ -27,7 +27,7 @@ Socket 字节、Document、Display 及实际发送内容。两者不能互相替
 | Runtime log | Tauri `RuntimeLogStore` | Rust/Tauri 格式化日志；20,000 条且 JSONL 最多 32 MiB，约 75% 低水位批量滚动 | MCP `application_log_*`、复现报告 | 不作为可逆 wire 报文来源；当前 UI 展示的是 Structured diagnostics |
 | Structured diagnostics | Application `EventHub` | Listener、Android、TLS、Socket、规则和外部包的类型化阶段/结果；随 EventHub 有界回放 | UI、MCP `diagnostics_query` | 不复制 Exchange/HTTP payload；这是职责隔离，不是隐私过滤 |
 | Reproduction report | Application report + Tauri composer | 精确 Workspace/Listener 快照、diagnostics、最近 200 条 runtime logs；Markdown 最多 256 Ki 字符 | 原生导出、MCP `reproduction_report` | 不隐式聚合 Exchange observation 或 HTTP capture |
-| MCP projection | Tauri MCP backend | 36 个查询工具只读投影现有 store/Application；五个环境配置工具调用 Application 候选用例；预算按工具类别独立限制 | 任意网络可达 MCP 客户端 | 不创建第二份观测存储，不直接访问 SQLite/保护器/任意文件 |
+| MCP projection | Tauri MCP backend | 34 个查询工具只读投影现有 store/Application；五个环境配置工具调用 Application 候选用例；预算按工具类别独立限制 | 任意网络可达 MCP 客户端 | 不创建第二份观测存储，不直接访问 SQLite/保护器/任意文件 |
 
 ## 2. ExchangeObservation 模型
 
@@ -182,7 +182,7 @@ IPv6 独立绑定、双栈覆盖、不支持和其他绑定失败分别通过 ca
 授权。任何能够连接端口的主机都可以读取公开数据并调用环境配置工具；网络观察者可能看到明文提交的
 私钥、密码和 confirmation token。这是接受的高风险远程写边界，不是安全远程管理能力。
 
-36 个既有工具继续只读，主要诊断工具包括：
+34 个既有工具继续只读，主要诊断工具包括：
 
 - `application_snapshot`：一次 generation 校验后的应用快照；
 - `application_log_query/get`：普通运行日志；
@@ -249,5 +249,5 @@ Exchange 流程完成。任何一项都不能单独证明外部业务系统已�
 - Pipeline 失败产生 Failed + Closed failed；
 - JSONL 重开、坏行、重复 ID、低水位滚动和写失败；
 - MCP 五个环境工具的精确 read-only/destructive/idempotent 注解，以及各类输入输出预算与 deadline；
-- MCP 顶层/嵌套封闭输入、36 个旧查询加五个环境工具的目录/分发一致性、成功输出根类型与文档全量工具名；
+- MCP 顶层/嵌套封闭输入、34 个查询加五个环境工具的目录/分发一致性、成功输出根类型与文档全量工具名；
 - UI、MCP 查询同一个 ExchangeObservationStore。

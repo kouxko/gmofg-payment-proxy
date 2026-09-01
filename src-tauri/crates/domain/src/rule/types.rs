@@ -69,7 +69,6 @@ pub enum JitterScope {
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 pub enum TerminalAction {
-    RejectTlsHandshake,
     DisconnectBeforeUpstream,
     UpstreamConnectTimeout {
         milliseconds: u64,
@@ -160,7 +159,6 @@ pub enum HttpAction {
         blocked_milliseconds: u64,
         direction: TrafficDirection,
     },
-    Pause,
     CustomHttpStatus {
         status: u16,
     },

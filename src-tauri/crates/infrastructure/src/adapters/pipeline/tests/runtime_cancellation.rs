@@ -10,11 +10,8 @@ fn cancellation_one_shot_rule() -> RuleDefinition {
             content: intercept_proxy_domain::RuleContent::Http(
                 intercept_proxy_domain::HttpRuleContent {
                     description: String::new(),
-                    condition: intercept_proxy_domain::ConditionTree::Leaf(
-                        intercept_proxy_domain::Condition::NthHit { count: 1 },
-                    ),
+                    conditions: vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
                     actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
-                    document: None,
                 },
             ),
         },
@@ -136,7 +133,6 @@ async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_m
         test_product_hooks(),
         rules.clone(),
         Arc::new(InMemorySessionStore::default()),
-        Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(16)),
         test_capture_repository(),
     ));
@@ -205,7 +201,6 @@ async fn aborted_runtime_stopping_still_retires_epoch_and_resets_actor() {
         test_product_hooks(),
         rules.clone(),
         Arc::new(InMemorySessionStore::default()),
-        Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(16)),
         test_capture_repository(),
     ));

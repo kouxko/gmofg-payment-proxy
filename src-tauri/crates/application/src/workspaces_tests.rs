@@ -41,7 +41,7 @@ async fn create_validate_save_copy_select_and_delete_share_one_revision_contract
 #[test]
 fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_binding() {
     use intercept_proxy_domain::{
-        Condition, ConditionTree, DocumentPredicate, ProtocolPackageId, ProtocolPackageRef,
+        Condition, DocumentPredicate, ProtocolPackageId, ProtocolPackageRef,
         ProtocolPackageVersion, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
         ScriptedSocketProcessing, SocketEndpoint, SocketPayloadProcessing, SocketRelaySettings,
         SocketRuleContent, StringOperator, StringPredicate, UnifiedAction,
@@ -74,13 +74,13 @@ fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_b
             one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                condition: ConditionTree::Leaf(Condition::Document {
+                conditions: vec![Condition::Document {
                     path: intercept_proxy_domain::JsonPointer::property("trace_id"),
                     predicate: DocumentPredicate::String(StringPredicate {
                         operator: StringOperator::Equal,
                         value: "phase5".into(),
                     }),
-                }),
+                }],
                 actions: vec![UnifiedAction::RecordMatch],
             }),
         },

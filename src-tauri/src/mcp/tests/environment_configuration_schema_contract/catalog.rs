@@ -24,7 +24,7 @@ fn old_read_tool_catalog_and_budgets_remain_unchanged() {
         .iter()
         .filter(|tool| !environment_names.contains(tool.name.as_ref()))
         .collect::<Vec<_>>();
-    assert_eq!(existing_reads.len(), 36);
+    assert_eq!(existing_reads.len(), 34);
     assert!(existing_reads.iter().all(|tool| {
         tool.annotations
             .as_ref()

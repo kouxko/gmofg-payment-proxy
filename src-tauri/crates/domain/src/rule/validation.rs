@@ -1,25 +1,22 @@
-use crate::{Condition, ConditionTree, DomainError, ErrorCode, JsonPath, MessageStage};
+use crate::{Condition, DomainError, ErrorCode, JsonPath, MessageStage};
 
 use super::{
     HttpAction, MAX_THROTTLE_BYTES_PER_SECOND, MAX_TOTAL_DELAY_MS, MAX_TRAFFIC_CHUNK_BYTES,
-    MatchField, TerminalAction, TrafficDirection, validate_http_condition,
+    TerminalAction, TrafficDirection, validate_http_condition,
 };
 
 pub(crate) fn validate_http_rule(
     stage: MessageStage,
-    condition: &ConditionTree,
+    conditions: &[Condition],
     actions: &[HttpAction],
 ) -> Result<(), DomainError> {
     let mut error = DomainError::new(ErrorCode::RuleInvalid, "规则配置非法");
     if actions.is_empty() {
         error = error.with_field_error("actions", "至少配置一个动作");
     }
-    let mut conditions = Vec::new();
-    collect_conditions(condition, &mut conditions);
-    validate_conditions(&conditions, &mut error);
+    validate_conditions(conditions, &mut error);
     validate_total_delay(actions, &mut error);
     validate_actions(stage, actions, &mut error);
-    validate_tls_conditions(stage, &conditions, &mut error);
 
     if error.field_errors.is_empty() {
         Ok(())
@@ -28,18 +25,7 @@ pub(crate) fn validate_http_rule(
     }
 }
 
-fn collect_conditions<'a>(tree: &'a ConditionTree, output: &mut Vec<&'a Condition>) {
-    match tree {
-        ConditionTree::All(children) | ConditionTree::Any(children) => {
-            for child in children {
-                collect_conditions(child, output);
-            }
-        }
-        ConditionTree::Leaf(condition) => output.push(condition),
-    }
-}
-
-fn validate_conditions(conditions: &[&Condition], error: &mut DomainError) {
+fn validate_conditions(conditions: &[Condition], error: &mut DomainError) {
     for (index, condition) in conditions.iter().enumerate() {
         match condition {
             Condition::Http { field, operator } => {
@@ -80,30 +66,6 @@ fn validate_total_delay(actions: &[HttpAction], error: &mut DomainError) {
     });
     if total_delay > MAX_TOTAL_DELAY_MS {
         push_field_error(error, "actions", "累计延迟不得超过 600000 毫秒");
-    }
-}
-
-fn validate_tls_conditions(
-    stage: MessageStage,
-    conditions: &[&Condition],
-    error: &mut DomainError,
-) {
-    if stage == MessageStage::TlsHandshake
-        && conditions.iter().any(|condition| {
-            !matches!(
-                condition,
-                Condition::Http {
-                    field: MatchField::CertificateFingerprint,
-                    ..
-                } | Condition::NthHit { .. }
-            )
-        })
-    {
-        push_field_error(
-            error,
-            "conditions",
-            "TLS 握手拒绝只允许通道、客户端证书和第 N 次命中条件",
-        );
     }
 }
 
@@ -352,8 +314,7 @@ fn action_compatible(stage: MessageStage, action: &HttpAction) -> bool {
         | HttpAction::ReplaceBodyText(_)
         | HttpAction::SetHeader { .. }
         | HttpAction::Delay { .. }
-        | HttpAction::Jitter { .. }
-        | HttpAction::Pause => stage != MessageStage::TlsHandshake,
+        | HttpAction::Jitter { .. } => stage != MessageStage::TlsHandshake,
         HttpAction::Throttle { direction, .. } | HttpAction::Intermittent { direction, .. } => {
             matches!(
                 (stage, direction),
@@ -368,7 +329,6 @@ fn action_compatible(stage: MessageStage, action: &HttpAction) -> bool {
 
 fn terminal_compatible(stage: MessageStage, terminal: &TerminalAction) -> bool {
     match terminal {
-        TerminalAction::RejectTlsHandshake => stage == MessageStage::TlsHandshake,
         TerminalAction::DisconnectBeforeUpstream
         | TerminalAction::UpstreamConnectTimeout { .. }
         | TerminalAction::UpstreamWriteTimeout { .. }

@@ -19,9 +19,11 @@ fn schema_keeps_all_runtime_payload_storage_absent() {
             "workspaces"
         ]
     );
-    assert!(!tables.iter().any(|name| name.contains("http_capture")
-        || name.contains("http_session")
-        || name.contains("breakpoint")));
+    assert!(
+        !tables
+            .iter()
+            .any(|name| name.contains("http_capture") || name.contains("http_session"))
+    );
     let secret_columns = store
         .connection
         .lock()

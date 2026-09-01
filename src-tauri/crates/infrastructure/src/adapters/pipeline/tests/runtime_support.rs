@@ -12,6 +12,30 @@ fn codec_failures_keep_generic_stable_error_codes() {
 }
 
 #[derive(Debug)]
+struct RejectingCodec;
+
+impl BodyCodec for RejectingCodec {
+    fn id(&self) -> &'static str {
+        "rejecting"
+    }
+
+    fn name(&self) -> &'static str {
+        "Rejecting Codec"
+    }
+
+    fn decode(&self, _: &[u8]) -> Result<String, intercept_proxy_product_api::ProductError> {
+        Ok(String::new())
+    }
+
+    fn encode(&self, _: &str) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
+        Err(intercept_proxy_product_api::ProductError::new(
+            "PRODUCT_SPECIFIC_CODE",
+            "rejected",
+        ))
+    }
+}
+
+#[derive(Debug)]
 struct StaticRules {
     snapshot: Mutex<RuleRuntimeSnapshot>,
 }
@@ -82,7 +106,6 @@ fn adapter(rules: Vec<RuleDefinition>, max_sessions: usize) -> Arc<RuntimePipeli
             snapshot: Mutex::new(RuleRuntimeSnapshot::new(rules)),
         }),
         Arc::new(InMemorySessionStore::new(max_sessions, 64 * 1024 * 1024)),
-        Arc::new(BreakpointCoordinator::default()),
         Arc::new(EventHub::new(128)),
         test_capture_repository(),
     ))

@@ -159,14 +159,8 @@
       },
       {
         "candidate_index": 13,
-        "candidate_local_id": "00000000-0000-0000-0000-00000000012d",
-        "created_order": 23,
-        "listener_alias": "http-entry"
-      },
-      {
-        "candidate_index": 14,
-        "candidate_local_id": "00000000-0000-0000-0000-00000000013e",
-        "created_order": 34,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000013d",
+        "created_order": 33,
         "listener_alias": "socket-entry"
       }
     ]

@@ -95,30 +95,3 @@ fn test_product_hooks() -> RuntimePipelineProductHooks {
         channel_labels: test_channel_labels(),
     }
 }
-
-#[derive(Debug)]
-struct StableErrorCodec;
-
-impl BodyCodec for StableErrorCodec {
-    fn id(&self) -> &'static str {
-        "stable-error"
-    }
-
-    fn name(&self) -> &'static str {
-        "Stable Error"
-    }
-
-    fn decode(&self, _bytes: &[u8]) -> Result<String, intercept_proxy_product_api::ProductError> {
-        Err(intercept_proxy_product_api::ProductError::new(
-            "PRODUCT_DECODE_FAILED",
-            "decode failed",
-        ))
-    }
-
-    fn encode(&self, _text: &str) -> Result<Vec<u8>, intercept_proxy_product_api::ProductError> {
-        Err(intercept_proxy_product_api::ProductError::new(
-            "PRODUCT_ENCODE_FAILED",
-            "encode failed",
-        ))
-    }
-}

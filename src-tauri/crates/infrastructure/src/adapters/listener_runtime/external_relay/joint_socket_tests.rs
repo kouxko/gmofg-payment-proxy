@@ -5,9 +5,8 @@ use std::sync::{
 
 use async_trait::async_trait;
 use intercept_proxy_domain::{
-    Condition, ConditionTree, Document, ListenerId, ProtocolDirection, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, RuleId, RuleProgramEntry, UnifiedAction,
-    UnifiedRuleProgram,
+    Condition, Document, ListenerId, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef,
+    ProtocolPackageVersion, RuleId, RuleProgramEntry, UnifiedAction, UnifiedRuleProgram,
 };
 use intercept_proxy_exchange::{Rules, SocketContext};
 use intercept_proxy_package_contract::{
@@ -113,7 +112,7 @@ async fn socket_frame_waits_for_listener_gate_before_reading_rule_generation() {
                     expected_rule,
                     1,
                     1,
-                    ConditionTree::Leaf(Condition::NthHit { count: 1 }),
+                    vec![Condition::NthHit { count: 1 }],
                     vec![UnifiedAction::RecordMatch],
                 )
                 .unwrap(),

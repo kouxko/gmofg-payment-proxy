@@ -5,9 +5,8 @@ use std::{
 };
 
 use intercept_proxy_application::{
-    AppResult, ConditionTree, MessageStage, ProtocolPackageKindViewModel,
-    ProtocolPackageValidationViewModel, RuleActionKind, RuleContent, RuleEditorContentContext,
-    RuleStage, UnifiedAction, WorkspaceId,
+    AppResult, ProtocolPackageKindViewModel, ProtocolPackageValidationViewModel, RuleActionKind,
+    RuleContent, RuleEditorContentContext, RuleStage, UnifiedAction, WorkspaceId,
 };
 use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use intercept_proxy_product_api::InterceptProxyProfile;
@@ -176,13 +175,13 @@ async fn seed_two_start_fixture(
         panic!("HTTP rule draft expected");
     };
     http_content.description = "phase2 lifecycle fixture".into();
-    http_content.condition = ConditionTree::Leaf(
+    http_content.conditions = vec![
         application
             .rule_definition_nth_hit_condition_draft(
                 intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
             )
             .expect("explicit positive nth-hit condition"),
-    );
+    ];
     http_content.actions = vec![UnifiedAction::from(
         application
             .rule_definition_action_draft(
@@ -190,7 +189,7 @@ async fn seed_two_start_fixture(
                     kind: RuleActionKind::Delay,
                     parameters_json: Some(r#"{"milliseconds":100}"#.into()),
                 },
-                MessageStage::Request,
+                RuleStage::ProxyToUpstream,
             )
             .expect("explicit delay action"),
     )];
