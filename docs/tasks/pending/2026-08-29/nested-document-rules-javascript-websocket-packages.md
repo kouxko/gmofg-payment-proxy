@@ -7,7 +7,7 @@
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-09-01 16:14:52 +08:00`
+- 最后更新时间：`2026-09-01 18:40:12 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
 - 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
@@ -57,11 +57,11 @@
 - Document 领域层不依赖 HTTP；应用层组合类型化上下文和 Document 能力。Socket 复用规则生命周期和执行骨架，但不获得 HTTP 能力。
 - 消息规则只保留 `ProxyToUpstream` 和 `ProxyToApp` 两个写出阶段，删除 `AppToProxy` 与 `UpstreamToProxy` 消息规则阶段。
 - 物理删除 TLS 握手规则阶段、拒绝 TLS 握手规则动作和对应故障模板；不解析旧阶段、旧动作或旧配置，不增加兼容、迁移、别名或回退。
-- 每条规则包含一个非空扁平条件列表和一个非空有序动作列表；同一规则内的多个条件固定为 AND。需要 OR 时创建多条规则，不提供条件组、NOT 或递归布尔树。
+- 每条规则只包含一个条件和与该条件对应的一个动作；删除条件组、AND/OR、全局有序动作列表和条件/动作分开添加的编辑方式。需要多个条件或动作时创建多条规则。
 - 规则按 priority 升序、相同 priority 按 Rule ID 升序执行；后一规则读取前面动作产生的当前 working state。
-- 条件命中后按声明顺序执行动作；Mock、主动断连、模拟网络故障等终止动作必须是该规则最后一个动作，并停止后续规则。
+- 条件命中后只执行其对应动作；Mock、主动断连、模拟网络故障等终止动作停止后续规则。
 - 整个方向规则链在私有 working Exchange 上执行。任何条件、动作、Encode 或提交校验失败都回滚 HTTP/Document 修改、控制效果和命中状态，并明确终止 Exchange；不得透传、部分提交、转成 no-match、重试或回退。
-- 保留 `enabled`、`priority`、Nth-hit、one-shot、hit count、last hit time 和 revision 并发保护；仅整条规则链成功后提交生命周期状态。
+- 保留 `enabled`、`priority`、hit count、last hit time 和 revision 并发保护；所有规则持续生效直到显式禁用或删除。one-shot/单次/持续选择与对应 Domain、Application、Runtime、持久化、wire、UI、测试和文档合同全链物理删除，不解析旧字段且不增加兼容、默认、迁移或回退；仅整条规则链成功后提交命中生命周期状态。Nth-hit 全链物理删除。
 
 ### 5. 条件与动作
 
@@ -188,6 +188,10 @@ result: "<HTML string>"
 
 ## 需求确认记录
 
+- `2026-09-01 18:40:12 +08:00`：用户确认 HTTP 与 Socket 共用同一套简化规则编辑骨架；新建规则的 enabled 不再使用“是否启用”下拉，改为与编辑规则一致的单一“启用规则”开关。one-shot/是否单次整列继续物理删除。HTTP 与 Socket 都必须通过同一回归断言。
+- `2026-09-01 18:22:57 +08:00`：用户再次收紧规则编辑器：每条规则界面只显示一个条件表单和一个对应动作表单，删除“添加 Document 条件”“添加 Document 动作”等中间提交按钮、删除重复的“规则配对”预览，并删除无用的“添加：记录命中”快捷按钮。最终“保存规则”是唯一提交动作，保存时由 Rust factory 生成并校验唯一条件与唯一动作；不保留旧追加、替换按钮或兼容 UI。
+- `2026-09-01 18:15:33 +08:00`：用户明确删除规则“是否单次/持续”整套能力，不只隐藏 UI；规则固定持续生效直到显式禁用或删除，不保留 one-shot wire、生命周期、持久化字段或兼容路径。用户同时确认 Schema 根节点被选择时路径输入框必须显示 `/`，内部仍保持 RFC 6901 根路径空字符串。验收更新为：新建/编辑规则界面无单次/持续控件，全仓当前生产合同无 one-shot 字段；Schema 根节点选择后输入框显示 `/` 且提交 Rust factory 的 path 仍为 `""`。
+
 | 时间 | 结论 |
 | --- | --- |
 | `2026-08-29 20:28:30 +08:00` | 建立初始 TASK-002，但当时的单动作、原始快照匹配、自动复制树、四阶段残留和可配置 Hook 等结论尚未完成最终访谈。 |
@@ -202,6 +206,9 @@ result: "<HTML string>"
 | `2026-09-01 11:25:53 +08:00` | 新一轮实际 App 验收确认三项变更：规则编辑器同组输入框、选择框和按钮必须对齐并使用统一尺寸；无协议 Schema 时 HTTP Body 仍必须允许手工输入 RFC 6901 `/a/b` 路径创建匹配条件，不能只显示“无 Body Document 能力”；断点功能与规则 `Pause` 动作全部物理删除，不保留隐藏入口、兼容 wire、迁移、alias、fallback 或额外错误处理。当前旧构建代理链路继续用隔离数据库同步验证；上述源码完成并重新构建后立即开始第二轮 GUI 与真实 Proxy 链路测试。受影响 NDR-JS-03、09、11、12 再次打开。 |
 | `2026-09-01 13:08:47 +08:00` | 用户授权提交并推送当前任务分支、触发 Windows 候选构建；产品版本为“1.00”，仓库 SemVer 保持 `1.0.0`。用户覆盖 Phase17 的 `<100` fail-closed/no-mutation 合同：唯一有效版本标记 `<100` 时启动默认整库清除并创建全新 Schema 100，不迁移、不兼容、不保留旧数据；Schema 100 原样保留，`>100`、缺少或损坏标记继续 fail-closed。正式标签与 GitHub Release 未获授权，本次只运行 Windows `verify-and-build` 候选 workflow。NDR-JS-10、11、12 重新打开。 |
 | `2026-09-01 16:14:52 +08:00` | 首次 Windows workflow run `33476081904` 的验证 job 与 Android Companion 构建通过，但 Windows installer job 因未执行 Boa Sidecar staging 而缺少 `binaries\\intercept-proxy-package-sidecar-x86_64-pc-windows-msvc.exe`，MSI/NSIS/portable 均未产出。用户要求优先修复 CI，并把复跑收窄为 Windows build-only：不再执行完整 Verify 或 macOS；Android Companion 仅作为 Windows 包声明的必需资源准备，不视为额外平台候选交付。验收为 Windows build job 在 Tauri build 前显式构建并 stage 同一 x86_64-pc-windows-msvc Sidecar，随后产出 MSI、NSIS 与 portable；不创建 tag 或 GitHub Release。本地 Proxy 与历史测试只读继续，发现的问题先记录。 |
+| `2026-09-01 17:05:25 +08:00` | 实际 App 创建带 Schema 的 Socket 规则时，`/message_type` 已声明为 string，但动作输入 `0100` 被统一 Document 工厂当作 JSON number 文本解析，返回 `Invalid Document JSON: invalid number at line 1 column 2`，直接阻止规则保存。用户明确以当前反馈覆盖扁平 AND/多动作合同：每条规则只保留一个条件及其对应的一个动作，条件和动作在同一编辑单元创建；物理删除第 N 次命中能力、计数状态、IPC、wire、UI、故障模板与测试，不兼容旧数据。新建规则不再使用对话框；点击“新建规则”后直接在右侧固定编辑区选择 Listener、阶段并填写名称、启用、优先级和 one-shot。string 匹配值与动作值按原始文本生成 Document string，`0100` 不要求用户手写 JSON 引号；number/boolean/object/array 仍按所选类型严格解析。受影响 NDR-JS-03、06、09、11、12 重新打开。 |
+| `2026-09-01 17:14:49 +08:00` | 用户要求进一步简化协议包列表：列表只显示每个包当前“在线”或“离线”状态；删除“内置示例/外部软件包”来源标签、已启用/停用状态、引用数、运行数及对应列表列。详情页和实际包生命周期合同不因列表精简而改变，不增加隐藏兼容展示。受影响 NDR-JS-09、11、12。 |
+| `2026-09-01 18:01:27 +08:00` | 最新 App 检查确认“无弹窗”仍保留了独立的新建规则中间页和“进入规则编辑器”按钮，用户明确要求物理删除这一步：点击“新建规则”后，右侧固定编辑区必须直接呈现 Listener、阶段、名称、启用、优先级、one-shot 与同一条件/动作编辑器；选择 Listener/阶段只负责加载 Rust 上下文，不得切换到第二个页面、不得再显示进入按钮，也不得恢复默认值或兼容创建流程。当前运行 App 保持用于对照，源码修改、自动化和新 bundle GUI 复验同步进行。受影响 NDR-JS-09、11、12 重新打开。 |
 
 旧任务正文中与本节最终合同冲突的初始结论全部失效，不得作为实现依据。
 
@@ -216,8 +223,8 @@ result: "<HTML string>"
 - 输入、输出、状态变化和错误行为：`PASS`
 - 具体 Manifest、注册、Hook、Frame、规则、Document、生命周期示例：`PASS`
 - 可重复 PASS/FAIL 验收：`PASS`
-- 会改变实现方向的未确认事项：`0`（Schema100 preserve、有效 `<100` 整库清除重建、其他无效/未来版本 fail-closed，以及 Windows 候选 workflow 边界均已明确）
-- 需求变更重新进入实现时间：`2026-09-01 13:08:47 +08:00`
+- 会改变实现方向的未确认事项：`0`（单条件单动作、string 原始文本、第 N 次命中物理删除、右侧内联新建、Schema100 与 Windows 候选 workflow 边界均已明确）
+- 需求变更重新进入实现时间：`2026-09-01 17:05:25 +08:00`
 - 进入实现时间：`2026-08-29 22:55:17 +08:00`；Planner → Architect → Critic 共识规划已通过，现有 Ultragoal 质量基线已纳入本任务并开始执行。
 
 ## 问题与根因分析
@@ -232,6 +239,7 @@ result: "<HTML string>"
 - 根因：旧发布前原型的领域边界与已确认最终合同不同，不存在保持旧模型的局部修复。
 - 正确边界：保留稳定的 Exchange/Pipeline 分层意图，直接替换旧领域模型、应用编排和包基础设施，不保留兼容路径。
 - `2026-09-01 11:25:53 +08:00` 当前已验证：隔离 HOME 的 arm64 App 已启动默认 Listener，`curl` 经 `127.0.0.1:8080` 实际转发到本地 `127.0.0.1:18083`，Server 收到 `GET /health?probe=1` 并返回 200；同一 GUI 验收截图同时证明编辑器控件未对齐、无 Schema Body 仅显示不可用文案、断点/Pause 仍暴露。正确修复边界是补齐权威 schema-free Document capability、统一前端布局，并物理删除断点/Pause 全链路；不得用纯 UI 假入口、disabled 控件或旧动作过滤代替。
+- `2026-09-01 17:05:25 +08:00` 当前已验证：规则编辑器把 Schema string 字段 `/message_type` 的动作输入 `0100` 原样传给 `rule_definition_document_action_draft`；Application `document_factory::parse_value` 对所有类型无差别调用 `Document::parse_json`，标准 JSON 拒绝带前导零的 number 文本，因而在类型校验前返回截图中的 `JSON_INVALID`。同仓库已有 `parse_protocol_rule_value` 明确规定 string 保留原始输入，两个文本解析边界发生语义分叉；自动化只验证 object/array/null 工厂和直接构造的 string runtime candidate，未走 string 动作 UI→IPC 工厂，因此真实使用被漏测。正确边界是唯一按显式类型解析的 Rust owner，string 直接构造 `DocumentValue::String`，其余类型严格解析；同时以单条件单动作移除条件/动作分离导致的无效中间状态，不增加引号提示、自动补引号或解析回退。
 
 ## 最小改动与最优设计比较
 
@@ -249,13 +257,13 @@ result: "<HTML string>"
 | --- | --- | --- | --- | --- | --- |
 | NDR-JS-01 | 映射当前源码，锁定旧行为与新合同 RED 测试；加入开发期 DB100 每启动重建及正式发布移除门禁 | TASK-20260829-001 | 否 | 已完成 | Phase1/2合同、RED基线和发布阻断门均已验证；Phase17已删除开发重建路径并证明Release持久化 |
 | NDR-JS-02 | 实现递归 Document、Number、RFC6901、Schema 和规则本地元数据 | NDR-JS-01 | 否 | 已完成 | Domain101/101及Schema/no-Schema、root `""`/empty-name `"/"`、wildcard与UI回归通过 |
-| NDR-JS-03 | 实现统一 HTTP/Document/Socket 规则、两写出阶段、多动作顺序、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 进行中 | 删除 TLS 握手阶段/动作/模板后，仅保留两写出阶段并重新验证单一RuleDefinition与RuntimeRuleBundle |
+| NDR-JS-03 | 实现统一 HTTP/Document/Socket 单条件单动作规则、两写出阶段、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 进行中 | 物理删除 NthHit 与条件/动作分离编辑；string 原始文本及 HTTP/Socket Schema/无Schema运行均通过 |
 | NDR-JS-04 | 定义严格 Manifest、稳定错误和唯一 JSON-RPC wire | NDR-JS-01 | 否 | 已完成 | 本地/远程共享Manifest、注册、Hook、stable code和固定JSON-RPC API1合同已验证 |
 | NDR-JS-05 | 实现通用 Boa Sidecar、固定 exports、ESM 加载和内部字节适配 | NDR-JS-04 | 否 | 已完成 | G049 / Phase 8 已 `VERIFIED / APPROVED / CHECKPOINT READY`；P0/P1/P2=0，`blockers=[]` |
 | NDR-JS-06 | 实现 ZIP 安装、包注册表和 enabled/online/failed/disabled 生命周期 | NDR-JS-05 | 否 | 已完成 | 10秒注册、冲突、启停、断连、删除、process ownership及无孤儿进程自动化通过 |
 | NDR-JS-07 | 将 HTTP/Socket Pipeline 切换到统一规则和唯一 WebSocket 包端口，删除旧执行路径 | NDR-JS-03、NDR-JS-06 | 否 | 已完成 | 两方向Pipeline、codec、原始字节、Encode、生命周期/CAS及旧执行路径物理删除已验证 |
 | NDR-JS-08 | 将内置 JSON、ISO8583 和第三方本地包迁移为同一 ZIP/Sidecar；保留远程同协议接入 | NDR-JS-07 | 可按包并行 | 已完成 | 内置/本地/远程统一ZIP、注册、RPC和capability链已验证，无Rhai/TOML兼容路径 |
-| NDR-JS-09 | 实现统一规则内联编辑、扁平 AND 条件行、多动作、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 进行中 | 物理删除 modal、递归条件树和 TLS 规则；左侧为合并规则列表，卡片显示上行/下行，右侧固定编辑 |
+| NDR-JS-09 | 实现统一规则右侧内联新建/编辑、单条件单动作卡片、精简协议包列表、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 进行中 | 物理删除创建 dialog 与 NthHit；新建元数据、条件和动作均在右侧固定编辑区完成；协议包列表只显示在线/离线 |
 | NDR-JS-10 | 固化正式 Schema100，并按最终发布合同在有效版本 `<100` 时整库清除重建；删除所有旧 Rhai/TOML/flat/four-stage/API1 路径 | NDR-JS-07、NDR-JS-09 | 否 | 进行中 | TDD证明Schema100保留、有效`<100`删除数据库/WAL/SHM并重建100、其他无效/未来版本fail-closed；随后重新执行Release启动与审查 |
 | NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 进行中 | 删除 current 文档中的 modal/递归条件树合同，改为内联扁平 AND 条件行；历史证据保持不可变 |
 | NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 进行中 | 旧递归树/modal checkpoint 已被用户需求变更失效；完成扁平内联规则重构后重新执行自动化、GUI、本地数据面和安装包验收 |
@@ -269,8 +277,8 @@ result: "<HTML string>"
 - Document 六类值、深层 object/array、Unicode、空键、`/`、`~`、RFC6901 根与转义。
 - finite number、安全整数、NaN/Infinity 拒绝、`1e-400`、重复 key last-wins、字段顺序非语义。
 - Schema 递归、title、HTTP 可省略、Socket 必填、null runtime、额外/缺失字段及无 Schema 独立树/显式复制。
-- 扁平非空 AND 条件列表、多动作顺序、前序修改可见、终止动作位置、严格 Set/Clear/Insert/Append、方向级失败回滚；多规则表达 OR。
-- enabled/priority/Nth-hit/one-shot/count/last-hit/revision 只在整体成功后提交。
+- 单条件单动作、string 原始文本、严格 Set/Clear/Insert/Append、终止动作与方向级失败回滚；多个条件或动作使用多条规则。
+- enabled/priority/count/last-hit/revision 只在整体成功后提交；one-shot 与 NthHit 类型、状态和 wire 必须零残留。
 - 开发期每启动重建；正式门禁删除该逻辑后，Release App 多次重启数据仍存在。
 
 ### Manifest、RPC 与 JavaScript

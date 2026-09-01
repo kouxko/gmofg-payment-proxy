@@ -14,7 +14,6 @@ pub(super) struct RuleTemplate {
     pub(super) priority: i32,
     pub(super) listener_alias: String,
     pub(super) stage: RuleStage,
-    pub(super) one_shot: bool,
     pub(super) content: RuleContent,
 }
 

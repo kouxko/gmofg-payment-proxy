@@ -412,8 +412,8 @@ export function ProtocolPackagesView() {
         </div>
       ) : !listError ? (
         <div className="overflow-hidden rounded-xl border border-[var(--telemetry-line)]">
-          <div className="grid grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_7rem_7rem_7rem] gap-3 bg-[var(--telemetry-table-head)] px-4 py-2 text-xs font-semibold text-[var(--telemetry-muted)] max-[760px]:hidden" aria-hidden="true">
-            <span>协议包</span><span>最新版本</span><span>版本数</span><span>引用数</span><span>状态</span>
+          <div className="grid grid-cols-[minmax(0,2fr)_minmax(8rem,1fr)_7rem_7rem] gap-3 bg-[var(--telemetry-table-head)] px-4 py-2 text-xs font-semibold text-[var(--telemetry-muted)] max-[760px]:hidden" aria-hidden="true">
+            <span>协议包</span><span>最新版本</span><span>版本数</span><span>状态</span>
           </div>
           {groups.map((group) => (
             <ProtocolPackageRow key={group.id} group={group} onOpen={(trigger) => openGroup(group, trigger)} />

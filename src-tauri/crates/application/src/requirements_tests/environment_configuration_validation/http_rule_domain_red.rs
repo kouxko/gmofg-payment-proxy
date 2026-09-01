@@ -19,14 +19,13 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
         let candidate = domain_contract_red::candidate_json_with(|candidate| {
             let rule = &mut candidate["workspace"]["rules"][0];
             rule["stage"] = serde_json::json!(stage);
-            rule["content"]["value"]["conditions"] = serde_json::json!([document_condition()]);
+            rule["content"]["value"]["condition"] = document_condition();
             if pure_document {
-                rule["content"]["value"]["actions"] =
-                    serde_json::json!([{"source":"record_match"}]);
+                rule["content"]["value"]["action"] = serde_json::json!({"source":"record_match"});
             } else {
-                rule["content"]["value"]["actions"] = serde_json::json!([{
+                rule["content"]["value"]["action"] = serde_json::json!({
                     "source":"http", "value":{"Delay": {"milliseconds": 1}}
-                }]);
+                });
             }
         });
         let report = validator(Arc::new(RecordingValidationPort::new(Behavior::Pass)))
@@ -42,28 +41,19 @@ async fn environment_domain_accepts_pure_document_and_exact_joint_stages() {
 }
 
 #[tokio::test]
-async fn empty_conditions_fail_with_exact_http_rule_code() {
+async fn missing_condition_fails_schema_with_exact_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["conditions"] =
-            serde_json::json!([]);
+        candidate["workspace"]["rules"][0]["content"]["value"].as_object_mut().unwrap().remove("condition");
     });
 
-    domain_contract_red::assert_domain_code_before_preview(
-        &candidate,
-        EnvironmentStatusCode::HttpRuleInvalid,
-    )
-    .await;
+    selector_parse_red::assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;
 }
 
 #[tokio::test]
 async fn request_stage_custom_status_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(
-                serde_json::json!({"source":"http","value":{"CustomHttpStatus": {"status": 503}}}),
-            );
+        candidate["workspace"]["rules"][0]["content"]["value"]["action"] =
+            serde_json::json!({"source":"http","value":{"CustomHttpStatus": {"status": 503}}});
     });
 
     domain_contract_red::assert_domain_code_before_preview(
@@ -76,50 +66,14 @@ async fn request_stage_custom_status_fails_with_exact_http_rule_code() {
 #[tokio::test]
 async fn request_stage_downstream_throttle_fails_with_exact_http_rule_code() {
     let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(serde_json::json!({"source":"http","value":{
+        candidate["workspace"]["rules"][0]["content"]["value"]["action"] =
+            serde_json::json!({"source":"http","value":{
                 "Throttle": {
                     "bytes_per_second": 1024,
                     "chunk_bytes": 128,
                     "direction": "Downstream"
                 }}
-            }));
-    });
-
-    domain_contract_red::assert_domain_code_before_preview(
-        &candidate,
-        EnvironmentStatusCode::HttpRuleInvalid,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn two_terminal_actions_fail_with_exact_http_rule_code() {
-    let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][3]["content"]["value"]["actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(serde_json::json!({
-                "source":"terminal", "value":{"UpstreamConnectTimeout": {"milliseconds": 1}}
-            }));
-    });
-
-    domain_contract_red::assert_domain_code_before_preview(
-        &candidate,
-        EnvironmentStatusCode::HttpRuleInvalid,
-    )
-    .await;
-}
-
-#[tokio::test]
-async fn non_terminal_action_after_terminal_fails_with_exact_http_rule_code() {
-    let candidate = domain_contract_red::candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][3]["content"]["value"]["actions"]
-            .as_array_mut()
-            .unwrap()
-            .push(serde_json::json!({"source":"http","value":{"Delay":{"milliseconds":1}}}));
+            });
     });
 
     domain_contract_red::assert_domain_code_before_preview(

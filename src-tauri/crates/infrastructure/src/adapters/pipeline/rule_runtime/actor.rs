@@ -2,7 +2,7 @@ use std::{collections::BTreeMap, sync::Arc};
 
 use intercept_proxy_application::EventHub;
 use intercept_proxy_domain::{
-    HttpHeader, MatchContext, MessageStage, RuleId, RuleRuntimeSnapshot, RuleStage, RuntimeEpoch,
+    HttpHeader, MatchContext, MessageStage, RuleRuntimeSnapshot, RuleStage, RuntimeEpoch,
 };
 use intercept_proxy_exchange::SocketContext;
 use intercept_proxy_runtime::{ConnectionContext, Result as ProxyResult, SocketJointEvaluation};
@@ -22,17 +22,9 @@ mod evaluation;
 
 pub(super) type RuleActorSender = mpsc::Sender<Command>;
 
-#[derive(Clone, Debug, Eq, Hash, PartialEq)]
-struct CounterKey {
-    rule_id: RuleId,
-    source_ip: String,
-    certificate_sha256: String,
-}
-
 #[derive(Clone, Debug)]
 struct RuleRuntime {
     snapshot: RuleRuntimeSnapshot,
-    counters: std::collections::HashMap<CounterKey, u64>,
 }
 
 pub(super) struct EvaluationInput {
@@ -282,18 +274,6 @@ async fn prepare_runtime(
             || current.snapshot.collection_revision != snapshot.collection_revision
             || current.snapshot.signature != snapshot.signature
         {
-            current.counters.retain(|key, _| {
-                let previous = current
-                    .snapshot
-                    .rules
-                    .iter()
-                    .find(|rule| rule.rule_id() == key.rule_id);
-                let replacement = snapshot
-                    .rules
-                    .iter()
-                    .find(|rule| rule.rule_id() == key.rule_id);
-                matches!((previous, replacement), (Some(previous), Some(replacement)) if replacement.enabled() && previous.to_draft() == replacement.to_draft())
-            });
             current.snapshot = snapshot;
         }
         return Ok(());
@@ -308,10 +288,7 @@ async fn prepare_runtime(
             .await
             .map_err(app_to_proxy)?;
     }
-    *runtime = Some(RuleRuntime {
-        snapshot,
-        counters: std::collections::HashMap::new(),
-    });
+    *runtime = Some(RuleRuntime { snapshot });
     Ok(())
 }
 

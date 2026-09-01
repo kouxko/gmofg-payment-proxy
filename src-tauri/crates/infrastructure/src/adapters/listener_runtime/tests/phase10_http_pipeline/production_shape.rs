@@ -59,41 +59,47 @@ async fn production_snapshot_compiles_flat_conditions_with_insert_and_append() {
             value: expected.to_owned(),
         }),
     };
-    let definition = RuleDefinition::create(
-        RuleDefinitionDraft {
-            name: "flat conditions insert append".into(),
-            enabled: true,
-            priority: 10,
-            listener_id: listener.id,
-            stage: RuleStage::ProxyToUpstream,
-            one_shot: false,
-            content: RuleContent::Http(HttpRuleContent {
-                description: String::new(),
-                conditions: vec![condition("old")],
-                actions: vec![
-                    UnifiedAction::Document(DocumentMutation::Set {
-                        path: JsonPointer::property("items"),
-                        value: DocumentValue::Array(Vec::new()),
-                    }),
-                    UnifiedAction::Document(DocumentMutation::Insert {
-                        path: JsonPointer::property("items"),
-                        index: 0,
-                        value: DocumentValue::String("first".into()),
-                    }),
-                    UnifiedAction::Document(DocumentMutation::Append {
-                        path: JsonPointer::property("items"),
-                        value: DocumentValue::String("last".into()),
-                    }),
-                ],
-            }),
+    let actions = [
+        DocumentMutation::Set {
+            path: JsonPointer::property("items"),
+            value: DocumentValue::Array(Vec::new()),
         },
-        1,
-    )
-    .unwrap();
+        DocumentMutation::Insert {
+            path: JsonPointer::property("items"),
+            index: 0,
+            value: DocumentValue::String("first".into()),
+        },
+        DocumentMutation::Append {
+            path: JsonPointer::property("items"),
+            value: DocumentValue::String("last".into()),
+        },
+    ];
+    let definitions = actions
+        .into_iter()
+        .zip([(10, 1_u64), (11, 2), (12, 3)])
+        .map(|(action, (priority, created_order))| {
+            RuleDefinition::create(
+                RuleDefinitionDraft {
+                    name: format!("flat condition action {created_order}"),
+                    enabled: true,
+                    priority,
+                    listener_id: listener.id,
+                    stage: RuleStage::ProxyToUpstream,
+                    content: RuleContent::Http(HttpRuleContent {
+                        description: String::new(),
+                        condition: condition("old"),
+                        action: UnifiedAction::Document(action),
+                    }),
+                },
+                created_order,
+            )
+            .unwrap()
+        })
+        .collect::<Vec<_>>();
     let workspace = ProxyWorkspace {
         listeners: vec![listener.clone()],
-        rule_definitions: vec![definition],
-        rule_created_order_high_water: 1,
+        rule_definitions: definitions,
+        rule_created_order_high_water: 3,
         ..ProxyWorkspace::default()
     };
 
@@ -116,7 +122,7 @@ async fn production_snapshot_compiles_flat_conditions_with_insert_and_append() {
 }
 
 #[tokio::test]
-async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
+async fn production_http_actor_keeps_rules_enabled_after_commit() {
     use intercept_proxy_domain::{
         Condition, DocumentMutation, DocumentPredicate, RuleStage, StringOperator, StringPredicate,
         UnifiedAction,
@@ -125,28 +131,24 @@ async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
     let listener = phase10_listener();
     let definition = RuleDefinition::create(
         RuleDefinitionDraft {
-            name: "HTTP unified Nth".into(),
+            name: "HTTP unified persistent rule".into(),
             enabled: true,
             priority: 10,
             listener_id: listener.id,
             stage: RuleStage::ProxyToUpstream,
-            one_shot: true,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions: vec![
-                    Condition::Document {
-                        path: JsonPointer::property("value"),
-                        predicate: DocumentPredicate::String(StringPredicate {
-                            operator: StringOperator::Equal,
-                            value: "old".into(),
-                        }),
-                    },
-                    Condition::NthHit { count: 2 },
-                ],
-                actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                condition: Condition::Document {
+                    path: JsonPointer::property("value"),
+                    predicate: DocumentPredicate::String(StringPredicate {
+                        operator: StringOperator::Equal,
+                        value: "old".into(),
+                    }),
+                },
+                action: UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property("value"),
                     value: DocumentValue::String("new".into()),
-                })],
+                }),
             }),
         },
         1,
@@ -177,23 +179,23 @@ async fn production_http_actor_owns_unified_nth_attempt_and_one_shot_commit() {
     pipeline.runtime_started(Uuid::from_u128(994)).await;
 
     for (index, expected) in [
-        br#"{"value":"old"}"#.as_slice(),
+        br#"{"value":"new"}"#.as_slice(),
         br#"{"value":"new"}"#.as_slice(),
     ]
     .into_iter()
     .enumerate()
     {
-        let actual = execute_nth_http_attempt(&snapshot, &pipeline, index).await;
+        let actual = execute_http_attempt(&snapshot, &pipeline, index).await;
         assert_eq!(actual.body.as_ref(), expected);
     }
 
     assert_eq!(repository.commit_attempts.load(Ordering::SeqCst), 2);
     let committed = repository.snapshot.lock().clone();
-    assert_eq!(committed.rules[0].lifecycle().hit_count, 1);
-    assert!(!committed.rules[0].enabled());
+    assert_eq!(committed.rules[0].lifecycle().hit_count, 2);
+    assert!(committed.rules[0].enabled());
 }
 
-pub(super) async fn execute_nth_http_attempt(
+pub(super) async fn execute_http_attempt(
     snapshot: &HttpProtocolRuntimeSnapshot,
     pipeline: &RuntimePipelineAdapter,
     index: usize,
@@ -327,13 +329,13 @@ async fn production_snapshot_uses_shared_provider_for_both_directions_and_joint_
         RuleStage::ProxyToUpstream,
         1,
         "value",
-        vec![Condition::Document {
+        Condition::Document {
             path: JsonPointer::property("value"),
             predicate: DocumentPredicate::String(StringPredicate {
                 operator: StringOperator::Equal,
                 value: "old".into(),
             }),
-        }],
+        },
         "new",
     );
     let workspace = workspace_with_http_rules(&listener, vec![rule]);

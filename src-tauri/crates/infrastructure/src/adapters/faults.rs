@@ -57,7 +57,7 @@ impl FaultServicePort for FaultServiceAdapter {
         let (stage, action) = definition
             .action
             .invoke(&configuration.parameters, self.body_codec.as_ref())?;
-        let conditions = configuration_conditions(&configuration);
+        let condition = configuration_condition(&configuration)?;
         let channel = configuration
             .channel
             .ok_or_else(|| AppError::new("RULE_INVALID", "故障规则必须绑定 Listener。"))?;
@@ -76,11 +76,10 @@ impl FaultServicePort for FaultServiceAdapter {
                 priority: configuration.priority,
                 listener_id,
                 stage: rule_stage(stage)?,
-                one_shot: configuration.one_shot,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("fault:{}", definition.view.template_id),
-                    conditions,
-                    actions: vec![intercept_proxy_domain::UnifiedAction::from(action)],
+                    condition,
+                    action: intercept_proxy_domain::UnifiedAction::from(action),
                 }),
             },
         })
@@ -97,7 +96,7 @@ impl FaultServicePort for FaultServiceAdapter {
         Some(ActiveFaultViewModel {
             rule_id: rule.rule_id().as_uuid(),
             template_name: template_name.into(),
-            target_summary: format!("{} 个条件", content.conditions.len()),
+            target_summary: "1 个条件".into(),
             priority: rule.priority(),
             hit_count: rule.lifecycle().hit_count,
             enabled: rule.enabled(),
@@ -127,7 +126,7 @@ fn rule_stage(stage: MessageStage) -> AppResult<RuleStage> {
     }
 }
 
-fn configuration_conditions(configuration: &FaultConfigurationDraft) -> Vec<Condition> {
+fn configuration_condition(configuration: &FaultConfigurationDraft) -> AppResult<Condition> {
     let mut conditions = Vec::new();
     if let Some(terminal) = configuration
         .terminal
@@ -149,12 +148,11 @@ fn configuration_conditions(configuration: &FaultConfigurationDraft) -> Vec<Cond
             operator: MatchOperator::Contains(target.clone()),
         });
     }
-    if let Some(nth) = configuration.nth_hit {
-        conditions.push(Condition::NthHit {
-            count: u64::from(nth),
-        });
+    match conditions.as_slice() {
+        [condition] => Ok(condition.clone()),
+        [] => Err(AppError::new("RULE_INVALID", "故障规则必须设置一个匹配条件。")),
+        _ => Err(AppError::new("RULE_INVALID", "故障规则只能设置一个匹配条件。")),
     }
-    conditions
 }
 
 mod actions;

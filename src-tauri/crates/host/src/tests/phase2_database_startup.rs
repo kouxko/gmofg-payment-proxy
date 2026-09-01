@@ -169,21 +169,22 @@ async fn seed_two_start_fixture(
     let intercept_proxy_application::RuleNewDefinitionDraft {
         listener_id,
         stage,
-        mut content,
+        content,
     } = structure;
-    let RuleContent::Http(http_content) = &mut content else {
+    let intercept_proxy_application::RuleNewDefinitionContent::Http { .. } = content else {
         panic!("HTTP rule draft expected");
     };
-    http_content.description = "phase2 lifecycle fixture".into();
-    http_content.conditions = vec![
-        application
-            .rule_definition_nth_hit_condition_draft(
-                intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
+    let description = "phase2 lifecycle fixture".into();
+    let condition = application
+            .rule_definition_http_condition_draft(
+                intercept_proxy_application::RuleMatchFieldKind::Method,
+                None,
+                intercept_proxy_application::RuleMatchOperatorKind::Equals,
+                "GET",
+                stage,
             )
-            .expect("explicit positive nth-hit condition"),
-    ];
-    http_content.actions = vec![UnifiedAction::from(
-        application
+            .expect("method condition");
+    let action = UnifiedAction::from(application
             .rule_definition_action_draft(
                 intercept_proxy_application::RuleHttpActionDraftInput {
                     kind: RuleActionKind::Delay,
@@ -191,8 +192,7 @@ async fn seed_two_start_fixture(
                 },
                 RuleStage::ProxyToUpstream,
             )
-            .expect("explicit delay action"),
-    )];
+            .expect("explicit delay action"));
     let input = intercept_proxy_application::RuleDefinitionSaveInput {
         rule_id: None,
         expected_revision: None,
@@ -202,8 +202,11 @@ async fn seed_two_start_fixture(
             priority: 29,
             listener_id,
             stage,
-            one_shot: true,
-            content,
+            content: RuleContent::Http(intercept_proxy_application::HttpRuleContent {
+                description,
+                condition,
+                action,
+            }),
         },
     };
     let created = application
@@ -264,7 +267,6 @@ async fn assert_two_start_fixture_present(
     assert_eq!(rule, fixture.rule);
     assert_eq!(rule.revision(), fixture.rule.revision());
     assert!(!rule.enabled());
-    assert!(rule.one_shot());
     assert_eq!(rule.lifecycle().hit_count, 0);
     assert_eq!(rule.lifecycle().last_hit_at, None);
     assert_package_persisted(application, &fixture.package).await;

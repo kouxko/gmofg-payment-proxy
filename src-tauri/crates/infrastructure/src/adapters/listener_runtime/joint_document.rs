@@ -199,7 +199,6 @@ impl JointDocumentEvaluation {
     pub(crate) fn gate(
         &mut self,
         rule_id: RuleId,
-        nth_attempt: u64,
         match_context: &MatchContext<'_>,
         message: &mut Message,
         body_codec: &dyn BodyCodec,
@@ -225,42 +224,38 @@ impl JointDocumentEvaluation {
             request_target: match_context.request_target,
             headers: &headers,
         };
-        let evaluation = program.evaluate_rule_with_http(
-            rule_id,
-            &self.document,
-            nth_attempt,
-            |field, operator| matches_http_condition(field, operator, &working_context),
-        )?;
+        let evaluation =
+            program.evaluate_rule_with_http(rule_id, &self.document, |field, operator| {
+                matches_http_condition(field, operator, &working_context)
+            })?;
         if evaluation.matched {
-            for action in program
+            let action = program
                 .rule(rule_id)
                 .expect("owned rule remains in its immutable program")
-                .actions()
-            {
-                match action {
-                    UnifiedAction::Document(mutation) => mutation.apply(&mut self.document)?,
-                    UnifiedAction::Http(
-                        action @ (intercept_proxy_domain::HttpAction::SetJsonField { .. }
-                        | intercept_proxy_domain::HttpAction::ReplaceBodyText(_)
-                        | intercept_proxy_domain::HttpAction::SetHeader { .. }),
-                    ) => {
-                        crate::adapters::pipeline::rule_actions::apply_rule_actions(
-                            body_codec,
-                            message,
-                            std::slice::from_ref(action),
-                            0,
+                .action();
+            match action {
+                UnifiedAction::Document(mutation) => mutation.apply(&mut self.document)?,
+                UnifiedAction::Http(
+                    action @ (intercept_proxy_domain::HttpAction::SetJsonField { .. }
+                    | intercept_proxy_domain::HttpAction::ReplaceBodyText(_)
+                    | intercept_proxy_domain::HttpAction::SetHeader { .. }),
+                ) => {
+                    crate::adapters::pipeline::rule_actions::apply_rule_actions(
+                        body_codec,
+                        message,
+                        std::slice::from_ref(action),
+                        0,
+                    )
+                    .map_err(|error| {
+                        intercept_proxy_domain::DomainError::new(
+                            intercept_proxy_domain::ErrorCode::RuleInvalid,
+                            error.message,
                         )
-                        .map_err(|error| {
-                            intercept_proxy_domain::DomainError::new(
-                                intercept_proxy_domain::ErrorCode::RuleInvalid,
-                                error.message,
-                            )
-                        })?;
-                    }
-                    UnifiedAction::RecordMatch
-                    | UnifiedAction::Http(_)
-                    | UnifiedAction::Terminal(_) => {}
+                    })?;
                 }
+                UnifiedAction::RecordMatch
+                | UnifiedAction::Http(_)
+                | UnifiedAction::Terminal(_) => {}
             }
         }
         self.changes
@@ -268,8 +263,6 @@ impl JointDocumentEvaluation {
         Ok(JointRuleConditionEvaluation::UnifiedOwned(
             intercept_proxy_runtime::JointConditionEvaluation {
                 matched: evaluation.matched,
-                eligible_without_nth: evaluation.eligible_without_nth,
-                contains_nth: evaluation.contains_nth,
             },
         ))
     }
@@ -405,7 +398,6 @@ impl SocketJointEvaluation for JointDocumentEvaluation {
     fn gate(
         &mut self,
         rule_id: Uuid,
-        nth_attempt: u64,
     ) -> intercept_proxy_runtime::Result<JointRuleConditionEvaluation> {
         let Some(program) = self.programs.get(&RuleId::from_uuid(rule_id)) else {
             return Ok(JointRuleConditionEvaluation::NotOwned);
@@ -414,7 +406,6 @@ impl SocketJointEvaluation for JointDocumentEvaluation {
             .evaluate_and_apply_rule_with_http(
                 RuleId::from_uuid(rule_id),
                 &mut self.document,
-                nth_attempt,
                 |_, _| {
                     Err(intercept_proxy_domain::DomainError::new(
                         intercept_proxy_domain::ErrorCode::RuleInvalid,
@@ -431,8 +422,6 @@ impl SocketJointEvaluation for JointDocumentEvaluation {
         Ok(JointRuleConditionEvaluation::UnifiedOwned(
             intercept_proxy_runtime::JointConditionEvaluation {
                 matched: evaluation.matched,
-                eligible_without_nth: evaluation.eligible_without_nth,
-                contains_nth: evaluation.contains_nth,
             },
         ))
     }
@@ -453,9 +442,7 @@ fn processing_change(
             .iter()
             .find(|rule| rule.rule_id() == rule_id)
             .map_or_else(Vec::new, |rule| {
-                rule.actions()
-                    .iter()
-                    .filter_map(|operation| match operation {
+                let operation = match rule.action() {
                         UnifiedAction::RecordMatch => Some(RuleProcessingOperation {
                             kind: RuleProcessingOperationKind::RecordMatch,
                             path: None,
@@ -485,8 +472,8 @@ fn processing_change(
                             })
                         }
                         UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => None,
-                    })
-                    .collect()
+                    };
+                operation.into_iter().collect()
             })
     } else {
         Vec::new()

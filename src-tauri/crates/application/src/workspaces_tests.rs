@@ -71,17 +71,16 @@ fn unified_rule_remap_changes_identity_resets_revision_and_preserves_order_and_b
             priority: -7,
             listener_id: old_listener_id,
             stage: RuleStage::ProxyToUpstream,
-            one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                conditions: vec![Condition::Document {
+                condition: Condition::Document {
                     path: intercept_proxy_domain::JsonPointer::property("trace_id"),
                     predicate: DocumentPredicate::String(StringPredicate {
                         operator: StringOperator::Equal,
                         value: "phase5".into(),
                     }),
-                }],
-                actions: vec![UnifiedAction::RecordMatch],
+                },
+                action: UnifiedAction::RecordMatch,
             }),
         },
         42,

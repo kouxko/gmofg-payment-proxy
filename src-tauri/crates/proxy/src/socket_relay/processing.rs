@@ -30,8 +30,6 @@ pub enum SocketPayloadDirection {
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct JointConditionEvaluation {
     pub matched: bool,
-    pub eligible_without_nth: bool,
-    pub contains_nth: bool,
 }
 
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
@@ -42,11 +40,7 @@ pub enum JointRuleConditionEvaluation {
 
 #[async_trait]
 pub trait SocketJointEvaluation: Send + Sync {
-    fn gate(
-        &mut self,
-        rule_id: Uuid,
-        nth_attempt: u64,
-    ) -> crate::Result<JointRuleConditionEvaluation>;
+    fn gate(&mut self, rule_id: Uuid) -> crate::Result<JointRuleConditionEvaluation>;
     async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
 }
 

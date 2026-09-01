@@ -156,87 +156,26 @@
         "priority": 10,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Canonical request-stage non-terminal actions",
-            "actions": [
-              {
-                "source": "http",
-                "value": {
-                  "SetJsonField": {
-                    "path": "$.amount",
-                    "value": 1000
-                  }
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "ReplaceBodyText": "replacement"
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "SetHeader": {
-                    "name": "X-Test",
-                    "value": "yes"
-                  }
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "Delay": {
-                    "milliseconds": 1
-                  }
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "Jitter": {
-                    "minimum_milliseconds": 1,
-                    "maximum_milliseconds": 2,
-                    "scope": "BeforeMessage"
-                  }
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "Throttle": {
-                    "bytes_per_second": 1024,
-                    "chunk_bytes": 128,
-                    "direction": "Upstream"
-                  }
+            "condition": {
+              "source": "http",
+              "field": "TerminalIp",
+              "operator": {
+                "Equals": "192.0.2.10"
+              }
+            },
+            "action": {
+              "source": "http",
+              "value": {
+                "SetJsonField": {
+                  "path": "$.amount",
+                  "value": 1000
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "http",
-                "field": "TerminalIp",
-                "operator": {
-                  "Equals": "192.0.2.10"
-                }
-              },
-              {
-                "source": "http",
-                "field": {
-                  "Header": "/x-amount"
-                },
-                "operator": {
-                  "Wildcard": "12*"
-                }
-              },
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -246,37 +185,27 @@
         "priority": 11,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Canonical response-stage non-terminal actions",
-            "actions": [
-              {
-                "source": "http",
-                "value": {
-                  "Intermittent": {
-                    "available_milliseconds": 10,
-                    "blocked_milliseconds": 5,
-                    "direction": "Downstream"
-                  }
-                }
-              },
-              {
-                "source": "http",
-                "value": {
-                  "CustomHttpStatus": {
-                    "status": 503
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "http",
+              "value": {
+                "Intermittent": {
+                  "available_milliseconds": 10,
+                  "blocked_milliseconds": 5,
+                  "direction": "Downstream"
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -286,23 +215,21 @@
         "priority": 13,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": "DisconnectBeforeUpstream"
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            },
+            "action": {
+              "source": "terminal",
+              "value": "DisconnectBeforeUpstream"
+            }
           }
         }
       },
@@ -312,27 +239,25 @@
         "priority": 14,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "UpstreamConnectTimeout": {
-                    "milliseconds": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamConnectTimeout": {
+                  "milliseconds": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -342,27 +267,25 @@
         "priority": 15,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "UpstreamWriteTimeout": {
-                    "milliseconds": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamWriteTimeout": {
+                  "milliseconds": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -372,27 +295,25 @@
         "priority": 16,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Request terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "DisconnectDuringUpstreamWrite": {
-                    "after_bytes": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DisconnectDuringUpstreamWrite": {
+                  "after_bytes": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -402,27 +323,25 @@
         "priority": 17,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "UpstreamReadTimeout": {
-                    "milliseconds": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamReadTimeout": {
+                  "milliseconds": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -432,27 +351,25 @@
         "priority": 18,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "DropUpstreamResponse": {
-                    "mode": "ReadCompleteResponse"
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DropUpstreamResponse": {
+                  "mode": "ReadCompleteResponse"
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -462,37 +379,35 @@
         "priority": 19,
         "listener_alias": "http-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "MockResponse": {
-                    "status": 200,
-                    "headers": [
-                      [
-                        "X-Test",
-                        "yes"
-                      ]
-                    ],
-                    "body_bytes": [
-                      79,
-                      75
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "MockResponse": {
+                  "status": 200,
+                  "headers": [
+                    [
+                      "X-Test",
+                      "yes"
                     ]
-                  }
+                  ],
+                  "body_bytes": [
+                    79,
+                    75
+                  ]
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -502,29 +417,27 @@
         "priority": 20,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "InvalidJson": {
-                    "body_bytes": [
-                      123
-                    ]
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "InvalidJson": {
+                  "body_bytes": [
+                    123
+                  ]
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -534,27 +447,25 @@
         "priority": 21,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "IncorrectContentLength": {
-                    "delta": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "IncorrectContentLength": {
+                  "delta": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -564,27 +475,25 @@
         "priority": 22,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "TruncateResponse": {
-                    "bytes": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "TruncateResponse": {
+                  "bytes": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -594,27 +503,25 @@
         "priority": 23,
         "listener_alias": "http-entry",
         "stage": "proxy_to_app",
-        "one_shot": false,
         "content": {
           "type": "http",
           "value": {
             "description": "Response terminal action",
-            "actions": [
-              {
-                "source": "terminal",
-                "value": {
-                  "DisconnectDuringDownstreamWrite": {
-                    "after_bytes": 1
-                  }
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DisconnectDuringDownstreamWrite": {
+                  "after_bytes": 1
                 }
               }
-            ],
-            "conditions": [
-              {
-                "source": "nth_hit",
-                "count": 1
-              }
-            ]
+            }
           }
         }
       },
@@ -624,7 +531,6 @@
         "priority": 20,
         "listener_alias": "socket-entry",
         "stage": "proxy_to_upstream",
-        "one_shot": false,
         "content": {
           "type": "socket",
           "value": {
@@ -632,53 +538,20 @@
               "id": "au-eftex",
               "version": "1.1.0"
             },
-            "actions": [
-              {
-                "source": "record_match"
-              },
-              {
-                "source": "document",
+            "condition": {
+              "source": "document",
+              "path": "/amount",
+              "predicate": {
+                "type": "number",
                 "value": {
-                  "type": "set",
-                  "path": "/approval_code",
-                  "value": "OK1234"
-                }
-              },
-              {
-                "source": "document",
-                "value": {
-                  "type": "clear",
-                  "path": "/temporary",
-                  "value_type": "string"
-                }
-              },
-              {
-                "source": "record_match"
-              }
-            ],
-            "conditions": [
-              {
-                "source": "document",
-                "path": "/amount",
-                "predicate": {
-                  "type": "number",
-                  "value": {
-                    "operator": "equal",
-                    "value": 1000
-                  }
-                }
-              },
-              {
-                "source": "document",
-                "path": "/approved",
-                "predicate": {
-                  "type": "boolean",
-                  "value": {
-                    "equal": true
-                  }
+                  "operator": "equal",
+                  "value": 1000
                 }
               }
-            ]
+            },
+            "action": {
+              "source": "record_match"
+            }
           }
         }
       }

@@ -41,14 +41,7 @@ fn validate_conditions(conditions: &[Condition], error: &mut DomainError) {
                     }
                 }
             }
-            Condition::NthHit { count: 0 } => push_field_error(
-                error,
-                format!("conditions.{index}.nth_hit"),
-                "第 N 次命中必须大于 0",
-            ),
-            Condition::NthHit { .. }
-            | Condition::Document { .. }
-            | Condition::DocumentPattern { .. } => {}
+            Condition::Document { .. } | Condition::DocumentPattern { .. } => {}
         }
     }
 }

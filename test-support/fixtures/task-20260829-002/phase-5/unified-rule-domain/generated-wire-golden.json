@@ -1,7 +1,7 @@
 {
   "schema_version": 1,
   "type_blocks": {
-    "Condition": "{ source: \"document\"; path: JsonPointer; predicate: DocumentPredicate } | { source: \"document_pattern\"; path: DocumentMatchPath; predicate: DocumentPredicate } | { source: \"http\"; field: MatchField; operator: MatchOperator } | { source: \"nth_hit\"; count: number }",
+    "Condition": "{ source: \"document\"; path: JsonPointer; predicate: DocumentPredicate } | { source: \"document_pattern\"; path: DocumentMatchPath; predicate: DocumentPredicate } | { source: \"http\"; field: MatchField; operator: MatchOperator }",
     "DocumentMutation": "{ type: \"set\"; path: JsonPointer; value: DocumentValue } | { type: \"clear\"; path: JsonPointer; value_type: DocumentValueType } | { type: \"insert\"; path: JsonPointer; index: number; value: DocumentValue } | { type: \"append\"; path: JsonPointer; value: DocumentValue }",
     "DocumentPredicate": "{ type: \"string\"; value: StringPredicate } | { type: \"number\"; value: NumberPredicate } | { type: \"boolean\"; value: BooleanPredicate } | { type: \"null_equal\" }",
     "UnifiedAction": "{ source: \"record_match\" } | { source: \"document\"; value: DocumentMutation } | { source: \"http\"; value: HttpAction } | { source: \"terminal\"; value: TerminalAction }"

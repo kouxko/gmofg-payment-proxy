@@ -1,9 +1,7 @@
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use intercept_proxy_domain::{
-    DocumentSchemaNode, Revision, RuleContent, RuleDefinitionDraft, RuleId, RuleStage,
-};
+use intercept_proxy_domain::{DocumentSchemaNode, Revision, RuleDefinitionDraft, RuleId, RuleStage};
 
 use super::{ListenerId, ProtocolPackageRef, RuleActionKind, RuleStageCapabilityViewModel};
 
@@ -46,7 +44,14 @@ pub struct SocketRuleEditorStageViewModel {
 pub struct RuleNewDefinitionDraft {
     pub listener_id: ListenerId,
     pub stage: RuleStage,
-    pub content: RuleContent,
+    pub content: RuleNewDefinitionContent,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(tag = "type", content = "value", rename_all = "snake_case")]
+pub enum RuleNewDefinitionContent {
+    Http { description: String },
+    Socket { package: ProtocolPackageRef },
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -77,12 +82,6 @@ pub struct RuleDocumentConditionPathCapability {
     pub wildcard_token: String,
     pub wildcard_matches_exactly_one_level: bool,
     pub multiple_matches_use_any: bool,
-}
-
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct RuleNthHitConditionDraftInput {
-    pub count: u64,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]

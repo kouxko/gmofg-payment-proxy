@@ -1,19 +1,19 @@
 // @vitest-environment jsdom
 
 import "@testing-library/jest-dom/vitest";
-import { act, render, screen, waitFor } from "@testing-library/react";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
 import { RulesView } from "./rules-view";
-import { httpCondition, httpListener, httpRule } from "./rules-view-test-fixtures";
+import { httpCondition, httpListener, httpRule, socketListener } from "./rules-view-test-fixtures";
 
 const commandMocks = vi.hoisted(() => ({
   workspaceList: vi.fn(), workspaceGet: vi.fn(), ruleDefinitionList: vi.fn(),
   ruleDefinitionGet: vi.fn(), ruleEditorContext: vi.fn(), ruleDefinitionSave: vi.fn(),
-  ruleDefinitionToggle: vi.fn(), ruleDefinitionDelete: vi.fn(), ruleDefinitionCopy: vi.fn(),
+  ruleDefinitionDelete: vi.fn(), ruleDefinitionCopy: vi.fn(),
   ruleDefinitionCreateFromExchangeObservation: vi.fn(), ruleDefinitionHttpConditionDraft: vi.fn(),
-  ruleDefinitionNthHitConditionDraft: vi.fn(), ruleDefinitionActionDraft: vi.fn(),
+  ruleDefinitionActionDraft: vi.fn(),
   ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
   ruleDefinitionDocumentCommonActionDraft: vi.fn(),
 }));
@@ -42,7 +42,7 @@ const context: RuleEditorContext = {
       { kind: "request_target", operators: ["equals"], selector: null },
     ], actions: [] },
     package: null, document_fields: [], document_common_actions: ["record_match"],
-    new_rule_draft: { listener_id: httpListener.id, stage: "proxy_to_upstream", content: httpRule().content },
+    new_rule_draft: { listener_id: httpListener.id, stage: "proxy_to_upstream", content: { type: "http", value: { description: "" } } },
   }] } },
 };
 
@@ -56,6 +56,8 @@ describe("RulesView inline editor", () => {
     commandMocks.ruleDefinitionGet.mockResolvedValue(httpRule());
     commandMocks.ruleEditorContext.mockResolvedValue(context);
     commandMocks.ruleDefinitionSave.mockImplementation(async (input) => ({ ...httpRule(), ...input.draft, revision: 4 }));
+    commandMocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(httpCondition);
+    commandMocks.ruleDefinitionDocumentCommonActionDraft.mockResolvedValue({ source: "record_match" });
   });
 
   it("keeps the rule list and fixed editor visible in one workspace without an editor dialog", async () => {
@@ -66,7 +68,73 @@ describe("RulesView inline editor", () => {
     expect(screen.queryByRole("dialog", { name: /编辑规则/ })).not.toBeInTheDocument();
     await userEvent.click(screen.getByRole("button", { name: /HTTP combined/ }));
     expect(await screen.findByDisplayValue("HTTP combined")).toBeVisible();
-    expect(screen.getByText("所有条件固定为 AND；需要 OR 时请新建多条规则。")).toBeVisible();
+    expect(screen.getAllByTestId("condition-form")).toHaveLength(1);
+    expect(screen.getAllByTestId("action-form")).toHaveLength(1);
+  });
+
+  it("starts rule creation inside the fixed editor without opening a dialog", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+
+    expect(screen.queryByRole("dialog", { name: "创建统一规则" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "新建规则" })).toBeVisible();
+    expect(screen.getByRole("button", { name: /创建规则的 Listener/ })).toBeVisible();
+  });
+
+  it("keeps creation metadata and rule content in one continuous editor without an enter step", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+    await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP Listener · HTTP" }));
+    const metadata = screen.getByTestId("rule-metadata-fields");
+    await user.click(within(metadata).getByRole("button", { name: /处理阶段/ }));
+    await user.click(await screen.findByRole("option", { name: "Proxy → Server" }));
+    const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
+    expect(enabled).not.toBeChecked();
+    expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /新规则是否启用/ })).not.toBeInTheDocument();
+    await user.type(within(metadata).getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
+    await user.type(within(metadata).getByLabelText("阶段内优先级"), "10");
+    await user.click(enabled);
+    expect(enabled).toBeChecked();
+
+    expect(screen.queryByRole("button", { name: /新规则是否单次/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "进入规则编辑器" })).not.toBeInTheDocument();
+    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+    expect(await screen.findByRole("heading", { name: "HTTP 规则内容" })).toBeVisible();
+  });
+
+  it("uses the same initially-disabled enable switch for Socket creation", async () => {
+    const socketContext: RuleEditorContext = {
+      listener_id: socketListener.id,
+      local_document_types: [],
+      document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
+      content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, stages: [{
+        stage: "proxy_to_app", document_fields: [], common_actions: ["record_match"],
+        new_rule_draft: { listener_id: socketListener.id, stage: "proxy_to_app", content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" } } } },
+      }] } },
+    };
+    commandMocks.workspaceGet.mockResolvedValue({ id: "workspace", listeners: [socketListener] });
+    commandMocks.ruleEditorContext.mockResolvedValue(socketContext);
+    const user = userEvent.setup(); render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+    await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
+    await user.click(await screen.findByRole("option", { name: "Socket Listener · Socket" }));
+    const metadata = screen.getByTestId("rule-metadata-fields");
+    await user.click(within(metadata).getByRole("button", { name: /处理阶段/ }));
+    await user.click(await screen.findByRole("option", { name: "Proxy → App" }));
+
+    const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
+    expect(enabled).not.toBeChecked();
+    expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /新规则是否启用|新规则是否单次/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();
   });
 
   it("shows both proxy directions in one list with a direction badge on each card", async () => {
@@ -84,15 +152,17 @@ describe("RulesView inline editor", () => {
     expect(screen.queryByText("Proxy → App")).not.toBeInTheDocument();
   });
 
-  it("saves the flat conditions array unchanged", async () => {
+  it("materializes the single condition and action before saving", async () => {
     render(<RulesView />);
     await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
     const save = await screen.findByRole("button", { name: "保存规则" });
     expect(save).toBeEnabled();
     await userEvent.click(save);
 
+    await waitFor(() => expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledWith("request_target", null, "equals", "/", "proxy_to_upstream"));
+    expect(commandMocks.ruleDefinitionDocumentCommonActionDraft).toHaveBeenCalledWith("record_match");
     await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
-      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ conditions: [httpCondition] }) } }),
+      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ condition: httpCondition, action: { source: "record_match" } }) } }),
     })));
   });
 

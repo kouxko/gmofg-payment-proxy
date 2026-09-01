@@ -1,9 +1,10 @@
 use super::production_shape::{
     Phase10ActorRules, actor_context, actor_pipeline, assert_production_changed_commit,
-    execute_nth_http_attempt, http_request_metadata, phase10_http_context,
+    execute_http_attempt, http_request_metadata, phase10_http_context,
     prepared_external_snapshot_for, prepared_external_snapshot_for_registration,
 };
 use super::*;
+use intercept_proxy_domain::{MatchField, MatchOperator};
 
 #[tokio::test]
 async fn prior_header_action_is_visible_to_the_next_rule_condition() {
@@ -15,28 +16,28 @@ async fn prior_header_action_is_visible_to_the_next_rule_condition() {
         "set first header",
         10,
         1,
-        vec![Condition::Http {
+        Condition::Http {
             field: MatchField::Method,
             operator: MatchOperator::Equals("POST".into()),
-        }],
-        vec![UnifiedAction::Http(HttpAction::SetHeader {
+        },
+        UnifiedAction::Http(HttpAction::SetHeader {
             name: "x-working".into(),
             value: "visible".into(),
-        })],
+        }),
     );
     let second = http_rule(
         &listener,
         "observe first header",
         20,
         2,
-        vec![Condition::Http {
+        Condition::Http {
             field: MatchField::Header("/x-working".into()),
             operator: MatchOperator::Equals("visible".into()),
-        }],
-        vec![UnifiedAction::Http(HttpAction::SetHeader {
+        },
+        UnifiedAction::Http(HttpAction::SetHeader {
             name: "x-observed".into(),
             value: "yes".into(),
-        })],
+        }),
     );
     let workspace = workspace_with_http_rules(&listener, vec![first, second]);
     let snapshot = prepared_external_snapshot_for(
@@ -57,7 +58,7 @@ async fn prior_header_action_is_visible_to_the_next_rule_condition() {
     let pipeline = actor_pipeline(&snapshot, repository);
     pipeline.runtime_started(Uuid::from_u128(994)).await;
 
-    let message = execute_nth_http_attempt(&snapshot, &pipeline, 30).await;
+    let message = execute_http_attempt(&snapshot, &pipeline, 30).await;
 
     assert!(has_header(&message, b"x-working"));
     assert!(has_header(&message, b"x-observed"));
@@ -68,29 +69,37 @@ async fn document_encode_is_the_only_final_body_write_after_ordered_actions() {
     use intercept_proxy_domain::HttpAction;
 
     let listener = phase10_listener();
-    let definition = http_rule(
+    let document_rule = http_rule(
         &listener,
         "ordered document and HTTP body actions",
         10,
         1,
-        vec![Condition::Document {
+        Condition::Document {
             path: JsonPointer::property("value"),
             predicate: DocumentPredicate::String(StringPredicate {
                 operator: StringOperator::Equal,
                 value: "old".into(),
             }),
-        }],
-        vec![
-            UnifiedAction::Document(DocumentMutation::Set {
-                path: JsonPointer::property("value"),
-                value: DocumentValue::String("new".into()),
-            }),
-            UnifiedAction::Http(HttpAction::ReplaceBodyText(
-                "must-not-overwrite-encode".into(),
-            )),
-        ],
+        },
+        UnifiedAction::Document(DocumentMutation::Set {
+            path: JsonPointer::property("value"),
+            value: DocumentValue::String("new".into()),
+        }),
     );
-    let workspace = workspace_with_http_rules(&listener, vec![definition]);
+    let http_body_rule = http_rule(
+        &listener,
+        "ordered HTTP body action",
+        20,
+        2,
+        Condition::Http {
+            field: MatchField::Method,
+            operator: MatchOperator::Equals("POST".into()),
+        },
+        UnifiedAction::Http(HttpAction::ReplaceBodyText(
+            "must-not-overwrite-encode".into(),
+        )),
+    );
+    let workspace = workspace_with_http_rules(&listener, vec![document_rule, http_body_rule]);
 
     assert_production_changed_commit(
         &listener,
@@ -123,11 +132,14 @@ async fn schema_free_http_hot_replace_keeps_root_rule_program() {
         "schema-free root hot replace",
         10,
         1,
-        vec![Condition::NthHit { count: 1 }],
-        vec![UnifiedAction::Document(DocumentMutation::Set {
+        Condition::Http {
+            field: MatchField::Method,
+            operator: MatchOperator::Equals("POST".into()),
+        },
+        UnifiedAction::Document(DocumentMutation::Set {
             path: JsonPointer::root(),
             value: DocumentValue::String("root".into()),
-        })],
+        }),
     );
     let workspace = workspace_with_http_rules(&listener, vec![replacement]);
     let adapter = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
@@ -159,11 +171,14 @@ async fn existing_http_connection_observes_rule_created_after_capabilities() {
         "keep-alive create",
         10,
         1,
-        vec![Condition::NthHit { count: 1 }],
-        vec![UnifiedAction::Document(DocumentMutation::Set {
+        Condition::Http {
+            field: MatchField::Method,
+            operator: MatchOperator::Equals("POST".into()),
+        },
+        UnifiedAction::Document(DocumentMutation::Set {
             path: JsonPointer::property("value"),
             value: DocumentValue::String("created".into()),
-        })],
+        }),
     );
     let workspace = workspace_with_http_rules(&listener, vec![replacement]);
     let adapter = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
@@ -207,8 +222,8 @@ fn http_rule(
     name: &str,
     priority: i32,
     created_order: u64,
-    conditions: Vec<Condition>,
-    actions: Vec<UnifiedAction>,
+    condition: Condition,
+    action: UnifiedAction,
 ) -> RuleDefinition {
     RuleDefinition::create(
         RuleDefinitionDraft {
@@ -217,11 +232,10 @@ fn http_rule(
             priority,
             listener_id: listener.id,
             stage: RuleStage::ProxyToUpstream,
-            one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions,
-                actions,
+                condition,
+                action,
             }),
         },
         created_order,
@@ -254,14 +268,13 @@ async fn plain_http_json_body_matches_manual_pointer_on_request_and_response() {
                 priority: 1,
                 listener_id: listener.id,
                 stage,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: vec![condition()],
-                    actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                    condition: condition(),
+                    action: UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::parse("/customer/result").unwrap(),
                         value: DocumentValue::String(value.into()),
-                    })],
+                    }),
                 }),
             },
             order,
@@ -341,11 +354,14 @@ async fn plain_http_document_rule_rejects_invalid_json_without_fallback() {
         "plain invalid json",
         1,
         1,
-        vec![Condition::NthHit { count: 1 }],
-        vec![UnifiedAction::Document(DocumentMutation::Set {
+        Condition::Http {
+            field: MatchField::Method,
+            operator: MatchOperator::Equals("POST".into()),
+        },
+        UnifiedAction::Document(DocumentMutation::Set {
             path: JsonPointer::root(),
             value: DocumentValue::Null(()),
-        })],
+        }),
     );
     let workspace = workspace_with_http_rules(&listener, vec![definition]);
     let snapshot = prepared_plain_snapshot(&workspace, &listener).await;

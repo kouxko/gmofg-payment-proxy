@@ -58,34 +58,13 @@ fn document_predicate(value: Value) -> Value {
 #[test]
 fn rules_use_authoritative_flat_conditions_and_unified_actions_wire() {
     let mut value = full_shape_value();
-    workspace_rules_mut(&mut value)[0] = json!({
-        "name": "Nested request rule",
-        "enabled": true,
-        "priority": 10,
-        "listener_alias": "http-entry",
-        "stage": "proxy_to_upstream",
-        "one_shot": false,
-        "content": {
-            "type": "http",
-            "value": {
-                "description": "authoritative flat AND conditions",
-                "conditions": [
-                    {
-                        "source": "http",
-                        "field": "Method",
-                        "operator": { "Equals": "POST" }
-                    },
-                    {
-                        "source": "nth_hit",
-                        "count": 2
-                    }
-                ],
-                "actions": [{ "source": "http", "value": { "Delay": { "milliseconds": 1 } } }]
-            }
-        }
+    workspace_rules_mut(&mut value)[0]["content"]["value"]["condition"] = json!({
+        "source": "http",
+        "field": "Method",
+        "operator": { "Equals": "POST" }
     });
 
-    parse(&value).expect("environment wire accepts authoritative flat conditions directly");
+    parse(&value).expect("environment wire accepts one authoritative condition directly");
 }
 
 #[test]
@@ -239,13 +218,13 @@ fn protocol_document_values_use_native_recursive_json_and_reject_unsafe_integers
         json!({"nested": "value"}),
     ] {
         let mut value = full_shape_value();
-        first_rule_mut(&mut value, "socket")["content"]["value"]["conditions"][0]["predicate"] =
+        first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["predicate"] =
             document_predicate(valid);
         parse(&value).expect("native recursive JSON Document value is canonical");
     }
 
     let mut value = full_shape_value();
-    first_rule_mut(&mut value, "socket")["content"]["value"]["conditions"][0]["predicate"] =
+    first_rule_mut(&mut value, "socket")["content"]["value"]["condition"]["predicate"] =
         document_predicate(json!(9_007_199_254_740_992_u64));
     assert!(parse(&value).is_err(), "unsafe Document integer accepted");
 }
@@ -335,7 +314,7 @@ fn canonical_fixture_contains_every_terminal_action_variant_once() {
     let actions = workspace_rules(&fixture)
         .iter()
         .filter(|rule| rule["content"]["type"] == "http")
-        .flat_map(|rule| rule["content"]["value"]["actions"].as_array().unwrap())
+        .map(|rule| &rule["content"]["value"]["action"])
         .filter(|action| action["source"] == "terminal")
         .map(|action| &action["value"])
         .map(|terminal| match terminal {

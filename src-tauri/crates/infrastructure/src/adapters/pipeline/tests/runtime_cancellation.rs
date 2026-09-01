@@ -1,17 +1,21 @@
-fn cancellation_one_shot_rule() -> RuleDefinition {
+fn cancellation_rule() -> RuleDefinition {
     RuleDefinition::create(
         intercept_proxy_domain::RuleDefinitionDraft {
-            name: "cancellation one-shot".into(),
+            name: "cancellation rule".into(),
             enabled: true,
             priority: 1,
             listener_id: intercept_proxy_domain::ListenerId::from_uuid(Uuid::from_u128(0x7472)),
             stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
-            one_shot: true,
             content: intercept_proxy_domain::RuleContent::Http(
                 intercept_proxy_domain::HttpRuleContent {
                     description: String::new(),
-                    conditions: vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
-                    actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
+                    condition: intercept_proxy_domain::Condition::Http {
+                        field: intercept_proxy_domain::MatchField::Method,
+                        operator: intercept_proxy_domain::MatchOperator::Equals("POST".into()),
+                    },
+                    action: intercept_proxy_domain::UnifiedAction::Http(
+                        intercept_proxy_domain::HttpAction::Delay { milliseconds: 1 },
+                    ),
                 },
             ),
         },
@@ -25,6 +29,7 @@ struct BlockingCommitRules {
     snapshot: Mutex<RuleRuntimeSnapshot>,
     commit_entered: Arc<tokio::sync::Notify>,
     commit_release: Arc<tokio::sync::Notify>,
+    commit_calls: std::sync::atomic::AtomicUsize,
 }
 
 #[async_trait]
@@ -38,8 +43,14 @@ impl RuntimeRuleRepository for BlockingCommitRules {
         snapshot: &RuleRuntimeSnapshot,
         deltas: &[intercept_proxy_domain::RuleLifecycleDelta],
     ) -> AppResult<u64> {
-        self.commit_entered.notify_one();
-        self.commit_release.notified().await;
+        if self
+            .commit_calls
+            .fetch_add(1, std::sync::atomic::Ordering::AcqRel)
+            == 0
+        {
+            self.commit_entered.notify_one();
+            self.commit_release.notified().await;
+        }
         let mut current = self.snapshot.lock();
         if current.collection_revision != snapshot.collection_revision
             || current.signature != snapshot.signature
@@ -125,9 +136,10 @@ async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_m
     let commit_entered = Arc::new(tokio::sync::Notify::new());
     let commit_release = Arc::new(tokio::sync::Notify::new());
     let rules = Arc::new(BlockingCommitRules {
-        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![cancellation_one_shot_rule()])),
+        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![cancellation_rule()])),
         commit_entered: Arc::clone(&commit_entered),
         commit_release: Arc::clone(&commit_release),
+        commit_calls: std::sync::atomic::AtomicUsize::new(0),
     });
     let pipeline = Arc::new(RuntimePipelineAdapter::new(
         test_product_hooks(),
@@ -176,8 +188,8 @@ async fn aborting_http_caller_after_commit_started_does_not_cancel_actor_state_m
         .unwrap();
 
     let persisted = rules.snapshot.lock();
-    assert!(!persisted.rules[0].enabled());
-    assert_eq!(persisted.rules[0].lifecycle().hit_count, 1);
+    assert!(persisted.rules[0].enabled());
+    assert_eq!(persisted.rules[0].lifecycle().hit_count, 2);
 }
 
 #[tokio::test(flavor = "current_thread")]
@@ -190,7 +202,7 @@ async fn aborted_runtime_stopping_still_retires_epoch_and_resets_actor() {
         snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity(
             Some(collection_id),
             1,
-            vec![cancellation_one_shot_rule()],
+            vec![cancellation_rule()],
         )),
         reset_calls: std::sync::atomic::AtomicUsize::new(0),
         stop_reset_entered: Arc::clone(&entered),

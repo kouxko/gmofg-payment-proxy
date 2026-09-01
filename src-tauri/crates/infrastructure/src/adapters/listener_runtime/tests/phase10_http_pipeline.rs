@@ -55,22 +55,9 @@ fn set_string_rule(
     stage: RuleStage,
     created_order: u64,
     field: &str,
-    mut conditions: Vec<Condition>,
+    condition: Condition,
     value: &str,
 ) -> RuleDefinition {
-    if conditions.is_empty() {
-        let decoded_field = match stage {
-            RuleStage::ProxyToUpstream => "route",
-            RuleStage::ProxyToApp => "result",
-        };
-        conditions.push(Condition::Document {
-            path: JsonPointer::property(decoded_field),
-            predicate: DocumentPredicate::String(StringPredicate {
-                operator: StringOperator::Equal,
-                value: "decoded".into(),
-            }),
-        });
-    }
     RuleDefinition::restore(
         id,
         RuleDefinitionDraft {
@@ -79,14 +66,13 @@ fn set_string_rule(
             priority: 10,
             listener_id: listener.id,
             stage,
-            one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions,
-                actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                condition,
+                action: UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property(field),
                     value: DocumentValue::String(value.into()),
-                })],
+                }),
             }),
         },
         intercept_proxy_domain::RuleDefinitionRestoreSnapshot {
@@ -116,8 +102,6 @@ fn workspace_with_http_rules(
     workspace
 }
 
-#[path = "phase10_http_pipeline/mixed_rule_ownership.rs"]
-mod mixed_rule_ownership;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
 #[path = "phase10_http_pipeline/request_metadata.rs"]

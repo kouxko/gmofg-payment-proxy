@@ -1,8 +1,8 @@
 //! 持久化前基于 Listener 与协议包描述的统一 Document 规则校验。
 
 use intercept_proxy_domain::{
-    Condition, DocumentSchemaNode, RuleContent, UnifiedAction, contains_document_condition,
-    validate_document_conditions_schema, validate_unified_actions_schema,
+    Condition, DocumentSchemaNode, RuleContent, UnifiedAction, is_document_condition,
+    validate_document_condition_schema, validate_unified_action_schema,
 };
 
 use super::Application;
@@ -48,15 +48,15 @@ impl Application {
                 "协议包未声明该方向的 Document Decode 能力",
             ));
         }
-        if candidate.actions.iter().any(document_action_modifies_value) && !capabilities.encode {
+        if document_action_modifies_value(candidate.action) && !capabilities.encode {
             return Err(rule_invalid(
-                "content.actions",
+                "content.action",
                 "协议包未声明该方向的 Document Encode 能力",
             ));
         }
         if let Some(schema) = schema {
-            validate_document_conditions_schema(candidate.conditions, &schema)?;
-            validate_unified_actions_schema(candidate.actions, &schema)?;
+            validate_document_condition_schema(candidate.condition, &schema)?;
+            validate_unified_action_schema(candidate.action, &schema)?;
         }
         Ok(())
     }
@@ -64,8 +64,8 @@ impl Application {
 
 struct DocumentCandidate<'a> {
     package: Option<&'a intercept_proxy_domain::ProtocolPackageRef>,
-    conditions: &'a [Condition],
-    actions: &'a [UnifiedAction],
+    condition: &'a Condition,
+    action: &'a UnifiedAction,
 }
 
 fn document_candidate<'a>(
@@ -74,8 +74,8 @@ fn document_candidate<'a>(
 ) -> AppResult<Option<DocumentCandidate<'a>>> {
     match (rule.content(), &listener.data_plane) {
         (RuleContent::Http(content), ListenerDataPlane::Http(settings)) => {
-            if !contains_document_condition(&content.conditions)
-                && !content.actions.iter().any(document_action_modifies_value)
+            if !is_document_condition(&content.condition)
+                && !document_action_modifies_value(&content.action)
             {
                 return Ok(None);
             }
@@ -84,8 +84,8 @@ fn document_candidate<'a>(
                     HttpBodyProcessing::Plain => None,
                     HttpBodyProcessing::Protocol { package } => Some(package),
                 },
-                conditions: &content.conditions,
-                actions: &content.actions,
+                condition: &content.condition,
+                action: &content.action,
             }))
         }
         (RuleContent::Socket(content), ListenerDataPlane::Socket(settings)) => {
@@ -111,8 +111,8 @@ fn document_candidate<'a>(
             }
             Ok(Some(DocumentCandidate {
                 package: Some(&scripted.package),
-                conditions: &content.conditions,
-                actions: &content.actions,
+                condition: &content.condition,
+                action: &content.action,
             }))
         }
         (RuleContent::Http(_), ListenerDataPlane::Socket(_))

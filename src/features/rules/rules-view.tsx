@@ -7,7 +7,7 @@ import { commands } from "@/generated/rust-types";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
 import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
-import { RuleCreationDialog } from "./rule-creation-dialog";
+import { RuleCreationEditor } from "./rule-creation-editor";
 import { RuleDefinitionEditor } from "./rule-definition-editor";
 import { RuleDefinitionList } from "./rule-definition-list";
 import { RulesWorkspaceShell } from "./rules-workspace-shell";
@@ -42,6 +42,7 @@ export function RulesView() {
       .then(async (draft) => {
         const editorContext = await callCommand(commands.ruleEditorContext(draft.draft.listener_id));
         if (!active) return;
+        setCreationOpen(false);
         setSelected(undefined);
         setInput(draft);
         setContext(editorContext);
@@ -56,6 +57,7 @@ export function RulesView() {
 
   async function selectRule(rule: RuleDefinition_Serialize) {
     const generation = ++editorGeneration.current;
+    setCreationOpen(false);
     setLoadingEditor(true);
     setFieldErrors({});
     try {
@@ -74,41 +76,19 @@ export function RulesView() {
     }
   }
 
-  function startCreation(draft: RuleDefinitionSaveInput, editorContext: RuleEditorContext) {
-    setSelected(undefined);
-    setInput(draft);
-    setContext(editorContext);
-    setFieldErrors({});
-    setCreationOpen(false);
-  }
-
-  async function save() {
-    if (!input || pending) return;
+  async function save(materialized: RuleDefinitionSaveInput) {
+    if (pending) return;
     setPending(true);
     try {
-      const saved = await callCommand(commands.ruleDefinitionSave(input));
+      const saved = await callCommand(commands.ruleDefinitionSave(materialized));
       setSelected(saved);
       setInput(toSaveInput(saved));
+      setCreationOpen(false);
       setFieldErrors({});
       await source.refresh();
       toast(`规则“${saved.name}”已保存。`, { variant: "success" });
     } catch (reason) {
       setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setPending(false);
-    }
-  }
-
-  async function toggle(enabled: boolean) {
-    if (!selected || !input || pending) return;
-    setPending(true);
-    try {
-      const saved = await callCommand(commands.ruleDefinitionToggle(selected.rule_id, selected.revision, enabled));
-      setSelected(saved);
-      setInput(toSaveInput(saved));
-      await source.refresh();
-    } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
       setPending(false);
@@ -157,14 +137,30 @@ export function RulesView() {
           <RuleDefinitionList
             error={source.error}
             loading={source.isLoading}
-            onNew={() => setCreationOpen(true)}
+            onNew={() => {
+              setSelected(undefined);
+              setInput(undefined);
+              setContext(undefined);
+              setFieldErrors({});
+              setCreationOpen(true);
+            }}
             onRefresh={() => void source.refresh()}
             onSelect={(rule) => void selectRule(rule)}
             pending={pending || loadingEditor}
             rules={source.rules}
             selectedId={selected?.rule_id}
           />
-          <RuleDefinitionEditor
+          {creationOpen ? <RuleCreationEditor
+            fieldErrors={fieldErrors}
+            listeners={source.listeners}
+            onCancel={() => {
+              setCreationOpen(false);
+              setInput(undefined);
+              setContext(undefined);
+            }}
+            onSave={(materialized) => void save(materialized)}
+            pending={pending}
+          /> : <RuleDefinitionEditor
             context={context}
             fieldErrors={fieldErrors}
             input={input}
@@ -176,13 +172,11 @@ export function RulesView() {
             }}
             onCopy={() => void copy()}
             onDelete={() => void remove()}
-            onSave={() => void save()}
-            onToggle={(enabled) => void toggle(enabled)}
+            onSave={(materialized) => void save(materialized)}
             pending={pending}
-          />
+          />}
         </RulesWorkspaceShell>
       </div>
-      <RuleCreationDialog listeners={source.listeners} onClose={() => setCreationOpen(false)} onCreate={startCreation} open={creationOpen} />
     </div>
   );
 }
@@ -197,7 +191,6 @@ function toSaveInput(rule: RuleDefinition_Serialize): RuleDefinitionSaveInput {
       priority: rule.priority,
       listener_id: rule.listener_id,
       stage: rule.stage,
-      one_shot: rule.one_shot,
       content: rule.content,
     },
   };

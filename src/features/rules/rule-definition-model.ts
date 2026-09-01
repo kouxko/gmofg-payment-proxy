@@ -59,53 +59,49 @@ export function ruleStageIncompatibility(
 }
 
 function httpStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "http" }>["value"], stage: HttpRuleEditorStageViewModel, localTypes: RuleLocalDocumentTypeCapability[]) {
-  const httpConditions = content.conditions.filter((condition): condition is Extract<Condition, { source: "http" }> => condition.source === "http");
-  const httpActions = content.actions.filter((action) => action.source === "http" || action.source === "terminal");
-  if (httpConditions.length > 0 || httpActions.length > 0) {
+  const httpCondition = content.condition.source === "http" ? content.condition : undefined;
+  const httpAction = content.action.source === "http" || content.action.source === "terminal" ? content.action : undefined;
+  if (httpCondition || httpAction) {
     if (!stage.http) return "目标阶段没有可编辑当前 HTTP 条件或动作的能力。";
-    for (const leaf of httpConditions) {
-      const kind = matchFieldKind(leaf);
+    if (httpCondition) {
+      const kind = matchFieldKind(httpCondition);
       const capability = kind ? stage.http.match_fields.find((item) => item.kind === kind) : undefined;
       if (!capability) return `目标阶段不支持 HTTP 条件 ${kind ? matchFieldLabel(kind) : "未知字段"}。`;
-      if (!capability.operators.includes(matchOperatorKind(leaf.operator))) {
+      if (!capability.operators.includes(matchOperatorKind(httpCondition.operator))) {
         return `目标阶段不支持 HTTP 条件 ${matchFieldLabel(capability.kind)} 的当前操作符。`;
       }
     }
-    const actionKinds = stage.http.actions.map((action) => action.kind);
-    for (const action of httpActions) {
-      const kind = ruleActionKind(action.source === "http" ? action.value : { Terminal: action.value });
+    if (httpAction) {
+      const actionKinds = stage.http.actions.map((action) => action.kind);
+      const kind = ruleActionKind(httpAction.source === "http" ? httpAction.value : { Terminal: httpAction.value });
       if (!actionKinds.includes(kind)) return `目标阶段不支持 HTTP 动作 ${ruleActionKindLabel(kind)}。`;
     }
   }
-  return documentIncompatibility(content.conditions, content.actions, stage.document_fields, stage.document_common_actions, localTypes);
+  return documentIncompatibility(content.condition, content.action, stage.document_fields, stage.document_common_actions, localTypes);
 }
 
 function socketStageIncompatibility(content: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "socket" }>["value"], expectedPackage: ProtocolPackageRef, stage: SocketRuleEditorStageViewModel, localTypes: RuleLocalDocumentTypeCapability[]) {
   if (content.package.id !== expectedPackage.id || content.package.version !== expectedPackage.version) {
     return "目标阶段的 Document 协议包与当前内容不一致。";
   }
-  return documentIncompatibility(content.conditions, content.actions, stage.document_fields, stage.common_actions, localTypes);
+  return documentIncompatibility(content.condition, content.action, stage.document_fields, stage.common_actions, localTypes);
 }
 
 function documentIncompatibility(
-  conditions: Condition[],
-  actions: import("@/generated/rust-types").UnifiedAction[],
+  condition: Condition,
+  action: import("@/generated/rust-types").UnifiedAction,
   fieldCapabilities: import("@/generated/rust-types").RuleDocumentSchemaFieldCapability[],
   commonActions: RuleCommonActionCapability[],
   localTypes: RuleLocalDocumentTypeCapability[],
 ) {
   const fields = documentSchemaFields(fieldCapabilities);
-  for (const leaf of conditions.filter((item) => item.source === "document" || item.source === "document_pattern")) {
-    const field = fields.find((item) => item.name === leaf.path);
-    if (field && !predicateMatchesType(leaf.predicate, field.type)) {
-      return `目标阶段不能编辑 Document 条件字段 ${leaf.path}。`;
+  if (condition.source === "document" || condition.source === "document_pattern") {
+    const field = fields.find((item) => item.name === condition.path);
+    if (field && !predicateMatchesType(condition.predicate, field.type)) {
+      return `目标阶段不能编辑 Document 条件字段 ${condition.path}。`;
     }
   }
-  for (const action of actions) {
-    const reason = documentActionIncompatibility(action, fields, commonActions, localTypes);
-    if (reason) return reason;
-  }
-  return null;
+  return documentActionIncompatibility(action, fields, commonActions, localTypes);
 }
 
 function documentActionIncompatibility(

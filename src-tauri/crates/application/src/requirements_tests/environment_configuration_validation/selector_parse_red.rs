@@ -6,7 +6,7 @@ fn candidate_json_with(mut edit: impl FnMut(&mut serde_json::Value)) -> Vec<u8> 
     serde_json::to_vec(&candidate).unwrap()
 }
 
-async fn assert_schema_code(candidate: &[u8], expected: EnvironmentStatusCode) {
+pub(super) async fn assert_schema_code(candidate: &[u8], expected: EnvironmentStatusCode) {
     let report = validator(Arc::new(RecordingValidationPort::new(Behavior::Pass)))
         .validate(candidate, CancellationToken::new())
         .await;
@@ -100,8 +100,8 @@ async fn unsupported_mitm_root_material_preserves_material_role_code() {
 #[tokio::test]
 async fn unsafe_document_integer_is_rejected_as_invalid_schema() {
     let candidate = candidate_json_with(|candidate| {
-        rule_named_mut(candidate, "Protocol Document values")["content"]["value"]["conditions"]
-            [0]["predicate"]["value"]["value"] = serde_json::json!(9_007_199_254_740_992_u64);
+        rule_named_mut(candidate, "Protocol Document values")["content"]["value"]["condition"]
+            ["predicate"]["value"]["value"] = serde_json::json!(9_007_199_254_740_992_u64);
     });
 
     assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;

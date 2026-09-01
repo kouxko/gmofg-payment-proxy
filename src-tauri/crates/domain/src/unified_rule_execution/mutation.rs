@@ -14,12 +14,11 @@ impl DocumentMutation {
 }
 
 /// Validates Document mutation values at paths declared by the package Schema.
-pub fn validate_unified_actions_schema(
-    actions: &[UnifiedAction],
+pub fn validate_unified_action_schema(
+    action: &UnifiedAction,
     schema: &DocumentSchemaNode,
 ) -> Result<(), DomainError> {
-    for (index, action) in actions.iter().enumerate() {
-        let expected_and_type = match action {
+    let expected_and_type = match action {
             UnifiedAction::Document(DocumentMutation::Set { path, value }) => schema
                 .resolve(path)
                 .ok()
@@ -36,7 +35,7 @@ pub fn validate_unified_actions_schema(
                 }
                 Some(_) => {
                     return Err(rule_error(
-                        &format!("actions.{index}"),
+                        "action",
                         "动作值类型与 Schema 声明不一致",
                     ));
                 }
@@ -45,15 +44,11 @@ pub fn validate_unified_actions_schema(
             UnifiedAction::RecordMatch | UnifiedAction::Http(_) | UnifiedAction::Terminal(_) => {
                 None
             }
-        };
-        if let Some((expected, value_type)) = expected_and_type
-            && !expected.accepts(value_type)
-        {
-            return Err(rule_error(
-                &format!("actions.{index}"),
-                "动作值类型与 Schema 声明不一致",
-            ));
-        }
+    };
+    if let Some((expected, value_type)) = expected_and_type
+        && !expected.accepts(value_type)
+    {
+        return Err(rule_error("action", "动作值类型与 Schema 声明不一致"));
     }
     Ok(())
 }

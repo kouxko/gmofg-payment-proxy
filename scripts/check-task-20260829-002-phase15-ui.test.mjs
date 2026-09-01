@@ -12,8 +12,9 @@ const files = [
   "src/features/rules/rules-workspace-shell.tsx",
   "src/features/rules/rule-definition-list.tsx",
   "src/features/rules/rule-definition-editor.tsx",
+  "src/features/rules/rule-creation-editor.tsx",
   "src/features/rules/rule-definition-model.ts",
-  "src/features/rules/rule-list-editors.tsx",
+  "src/features/rules/rule-single-pair-editor.tsx",
   "src/features/capture/exchange-observation-detail.tsx",
   "src/features/protocol-packages/protocol-package-detail.tsx",
   "src-tauri/crates/application/src/models/unified_rule.rs",
@@ -28,6 +29,7 @@ const files = [
   "src-tauri/crates/exchange/src/observation.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
   "src-tauri/crates/domain/src/unified_rule_execution.rs",
+  "src-tauri/crates/domain/src/unified_rule_execution/program.rs",
   "src-tauri/crates/domain/src/unified_rule_execution/mutation.rs",
   "src-tauri/crates/proxy/src/socket_relay/processing.rs",
   "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
@@ -130,22 +132,20 @@ test("checker rejects legacy ProtocolDocumentRule production paths", () => {
   }
 });
 
-test("checker rejects loss of actor-owned unified Nth contract", () => {
+test("checker rejects loss of unified ownership and lifecycle contract", () => {
   for (const [relative, token] of [
     ["src-tauri/crates/proxy/src/socket_relay/processing.rs", "JointRuleConditionEvaluation"],
     ["src-tauri/crates/proxy/src/socket_relay/processing.rs", "UnifiedOwned(JointConditionEvaluation)"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs", "JointRuleConditionEvaluation::NotOwned"],
     ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "let checkpoint = current.clone()"],
-    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "current.counters.retain"],
     ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs", "commit_runtime_deltas"],
     ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "rules: &[RuleDefinition]"],
-    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "joint.gate(rule.rule_id().as_uuid(), nth_attempt)?"],
-    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "current.counters.insert(key, nth_attempt)"],
+    ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "joint.gate(rule.rule_id().as_uuid())?"],
     ["src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs", "rule.lifecycle_delta_for_successful_match"],
   ]) {
     const root = fixture((directory) => {
       const path = join(directory, relative);
-      writeFileSync(path, readFileSync(path, "utf8").replaceAll(token, "REMOVED_NTH_OWNER"));
+      writeFileSync(path, readFileSync(path, "utf8").replaceAll(token, "REMOVED_UNIFIED_OWNER"));
     });
     try {
       assert.notEqual(run(root).status, 0, token);
@@ -174,18 +174,36 @@ test("checker rejects retired runtime owner re-entry", () => {
   }
 });
 
+test("checker rejects restoring the intermediate rule creation step", () => {
+  const root = fixture((directory) => {
+    const path = join(directory, "src/features/rules/rule-creation-editor.tsx");
+    writeFileSync(path, `${readFileSync(path, "utf8")}\n// 进入规则编辑器\n`);
+  });
+  try {
+    assert.notEqual(run(root).status, 0);
+  } finally {
+    rmSync(root, { recursive: true, force: true });
+  }
+});
+
 test("checker rejects removal of each flat inline editor owner", () => {
   for (const [relative, token] of [
     ["src/features/rules/rules-view.tsx", "<RulesWorkspaceShell>"],
     ["src/features/rules/rules-view.tsx", "<RuleDefinitionEditor"],
+    ["src/features/rules/rules-view.tsx", "<RuleCreationEditor"],
     ["src/features/rules/rules-workspace-shell.tsx", "grid-cols-[minmax(600px,1fr)_560px]"],
     ["src/features/rules/rule-definition-list.tsx", "上行与下行规则统一显示"],
     ["src/features/rules/rule-definition-list.tsx", "ruleDirectionLabel(rule.stage)"],
-    ["src/features/rules/rule-list-editors.tsx", "所有条件固定为 AND"],
-    ["src/features/rules/rule-definition-editor.tsx", "<FlatConditionList"],
-    ["src/features/rules/rule-definition-editor.tsx", "<OrderedActionList"],
-    ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentConditionDraft"],
-    ["src/features/rules/rule-definition-editor.tsx", "commands.ruleDefinitionDocumentActionDraft"],
+    ["src/features/rules/rule-definition-editor.tsx", "<RuleSinglePairEditor"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "async function materialize()"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "conditions: [condition]"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "actions: [action]"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "保存规则"],
+    ["src/features/rules/rule-creation-editor.tsx", "onReadinessChange"],
+    ["src-tauri/crates/domain/src/unified_rule_execution.rs", "conditions.len() != 1"],
+    ["src-tauri/crates/domain/src/unified_rule_execution/program.rs", "actions.len() != 1"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "commands.ruleDefinitionDocumentConditionDraft"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "commands.ruleDefinitionDocumentActionDraft"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs", "rule_definitions"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs", "Document::parse_json"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs", "JointDocumentEvaluation::new_plain_json"],
@@ -324,11 +342,11 @@ test("checker rejects restoring stage-grouped rule lists", () => {
 
 test("checker rejects schema fields falling back to schema-free capabilities", () => {
   for (const [from, to] of [
-    ["selectedSchemaField?.predicates", "selectedLocalType?.predicates"],
-    ["selectedSchemaField?.actions", "selectedLocalType?.actions"],
+    ["selectedSchema?.predicates", "undefined"],
+    ["selectedDocumentActions", "missingDocumentActions"],
   ]) {
     const root = fixture((directory) => {
-      const path = join(directory, "src/features/rules/rule-definition-editor.tsx");
+      const path = join(directory, "src/features/rules/rule-single-pair-editor.tsx");
       writeFileSync(path, readFileSync(path, "utf8").replaceAll(from, to));
     });
     try {

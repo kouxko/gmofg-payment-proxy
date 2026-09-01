@@ -1,0 +1,15 @@
+{
+  "case": "match-18",
+  "request_path": "/body?case=age18",
+  "request_body_hex": "7b22637573746f6d6572223a7b22616765223a31387d7d",
+  "status": 200,
+  "reason": "OK",
+  "response_headers": {
+    "Server": "BaseHTTP/0.6 Python/3.14.7",
+    "Date": "Tue, 01 Sep 2026 08:41:30 GMT",
+    "content-type": "application/json",
+    "content-length": "45"
+  },
+  "response_body_hex": "7b22757073747265616d5f7265636569766564223a7b22637573746f6d6572223a7b22616765223a31387d7d7d",
+  "response_body_utf8": "{\"upstream_received\":{\"customer\":{\"age\":18}}}"
+}

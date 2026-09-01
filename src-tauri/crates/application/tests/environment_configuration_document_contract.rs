@@ -125,7 +125,7 @@ fn terminal_action_rejects_wrong_offset_fields() {
             .unwrap()
             .iter_mut()
             .filter(|rule| rule["content"]["type"] == "http")
-            .flat_map(|rule| rule["content"]["value"]["actions"].as_array_mut().unwrap())
+            .map(|rule| &mut rule["content"]["value"]["action"])
             .find(|action| action["source"] == "terminal" && action["value"].get(variant).is_some())
             .expect("canonical fixture contains the requested terminal variant");
         action["value"] = invalid;

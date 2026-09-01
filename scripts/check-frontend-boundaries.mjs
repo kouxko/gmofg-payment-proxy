@@ -233,7 +233,7 @@ const iconCloseTriggerFiles = new Set([
   "src/features/listeners/socket-protocol-package-dialog.tsx",
   "src/features/protocol-packages/protocol-package-dialog.tsx",
   "src/features/rules/rules-view.tsx",
-  "src/features/rules/rule-creation-dialogs.tsx",
+  "src/features/rules/rule-creation-dialog.tsx",
 ]);
 
 const failures = [];
@@ -344,7 +344,7 @@ if (/commands\.ruleSave/.test(captureSource)) {
 const ruleEditorDirectory = join(sourceRoot, "features/rules");
 const ruleEditorSource = readdirSync(ruleEditorDirectory)
   .filter((name) =>
-    /^(?:rule-definition-editor|use-async-request-slots)\.tsx?$/.test(
+    /^(?:rule-definition-editor|rule-single-pair-editor)\.tsx?$/.test(
       name,
     ),
   )
@@ -358,7 +358,6 @@ if (
   );
 }
 for (const command of [
-  "commands.ruleDefinitionNthHitConditionDraft",
   "commands.ruleDefinitionHttpConditionDraft",
   "commands.ruleDefinitionActionDraft",
 ]) {
@@ -386,13 +385,13 @@ if (
   );
 }
 if (
-  !ruleEditorSource.includes("useAsyncRequestSlots") ||
-  !ruleEditorSource.includes("editorScope") ||
-  !ruleEditorSource.includes("appendHttpFactoryResult") ||
-  !ruleEditorSource.includes("generations.current.get(key) !== generation")
+  !ruleEditorSource.includes("async function materialize()") ||
+  !ruleEditorSource.includes("conditions: [condition]") ||
+  !ruleEditorSource.includes("actions: [action]") ||
+  !ruleEditorSource.includes("props.onSave(withSinglePair")
 ) {
   failures.push(
-    "src/features/rules/rule-definition-editor.tsx: Rust 异步草稿必须按规则、Listener、阶段使用代次隔离，并函数式合并到最新草稿",
+    "src/features/rules/rule-single-pair-editor.tsx: 条件与动作必须只在最终保存时由 Rust 工厂生成，并一次写入唯一规则配对",
   );
 }
 
@@ -440,13 +439,13 @@ if (/\.name\.includes\(/.test(faultSource)) {
   );
 }
 if (
-  /const\s*\[\s*(?:nthHit|priority|oneShot|channel)\s*,[^\]]+\]\s*=\s*useState\(\s*(?:1|100|false|["']transaction["'])\s*\)/.test(
+  /const\s*\[\s*(?:priority|oneShot|channel)\s*,[^\]]+\]\s*=\s*useState\(\s*(?:100|false|["']transaction["'])\s*\)/.test(
     faultSource,
   ) ||
   /channel:\s*["']transaction["']/.test(faultSource)
 ) {
   failures.push(
-    "src/features/faults/faults-view.tsx: 故障通道、命中次数、优先级和一次性默认值必须来自 Rust 模板",
+    "src/features/faults/faults-view.tsx: 故障通道、优先级和一次性默认值必须来自 Rust 模板",
   );
 }
 if (

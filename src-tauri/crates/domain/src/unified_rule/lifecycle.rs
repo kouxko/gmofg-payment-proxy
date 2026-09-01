@@ -2,7 +2,7 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-use crate::{DomainError, Revision, RuleId, TerminalIdentity};
+use crate::{DomainError, Revision, RuleId};
 
 use super::{RuleDefinition, rule_binding_error};
 
@@ -29,7 +29,6 @@ pub struct RuleLifecycleSnapshot {
     pub rule_id: RuleId,
     pub revision: Revision,
     pub enabled: bool,
-    pub one_shot: bool,
     pub lifecycle: RuleLifecycle,
 }
 
@@ -41,8 +40,6 @@ impl RuleLifecycleSnapshot {
             expected_revision: self.revision,
             hit_count_increment: 1,
             last_hit_at: Some(last_hit_at),
-            disable_one_shot: self.one_shot && self.enabled,
-            nth_counter_advance: None,
         }
     }
 }
@@ -55,25 +52,6 @@ pub struct RuleLifecycleDelta {
     pub expected_revision: Revision,
     pub hit_count_increment: u64,
     pub last_hit_at: Option<DateTime<Utc>>,
-    pub disable_one_shot: bool,
-    pub nth_counter_advance: Option<NthCounterAdvance>,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct NthCounterSnapshot {
-    pub rule_id: RuleId,
-    pub terminal: TerminalIdentity,
-    pub attempts: u64,
-}
-
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
-pub struct NthCounterAdvance {
-    pub rule_id: RuleId,
-    pub terminal: TerminalIdentity,
-    pub expected_attempts: u64,
-    pub increment: u64,
 }
 
 impl RuleLifecycleDelta {
@@ -95,25 +73,8 @@ impl RuleLifecycleDelta {
                 "命中增量与 last_hit_at 必须同时存在",
             ));
         }
-        if let Some(advance) = &self.nth_counter_advance
-            && (advance.rule_id != snapshot.rule_id || advance.increment != 1)
-        {
-            return Err(rule_binding_error(
-                "nth_counter_advance",
-                "Nth counter 增量无效",
-            ));
-        }
-        if !has_hit && self.nth_counter_advance.is_none() {
+        if !has_hit {
             return Err(rule_binding_error("lifecycle", "生命周期增量不得为空"));
-        }
-        if self.disable_one_shot && !has_hit {
-            return Err(rule_binding_error(
-                "disable_one_shot",
-                "one-shot 只能由成功命中禁用",
-            ));
-        }
-        if self.disable_one_shot && (!snapshot.one_shot || !snapshot.enabled) {
-            return Err(rule_binding_error("lifecycle", "one-shot 生命周期增量无效"));
         }
         Ok(())
     }
@@ -131,7 +92,6 @@ impl RuleDefinition {
             rule_id: self.rule_id,
             revision: self.revision,
             enabled: self.enabled,
-            one_shot: self.one_shot,
             lifecycle: self.lifecycle.clone(),
         }
     }
@@ -155,10 +115,6 @@ impl RuleDefinition {
                 .checked_add(delta.hit_count_increment)
                 .ok_or_else(|| rule_binding_error("hit_count", "规则命中次数溢出"))?;
             candidate.lifecycle.last_hit_at = Some(last_hit_at);
-        }
-        if delta.disable_one_shot {
-            candidate.enabled = false;
-            candidate.revision = candidate.revision.checked_next()?;
         }
         Ok(candidate)
     }

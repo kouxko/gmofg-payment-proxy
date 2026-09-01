@@ -64,7 +64,6 @@ fn restore_rule(
             priority: template.priority,
             listener_id,
             stage: template.stage,
-            one_shot: template.one_shot,
             content: template.content.clone(),
         },
         RuleDefinitionRestoreSnapshot {

@@ -12,17 +12,17 @@ use crate::{
     AppError, AppResult, HttpBodyProcessing, HttpRuleEditorStageViewModel, ListenerDataPlane,
     ListenerId, ProtocolPackageDescriptionViewModel, ProtocolPackageKindViewModel,
     ProtocolPackageRef, ProxyListener, RuleAction as AppRuleAction, RuleCommonActionCapability,
-    RuleContent, RuleDocumentConditionPathCapability, RuleEditorContentContext, RuleEditorContext,
+    RuleDocumentConditionPathCapability, RuleEditorContentContext, RuleEditorContext,
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
-    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind, RuleNewDefinitionDraft,
-    RuleNthHitConditionDraftInput, RuleStage, RuleTerminalAction, SocketPayloadProcessing,
-    SocketRuleEditorStageViewModel, SocketTopology, document_schema_field_capabilities,
-    local_document_type_capabilities,
+    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
+    RuleNewDefinitionContent, RuleNewDefinitionDraft,
+    RuleStage, RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStageViewModel,
+    SocketTopology, document_schema_field_capabilities, local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
     Condition, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
-    HttpRuleContent, JitterScope, MatchField, MatchOperator, SocketRuleContent,
-    TerminalAction as DomainTerminalAction, TrafficDirection, UnifiedAction,
+    JitterScope, MatchField, MatchOperator, TerminalAction as DomainTerminalAction,
+    TrafficDirection, UnifiedAction,
 };
 
 impl Application {
@@ -114,17 +114,6 @@ impl Application {
         match action {
             RuleCommonActionCapability::RecordMatch => UnifiedAction::RecordMatch,
         }
-    }
-
-    pub fn rule_definition_nth_hit_condition_draft(
-        &self,
-        input: RuleNthHitConditionDraftInput,
-    ) -> AppResult<Condition> {
-        let _ = self;
-        if input.count == 0 {
-            return Err(AppError::new("RULE_INVALID", "第 N 次命中必须是正整数。"));
-        }
-        Ok(Condition::NthHit { count: input.count })
     }
 
     pub fn rule_definition_http_condition_draft(
@@ -373,11 +362,9 @@ fn http_stages(
                 new_rule_draft: RuleNewDefinitionDraft {
                     listener_id,
                     stage,
-                    content: RuleContent::Http(HttpRuleContent {
+                    content: RuleNewDefinitionContent::Http {
                         description: String::new(),
-                        conditions: Vec::new(),
-                        actions: Vec::new(),
-                    }),
+                    },
                 },
             }
         })
@@ -405,11 +392,9 @@ fn socket_stages(
             new_rule_draft: RuleNewDefinitionDraft {
                 listener_id,
                 stage,
-                content: RuleContent::Socket(SocketRuleContent {
+                content: RuleNewDefinitionContent::Socket {
                     package: description.package.clone(),
-                    conditions: Vec::new(),
-                    actions: Vec::new(),
-                }),
+                },
             },
         })
         .collect()

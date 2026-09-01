@@ -225,7 +225,7 @@ impl ReverseProxyService {
     /// 使用宿主分配的共享运行 epoch 启动监听器。
     ///
     /// 一个 Workspace 可同时运行多个 Reverse Listener；它们必须共享 epoch，规则的
-    /// 第 N 次命中、一次性禁用和全局容量才不会因请求在不同端口间切换而被重置。
+    /// 规则生命周期和全局容量不会因请求在不同端口间切换而被重置。
     pub async fn serve_listener_with_epoch(
         &self,
         listener: TcpListener,

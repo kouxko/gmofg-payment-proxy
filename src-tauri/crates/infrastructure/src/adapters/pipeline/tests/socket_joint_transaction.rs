@@ -40,15 +40,12 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
     fn gate(
         &mut self,
         _rule_id: Uuid,
-        _nth_attempt: u64,
     ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::JointRuleConditionEvaluation>
     {
         Ok(
             intercept_proxy_runtime::JointRuleConditionEvaluation::UnifiedOwned(
                 intercept_proxy_runtime::JointConditionEvaluation {
                     matched: true,
-                    eligible_without_nth: true,
-                    contains_nth: false,
                 },
             ),
         )
@@ -73,12 +70,11 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
 async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
     let rule = intercept_proxy_domain::RuleDefinition::create(
         intercept_proxy_domain::RuleDefinitionDraft {
-            name: "one-shot socket transaction".into(),
+            name: "socket transaction".into(),
             enabled: true,
             priority: 1,
             listener_id: intercept_proxy_domain::ListenerId::from_uuid(Uuid::from_u128(0x7472)),
             stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
-            one_shot: true,
             content: intercept_proxy_domain::RuleContent::Socket(
                 intercept_proxy_domain::SocketRuleContent {
                     package: intercept_proxy_domain::ProtocolPackageRef {
@@ -87,8 +83,11 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
                         version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0")
                             .expect("package version"),
                     },
-                    conditions: vec![intercept_proxy_domain::Condition::NthHit { count: 1 }],
-                    actions: vec![intercept_proxy_domain::UnifiedAction::RecordMatch],
+                    condition: intercept_proxy_domain::Condition::Document {
+                        path: intercept_proxy_domain::JsonPointer::parse("").unwrap(),
+                        predicate: intercept_proxy_domain::DocumentPredicate::NullEqual,
+                    },
+                    action: intercept_proxy_domain::UnifiedAction::RecordMatch,
                 },
             ),
         },
@@ -133,6 +132,6 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
         .expect("successful Encode commits the joint lifecycle transaction");
     assert_eq!(encoded.data, b"encoded");
     assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 1);
-    assert!(!rules.snapshot.lock().rules[0].enabled());
+    assert!(rules.snapshot.lock().rules[0].enabled());
     assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 1);
 }

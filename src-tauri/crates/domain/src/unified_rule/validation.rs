@@ -6,41 +6,27 @@ pub(super) fn validate_http_runtime_content(
     definition: &RuleDefinition,
     content: &HttpRuleContent,
 ) -> Result<(), DomainError> {
-    let conditions = content
-        .conditions
-        .iter()
-        .filter(|condition| matches!(condition, Condition::Http { .. }))
-        .cloned()
-        .collect::<Vec<_>>();
-    let actions = content
-        .actions
-        .iter()
-        .filter_map(|action| match action {
-            UnifiedAction::Http(action) => Some(action.clone()),
-            UnifiedAction::Terminal(action) => Some(HttpAction::Terminal(action.clone())),
-            UnifiedAction::RecordMatch | UnifiedAction::Document(_) => None,
-        })
-        .collect::<Vec<_>>();
-    if conditions.is_empty() && actions.is_empty() {
+    let Condition::Http { .. } = &content.condition else {
         return Ok(());
-    }
+    };
+    let action = match &content.action {
+        UnifiedAction::Http(action) => action.clone(),
+        UnifiedAction::Terminal(action) => HttpAction::Terminal(action.clone()),
+        UnifiedAction::RecordMatch | UnifiedAction::Document(_) => return Ok(()),
+    };
     let stage = match definition.stage {
         RuleStage::ProxyToUpstream => MessageStage::Request,
         RuleStage::ProxyToApp => MessageStage::Response,
     };
-    crate::validate_http_rule(stage, &content.conditions, &actions)
+    crate::validate_http_rule(stage, std::slice::from_ref(&content.condition), &[action])
 }
 
 pub(super) fn ensure_socket_only(
-    conditions: &[Condition],
-    actions: &[UnifiedAction],
+    condition: &Condition,
+    action: &UnifiedAction,
 ) -> Result<(), DomainError> {
-    if conditions
-        .iter()
-        .any(|condition| matches!(condition, Condition::Http { .. }))
-        || actions
-            .iter()
-            .any(|action| matches!(action, UnifiedAction::Http(_) | UnifiedAction::Terminal(_)))
+    if matches!(condition, Condition::Http { .. })
+        || matches!(action, UnifiedAction::Http(_) | UnifiedAction::Terminal(_))
     {
         return Err(rule_binding_error(
             "content",
