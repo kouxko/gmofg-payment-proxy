@@ -28,7 +28,7 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
         HostPlatformServices::new(Arc::new(TestSecrets), Arc::new(NoopDialog)),
         Arc::new(InterceptProxyProfile),
     )
-    .with_builtin_protocol_package(Arc::from(crate::BUILTIN_ISO8583_ARCHIVE))
+    .with_builtin_protocol_package(Arc::from(crate::BUILTIN_ISO8583_COMPONENT))
     .build()
     .await
     .expect("build production environment services");
@@ -120,7 +120,7 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn production_full_resource_candidate_requires_builtin_sidecar_online() {
+async fn production_full_resource_candidate_requires_managed_package_online() {
     let _guard = APPLICATION_HOST_LOCK.lock().await;
     let directory = TempDir::new().expect("temporary production Host data directory");
     let host = build_production_host(&directory).await;
@@ -160,7 +160,7 @@ async fn build_production_host(directory: &TempDir) -> ApplicationHost {
         HostPlatformServices::new(Arc::new(TestSecrets), Arc::new(NoopDialog)),
         Arc::new(InterceptProxyProfile),
     )
-    .with_builtin_protocol_package(Arc::from(crate::BUILTIN_ISO8583_ARCHIVE))
+    .with_builtin_protocol_package(Arc::from(crate::BUILTIN_ISO8583_COMPONENT))
     .build()
     .await
     .expect("build production environment services")

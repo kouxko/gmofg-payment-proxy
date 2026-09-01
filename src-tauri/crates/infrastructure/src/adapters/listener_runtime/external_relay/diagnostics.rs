@@ -26,6 +26,13 @@ pub(in crate::adapters::listener_runtime) fn trace_external_rpc_failure(
             Some(error.message()),
             "object(fields=1)".to_owned(),
         ),
+        PackageTransportError::Package { error } => (
+            None,
+            None,
+            Some(error.code.as_str()),
+            Some(error.message.as_str()),
+            "none".to_owned(),
+        ),
         _ => (None, None, None, None, "none".to_owned()),
     };
     let direction_text = match direction {

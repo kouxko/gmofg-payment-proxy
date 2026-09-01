@@ -5,23 +5,22 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-boa_engine.workspace = true
 futures-util.workspace = true
 intercept-proxy-domain = { path = "../domain" }
 intercept-proxy-package-contract = { path = "../package-contract" }
-serde.workspace = true
 serde_json.workspace = true
-tokio = { workspace = true, features = ["process"] }
-tokio-tungstenite = { workspace = true, features = ["connect"] }
-zip.workspace = true
-
-[[bin]]
-name = "intercept-proxy-package-sidecar"
-path = "src/bin/intercept-proxy-package-sidecar.rs"
+tokio.workspace = true
+tokio-tungstenite = { workspace = true, features = ["connect", "rustls-tls-native-roots"] }
+wasm-encoder.workspace = true
+wasmparser.workspace = true
+wasmtime.workspace = true
+wasmtime-wasi.workspace = true
+wasmtime-wasi-http.workspace = true
 
 [dev-dependencies]
 serde_json.workspace = true
 tempfile.workspace = true
+tokio.workspace = true
 
 [lints]
 workspace = true

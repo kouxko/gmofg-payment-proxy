@@ -23,7 +23,7 @@ UI 用户意图
 - `workspaces`、`workspace_state`：完整 Workspace JSON、revision 与当前选择；
 - `certificate_material`、`certificate_state`：受保护的证书材料和集合 revision；
 - `protected_secrets`：provider/key 对应的受保护 blob；
-- `external_protocol_packages`：统一保存外部包注册指纹、本地 ZIP、启用状态、最近连接和稳定错误；
+- `external_protocol_packages`：统一保存远端注册指纹、本地 Component、启用状态、最近连接和稳定错误；
 - `android_runtime_owners`：最多 8 台设备、按 serial + epoch 隔离的跨进程网络所有权事实；
 - `application_feature_state`：一次性初始化状态。
 

@@ -50,6 +50,7 @@ security-framework.workspace = true
 
 [dev-dependencies]
 tokio-tungstenite = { workspace = true, features = ["connect"] }
+wasm-encoder.workspace = true
 zip.workspace = true
 
 [lints]

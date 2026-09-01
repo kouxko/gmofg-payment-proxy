@@ -286,7 +286,7 @@ impl ExternalPackageApplicationPort for FakeProtocolPackageServices {
 
 #[async_trait]
 impl ProtocolPackageImportPort for FakeProtocolPackageServices {
-    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+    async fn prepare_component(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
         self.import_calls.fetch_add(1, Ordering::SeqCst);
         if let Some(error) = self.failures.lock().import.clone() {
             return Err(error);
@@ -294,7 +294,7 @@ impl ProtocolPackageImportPort for FakeProtocolPackageServices {
         self.import_responses.lock().pop_front().unwrap_or(Ok(None))
     }
 
-    async fn commit_zip(
+    async fn commit_component(
         &self,
         _: ProtocolPackageImportToken,
     ) -> AppResult<ProtocolPackageImportViewModel> {
@@ -309,7 +309,7 @@ impl ProtocolPackageImportPort for FakeProtocolPackageServices {
             })
     }
 
-    async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
+    async fn discard_component(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
         Ok(())
     }
 }

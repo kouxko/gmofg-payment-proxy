@@ -1,4 +1,6 @@
 use super::*;
+use crate::adapters::{PackageTransportError, ProtocolPackageRuntime};
+use async_trait::async_trait;
 use intercept_proxy_domain::{
     Condition, Document, DocumentMutation, DocumentPredicate, DocumentValue, JsonPointer,
     ListenerId, ProtocolDirection, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage,
@@ -35,10 +37,7 @@ fn socket_rule(
     )
     .unwrap()
 }
-use intercept_proxy_package_contract::{
-    CanonicalBase64, DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult,
-    PackageManifest,
-};
+use intercept_proxy_package_contract::{FrameResult, PackageManifest};
 use serde_json::json;
 use uuid::Uuid;
 
@@ -46,97 +45,88 @@ use uuid::Uuid;
 struct DisconnectedRpc;
 
 #[async_trait]
-impl ExternalPackageRpc for DisconnectedRpc {
+impl ProtocolPackageRuntime for DisconnectedRpc {
     async fn frame(
         &self,
         _direction: ProtocolDirection,
-        _request: FrameParams,
+        _buffer: Vec<u8>,
     ) -> Result<FrameResult, PackageTransportError> {
         Err(PackageTransportError::Disconnected)
     }
 
-    async fn decode(
+    async fn decode_socket(
         &self,
         _direction: ProtocolDirection,
-        _request: DecodeParams,
+        _input: Vec<u8>,
     ) -> Result<Document, PackageTransportError> {
         Err(PackageTransportError::Disconnected)
     }
 
-    async fn encode(
+    async fn encode_socket(
         &self,
         _direction: ProtocolDirection,
-        _request: EncodeParams,
-    ) -> Result<String, PackageTransportError> {
+        _original_input: Vec<u8>,
+        _document: Document,
+    ) -> Result<Vec<u8>, PackageTransportError> {
         Err(PackageTransportError::Disconnected)
     }
 
     async fn display(
         &self,
         _direction: ProtocolDirection,
-        _request: DisplayParams,
+        _document: Document,
     ) -> Result<String, PackageTransportError> {
         Err(PackageTransportError::Disconnected)
     }
 }
 
 #[tokio::test]
-async fn rpc_contract_frame_preserves_connection_failure() {
-    let rpc = DisconnectedRpc;
+async fn runtime_contract_frame_preserves_connection_failure() {
+    let runtime = DisconnectedRpc;
     assert!(matches!(
-        rpc.frame(
-            ProtocolDirection::Upstream,
-            FrameParams {
-                buffer: CanonicalBase64::from_bytes(b"frame")
-            }
-        )
-        .await,
+        runtime
+            .frame(ProtocolDirection::Upstream, b"frame".to_vec())
+            .await,
         Err(PackageTransportError::Disconnected)
     ));
 }
 
 #[tokio::test]
-async fn rpc_contract_decode_preserves_connection_failure() {
-    let rpc = DisconnectedRpc;
+async fn runtime_contract_decode_preserves_connection_failure() {
+    let runtime = DisconnectedRpc;
     assert!(matches!(
-        rpc.decode(
-            ProtocolDirection::Upstream,
-            DecodeParams {
-                input: CanonicalBase64::from_bytes(b"frame").as_str().to_owned()
-            }
-        )
-        .await,
+        runtime
+            .decode_socket(ProtocolDirection::Upstream, b"frame".to_vec())
+            .await,
         Err(PackageTransportError::Disconnected)
     ));
 }
 
 #[tokio::test]
-async fn rpc_contract_encode_preserves_connection_failure() {
-    let rpc = DisconnectedRpc;
+async fn runtime_contract_encode_preserves_connection_failure() {
+    let runtime = DisconnectedRpc;
     assert!(matches!(
-        rpc.encode(
-            ProtocolDirection::Upstream,
-            EncodeParams {
-                original_input: CanonicalBase64::from_bytes(b"frame").as_str().to_owned(),
-                document: serde_json::from_value(json!({})).unwrap(),
-            }
-        )
-        .await,
+        runtime
+            .encode_socket(
+                ProtocolDirection::Upstream,
+                b"frame".to_vec(),
+                serde_json::from_value(json!({})).unwrap(),
+            )
+            .await,
         Err(PackageTransportError::Disconnected)
     ));
 }
 
 #[tokio::test]
-async fn rpc_contract_display_preserves_connection_failure() {
-    let rpc = DisconnectedRpc;
+async fn runtime_contract_display_preserves_connection_failure() {
+    let runtime = DisconnectedRpc;
     assert!(matches!(
-        rpc.display(
-            ProtocolDirection::Upstream,
-            DisplayParams {
-                document: serde_json::from_value(json!({})).unwrap(),
-            }
-        )
-        .await,
+        runtime
+            .display(
+                ProtocolDirection::Upstream,
+                serde_json::from_value(json!({})).unwrap(),
+            )
+            .await,
         Err(PackageTransportError::Disconnected)
     ));
 }

@@ -88,7 +88,7 @@ describe("HttpProtocolProcessingCard", () => {
     render(<HttpProtocolProcessingCard settings={settings()} catalog={catalog([optionValue], 1)} locked={false} onChange={onChange} />);
 
     await user.click(screen.getByLabelText("HTTP 协议处理方案"));
-    await user.click(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 外部 · 在线" }));
+    await user.click(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 远端调试 · 在线" }));
 
     expect(onChange).toHaveBeenCalledWith({
       body_processing: { mode: "protocol", package: { id: "http-json", version: "1.0.0" } },
@@ -121,7 +121,7 @@ describe("HttpProtocolProcessingCard", () => {
     );
 
     await user.click(screen.getByLabelText("HTTP 协议处理方案"));
-    expect(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 外部 · 在线" })).toBeVisible();
+    expect(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 远端调试 · 在线" })).toBeVisible();
     expect(screen.queryByRole("option", { name: /Socket JSON/ })).not.toBeInTheDocument();
   });
 
@@ -158,7 +158,7 @@ describe("HttpProtocolProcessingCard", () => {
 
     await user.click(screen.getByLabelText("HTTP 协议处理方案"));
     expect(screen.queryByRole("option", { name: "当前选择（不可用）" })).not.toBeInTheDocument();
-    expect(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 外部 · 在线" })).toBeVisible();
-    expect(screen.getByRole("option", { name: "http-json 2.0.0 · 2.0.0 · 外部 · 在线" })).toBeVisible();
+    expect(await screen.findByRole("option", { name: "http-json 1.0.0 · 1.0.0 · 远端调试 · 在线" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "http-json 2.0.0 · 2.0.0 · 远端调试 · 在线" })).toBeVisible();
   });
 });

@@ -48,14 +48,16 @@ describe("protocol package presentation model", () => {
     expect(validationText({ state: "invalid", code: "" })).toBe("校验失败：未知错误");
   });
 
-  it("uses the closed external source for online and offline status text", () => {
-    expect(packageSourceText(version("1.0.0"))).toBe("外部 · 在线");
+  it("uses the closed source union for managed and remote status text", () => {
+    expect(packageSourceText(version("1.0.0", {
+      package_source: { type: "managed", online: true },
+    }))).toBe("本地管理 · 运行中");
     expect(packageSourceText(version("1.0.0", {
       package_source: { type: "external", online: true },
-    }))).toBe("外部 · 在线");
+    }))).toBe("远端调试 · 在线");
     expect(packageSourceText(version("1.0.0", {
       package_source: { type: "external", online: false },
-    }))).toBe("外部 · 离线");
+    }))).toBe("远端调试 · 离线");
     const malformed: unknown = [{
       ...group(),
       versions: [{

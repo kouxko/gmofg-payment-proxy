@@ -1,7 +1,8 @@
 # 外部软件包接入与 MCP 诊断指南
 
-本指南描述本地 Boa Sidecar 和第三方进程如何通过同一个 WebSocket 端点为 HTTP Body 或 Socket
-Listener 提供协议处理，以及 MCP 客户端如何确认注册、生命周期和失败阶段。MCP 查询保持只读；它
+本指南描述第三方调试进程如何通过 WebSocket 端点为 HTTP Body 或 Socket Listener 提供协议处理，
+以及 MCP 客户端如何确认注册、生命周期和失败阶段。本地单文件 Component 由主进程直接调用，不经过
+该端点。MCP 查询保持只读；它
 不会替调用方启用、停用、删除、重连软件包或启动 Listener。
 
 ## 1. 找到权威服务地址
@@ -10,9 +11,8 @@ Listener 提供协议处理，以及 MCP 客户端如何确认注册、生命周
 固定为 `/packages`，不能增加 query 或改用其他路径。服务不要求 token、HMAC、mTLS、Origin 或注册
 身份；监听范围只由 bind address 决定。
 
-设置页修改 bind address 或 port 后，需要重启 Proxy 才会改变实际服务。本地严格
-JavaScript ZIP 由应用管理的 Boa Sidecar 主动连接同一端点；第三方进程也主动连接，但不获得 ZIP
-源码、本机路径或 Sidecar Host API。
+设置页修改 bind address 或 port 后，需要重启 Proxy 才会改变实际服务。只有第三方调试进程主动连接；
+它不获得本地 Component 字节、本机路径或主进程 Host capability。
 
 ## 2. 发送唯一一次注册通知
 
@@ -51,7 +51,7 @@ WebSocket 建立后，软件包必须先发送无 `id` 的 JSON-RPC 2.0 notifica
 - `hooks.upstream.encode` / `hooks.downstream.encode`。
 - `document.upstream.display` / `document.downstream.display`。
 
-## 3. JSON-RPC 与 JavaScript ZIP 合同
+## 3. JSON-RPC 与本地 Component 合同
 
 - Socket `frame.params.buffer` 和 Socket decode/encode wire bytes 使用 canonical padded Base64。
 - HTTP decode 的 `params.input` 与 encode 的 `params.originalInput` 使用 Unicode string。
@@ -61,11 +61,10 @@ WebSocket 建立后，软件包必须先发送无 `id` 的 JSON-RPC 2.0 notifica
 - 成功响应复制请求 `id`；失败响应的 `error.data.code` 是稳定 machine code。错误 ID、重复响应、非法
   envelope、缺失稳定 code 或结果类型不匹配会按对应边界失败。
 
-本地 ZIP 固定包含根目录 `manifest.json`、`protocol.js`、`display.js`。Boa Sidecar 从已校验 ZIP 字节
-加载 package-relative ES module，缓存固定 named exports。当前 host 不注入 Node、filesystem、process、
-Buffer、fetch、timer 或 WebSocket Host bindings；这不是对 Boa default/native capability 的限制声明。
-Socket hook 在 Sidecar 内看到 `Uint8Array`；跨 `/packages` 的 Socket wire 仍是 Base64。第三方进程只
-实现上述 JSON-RPC wire，不应把某个 JavaScript runtime 当作协议要求。
+本地包是带唯一顶层 Manifest 的 WebAssembly Component，Socket WIT 直接传递 `list<u8>`，HTTP WIT
+传递 Unicode `string`，Document 使用 JSON UTF-8 `string`。主进程提供 WASI Preview 2、WASI HTTP 和
+版本化 Host WebSocket；本地 Hook 不使用 JSON-RPC 或 Base64。跨 `/packages` 的远端 Socket wire 仍使用
+Base64，第三方进程只实现上述 JSON-RPC wire，不应把某个源码语言或 runtime 当作协议要求。
 
 ## 4. 规则事务与过程证据
 
@@ -88,10 +87,10 @@ one-shot 或 Document 修改。
 
 ## 5. 生命周期与持久化
 
-首次远端注册创建精确 `package.id + version` 的 external registry 记录并按合同启用；后续相同身份
-必须保持注册指纹一致。严格
-本地 ZIP 会把原始 archive 与同一注册指纹绑定；启用本地版本后由应用启动 Boa Sidecar，远端版本则
-要求第三方进程已经在线。Listener 只有在精确版本 enabled、online、valid 且能力与数据面匹配时才能
+首次远端注册创建精确 `package.id + version` 的 registry 记录并按合同启用；后续相同身份必须保持
+注册指纹一致。本地导入保存完整 Component bytes，并在数据库提交前完成实例化；远端版本要求第三方
+进程已经在线。同一精确身份不能同时由本地 Component 与远端连接占有。Listener 只有在精确版本
+enabled、online、valid 且能力与数据面匹配时才能
 启动。
 
 持久化详情包括 registration、SHA-256 fingerprint、可选 local archive、enabled、首次/最后连接时间、

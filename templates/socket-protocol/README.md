@@ -1,17 +1,17 @@
 # Socket protocol package template
 
-The bundled starter is a strict package API 1 ZIP executed by a local Sidecar. The package process
-initiates the existing `/packages` WebSocket registration and serves the same fixed JSON-RPC methods
-as any remote package.
+The bundled starter is a Rust WebAssembly Component implementing package API 1. Its manifest is
+embedded in the top-level `intercept-proxy:manifest` custom section, so the resulting `.wasm` file is
+the complete import unit. Local Components run in the Proxy process and do not connect to
+`/packages` or use JSON-RPC/Base64 transport.
 
-The ZIP root contains exactly:
+Build every protocol-package example and template Component from the repository root:
 
-- `manifest.json`
-- `protocol.js`
-- `display.js`
+```bash
+pnpm build:protocol-packages
+```
 
-Additional package modules may use package-relative `.js` paths. Directory wrappers, alternate
-manifests, configurable entry names, compatibility aliases and runtime fallbacks are rejected.
+Artifacts and a machine-readable index are written to `dist/protocol-package-components/`.
 
 See [API.md](API.md), [AUTHORING.md](AUTHORING.md), and the
 [ISO 8583 starter](iso8583-standard/README.md).

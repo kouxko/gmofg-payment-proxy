@@ -86,9 +86,9 @@
 | H-BODY-HEX | arbitrary bytes | plain/binary | 未命中规则时逐字节保持 |
 | H-BODY-PROTOCOL | protocol Document | protocol package | Decode → Rules → Encode；无修改时不重写 |
 
-HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本，并通过统一 `/packages` JSON-RPC 执行。
-HTTP Hook 使用 string；Socket RPC wire 使用 canonical padded Base64，本地 Boa JavaScript Hook 中使用
-`Uint8Array`。两类数据面互相绑定错误必须在配置阶段拒绝，不能记录为跳过。
+HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本。本地 Component 通过 WIT 直接使用字符串
+或字节；远端源码调试才通过 `/packages` JSON-RPC，Socket wire 使用 canonical padded Base64。两类
+数据面互相绑定错误必须在配置阶段拒绝，不能记录为跳过。
 
 ### 4.3 HTTP 条件穷举
 
@@ -171,14 +171,14 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 
 | ID | 实现 | 能力 | 必须断言 |
 | --- | --- | --- | --- |
-| P-BOA-ISO8583 | 本地 JavaScript ZIP + Boa Sidecar | Frame/Decode/Display/Encode | 严格 archive、固定 export、主动注册、分段/粘包、无修改原字节、进程清理 |
+| P-COMPONENT-ISO8583 | 本地单文件 Component | Frame/Decode/Display/Encode | 顶层 manifest、WIT export、分段/粘包、无修改原字节、启停/重启与实例清理 |
 | P-EXT-SOCKET | 第三方进程 | `/packages` WebSocket JSON-RPC | 无 id 注册 notification、固定方法、上下行 hook、断线与重连 |
 | P-EXT-HTTP | 第三方进程 | HTTP Body Decode/Display/Encode | string wire、request/response 独立 Schema、规则 transaction 与 Encode rollback |
-| P-PY-AU-EFTEX | 外部 Python | H01 + DUKPT + ISO8583 | 两方向派生、解密、Document、Display、重加密逐字节一致 |
+| P-AU-EFTEX | Rust Component；Python 保留远端调试 | H01 + DUKPT + ISO8583 | 两方向派生、解密、Document、Display、重加密逐字节一致 |
 
 所有包共同验证：
 
-- `manifest.json`、`protocol.js`、`display.js`、递归 Document Schema、固定 JavaScript export/JSON-RPC 合同和精确版本绑定。
+- 顶层 manifest custom section、递归 Document Schema、固定 WIT export、远端 JSON-RPC 调试合同和精确版本绑定。
 - registration fingerprint、可选 local archive、启用、禁用、offline、重连、替换版本、引用占用和删除。
 - frame/decode/display/rules/encode 调用顺序；不得发明 Hook timeout 或应用队列上限。
 - 包错误、无效 Base64、错误 response id、超限消息、断线全部 fail-closed。
@@ -188,7 +188,7 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 
 ### 6.1 Schema 100 与包生命周期
 
-- 空数据库创建唯一 Schema 100；`external_protocol_packages` 保存 registration、fingerprint、可选本地 ZIP、
+- 空数据库创建唯一 Schema 100；`external_protocol_packages` 保存 registration、fingerprint、可选本地 Component、
   enabled、首次/最后连接、最后远端地址和三字段原子的最近错误。
 - 唯一有效版本标记低于 Schema 100 时，启动必须删除 SQLite 主文件、WAL 与 SHM，再创建全新的
   Schema 100；Schema 100 原样保留，未来、缺失、重复或损坏标记必须 fail closed。
@@ -266,10 +266,10 @@ pnpm scan:architecture-docs
 
 ### 8.2 release App 真实 loopback
 
-真实 loopback 使用独立 E2E Workspace、官方 Boa JavaScript ZIP 和严格 API 1 第三方 fixture。Runner 必须：
+真实 loopback 使用独立 E2E Workspace、官方单文件 Component 和严格 API 1 远端调试 fixture。Runner 必须：
 
 1. App 停止时备份临时 SQLite，幂等安装固定 Workspace，记录原 selected Workspace。
-2. 启动 release App，等待 `/packages` readiness；本地 ZIP 由 Supervisor 启动 Boa Sidecar，第三方 fixture
+2. 启动 release App，确认本地 Component 已由主进程恢复；远端 fixture 等待 `/packages` readiness 后
    主动发送 `package.register`。
 3. 分别通过真实 HTTP 与 Socket Listener/Mock Server，逐字段或逐字节断言 Frame/Decode/Rules/Encode、
    `processed`、stable error 和双向 wire。

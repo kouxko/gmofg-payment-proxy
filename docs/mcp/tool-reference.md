@@ -129,10 +129,10 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 - `intercept-proxy://docs/protocol-package-authoring/1.0`：`protocol-package-authoring`，递归 Document、
   两写出边界与协议包职责。
 - `intercept-proxy://docs/protocol-package-host-api/1.0`：严格 `manifest.json`、固定 Hook 和错误合同。
-- `intercept-proxy://docs/socket-protocol-package-authoring/1.0`：JavaScript ZIP 与 Socket authoring。
+- `intercept-proxy://docs/socket-protocol-package-authoring/1.0`：Rust Component 与 Socket authoring。
 - `intercept-proxy://docs/external-package-integration-guide/1.0`：`/packages`、`package.register` 和生命周期。
-- `intercept-proxy://templates/iso8583-ascii-standard/1.0.0/{manifest.json,protocol.js,display.js,archive.zip}`：
-  应用拥有的官方 Boa JavaScript 起始包源码与 exact ZIP。
+- `intercept-proxy://templates/iso8583-ascii-standard/1.0.0/{manifest.json,src/lib.rs,component.wasm}`：
+  应用拥有的官方 Rust 起始包源码与可直接导入的单文件 Component。
 
 产品 1.00 的持久化兼容起点为 Schema 100。开发期旧 Schema 的 recreate 分支不能用于 Schema 100+
 恢复、升级或验收；未知/损坏版本必须 fail closed。真实 App、外部网络、系统权限或人工 UI 没有执行时

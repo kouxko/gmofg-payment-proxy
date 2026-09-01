@@ -19,10 +19,7 @@ use intercept_proxy_domain::{
     UnifiedAction,
 };
 use intercept_proxy_exchange::{ExternalPackageCallStage, HttpContext};
-use intercept_proxy_package_contract::{
-    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
-    PackageRpcError,
-};
+use intercept_proxy_package_contract::{PackageManifest, PackageRpcError};
 use intercept_proxy_product_api::{
     BodyCodec, ClassifiedRequest, ProductError, ProductMessageContext, RequestClassifier,
 };
@@ -166,18 +163,10 @@ impl RecordingHttpRpc {
 
 #[async_trait]
 impl ExternalPackageRpc for RecordingHttpRpc {
-    async fn frame(
+    async fn decode_http(
         &self,
         _direction: ProtocolDirection,
-        _request: FrameParams,
-    ) -> Result<FrameResult, PackageTransportError> {
-        unreachable!("HTTP pipeline does not call Socket framing")
-    }
-
-    async fn decode(
-        &self,
-        _direction: ProtocolDirection,
-        request: DecodeParams,
+        input: String,
     ) -> Result<Document, PackageTransportError> {
         if self.fail_decode {
             return Err(remote_failure(
@@ -187,14 +176,14 @@ impl ExternalPackageRpc for RecordingHttpRpc {
                 PackageErrorCode::BodyDecodeFailed,
             ));
         }
-        Document::parse_json(&request.input)
-            .map_err(|error| PackageTransportError::Package { error })
+        Document::parse_json(&input).map_err(|error| PackageTransportError::Package { error })
     }
 
-    async fn encode(
+    async fn encode_http(
         &self,
         _direction: ProtocolDirection,
-        request: EncodeParams,
+        _original_input: String,
+        document: Document,
     ) -> Result<String, PackageTransportError> {
         self.encode_calls.fetch_add(1, Ordering::SeqCst);
         if self.fail_encode {
@@ -208,8 +197,7 @@ impl ExternalPackageRpc for RecordingHttpRpc {
                 ),
             });
         }
-        request
-            .document
+        document
             .to_json()
             .map_err(|error| PackageTransportError::Package { error })
     }
@@ -217,7 +205,7 @@ impl ExternalPackageRpc for RecordingHttpRpc {
     async fn display(
         &self,
         _direction: ProtocolDirection,
-        request: DisplayParams,
+        document: Document,
     ) -> Result<String, PackageTransportError> {
         if self.fail_display {
             return Err(remote_failure(
@@ -227,8 +215,7 @@ impl ExternalPackageRpc for RecordingHttpRpc {
                 PackageErrorCode::InternalError,
             ));
         }
-        request
-            .document
+        document
             .to_json()
             .map_err(|error| PackageTransportError::Package { error })
     }

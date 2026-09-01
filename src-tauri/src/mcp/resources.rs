@@ -16,11 +16,9 @@ pub const VALIDATION_PLAYBOOK_URI: &str = "intercept-proxy://docs/validation-pla
 pub const ISO8583_MANIFEST_URI: &str =
     "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/manifest.json";
 pub const ISO8583_PROTOCOL_SOURCE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/protocol.js";
-pub const ISO8583_DISPLAY_SOURCE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/display.js";
-pub const ISO8583_ARCHIVE_URI: &str =
-    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/archive.zip";
+    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/src/lib.rs";
+pub const ISO8583_COMPONENT_URI: &str =
+    "intercept-proxy://templates/iso8583-ascii-standard/1.0.0/component.wasm";
 
 const RULES_AND_PROTOCOL_PACKAGES: &str =
     include_str!("../../../docs/architecture/rules-and-protocol-packages.md");
@@ -36,9 +34,7 @@ const VALIDATION_PLAYBOOK: &str = include_str!("../../../docs/mcp/validation-pla
 const ISO8583_MANIFEST: &str =
     include_str!("../../../templates/socket-protocol/iso8583-standard/manifest.json");
 const ISO8583_PROTOCOL_SOURCE: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/protocol.js");
-const ISO8583_DISPLAY_SOURCE: &str =
-    include_str!("../../../templates/socket-protocol/iso8583-standard/display.js");
+    include_str!("../../../templates/socket-protocol/iso8583-standard/src/lib.rs");
 
 pub fn list() -> Vec<Resource> {
     vec![
@@ -104,17 +100,14 @@ pub fn list() -> Vec<Resource> {
             .with_description("The exact manifest compiled into the official 1.0.0 template.")
             .with_mime_type("application/json"),
         Resource::new(ISO8583_PROTOCOL_SOURCE_URI, "official-iso8583-protocol-source")
-            .with_title("ISO 8583:1987 framing, decode and encode source")
-            .with_mime_type("text/javascript"),
-        Resource::new(ISO8583_DISPLAY_SOURCE_URI, "official-iso8583-display-source")
-            .with_title("ISO 8583:1987 display source")
-            .with_mime_type("text/javascript"),
-        Resource::new(ISO8583_ARCHIVE_URI, "official-iso8583-template-zip")
+            .with_title("ISO 8583:1987 Component source")
+            .with_mime_type("text/rust"),
+        Resource::new(ISO8583_COMPONENT_URI, "official-iso8583-template-component")
             .with_title("ISO 8583:1987 ASCII Profile 1.0.0")
             .with_description(
-                "The exact application-owned ZIP template. MCP returns base64 blob contents.",
+                "The exact application-owned protocol package. MCP returns base64 blob contents.",
             )
-            .with_mime_type("application/zip"),
+            .with_mime_type("application/wasm"),
     ]
 }
 
@@ -132,8 +125,7 @@ pub fn text(uri: &str) -> Option<(&'static str, &'static str)> {
         TOOL_REFERENCE_URI => Some(("text/markdown", TOOL_REFERENCE)),
         VALIDATION_PLAYBOOK_URI => Some(("text/markdown", VALIDATION_PLAYBOOK)),
         ISO8583_MANIFEST_URI => Some(("application/json", ISO8583_MANIFEST)),
-        ISO8583_PROTOCOL_SOURCE_URI => Some(("text/javascript", ISO8583_PROTOCOL_SOURCE)),
-        ISO8583_DISPLAY_SOURCE_URI => Some(("text/javascript", ISO8583_DISPLAY_SOURCE)),
+        ISO8583_PROTOCOL_SOURCE_URI => Some(("text/rust", ISO8583_PROTOCOL_SOURCE)),
         _ => None,
     }
 }

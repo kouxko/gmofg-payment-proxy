@@ -21,7 +21,8 @@ mod capabilities;
 pub(super) mod contract;
 mod diagnostics;
 mod joint_socket;
-pub(crate) use contract::ExternalPackageRpc;
+#[cfg(test)]
+pub(crate) use crate::adapters::ProtocolPackageRuntime as ExternalPackageRpc;
 pub(crate) use contract::ExternalSocketPackageBinding as RuntimeExternalSocketPackageBinding;
 use contract::ExternalSocketPackageBinding;
 pub(crate) use contract::ExternalSocketPackageProvider;
@@ -60,12 +61,12 @@ impl ExternalSocketCapabilityFactoryAdapter {
         binding: DirectionBinding,
     ) -> SocketDirectionCapabilities<D> {
         let methods = binding.methods();
-        let rpc = Arc::clone(&self.binding.rpc);
+        let runtime = Arc::clone(&self.binding.runtime);
         let package = self.binding.registration.package().identity().clone();
         let observed = Arc::new(parking_lot::Mutex::new(None));
         let prepared = Arc::new(parking_lot::Mutex::new(None));
         let decode = ExternalDecode::<D>::new(
-            Arc::clone(&rpc),
+            Arc::clone(&runtime),
             methods.decode,
             package.clone(),
             connection.clone(),
@@ -80,7 +81,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
                 Arc::clone(&self.pipeline),
                 connection.clone(),
                 self.observation.listener_id.clone(),
-                Arc::clone(&rpc),
+                Arc::clone(&runtime),
                 binding.protocol_direction,
                 Arc::clone(&observed),
                 Arc::clone(&prepared),
@@ -92,7 +93,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
         );
         SocketDirectionCapabilities::new(
             Box::new(ExternalFrame::<D>::new(
-                Arc::clone(&rpc),
+                Arc::clone(&runtime),
                 methods.frame,
                 package.clone(),
                 connection.clone(),
@@ -100,7 +101,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
             )),
             Box::new(decode),
             Box::new(ExternalDisplay::new(
-                Arc::clone(&self.binding.rpc),
+                Arc::clone(&self.binding.runtime),
                 methods.display,
                 package.clone(),
                 connection.clone(),

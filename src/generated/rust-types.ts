@@ -923,7 +923,7 @@ export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display"
 
 /**  外部协议包详情的严格连接投影。 */
 export type ExternalPackageDetailViewModel = {
-	/**  `true` 表示由 Proxy 持久化 ZIP 并拥有本地 Sidecar 进程生命周期。 */
+	/**  历史字段名；`true` 表示由 Proxy 持久化 Component 并拥有本地实例生命周期。 */
 	local_process: boolean,
 	remote_address: string | null,
 	connection_id: string | null,
@@ -1766,7 +1766,7 @@ export type ProtocolPackageDirectionCapabilitiesViewModel = {
 	encode: boolean,
 };
 
-/**  内置协议包 ZIP 写入用户所选文件后的结果。 */
+/**  内置协议包 Component 写入用户所选文件后的结果。 */
 export type ProtocolPackageExportOutcomeViewModel = {
 	bytes_written: number,
 	replaced_existing: boolean,
@@ -1810,13 +1810,13 @@ export type ProtocolPackageIdentityInput = {
  */
 export type ProtocolPackageImportDispositionViewModel = "new" | "reusable" | "identity_conflict";
 
-/**  原生 ZIP 导入是新安装，还是相同身份和内容的幂等复用。 */
+/**  原生 Component 导入是新安装，还是相同身份和内容的幂等复用。 */
 export type ProtocolPackageImportOutcomeViewModel = "installed" | "reused";
 
-/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
 export type ProtocolPackageImportPreviewViewModel = ProtocolPackageImportPreviewViewModel_Serialize | ProtocolPackageImportPreviewViewModel_Deserialize;
 
-/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
 export type ProtocolPackageImportPreviewViewModel_Deserialize = {
 	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
 	token: ProtocolPackageImportToken | null,
@@ -1830,7 +1830,7 @@ export type ProtocolPackageImportPreviewViewModel_Deserialize = {
 	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
 };
 
-/**  ZIP 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
 export type ProtocolPackageImportPreviewViewModel_Serialize = {
 	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
 	token: ProtocolPackageImportToken | null,
@@ -1849,14 +1849,14 @@ export type ProtocolPackageImportToken = string;
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel = ProtocolPackageImportViewModel_Serialize | ProtocolPackageImportViewModel_Deserialize;
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel_Deserialize = {
@@ -1870,7 +1870,7 @@ export type ProtocolPackageImportViewModel_Deserialize = {
 
 /**
  *  原生文件选择和完整校验成功后的无源码导入结果。
- *  用户取消由命令返回 `None` 表示；任何 ZIP、Manifest、Schema 或 JavaScript 错误均作为
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
  *  稳定 `AppError` 返回，不会构造该类型。
  */
 export type ProtocolPackageImportViewModel_Serialize = {
@@ -1915,10 +1915,12 @@ export type ProtocolPackageSchemaViewModel_Serialize = {
 /**
  *  精确协议包版本的执行来源。
  *
- *  严格 JavaScript ZIP 与官方起始包都由本地或远端外部进程执行。`online` 是连接状态快照，
+ *  本地 Component 在当前进程执行；远端调试包由外部进程执行。`online` 是可调用状态快照，
  *  与用户启用状态相互独立。
  */
 export type ProtocolPackageSourceViewModel =
+/**  由 Proxy 主进程拥有并管理生命周期。 */
+{ type: "managed"; online: boolean } |
 /**  由已注册的第三方进程通过 JSON-RPC 执行。 */
 { type: "external"; online: boolean };
 

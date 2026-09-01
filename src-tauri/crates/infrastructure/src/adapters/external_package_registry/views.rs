@@ -24,7 +24,11 @@ pub(super) fn application_summary(
         name: stored.registration.package().name().to_owned(),
         host_api: stored.registration.api(),
         kind: application_kind(stored.registration.kind()),
-        source: ProtocolPackageSourceViewModel::External { online },
+        source: if stored.local_archive.is_some() {
+            ProtocolPackageSourceViewModel::Managed { online }
+        } else {
+            ProtocolPackageSourceViewModel::External { online }
+        },
         enabled: stored.enabled,
         validation: ProtocolPackageValidationViewModel::Valid,
         installed_at: stored.first_connected_at,

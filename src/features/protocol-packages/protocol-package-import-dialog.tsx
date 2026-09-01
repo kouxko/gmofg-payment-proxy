@@ -39,18 +39,18 @@ export function ProtocolPackageImportDialog({
   }, [state]);
   return (
     <Modal isOpen={state.kind !== "closed"} onOpenChange={onOpenChange}>
-      <Button className="hidden" aria-hidden="true">打开协议包 ZIP 导入</Button>
+      <Button className="hidden" aria-hidden="true">打开协议包导入</Button>
       <Modal.Backdrop isDismissable={!busy}>
         <Modal.Container size="lg" scroll="inside">
           <Modal.Dialog>
             <Modal.Header>
-              <Modal.Heading>导入协议包 ZIP</Modal.Heading>
+              <Modal.Heading>导入协议包</Modal.Heading>
             </Modal.Header>
             <Modal.Body className="min-h-40 space-y-5" aria-busy={busy}>
               {state.kind === "preparing" && (
                 <div className="grid min-h-32 place-items-center gap-3 text-center" aria-live="polite">
-                  <Spinner aria-label="正在选择并完整校验协议包 ZIP" />
-                  <p className="text-sm text-[var(--telemetry-muted)]">正在读取 ZIP，并校验 Manifest、Schema、JavaScript 模块与入口……</p>
+                  <Spinner aria-label="正在选择并完整校验协议包" />
+                  <p className="text-sm text-[var(--telemetry-muted)]">正在读取协议包，并校验 Manifest、Schema 与接口……</p>
                 </div>
               )}
               {state.kind === "committing" && <BusyMessage label="正在安装协议包" detail="一次性确认凭据已提交，正在等待应用核心完成原子安装。" />}
@@ -83,13 +83,13 @@ export function ProtocolPackageImportDialog({
               )}
               {state.kind === "conflict" && <ImportPreview preview={state.preview} headingRef={previewHeadingRef} />}
               {state.kind === "closed" && (
-                <p className="text-sm text-[var(--telemetry-muted)]">选择 ZIP 后，应用核心会先完成全部校验，再显示不含源码的预览。</p>
+                <p className="text-sm text-[var(--telemetry-muted)]">选择协议包后，应用核心会先完成全部校验，再显示不含源码的预览。</p>
               )}
             </Modal.Body>
             <Modal.Footer className="shrink-0 flex-wrap border-t border-[var(--telemetry-line)] pt-4">
               <Button slot="close" variant="outline" isDisabled={busy}>取消</Button>
               {(state.kind === "prepare-error" || state.kind === "commit-error" || state.kind === "conflict") && (
-                <Button variant="outline" isDisabled={busy} onPress={onChoose}>重新选择 ZIP</Button>
+                <Button variant="outline" isDisabled={busy} onPress={onChoose}>重新选择协议包</Button>
               )}
               {state.kind === "discard-error" && <Button variant="primary" onPress={() => onOpenChange(false)}>重试释放并关闭</Button>}
               {state.kind === "refresh-error" && (
@@ -159,7 +159,7 @@ function ImportPreview({
         </div>
       </section>
       <DispositionNotice disposition={preview.disposition} />
-      <p className="text-xs text-[var(--telemetry-muted)]">预览仅包含声明与校验结果，不会把 ZIP、脚本源码、本机文件路径或 AST 发送到 WebView。</p>
+      <p className="text-xs text-[var(--telemetry-muted)]">预览仅包含声明与校验结果，不会把协议包字节或本机文件路径发送到 WebView。</p>
       <p className="text-xs text-[var(--telemetry-muted)]">新安装的协议包默认停用，不会修改或重绑任何入口。</p>
     </div>
   );

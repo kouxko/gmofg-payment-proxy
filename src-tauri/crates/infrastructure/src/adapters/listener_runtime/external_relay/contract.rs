@@ -4,108 +4,38 @@ use std::{fmt, sync::Arc};
 
 use async_trait::async_trait;
 use intercept_proxy_application::AppResult;
-use intercept_proxy_domain::{
-    Document, ProtocolDirection, ProtocolPackageRef, ProxyListener, ProxyWorkspace, SocketTopology,
-};
-use intercept_proxy_package_contract::{
-    DecodeParams, DisplayParams, EncodeParams, FrameParams, FrameResult, PackageManifest,
-};
+use intercept_proxy_domain::{ProtocolPackageRef, ProxyListener, ProxyWorkspace, SocketTopology};
+use intercept_proxy_package_contract::PackageManifest;
 
 use super::super::{DocumentProgramFactory, document_rules};
-use crate::adapters::{PackageTransportClient, PackageTransportError};
-
-/// 外部连接的协议入口窄接口。
-#[async_trait]
-pub(crate) trait ExternalPackageRpc: fmt::Debug + Send + Sync {
-    async fn frame(
-        &self,
-        direction: ProtocolDirection,
-        request: FrameParams,
-    ) -> Result<FrameResult, PackageTransportError>;
-    async fn decode(
-        &self,
-        direction: ProtocolDirection,
-        request: DecodeParams,
-    ) -> Result<Document, PackageTransportError>;
-    async fn encode(
-        &self,
-        direction: ProtocolDirection,
-        request: EncodeParams,
-    ) -> Result<String, PackageTransportError>;
-    async fn display(
-        &self,
-        direction: ProtocolDirection,
-        request: DisplayParams,
-    ) -> Result<String, PackageTransportError>;
-}
-
-#[async_trait]
-impl ExternalPackageRpc for PackageTransportClient {
-    async fn frame(
-        &self,
-        direction: ProtocolDirection,
-        request: FrameParams,
-    ) -> Result<FrameResult, PackageTransportError> {
-        match direction {
-            ProtocolDirection::Upstream => self.upstream_frame(request).await,
-            ProtocolDirection::Downstream => self.downstream_frame(request).await,
-        }
-    }
-    async fn decode(
-        &self,
-        direction: ProtocolDirection,
-        request: DecodeParams,
-    ) -> Result<Document, PackageTransportError> {
-        match direction {
-            ProtocolDirection::Upstream => self.upstream_decode(request).await,
-            ProtocolDirection::Downstream => self.downstream_decode(request).await,
-        }
-    }
-    async fn encode(
-        &self,
-        direction: ProtocolDirection,
-        request: EncodeParams,
-    ) -> Result<String, PackageTransportError> {
-        match direction {
-            ProtocolDirection::Upstream => self.upstream_encode(request).await,
-            ProtocolDirection::Downstream => self.downstream_encode(request).await,
-        }
-    }
-    async fn display(
-        &self,
-        direction: ProtocolDirection,
-        request: DisplayParams,
-    ) -> Result<String, PackageTransportError> {
-        match direction {
-            ProtocolDirection::Upstream => self.upstream_display(request).await,
-            ProtocolDirection::Downstream => self.downstream_display(request).await,
-        }
-    }
-}
+use crate::adapters::ProtocolPackageRuntime;
 
 /// 注册快照与对应在线 actor 的不可分割绑定。
 #[derive(Clone)]
 pub(crate) struct ExternalSocketPackageBinding {
     pub(crate) registration: PackageManifest,
-    pub(crate) rpc: Arc<dyn ExternalPackageRpc>,
+    pub(crate) runtime: Arc<dyn ProtocolPackageRuntime>,
     max_frame_bytes: usize,
 }
 
 impl ExternalSocketPackageBinding {
     #[cfg(test)]
     #[must_use]
-    pub(crate) fn new(registration: PackageManifest, rpc: Arc<dyn ExternalPackageRpc>) -> Self {
-        Self::with_limits(registration, rpc, 8 * 1024 * 1024)
+    pub(crate) fn new(
+        registration: PackageManifest,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
+    ) -> Self {
+        Self::with_limits(registration, runtime, 8 * 1024 * 1024)
     }
 
     pub(crate) fn with_limits(
         registration: PackageManifest,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         max_frame_bytes: usize,
     ) -> Self {
         Self {
             registration,
-            rpc,
+            runtime,
             max_frame_bytes,
         }
     }
@@ -116,8 +46,8 @@ impl ExternalSocketPackageBinding {
         self.max_frame_bytes
     }
 
-    pub(crate) fn rpc(&self) -> Arc<dyn ExternalPackageRpc> {
-        Arc::clone(&self.rpc)
+    pub(crate) fn runtime(&self) -> Arc<dyn ProtocolPackageRuntime> {
+        Arc::clone(&self.runtime)
     }
 }
 

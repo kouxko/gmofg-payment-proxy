@@ -129,7 +129,7 @@ fn mcp_reproduction_report_and_runtime_logs_are_read_only_and_queryable() {
 }
 
 #[test]
-fn javascript_package_import_reaches_phase9_enabled_failed_state_through_real_ipc() {
+fn component_package_import_reaches_enabled_online_state_through_real_ipc() {
     let fixture = CrossLayerFixture::new();
     let webview = fixture.webview();
 
@@ -146,7 +146,7 @@ fn javascript_package_import_reaches_phase9_enabled_failed_state_through_real_ip
     assert_eq!(preview["disposition"], "new");
     assert_eq!(committed["outcome"], "installed");
     assert_eq!(committed["version"]["enabled"], true);
-    assert_eq!(committed["version"]["package_source"]["online"], false);
+    assert_eq!(committed["version"]["package_source"]["online"], true);
     assert_eq!(packages.as_array().unwrap().len(), 1);
     fixture.assert_dialog_boundaries();
 }

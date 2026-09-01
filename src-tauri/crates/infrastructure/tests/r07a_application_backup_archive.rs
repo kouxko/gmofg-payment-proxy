@@ -23,7 +23,7 @@ fn deterministic_valid_fixture_reads_exact_references() {
     let second = ApplicationBackupArchive::read(&zip).expect("fixture is deterministic");
 
     assert_eq!(first, second);
-    assert_eq!(first.files.len(), 3);
+    assert_eq!(first.files.len(), 2);
     assert_eq!(
         first
             .files
@@ -32,8 +32,7 @@ fn deterministic_valid_fixture_reads_exact_references() {
             .collect::<Vec<_>>(),
         [
             "portable-materials/server-identity.pem",
-            "protocol-packages/sample/1.0.0/manifest.json",
-            "protocol-packages/sample/1.0.0/protocol.js",
+            "protocol-packages/sample/1.0.0/component.wasm",
         ]
     );
 }
@@ -48,11 +47,7 @@ fn archive_debug_redacts_configuration_payloads_and_passwords() {
     let zip = build_zip(&[
         stored("application.json", application),
         stored(
-            "protocol-packages/sample/1.0.0/manifest.json",
-            b"script-secret-marker",
-        ),
-        stored(
-            "protocol-packages/sample/1.0.0/protocol.js",
+            "protocol-packages/sample/1.0.0/component.wasm",
             b"script-secret-marker",
         ),
         stored(
@@ -98,7 +93,7 @@ fn ordinary_protocol_package_zip_is_rejected() {
 #[test]
 fn archive_without_application_json_is_rejected() {
     let zip = build_zip(&[stored(
-        "protocol-packages/sample/1.0.0/manifest.json",
+        "protocol-packages/sample/1.0.0/component.wasm",
         b"api = 1",
     )]);
 
@@ -136,7 +131,7 @@ fn symlink_entry_is_rejected() {
     let mut zip = valid_zip();
     patch_unix_mode(
         &mut zip,
-        b"protocol-packages/sample/1.0.0/manifest.json",
+        b"protocol-packages/sample/1.0.0/component.wasm",
         0o120_777,
     );
 
@@ -170,11 +165,11 @@ fn file_parent_conflict_is_rejected_in_both_orders() {
         vec![
             stored("application.json", &application),
             stored("protocol-packages", b"file"),
-            stored("protocol-packages/sample/1.0.0/manifest.json", b"child"),
+            stored("protocol-packages/sample/1.0.0/component.wasm", b"child"),
         ],
         vec![
             stored("application.json", &application),
-            stored("protocol-packages/sample/1.0.0/manifest.json", b"child"),
+            stored("protocol-packages/sample/1.0.0/component.wasm", b"child"),
             stored("protocol-packages", b"file"),
         ],
     ] {
@@ -232,7 +227,7 @@ fn archive_byte_limit_is_enforced() {
 #[test]
 fn entry_count_limit_is_enforced() {
     let zip = valid_zip();
-    let limits = ApplicationBackupArchiveLimits::new(100_000, 3, 10_000, 40_000, 100, 10).unwrap();
+    let limits = ApplicationBackupArchiveLimits::new(100_000, 2, 10_000, 40_000, 100, 10).unwrap();
 
     assert_code_with_limits(&zip, &limits, Code::TooManyEntries);
 }
@@ -277,12 +272,8 @@ fn compression_ratio_limit_is_enforced() {
     let zip = build_zip(&[
         stored("application.json", &application),
         deflated(
-            "protocol-packages/sample/1.0.0/manifest.json",
+            "protocol-packages/sample/1.0.0/component.wasm",
             vec![0; 16 * 1024],
-        ),
-        stored(
-            "protocol-packages/sample/1.0.0/protocol.js",
-            b"fn frame() {}",
         ),
         stored("portable-materials/server-identity.pem", b"identity"),
     ]);
@@ -310,7 +301,7 @@ fn invalid_application_json_and_version_are_redacted_to_one_stable_code() {
 fn referenced_payload_must_be_present() {
     let entries = valid_entries()
         .into_iter()
-        .filter(|entry| !entry.name.ends_with("protocol.js"))
+        .filter(|entry| !entry.name.ends_with("component.wasm"))
         .collect::<Vec<_>>();
 
     assert_code(&build_zip(&entries), Code::ReferencedFileMissing);
@@ -371,10 +362,9 @@ fn error_codes_have_stable_wire_values() {
 fn valid_entries() -> Vec<Entry> {
     vec![
         stored("application.json", application_json()),
-        stored("protocol-packages/sample/1.0.0/manifest.json", b"api = 1"),
         stored(
-            "protocol-packages/sample/1.0.0/protocol.js",
-            b"fn frame() {}",
+            "protocol-packages/sample/1.0.0/component.wasm",
+            b"component",
         ),
         stored("portable-materials/server-identity.pem", b"identity"),
     ]
@@ -400,10 +390,7 @@ fn application_json_with(workspace: &ProxyWorkspace, password: Option<&str>) -> 
         "protocol_packages": [{
             "package": { "id": "sample", "version": "1.0.0" },
             "enabled": true,
-            "files": [
-                "protocol-packages/sample/1.0.0/manifest.json",
-                "protocol-packages/sample/1.0.0/protocol.js"
-            ]
+            "files": ["protocol-packages/sample/1.0.0/component.wasm"]
         }],
         "portable_materials": [{
             "reference_id": "00000000-0000-0000-0000-000000000002",

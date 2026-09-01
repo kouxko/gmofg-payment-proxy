@@ -27,19 +27,20 @@
 - `src-tauri/crates/domain`：Workspace、Listener、Socket topology、协议 Document、external_package 注册与 wire 合同。
 - `src-tauri/crates/application`：只读/写入用例、DTO、规则能力、复现报告组合、错误与诊断投影。MCP 和 UI 都应复用这里的权威业务模型。
 - `src-tauri/crates/exchange`：协议中立的 `Exchange`、Reader/Writer `Pipeline`、`Envelope`、方向类型与透明 Socket 字节交换核心。
-- `src-tauri/crates/infrastructure`：SQLite 配置/协议包元数据、ListenerRuntime、ADB、证书、external_package WebSocket/JSON-RPC，以及有界内存 `ExchangeObservationStore`。
+- `src-tauri/crates/package-runtime`：单文件 Component 校验、进程内 Wasmtime/WASI 执行与 Host WebSocket。
+- `src-tauri/crates/infrastructure`：SQLite 配置/协议包元数据、本地运行时注册表、ListenerRuntime、ADB、证书、远端调试 WebSocket/JSON-RPC，以及有界内存 `ExchangeObservationStore`。
 - `src-tauri/crates/proxy`：具体 HTTP/Socket transport、能力装配、连接接入、读写和超时；不得依赖 UI 或 SQLite。
 - `src-tauri/src/mcp`：全接口明文 MCP transport、39 项工具目录和资源；34 个查询调用 Application 只读 facade，其中 ExchangeObservation 通过 `ExchangeObservationQueries` port facade 查询，只有 composition root 会把 Infrastructure `ExchangeObservationStore` 注入该 port。五个环境配置工具通过类型化边界调用 Application 候选用例。MCP 不直接访问 SQLite、Infrastructure store、保护器或任意文件。
 - `src/features`：Tauri/React 展示与用户操作；不能自行推导另一套业务状态。
-- `examples/external-packages`：第三方 WebSocket 软件包示例及可独立运行的测试客户端。
+- `examples/external-packages`：可导入的 Rust Component 与可独立运行的远端源码调试客户端。
 
 ## 四、HTTP/Socket 与协议包调用链
 
 `ListenerRuntime` 根据 Workspace 快照创建 HTTP、透明 Socket 或 Scripted Socket Exchange；`LocalServer`
 是 Socket 协议模式中的进程内精确 Echo Server。HTTP Body Protocol 与 Scripted Socket 都绑定精确包
-版本，并通过 `/packages` WebSocket JSON-RPC 调用固定的 `hooks.upstream.*`、`hooks.downstream.*` 和
-`document.*.display` 方法。本地严格 JavaScript ZIP 由应用管理的 Boa Sidecar 主动注册；第三方进程
-使用相同 wire。Proxy 继续拥有 TCP framing、业务连接和规则事务生命周期。
+版本。本地单文件 Component 由主进程通过 WIT 直接调用；远端源码调试进程才通过 `/packages`
+WebSocket JSON-RPC 调用固定的 `hooks.upstream.*`、`hooks.downstream.*` 和 `document.*.display`
+方法。Proxy 继续拥有 TCP framing、业务连接和规则事务生命周期，两种来源不能抢占同一精确身份。
 
 业务流水线按适用数据面执行 Frame → Decode → Display → Rules → Encode。统一规则只在
 `Proxy -> Server` 与 `Proxy -> App` 两个写出边界运行；Encode 失败会回滚 Document、Nth counter、hit

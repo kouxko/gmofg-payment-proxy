@@ -1,7 +1,7 @@
 //! 协议包管理 IPC。
 //!
-//! 命令只接收精确 `id + version` 身份；导入命令甚至不接收路径或字节。ZIP 文件选择、
-//! 有界读取、完整编译、引用约束和启停约束都在 Rust Application/Infrastructure 中执行。
+//! 命令只接收精确 `id + version` 身份；导入命令甚至不接收路径或字节。Component 文件选择、
+//! 静态校验、实例化、引用约束和启停约束都在 Rust Application/Infrastructure 中执行。
 
 use intercept_proxy_application::{
     AppError, ExternalPackageServiceStatusViewModel, ListenerProtocolPackageCatalogViewModel,
@@ -20,8 +20,8 @@ use tauri::State;
 use super::{CommandResult, command_error};
 use crate::app_state::AppState;
 
-const PROTOCOL_PACKAGE_EXPORT_DIALOG_PURPOSE: &str = "protocol_package_export_zip";
-const BUILTIN_PROTOCOL_PACKAGE_FILE_NAME: &str = "iso8583-ascii-standard-1.0.0.zip";
+const PROTOCOL_PACKAGE_EXPORT_DIALOG_PURPOSE: &str = "protocol_package_export_wasm";
+const BUILTIN_PROTOCOL_PACKAGE_FILE_NAME: &str = "iso8583-ascii-standard-1.0.0.wasm";
 
 #[tauri::command]
 #[specta::specta]
@@ -164,13 +164,13 @@ pub async fn protocol_package_export_builtin(
         return Ok(None);
     };
 
-    let archive = state
+    let component = state
         .application
         .protocol_package_builtin_archive()
         .await
         .map_err(command_error)?;
     let outcome = tokio::task::spawn_blocking(move || {
-        AtomicFileExporter.write(&selection.path, &archive, selection.overwrite_confirmed)
+        AtomicFileExporter.write(&selection.path, &component, selection.overwrite_confirmed)
     })
     .await
     .map_err(|_| command_error(export_task_failed()))?
@@ -255,7 +255,7 @@ pub async fn protocol_package_usage(
 fn export_task_failed() -> AppError {
     AppError::new(
         "PROTOCOL_PACKAGE_EXPORT_FAILED",
-        "协议包 ZIP 后台写入任务未能完成。",
+        "协议包 Component 后台写入任务未能完成。",
     )
 }
 
@@ -271,7 +271,7 @@ fn export_failed(error: &InfrastructureError) -> AppError {
         ),
         _ => AppError::new(
             "PROTOCOL_PACKAGE_EXPORT_FAILED",
-            "协议包 ZIP 写入失败，原目标未被修改。",
+            "协议包 Component 写入失败，原目标未被修改。",
         ),
     }
 }

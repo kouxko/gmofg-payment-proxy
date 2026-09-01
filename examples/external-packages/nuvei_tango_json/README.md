@@ -1,7 +1,11 @@
 # Nuvei Tango JSON External Package
 
-`nuvei-tango-json@1.0.0` 是 Intercept Proxy 的只读 Python Socket 外部协议包。它严格拆分并解析
-Nuvei Tango 观察到的长度前缀 JSON 报文，但不允许修改或重新生成业务内容。
+`nuvei-tango-json@1.0.0` 同时提供两种等价入口：
+
+- `nuvei_tango_json/`：保留的 Python WebSocket 外部调试实现，适合快速修改和观察 JSON-RPC 日志。
+- `component/`：Rust 实现的单文件 WebAssembly Component，供 Proxy 在同一进程内直接加载。
+
+两种实现都只读地拆分并解析 Nuvei Tango 观察到的长度前缀 JSON 报文，不允许修改或重新生成业务内容。
 
 ## 线路合同
 
@@ -27,6 +31,8 @@ fail-closed。
 
 ## 安装与测试
 
+### Python 外部调试实现
+
 要求 Python 3.11 或更高版本：
 
 ```bash
@@ -39,9 +45,33 @@ python3 -m venv .venv
 
 Windows 使用 `.venv\\Scripts\\python.exe`。
 
+### WebAssembly Component
+
+要求安装 Rust 的 `wasm32-wasip2` target：
+
+```bash
+rustup target add wasm32-wasip2
+cargo test --locked --manifest-path component/Cargo.toml
+pnpm build:protocol-packages
+```
+
+构建产物为：
+
+```text
+dist/protocol-package-components/intercept-proxy-nuvei-tango-json-component.wasm
+```
+
+直接执行 `cargo build --target wasm32-wasip2` 得到的是尚未追加顶层 Manifest 的编译器原始产物，
+不能替代统一构建生成的可导入文件。
+
+该 Component 内嵌 `intercept-proxy:manifest`，直接导出 Socket WIT 的上下行
+`frame/decode/encode/display` 函数，不连接本地 `/packages` WebSocket。`encoding_context` 仍由实例内随机
+HMAC key 认证、绑定方向并有界保存；WIT 传入的 `original-input` 还必须与上下文中的原始 frame
+逐字节一致。组件实例重建后，旧 context 与 Python 进程重启后的行为一样失效。
+
 ## 启动与绑定
 
-默认连接本机 Proxy：
+以下启动方式只适用于 Python 外部调试实现。它默认连接本机 Proxy：
 
 ```bash
 .venv/bin/nuvei-tango-json

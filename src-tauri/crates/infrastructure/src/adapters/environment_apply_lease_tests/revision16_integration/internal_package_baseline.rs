@@ -1,22 +1,16 @@
-use std::{
-    fs,
-    io::{Cursor, Write},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{path::PathBuf, process::Command, sync::Arc};
 
 use intercept_proxy_application::{
     EnvironmentApplyBaselineCapturePort, EnvironmentApplyBaselineCaptureRequest,
     EnvironmentCommitTarget, HttpBodyProcessing, builtin_iso8583_package_ref,
 };
 use intercept_proxy_domain::{ListenerDataPlane, ProxyWorkspace};
-use zip::{ZipWriter, write::SimpleFileOptions};
 
 use super::runtime_fixture_with_builtin;
 
 #[tokio::test(flavor = "current_thread")]
-async fn phase13_seed_projects_the_enabled_builtin_before_sidecar_start() {
-    let fixture = runtime_fixture_with_builtin(Some(Arc::from(template_zip()))).await;
+async fn seeded_builtin_is_projected_before_runtime_instantiation() {
+    let fixture = runtime_fixture_with_builtin(Some(Arc::from(template_component()))).await;
     let mut candidate = ProxyWorkspace::default();
     let ListenerDataPlane::Http(settings) = &mut candidate.listeners[0].data_plane else {
         panic!("default Listener is HTTP")
@@ -50,17 +44,30 @@ async fn phase13_seed_projects_the_enabled_builtin_before_sidecar_start() {
     assert!(!baseline.exact_packages()[0].online());
 }
 
-fn template_zip() -> Vec<u8> {
+fn template_component() -> Vec<u8> {
     let root = PathBuf::from(env!("CARGO_MANIFEST_DIR"))
         .join("../../../templates/socket-protocol/iso8583-standard");
-    let mut writer = ZipWriter::new(Cursor::new(Vec::new()));
-    for relative in ["manifest.json", "protocol.js", "display.js"] {
-        writer
-            .start_file(relative, SimpleFileOptions::default())
-            .unwrap();
-        writer
-            .write_all(&fs::read(root.join(relative)).unwrap())
-            .unwrap();
-    }
-    writer.finish().unwrap().into_inner()
+    let output = Command::new(env!("CARGO"))
+        .args([
+            "build",
+            "--locked",
+            "--manifest-path",
+            root.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            "wasm32-wasip2",
+        ])
+        .output()
+        .unwrap();
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let component =
+        std::fs::read(root.join(
+            "target/wasm32-wasip2/debug/intercept_proxy_iso8583_ascii_standard_component.wasm",
+        ))
+        .unwrap();
+    let manifest = std::fs::read(root.join("manifest.json")).unwrap();
+    intercept_proxy_package_runtime::embed_package_manifest(&component, &manifest).unwrap()
 }

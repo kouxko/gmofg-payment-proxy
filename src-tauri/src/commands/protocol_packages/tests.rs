@@ -2,7 +2,6 @@
 mod tests {
     use std::{
         collections::VecDeque,
-        io::{Cursor, Write},
         path::{Path, PathBuf},
         sync::{Arc, Mutex},
     };
@@ -19,7 +18,6 @@ mod tests {
         WebviewUrl, WebviewWindowBuilder, http::HeaderMap, ipc::InvokeBody, test::MockRuntime,
     };
     use tempfile::TempDir;
-    use zip::{ZipWriter, write::SimpleFileOptions};
 
     use super::{
         listener_protocol_package_catalog, protocol_package_delete, protocol_package_detail,
@@ -28,10 +26,6 @@ mod tests {
         protocol_package_restart, protocol_package_usage,
     };
     use crate::app_state::AppState;
-
-    const MANIFEST: &str = include_str!(
-        "../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
-    );
 
     #[derive(Debug, Default)]
     struct QueueDialog {
@@ -78,15 +72,15 @@ mod tests {
     #[test]
     fn strict_import_contract_fails_closed_through_real_tauri_ipc() {
         let fixture = TempDir::new().unwrap();
-        let invalid = fixture.path().join("invalid.zip");
-        let javascript = fixture.path().join("javascript.zip");
-        std::fs::write(&invalid, b"not a zip archive").unwrap();
-        std::fs::write(&javascript, javascript_package_zip()).unwrap();
+        let invalid = fixture.path().join("invalid.wasm");
+        let component = fixture.path().join("iso8583.wasm");
+        std::fs::write(&invalid, b"not a WebAssembly Component").unwrap();
+        std::fs::write(&component, crate::BUILTIN_ISO8583_COMPONENT).unwrap();
         let app = test_app(
             fixture.path(),
             Arc::new(QueueDialog::with_opens(vec![
                 Ok(Some(invalid)),
-                Ok(Some(javascript)),
+                Ok(Some(component)),
             ])),
         );
         let webview = WebviewWindowBuilder::new(&app, "main", WebviewUrl::default())
@@ -107,7 +101,7 @@ mod tests {
         );
         assert_eq!(committed["outcome"], "installed");
         assert_eq!(committed["version"]["enabled"], true);
-        assert_eq!(committed["version"]["package_source"]["online"], false);
+        assert_eq!(committed["version"]["package_source"]["online"], true);
         let package_ref = committed["version"]["package"].clone();
         let disabled: Value = invoke_ok(
             &webview,
@@ -162,7 +156,7 @@ mod tests {
         let error = invoke_error(
             &webview,
             "protocol_package_import",
-            json!({ "path": "/tmp/forged.zip", "zipBytes": [1, 2, 3] }),
+            json!({ "path": "/tmp/forged.wasm", "componentBytes": [1, 2, 3] }),
         );
         assert_eq!(error.code, "FILE_DIALOG_PERMISSION_DENIED");
         let list: Value = invoke_ok(&webview, "protocol_package_list", json!({}));
@@ -251,18 +245,4 @@ mod tests {
         }
     }
 
-    fn javascript_package_zip() -> Vec<u8> {
-        let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
-        for (path, contents) in [
-            ("manifest.json", MANIFEST.as_bytes()),
-            ("protocol.js", b"export {}".as_slice()),
-            ("display.js", b"export {}".as_slice()),
-        ] {
-            archive
-                .start_file(path, SimpleFileOptions::default())
-                .unwrap();
-            archive.write_all(contents).unwrap();
-        }
-        archive.finish().unwrap().into_inner()
-    }
 }

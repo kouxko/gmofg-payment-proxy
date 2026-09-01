@@ -18,7 +18,7 @@ pub(crate) struct StoredExternalPackage {
     pub registration: PackageManifest,
     /// Proxy 对规范化注册合同计算的 SHA-256 指纹。
     pub fingerprint: [u8; 32],
-    /// Exact imported ZIP for a Proxy-managed local Sidecar; remote packages store `None`.
+    /// Exact imported Component for a Proxy-managed local runtime; remote packages store `None`.
     pub local_archive: Option<Vec<u8>>,
     /// 用户显式设置的启用位；与当前在线状态相互独立。
     pub enabled: bool,

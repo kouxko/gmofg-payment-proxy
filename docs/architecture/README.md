@@ -11,7 +11,7 @@ Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论�
 1. [模块与代码组织](modules.md)：Rust crate、Tauri 组合根和前端 feature 的所有权。
 2. [Exchange 与 Pipeline](exchange-pipeline.md)：协议无关核心、强类型方向和可替换能力。
 3. [数据流、错误与验证](data-flow.md)：真实连接如何按顺序转发、观察和失败。
-4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema 与 Sidecar 包。
+4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema、本地 Component 与远程调试包。
 5. [运行时观测与诊断](runtime-observability.md)：内存证据、日志、UI 实时刷新、MCP 和复现报告。
 6. [安全、TLS 与持久化](security-and-persistence.md)：双连接 TLS/mTLS、SQLite 与应用导入导出。
 7. [Android VPN 透明路由](android-vpn-transparent-routing.md)：设备侧 TUN、SOCKS5 与流量恢复。
@@ -54,7 +54,7 @@ flowchart LR
 | Exchange 核心 | `src-tauri/crates/exchange/src/lib.rs` |
 | HTTP/Socket/TLS runtime | `src-tauri/crates/proxy/src/lib.rs` |
 | 系统与持久化适配器 | `src-tauri/crates/infrastructure/src/lib.rs` |
-| 协议包合同与严格 ZIP | `src-tauri/crates/package-contract/src/lib.rs`、`src-tauri/crates/package-runtime/src/lib.rs` |
+| 协议包合同与单文件 Component | `src-tauri/crates/package-contract/src/lib.rs`、`src-tauri/crates/package-runtime/src/lib.rs` |
 | 前端持久外壳 | `src/features/shell/app-runtime.tsx` |
 | Rust 生成的 IPC 类型 | `src/generated/rust-types.ts` |
 
@@ -69,7 +69,8 @@ flowchart LR
 ## 决策与验证
 
 - 当前递归 Document、两写出阶段和 JavaScript package API 1 边界以
-  [ADR-009](decisions/ADR-009-nested-document-javascript-package-runtime.md) 为准。
+  [ADR-009](decisions/ADR-009-nested-document-javascript-package-runtime.md) 与
+  [ADR-010](decisions/ADR-010-in-process-webassembly-protocol-packages.md) 为准。
 - [ADR-002](decisions/ADR-002-protocol-packages-http.md)、
   [ADR-006](decisions/ADR-006-unified-exchange-observation.md) 和
   [ADR-007](decisions/ADR-007-exchange-pipeline-runtime-boundary.md) 已被替代，仅保留历史原因和被否决方案。

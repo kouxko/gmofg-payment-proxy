@@ -16,7 +16,7 @@ impl EnvironmentApplyRuntimeAdapter {
             .await
             .map_err(|_| package_unavailable())?
         {
-            let online = current.source.external_online().unwrap_or(false);
+            let online = current.source.online();
             let projection = self.observe_projection(package, &current, online);
             return Ok(exact_observation(
                 Uuid::from_u128(u128::from(projection.lease_generation)),
