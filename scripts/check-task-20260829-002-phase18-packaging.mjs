@@ -64,6 +64,17 @@ for (const token of ['"hdiutil", "attach"', "-readonly", "-nobrowse", "CFFIXED_U
 for (const token of ["node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc", "pnpm build:macos:universal"]) {
   requireText("release workflow", workflow, token);
 }
+const windowsBuild = workflow.slice(
+  workflow.indexOf("  build:\n"),
+  workflow.indexOf("  build-macos:\n"),
+);
+const windowsSidecarStage = windowsBuild.indexOf(
+  "node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc",
+);
+const windowsTauriBuild = windowsBuild.indexOf("- name: Build MSI and NSIS installers");
+if (windowsSidecarStage < 0 || windowsTauriBuild < 0 || windowsSidecarStage >= windowsTauriBuild) {
+  failures.push("Windows build job must stage its x86_64 sidecar before Tauri packaging");
+}
 requireText("Schema100 E2E", legacyE2e, "EXPECTED_SCHEMA_VERSION = 100");
 requireText("Release composition root", compositionRoot, "use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};");
 if (/#\[cfg\(debug_assertions\)\]\s*use intercept_proxy_host::\{ApplicationHostBuilder, HostPlatformServices\};/u.test(compositionRoot)) {

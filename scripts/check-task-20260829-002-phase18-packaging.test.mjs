@@ -38,6 +38,25 @@ test("release process E2E consumes the current Schema100 database only", async (
   assert.doesNotMatch(source, /Expected database schema 19|version != \(19,\)/u);
 });
 
+test("Windows installer build stages its own target sidecar before Tauri packaging", async () => {
+  const workflow = await readFile(
+    path.join(repositoryRoot, ".github/workflows/windows-release.yml"),
+    "utf8",
+  );
+  const buildJob = workflow.slice(
+    workflow.indexOf("  build:\n"),
+    workflow.indexOf("  build-macos:\n"),
+  );
+  const stageIndex = buildJob.indexOf(
+    "node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc",
+  );
+  const packageIndex = buildJob.indexOf("- name: Build MSI and NSIS installers");
+
+  assert.notEqual(stageIndex, -1, "Windows build job must stage the Boa sidecar");
+  assert.notEqual(packageIndex, -1, "Windows build job must package MSI and NSIS");
+  assert.ok(stageIndex < packageIndex, "sidecar staging must precede Tauri packaging");
+});
+
 const checker = path.join(repositoryRoot, "scripts/check-task-20260829-002-phase18-packaging.mjs");
 const checkerFiles = [
   "src-tauri/tauri.conf.json",
@@ -88,7 +107,20 @@ for (const [name, file, before, after, expected] of [
   ["mounted DMG dropped", checkerFiles[6], '"hdiutil", "attach"', '"cp", "app"', /hdiutil/u],
   ["isolated profile dropped", checkerFiles[6], 'environment["CFFIXED_USER_HOME"]', 'environment["SHARED_USER_HOME"]', /CFFIXED_USER_HOME/u],
   ["Socket official ZIP dropped", checkerFiles[6], "iso8583-ascii-standard", "direct-socket", /iso8583-ascii-standard/u],
-  ["Windows sidecar target dropped", checkerFiles[8], "x86_64-pc-windows-msvc", "x86_64-apple-darwin", /x86_64-pc-windows-msvc/u],
+  [
+    "Windows sidecar target dropped",
+    checkerFiles[8],
+    "      - name: Stage Windows Boa package sidecar\n        run: node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc\n\n      - name: Configure Authenticode signing for tagged releases",
+    "      - name: Stage Windows Boa package sidecar\n        run: node scripts/stage-package-sidecar.mjs x86_64-apple-darwin\n\n      - name: Configure Authenticode signing for tagged releases",
+    /Windows build job/u,
+  ],
+  [
+    "Windows build sidecar staging dropped",
+    checkerFiles[8],
+    "      - name: Stage Windows Boa package sidecar\n        run: node scripts/stage-package-sidecar.mjs x86_64-pc-windows-msvc\n\n      - name: Configure Authenticode signing for tagged releases",
+    "      - name: Configure Authenticode signing for tagged releases",
+    /Windows build job/u,
+  ],
   ["Schema19 restored", checkerFiles[7], "EXPECTED_SCHEMA_VERSION = 100", "EXPECTED_SCHEMA_VERSION = 19", /Schema100/u],
   ["Release imports debug-gated", checkerFiles[9], "use intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};", "#[cfg(debug_assertions)]\nuse intercept_proxy_host::{ApplicationHostBuilder, HostPlatformServices};", /debug-only/u],
   ["Universal vendored OpenSSL dropped", checkerFiles[10], 'macos-universal-vendored-openssl = ["intercept-proxy-runtime/macos-universal-vendored-openssl"]', 'macos-universal-vendored-openssl = []', /root Cargo/u],
