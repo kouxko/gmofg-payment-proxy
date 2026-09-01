@@ -9,7 +9,6 @@ use intercept_proxy_exchange::{
     Error, ExternalPackageCallStage, RuleProcessingAccumulator, RuleProcessingChange,
     RuleProcessingOperation, RuleProcessingOperationKind, SocketContext, rules_processed,
 };
-use intercept_proxy_package_contract::{CanonicalBase64, EncodeParams};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{
     ConnectionContext, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
@@ -17,7 +16,7 @@ use intercept_proxy_runtime::{
 use parking_lot::Mutex;
 use uuid::Uuid;
 
-use super::external_relay::ExternalPackageRpc;
+use crate::adapters::ProtocolPackageRuntime;
 
 mod error;
 use error::external_rpc_error;
@@ -95,14 +94,14 @@ enum JointDocumentEncoder {
     },
     External {
         original_input: String,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         codec: Arc<dyn BodyCodec>,
         package: ProtocolPackageRef,
     },
     SocketExternal {
         original_input: Vec<u8>,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         package: ProtocolPackageRef,
     },
@@ -140,7 +139,7 @@ impl JointDocumentEvaluation {
         document: Document,
         original_document: Document,
         original_input: String,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         codec: Arc<dyn BodyCodec>,
         package: ProtocolPackageRef,
@@ -152,7 +151,7 @@ impl JointDocumentEvaluation {
             original_document,
             encoder: JointDocumentEncoder::External {
                 original_input,
-                rpc,
+                runtime,
                 direction,
                 codec,
                 package,
@@ -167,7 +166,7 @@ impl JointDocumentEvaluation {
         document: Document,
         original_document: Document,
         original_input: Vec<u8>,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         package: ProtocolPackageRef,
         programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
@@ -178,7 +177,7 @@ impl JointDocumentEvaluation {
             original_document,
             encoder: JointDocumentEncoder::SocketExternal {
                 original_input,
-                rpc,
+                runtime,
                 direction,
                 package,
             },
@@ -293,7 +292,7 @@ impl JointDocumentEvaluation {
             }
             JointDocumentEncoder::External {
                 original_input,
-                rpc,
+                runtime,
                 direction,
                 codec,
                 package,
@@ -301,14 +300,8 @@ impl JointDocumentEvaluation {
                 if self.document == self.original_document {
                     return Ok(());
                 }
-                let encoded = rpc
-                    .encode(
-                        direction,
-                        EncodeParams {
-                            original_input,
-                            document: self.document,
-                        },
-                    )
+                let encoded = runtime
+                    .encode_http(direction, original_input, self.document)
                     .await
                     .map_err(|error| {
                         external_rpc_error(
@@ -342,7 +335,7 @@ impl JointDocumentEvaluation {
         rules_processed(direction, &self.changes, &self.document);
         let JointDocumentEncoder::SocketExternal {
             original_input,
-            rpc,
+            runtime,
             direction,
             package,
         } = self.encoder
@@ -356,16 +349,8 @@ impl JointDocumentEvaluation {
                 data: original_input,
             });
         }
-        let encoded = rpc
-            .encode(
-                direction,
-                EncodeParams {
-                    original_input: CanonicalBase64::from_bytes(&original_input)
-                        .as_str()
-                        .to_owned(),
-                    document: self.document,
-                },
-            )
+        let encoded = runtime
+            .encode_socket(direction, original_input, self.document)
             .await
             .map_err(|error| {
                 external_rpc_error(
@@ -376,12 +361,7 @@ impl JointDocumentEvaluation {
                     &error,
                 )
             })?;
-        let encoded = CanonicalBase64::try_from(encoded).map_err(|_| {
-            Error::new("ENCODE_FAILED: Socket package returned non-canonical Base64")
-        })?;
-        Ok(SocketContext {
-            data: encoded.bytes(),
-        })
+        Ok(SocketContext { data: encoded })
     }
 }
 

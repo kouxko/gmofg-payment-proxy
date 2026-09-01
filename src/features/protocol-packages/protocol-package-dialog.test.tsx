@@ -368,7 +368,7 @@ describe("ProtocolPackageDialog details", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
-    const disableButton = await screen.findByRole("button", { name: "停用外部软件包" });
+    const disableButton = await screen.findByRole("button", { name: "停用协议包" });
     await Promise.all([user.click(disableButton), user.click(disableButton)]);
 
     expect(mocks.protocolPackageDisable).toHaveBeenCalledTimes(1);
@@ -376,7 +376,7 @@ describe("ProtocolPackageDialog details", () => {
     pending.resolve({ ...external, enabled: false });
     expect(await screen.findByText("已停用", { selector: "dd" })).toBeVisible();
     expect(screen.getByRole("status")).toHaveTextContent("已停用");
-    expect(screen.queryByRole("button", { name: "停用外部软件包" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "停用协议包" })).not.toBeInTheDocument();
   });
 
   it("keeps the external package enabled and exposes a retry after disable fails", async () => {
@@ -391,12 +391,12 @@ describe("ProtocolPackageDialog details", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
-    await user.click(await screen.findByRole("button", { name: "停用外部软件包" }));
+    await user.click(await screen.findByRole("button", { name: "停用协议包" }));
 
-    expect(await screen.findByText("外部软件包停用失败")).toBeVisible();
+    expect(await screen.findByText("协议包停用失败")).toBeVisible();
     expect(screen.getByText("入口停止失败")).toBeVisible();
     expect(screen.getByText("已启用", { selector: "dd" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "停用外部软件包" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "停用协议包" })).toBeEnabled();
   });
 
   it("blocks deletion from the authoritative usage list and explains every reference", async () => {
@@ -413,7 +413,7 @@ describe("ProtocolPackageDialog details", () => {
 
     expect(await screen.findByText("仍有 1 个入口引用此精确版本，不能删除。")).toBeVisible();
     expect(screen.getByText("请先修改或删除：收银台测试 / 上游 Socket")).toBeVisible();
-    expect(screen.getByRole("button", { name: "删除外部软件包" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "删除协议包" })).toBeDisabled();
     expect(mocks.protocolPackageDelete).not.toHaveBeenCalled();
   });
 
@@ -438,7 +438,7 @@ describe("ProtocolPackageDialog details", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
-    await user.click(await screen.findByRole("button", { name: "删除外部软件包" }));
+    await user.click(await screen.findByRole("button", { name: "删除协议包" }));
     expect(screen.getByRole("alertdialog", { name: "删除 ISO 8583 长名称协议包 2.0.0？" })).toBeVisible();
     await user.click(screen.getByRole("button", { name: "确认删除" }));
 
@@ -471,18 +471,18 @@ describe("ProtocolPackageDialog details", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
     await user.click(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }));
-    await user.click(await screen.findByRole("button", { name: "删除外部软件包" }));
+    await user.click(await screen.findByRole("button", { name: "删除协议包" }));
     await user.click(screen.getByRole("button", { name: "确认删除" }));
 
-    expect(await screen.findByText("外部软件包删除失败")).toBeVisible();
+    expect(await screen.findByText("协议包删除失败")).toBeVisible();
     expect(screen.getByText("注册状态已变化，请刷新")).toBeVisible();
     expect(screen.getByRole("button", { name: "确认删除" })).toBeEnabled();
     expect(screen.getByRole("alertdialog")).toBeVisible();
   });
-  it("exposes the unified external lifecycle controls for every package", async () => {
+  it("exposes the unified lifecycle controls for every package", async () => {
     await openDialog();
-    expect(screen.getByRole("button", { name: "停用外部软件包" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "删除外部软件包" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "停用协议包" })).toBeVisible();
+    expect(screen.getByRole("button", { name: "删除协议包" })).toBeVisible();
   });
 
   it("keeps narrow dialogs scrollable with keyboard-accessible version actions", async () => {

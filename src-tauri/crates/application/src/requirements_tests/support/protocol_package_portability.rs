@@ -223,18 +223,18 @@ impl ExternalPackageApplicationPort for FakeProtocolPackagePortability {
 
 #[async_trait]
 impl ProtocolPackageImportPort for FakeProtocolPackagePortability {
-    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+    async fn prepare_component(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
         unused()
     }
 
-    async fn commit_zip(
+    async fn commit_component(
         &self,
         _: ProtocolPackageImportToken,
     ) -> AppResult<ProtocolPackageImportViewModel> {
         unused()
     }
 
-    async fn discard_zip(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
+    async fn discard_component(&self, _: ProtocolPackageImportToken) -> AppResult<()> {
         unused()
     }
 }

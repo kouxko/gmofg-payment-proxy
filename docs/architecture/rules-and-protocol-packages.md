@@ -1,14 +1,14 @@
 # 规则、递归 Document 与协议包
 
-本文是规则编辑、HTTP/Socket Document 处理、本地 JavaScript ZIP 和远端软件包的当前架构合同。
-历史决策见 [ADR-009](decisions/ADR-009-nested-document-javascript-package-runtime.md)。
+本文是规则编辑、HTTP/Socket Document 处理、本地单文件协议包和远端调试软件包的当前架构合同。
+当前运行时决策见 [ADR-010](decisions/ADR-010-in-process-webassembly-protocol-packages.md)。
 
 ## 1. 所有权
 
 - Domain 拥有 `RuleDefinition`、递归 `Document`、Schema、扁平条件列表、action 与验证。
 - Application 提供 rule editor context 和 typed factory；UI 只消费 predicate/action capability，不生成默认。
 - Exchange 拥有 Reader/Writer 顺序与观察事件，Infrastructure 把统一规则接入 HTTP/Socket actor。
-- Proxy 拥有 `/packages` WebSocket、业务连接和网络写出；Boa Sidecar 拥有本地 JavaScript 执行。
+- Proxy 拥有业务连接、网络写出与进程内本地 Component；`/packages` WebSocket 只承载远程调试包。
 
 Workspace 只保存一个 `rule_definitions` 集合。HTTP 与 Socket 内容保持带标签隔离，不能交换 transport
 字段或动作；Document 条件和动作通过共同领域合同复用。
@@ -76,28 +76,22 @@ Direct Socket 不进入 Frame/Decode/Rules/Encode。Display 是未信任观测�
 
 ## 5. package API 1
 
-本地包是严格 ZIP，根目录包含：
+本地包是一个 WebAssembly Component 文件。顶层唯一 `intercept-proxy:manifest` custom section 固定
+`api: 1`、kind、精确 id/SemVer 与上下行递归 Schema；导入先验证 Component、Manifest 和对应 WIT
+world，提交后由主进程 Wasmtime 实例化。运行时没有旧 ZIP 迁移、别名、Sidecar 或自动回退路径。
 
-```text
-manifest.json
-protocol.js
-display.js
-```
-
-`manifest.json` 固定 `api: 1`、kind、精确 id/SemVer 与上下行递归 Schema。导入先验证 ZIP 路径、数量、
-大小、压缩比、strict JSON、Schema 和模块路径；提交后由独立 Boa Sidecar 加载。当前 host 不注入
-Node、文件系统、process、Buffer、fetch、timer 或 WebSocket bindings；这是当前 host surface，不是
-对 Boa default/native capabilities 的概括。运行时没有旧包迁移、别名或第二执行路径。
-
-本地 Sidecar 与远端软件包都主动连接 `/packages` 并发送一次 `package.register`。固定方法为：
+本地 Pipeline 通过 `ProtocolPackageRuntime` 直接调用 Component：HTTP 使用 string，Socket 使用原始
+bytes，Document 使用领域对象。只有远程调试软件包主动连接 `/packages` 并发送
+`package.register`，其固定方法为：
 
 - `hooks.upstream.frame|decode|encode`
 - `hooks.downstream.frame|decode|encode`
 - `document.upstream.display`
 - `document.downstream.display`
 
-Frame/Decode/Encode 的二进制 wire 使用 Base64 JSON-RPC 或 JavaScript `Uint8Array` 边界；Document 是
-JSON 值，Display 是未信任 HTML。精确版本离线时引用它的 Listener fail-closed，不切换版本或 Direct。
+远程 Frame/Decode/Encode 的二进制 wire 使用 Base64 JSON-RPC；Base64 不进入本地 Wasm 调用。
+Document 是 JSON 值，Display 是未信任 HTML。精确版本不可调用时引用它的 Listener fail-closed，
+不切换版本或 Direct。
 
 ## 6. 观察与失败
 
@@ -120,6 +114,6 @@ SQLite Schema 100 是产品 1.00 兼容基线。Schema 100 数据原样保留；
 - recursive Schema、schema-free first condition、扁平 AND 与多规则 OR、Insert/Append/Clear typed capability；
 - 当前 working state 按序匹配、ordered action、前序可见、NthHit/one-shot 成功提交与 Encode rollback；
 - HTTP 与 Socket 两个写出阶段共用统一规则但保持 transport DTO 隔离；
-- ZIP/API 1、Boa sandbox、`package.register`、超时/额度/断线与精确版本生命周期；
+- Component/API 1、WIT、Host WebSocket、远程 `package.register`、断线与精确版本生命周期；
 - received/process/final/encoded typed evidence、`changes_truncated` 和 stable error；
 - Schema 100 preserve、唯一有效 `<100` 清除重建、未来/缺失/重复/损坏标记 fail-closed 与发布 checker 门禁。

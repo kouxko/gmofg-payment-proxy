@@ -177,15 +177,17 @@ impl Application {
 
     /// 校验当前执行来源的严格描述后，原子写入启用位。
     ///
-    /// 远端来源必须在线；本地 Sidecar 即使离线也允许启用，由外部包端口启动 exact process。
+    /// 远端来源必须在线；本地 Component 由外部包端口在当前进程内实例化。
     pub async fn protocol_package_enable(
         &self,
         package: ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageVersionViewModel> {
         let _gate = self.mutation_gate.lock().await;
         let stored = self.require_protocol_package(&package).await?;
-        let ProtocolPackageSourceViewModel::External { online } = stored.source;
-        if !online && !self.external_packages.detail(&package).await?.local_process {
+        if matches!(
+            stored.source,
+            ProtocolPackageSourceViewModel::External { online: false }
+        ) {
             return Err(AppError::new(
                 "EXTERNAL_PACKAGE_OFFLINE",
                 "远端外部软件包当前离线，无法启用。",
@@ -195,10 +197,10 @@ impl Application {
         let description = self.external_packages.describe(&package).await?;
         ensure_external_description(&package, &description)?;
         self.external_packages.set_enabled(&package, true).await?;
-        Ok(ProtocolPackageVersionViewModel {
-            enabled: true,
-            ..stored
-        })
+        self.external_packages
+            .get(&package)
+            .await?
+            .ok_or_else(|| protocol_package_not_found(&package))
     }
 
     /// 停用精确版本；外部来源会先停止所有活动引用，并始终保留 WebSocket 连接。
@@ -209,16 +211,16 @@ impl Application {
         package: ProtocolPackageRef,
     ) -> AppResult<ProtocolPackageVersionViewModel> {
         let _gate = self.mutation_gate.lock().await;
-        let stored = self.require_protocol_package(&package).await?;
+        self.require_protocol_package(&package).await?;
         let usages = self.protocol_package_usage.usages(&package).await?;
         for usage in usages.iter().filter(|usage| usage.blocks_disable()) {
             self.listener_runtime.stop(usage.listener_id).await?;
         }
         self.external_packages.set_enabled(&package, false).await?;
-        Ok(ProtocolPackageVersionViewModel {
-            enabled: false,
-            ..stored
-        })
+        self.external_packages
+            .get(&package)
+            .await?
+            .ok_or_else(|| protocol_package_not_found(&package))
     }
 
     /// 删除没有任何保存引用的精确版本。
@@ -240,8 +242,10 @@ impl Application {
             )
             .entity(package_entity(&package)));
         }
-        let ProtocolPackageSourceViewModel::External { online } = stored.source;
-        if online {
+        if matches!(
+            stored.source,
+            ProtocolPackageSourceViewModel::External { online: true }
+        ) {
             self.external_packages.disconnect(&package).await?;
         }
         self.external_packages.delete(&package).await?;
@@ -306,12 +310,11 @@ impl Application {
                 package_field,
             ));
         }
-        let ProtocolPackageSourceViewModel::External { online } = version.source;
-        if require_enabled && !online {
+        if require_enabled && !version.source.online() {
             return Err(listener_error_field(
                 AppError::new(
-                    "EXTERNAL_PACKAGE_OFFLINE",
-                    "入口引用的外部软件包当前离线，不能启动。",
+                    "PROTOCOL_PACKAGE_RUNTIME_OFFLINE",
+                    "入口引用的协议包当前不可调用，不能启动。",
                 )
                 .entity(package_entity(package)),
                 package_field,

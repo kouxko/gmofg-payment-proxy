@@ -1,8 +1,4 @@
-use std::{
-    io::{Cursor, Write},
-    path::PathBuf,
-    sync::Arc,
-};
+use std::{borrow::Cow, path::PathBuf, process::Command, sync::Arc};
 
 use intercept_proxy_application::{
     AppResult, ProtocolPackageKindViewModel, ProtocolPackageValidationViewModel, RuleActionKind,
@@ -11,26 +7,19 @@ use intercept_proxy_application::{
 use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use intercept_proxy_product_api::InterceptProxyProfile;
 use rusqlite::OptionalExtension;
-use zip::{ZipWriter, write::SimpleFileOptions};
+use wasm_encoder::{ComponentSection, CustomSection};
 
 use super::*;
 
-const MANIFEST: &str = include_str!(
-    "../../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json"
-);
-const PROTOCOL_JS: &[u8] = include_bytes!(
-    "../../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/protocol.js"
-);
-const DISPLAY_JS: &[u8] = include_bytes!(
-    "../../../../../test-support/fixtures/task-20260829-002/phase-4/package-contract/display.js"
-);
+const MANIFEST: &str =
+    include_str!("../../../../../templates/socket-protocol/iso8583-standard/manifest.json");
 
 #[derive(Debug)]
 struct StaticOpenDialog(PathBuf);
 
 impl NativeFileDialog for StaticOpenDialog {
     fn choose_open_file(&self, purpose: &str) -> AppResult<Option<PathBuf>> {
-        assert_eq!(purpose, "protocol_package_zip");
+        assert_eq!(purpose, "protocol_package_wasm");
         Ok(Some(self.0.clone()))
     }
 
@@ -73,14 +62,14 @@ async fn release_startup_preserves_schema100_state_across_two_real_host_starts()
 
 async fn assert_two_start_database_contract() {
     let temp = tempfile::tempdir().expect("temporary two-start host directory");
-    let package_zip = temp.path().join("strict-javascript-package.zip");
-    let package_archive = javascript_package_zip();
-    std::fs::write(&package_zip, &package_archive).expect("write strict JavaScript package ZIP");
+    let package_file = temp.path().join("iso8583-standard.wasm");
+    let package_archive = built_in_socket_component();
+    std::fs::write(&package_file, &package_archive).expect("write Component package");
     let first = ApplicationHostBuilder::new(
         temp.path(),
         HostPlatformServices::new(
             Arc::new(TestSecretProtector),
-            Arc::new(StaticOpenDialog(package_zip)),
+            Arc::new(StaticOpenDialog(package_file)),
         ),
         Arc::new(InterceptProxyProfile),
     )
@@ -218,16 +207,19 @@ async fn seed_two_start_fixture(
     let preview = application
         .protocol_package_import()
         .await
-        .expect("prepare strict JavaScript ZIP")
-        .expect("native dialog selected a ZIP");
+        .expect("prepare Component")
+        .expect("native dialog selected a Component");
     let package = preview.package.clone();
     let imported = application
         .protocol_package_import_commit(preview.token.expect("committable package"))
         .await
-        .expect("commit validated local ZIP to the unified registry");
+        .expect("commit validated local Component to the unified registry");
     assert_eq!(imported.version.package, package);
     assert!(imported.version.enabled);
-    assert_eq!(imported.version.source.external_online(), Some(false));
+    assert!(matches!(
+        imported.version.source,
+        intercept_proxy_application::ProtocolPackageSourceViewModel::Managed { online: true }
+    ));
     assert_package_persisted(application.as_ref(), &package).await;
 
     TwoStartFixture {
@@ -282,12 +274,15 @@ async fn assert_package_persisted(
         .iter()
         .flat_map(|group| &group.versions)
         .find(|version| &version.package == package)
-        .expect("exact local ZIP package persists");
+        .expect("exact local Component package persists");
     assert!(version.enabled);
-    assert_eq!(version.source.external_online(), Some(false));
-    assert_eq!(version.name, "Payment JSON");
+    assert!(matches!(
+        version.source,
+        intercept_proxy_application::ProtocolPackageSourceViewModel::Managed { online: true }
+    ));
+    assert_eq!(version.name, "ISO 8583:1987 ASCII Profile");
     assert_eq!(version.host_api, 1);
-    assert_eq!(version.kind, ProtocolPackageKindViewModel::Http);
+    assert_eq!(version.kind, ProtocolPackageKindViewModel::Socket);
     assert_eq!(
         version.validation,
         ProtocolPackageValidationViewModel::Valid
@@ -300,9 +295,7 @@ async fn assert_package_persisted(
     let external = detail.external.expect("external package lifecycle detail");
     assert!(external.local_process);
     assert_eq!(external.remote_address, None);
-    let recent_error = external.recent_error.expect("stable local process failure");
-    assert_eq!(recent_error.code, "EXTERNAL_PACKAGE_PROCESS_FAILED");
-    assert_eq!(recent_error.message, "本地软件包进程启动失败。");
+    assert_eq!(external.recent_error, None);
 }
 
 fn load_package_snapshot(
@@ -351,15 +344,9 @@ fn assert_package_snapshot_contract(snapshot: &StoredPackageSnapshot, fixture: &
     assert_eq!(snapshot.enabled, 1);
     assert_eq!(snapshot.first_connected_at, snapshot.last_connected_at);
     assert_eq!(snapshot.last_remote_address, None);
-    assert_eq!(
-        snapshot.recent_error_code.as_deref(),
-        Some("EXTERNAL_PACKAGE_PROCESS_FAILED")
-    );
-    assert_eq!(
-        snapshot.recent_error_message.as_deref(),
-        Some("本地软件包进程启动失败。")
-    );
-    assert!(snapshot.recent_error_occurred_at.is_some());
+    assert_eq!(snapshot.recent_error_code, None);
+    assert_eq!(snapshot.recent_error_message, None);
+    assert_eq!(snapshot.recent_error_occurred_at, None);
 }
 
 fn assert_schema100_without_legacy_tables(data_dir: &std::path::Path) {
@@ -391,22 +378,39 @@ fn assert_schema100_without_legacy_tables(data_dir: &std::path::Path) {
     }
 }
 
-fn javascript_package_zip() -> Vec<u8> {
-    let mut archive = ZipWriter::new(Cursor::new(Vec::new()));
-    for (path, contents) in [
-        ("manifest.json", MANIFEST.as_bytes()),
-        ("protocol.js", PROTOCOL_JS),
-        ("display.js", DISPLAY_JS),
-    ] {
-        archive
-            .start_file(path, SimpleFileOptions::default())
-            .expect("start strict JavaScript package entry");
-        archive
-            .write_all(contents)
-            .expect("write strict JavaScript package entry");
+fn built_in_socket_component() -> Vec<u8> {
+    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+    let source = repository.join("templates/socket-protocol/iso8583-standard");
+    let target = tempfile::tempdir().expect("temporary Component target");
+    let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
+        .args([
+            "build",
+            "--locked",
+            "--manifest-path",
+            source.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            "wasm32-wasip2",
+            "--target-dir",
+            target.path().to_str().unwrap(),
+        ])
+        .output()
+        .expect("build template Component");
+    assert!(
+        output.status.success(),
+        "{}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let component = std::fs::read(
+        target
+            .path()
+            .join("wasm32-wasip2/debug/intercept_proxy_iso8583_ascii_standard_component.wasm"),
+    )
+    .expect("read template Component");
+    let mut component = component;
+    CustomSection {
+        name: Cow::Borrowed("intercept-proxy:manifest"),
+        data: Cow::Borrowed(MANIFEST.as_bytes()),
     }
-    archive
-        .finish()
-        .expect("finish strict JavaScript package ZIP")
-        .into_inner()
+    .append_to_component(&mut component);
+    component
 }

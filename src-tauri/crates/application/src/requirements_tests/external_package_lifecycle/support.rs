@@ -98,7 +98,14 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
         let record = records
             .get_mut(package)
             .ok_or_else(|| AppError::new("EXTERNAL_PACKAGE_NOT_FOUND", "外部软件包不存在。"))?;
-        record.source = ProtocolPackageSourceViewModel::External { online: true };
+        record.source = match record.source {
+            ProtocolPackageSourceViewModel::Managed { .. } => {
+                ProtocolPackageSourceViewModel::Managed { online: true }
+            }
+            ProtocolPackageSourceViewModel::External { .. } => {
+                ProtocolPackageSourceViewModel::External { online: true }
+            }
+        };
         Ok(())
     }
 

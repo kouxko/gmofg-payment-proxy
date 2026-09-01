@@ -260,6 +260,26 @@ impl SqliteStore {
         records: &[WorkspaceRecord],
         settings: &Value,
     ) -> Result<(), InfrastructureError> {
+        self.replace_application_configuration_inner(selected_id, records, settings, None)
+    }
+
+    pub(crate) fn replace_application_bundle(
+        &self,
+        selected_id: Uuid,
+        records: &[WorkspaceRecord],
+        settings: &Value,
+        packages: &[super::external_packages::LocalApplicationPackageRecord],
+    ) -> Result<(), InfrastructureError> {
+        self.replace_application_configuration_inner(selected_id, records, settings, Some(packages))
+    }
+
+    fn replace_application_configuration_inner(
+        &self,
+        selected_id: Uuid,
+        records: &[WorkspaceRecord],
+        settings: &Value,
+        packages: Option<&[super::external_packages::LocalApplicationPackageRecord]>,
+    ) -> Result<(), InfrastructureError> {
         if records.is_empty() || !records.iter().any(|record| record.id == selected_id) {
             return Err(InfrastructureError::RevisionConflict);
         }
@@ -267,6 +287,14 @@ impl SqliteStore {
         let transaction = connection
             .transaction_with_behavior(TransactionBehavior::Immediate)
             .map_err(|source| InfrastructureError::Database { source })?;
+
+        if let Some(packages) = packages {
+            super::external_packages::replace_local_application_packages(
+                &transaction,
+                packages,
+                Utc::now(),
+            )?;
+        }
 
         transaction
             .execute("DELETE FROM workspaces", [])

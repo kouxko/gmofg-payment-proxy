@@ -14,7 +14,7 @@ export function isProtocolPackageSource(
   value: unknown,
 ): value is ProtocolPackageSourceViewModel {
   if (!isRecord(value)) return false;
-  if (value.type === "external") {
+  if (value.type === "managed" || value.type === "external") {
     return hasOnly(value, ["type", "online"])
       && typeof value.online === "boolean";
   }
@@ -23,7 +23,10 @@ export function isProtocolPackageSource(
 
 /** 来源文案只读取 closed union，不从名称、ID 或启用状态反推来源。 */
 export function packageSourceText(version: ProtocolPackageVersionViewModel): string {
-  return version.package_source.online ? "外部 · 在线" : "外部 · 离线";
+  if (version.package_source.type === "managed") {
+    return version.package_source.online ? "本地管理 · 运行中" : "本地管理 · 已停止";
+  }
+  return version.package_source.online ? "远端调试 · 在线" : "远端调试 · 离线";
 }
 
 export function isBuiltInPackage(version: ProtocolPackageVersionViewModel): boolean {
@@ -33,6 +36,10 @@ export function isBuiltInPackage(version: ProtocolPackageVersionViewModel): bool
 
 export function isExternalPackage(version: ProtocolPackageVersionViewModel): boolean {
   return version.package_source.type === "external";
+}
+
+export function isManagedPackage(version: ProtocolPackageVersionViewModel): boolean {
+  return version.package_source.type === "managed";
 }
 
 function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {

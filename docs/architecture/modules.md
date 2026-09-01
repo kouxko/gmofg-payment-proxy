@@ -29,7 +29,7 @@ flowchart TB
 - `application` 只依赖领域和产品契约，通过 trait 请求外部能力。
 - `proxy` 依赖 `exchange`，提供 HTTP、Socket、TLS 和连接生命周期适配。
 - `infrastructure` 是外层适配器集合，可以同时理解 application 端口、SQLite、proxy、
-  exchange、package-contract、package-runtime 和外部 Sidecar 注册表，并负责把它们接起来。
+  exchange、package-contract、package-runtime 和协议包注册表，并负责把它们接起来。
 - `host` 是与 UI 无关的最终 Rust 组合根；`src-tauri` 只再添加桌面运行时能力。
 
 ## 2. Cargo crate 依赖
@@ -44,7 +44,7 @@ flowchart TB
 | `intercept-proxy-application` | `domain`、`exchange`、`product-api` | Use Case、ViewModel、端口、事件、容量和乐观锁 |
 | `intercept-proxy-exchange` | `domain` | `Exchange<P>`、Pipeline、Envelope、端点和透明转发 |
 | `intercept-proxy-package-contract` | `domain` | API 1 Manifest、固定 RPC、FrameResult 与错误 wire |
-| `intercept-proxy-package-runtime` | `domain`、`package-contract` | 严格 ZIP、Boa 模块与独立 Sidecar 程序 |
+| `intercept-proxy-package-runtime` | `domain`、`package-contract` | 单文件 Component 校验、Wasmtime/WASI 与 Host 能力 |
 | `intercept-proxy-runtime` | `exchange` | Tokio/Hyper/rustls transport、HTTP、Socket、TLS 和 supervisor |
 | `intercept-proxy-infrastructure` | `application`、`domain`、`exchange`、`package-contract`、`package-runtime`、`product-api`、`runtime` | SQLite、密钥保护、证书、ADB、Listener、协议包和运行适配 |
 | `intercept-proxy-host` | `application`、`infrastructure`、`product-api`、`runtime` | 无 UI 的完整应用装配与后台任务所有权 |
@@ -135,7 +135,7 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 - `sqlite/`：Workspace、规则、协议包、证书引用和设置持久化。
 - `adapters/listener_runtime/`：领域 Listener 到真实 runtime 的装配与校验。
 - `adapters/pipeline/`：HTTP 标准规则、抓包、会话和故障动作桥接。
-- `sqlite/external_packages.rs`：外部包注册、本地 ZIP、生命周期状态和精确版本持久化。
+- `sqlite/external_packages.rs`：远端包注册、本地 Component、生命周期状态和精确版本持久化。
 - `adapters/external_packages/`：外部 WebSocket/RPC 协议能力。
 - `adapters/exchange_observation.rs`：有界内存中的连接事件记录，不写 SQLite。
 - `certificates/`、`dpapi`、`keychain`、Android ADB adapter：平台边界。

@@ -1,8 +1,9 @@
 # ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时
 
-- Status: Accepted
+- Status: Superseded by [ADR-010](ADR-010-in-process-webassembly-protocol-packages.md) for local package execution
 - 日期：2026-08-31
 - Supersedes: [ADR-002](ADR-002-protocol-packages-http.md)、[ADR-007](ADR-007-exchange-pipeline-runtime-boundary.md)
+- Superseded by: [ADR-010](ADR-010-in-process-webassembly-protocol-packages.md)
 
 ## Context
 

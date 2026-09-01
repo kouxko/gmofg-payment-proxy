@@ -67,7 +67,7 @@ function appError(code: string, message: string, detailText: string) {
   };
 }
 
-describe("ProtocolPackage ZIP import", () => {
+describe("ProtocolPackage import", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.protocolPackageList.mockResolvedValue([]);
@@ -85,8 +85,8 @@ describe("ProtocolPackage ZIP import", () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
 
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包 ZIP" })).not.toBeInTheDocument());
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包" })).not.toBeInTheDocument());
     expect(mocks.protocolPackageImportCommit).not.toHaveBeenCalled();
     expect(screen.queryByRole("status")).not.toBeInTheDocument();
   });
@@ -94,7 +94,7 @@ describe("ProtocolPackage ZIP import", () => {
   it("shows a complete no-source preview before enabling commit", async () => {
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
 
     const preview = await screen.findByLabelText("协议包无源码预览");
     expect(preview).toHaveTextContent("iso-8583");
@@ -117,7 +117,7 @@ describe("ProtocolPackage ZIP import", () => {
     mocks.protocolPackageImport.mockResolvedValue(importPreview({ disposition: undefined as never }));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     expect(await screen.findByText("协议包校验预览数据不完整。")).toBeVisible();
     expect(mocks.protocolPackageImportCommit).not.toHaveBeenCalled();
   });
@@ -126,14 +126,14 @@ describe("ProtocolPackage ZIP import", () => {
     const user = userEvent.setup();
     mocks.protocolPackageImport.mockResolvedValueOnce(importPreview({ disposition: "reusable" }));
     const first = render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     expect(await screen.findByText("可复用精确版本")).toBeVisible();
     expect(screen.getByRole("button", { name: "确认安装" })).toBeEnabled();
     first.unmount();
 
     mocks.protocolPackageImport.mockResolvedValueOnce(importPreview({ disposition: "identity_conflict", token: null }));
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     expect(await screen.findByText("精确身份内容冲突")).toBeVisible();
     expect(screen.queryByRole("button", { name: "确认安装" })).not.toBeInTheDocument();
     expect(mocks.protocolPackageImportCommit).not.toHaveBeenCalled();
@@ -144,7 +144,7 @@ describe("ProtocolPackage ZIP import", () => {
     mocks.protocolPackageImportDiscard.mockReturnValue(discard.promise);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    const trigger = screen.getByRole("button", { name: "导入协议包 ZIP" });
+    const trigger = screen.getByRole("button", { name: "导入协议包" });
     await user.click(trigger);
     await screen.findByRole("button", { name: "确认安装" });
     await user.click(screen.getByRole("button", { name: "取消" }));
@@ -152,7 +152,7 @@ describe("ProtocolPackage ZIP import", () => {
     expect(mocks.protocolPackageImportDiscard).toHaveBeenCalledWith("018f-import-token");
     expect(screen.getByLabelText("正在释放导入预览")).toBeVisible();
     discard.resolve({ success: true, message: "已释放" });
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包 ZIP" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包" })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(mocks.protocolPackageImportCommit).not.toHaveBeenCalled();
   });
@@ -165,7 +165,7 @@ describe("ProtocolPackage ZIP import", () => {
     ));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "取消" }));
 
     expect(await screen.findByText(/导入预览释放失败/)).toBeVisible();
@@ -173,7 +173,7 @@ describe("ProtocolPackage ZIP import", () => {
     expect(screen.getByRole("button", { name: "重试释放并关闭" })).toBeEnabled();
     mocks.protocolPackageImportDiscard.mockResolvedValueOnce({ success: true, message: "已释放" });
     await user.click(screen.getByRole("button", { name: "重试释放并关闭" }));
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包 ZIP" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包" })).not.toBeInTheDocument());
     expect(mocks.protocolPackageImportDiscard).toHaveBeenCalledTimes(2);
   });
 
@@ -181,32 +181,31 @@ describe("ProtocolPackage ZIP import", () => {
     mocks.protocolPackageImportDiscard.mockRejectedValueOnce(appError(
       "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID",
       "导入确认已过期",
-      "请重新选择 ZIP",
+      "请重新选择协议包",
     ));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    const trigger = screen.getByRole("button", { name: "导入协议包 ZIP" });
+    const trigger = screen.getByRole("button", { name: "导入协议包" });
     await user.click(trigger);
     await user.click(await screen.findByRole("button", { name: "取消" }));
 
-    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包 ZIP" })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole("dialog", { name: "导入协议包" })).not.toBeInTheDocument());
     await waitFor(() => expect(trigger).toHaveFocus());
     expect(mocks.protocolPackageImportDiscard).toHaveBeenCalledTimes(1);
   });
 
   it.each([
-    ["读取失败", "IO_ERROR", "无法读取协议包 ZIP", "/tmp/package.zip"],
-    ["ZIP 非法", "INVALID_ZIP", "协议包不是合法 ZIP", "archive.zip: central directory"],
-    ["Manifest 非法", "MANIFEST_INVALID", "Manifest 校验失败", "manifest.json:12:7"],
-    ["Schema 非法", "DOCUMENT_SCHEMA_INVALID", "Schema 校验失败", "schema.json:8:3"],
-    ["JavaScript 语法错", "SCRIPT_SYNTAX_ERROR", "JavaScript 编译失败", "protocol.js:21:9"],
-    ["入口错误", "ENTRY_POINT_MISSING", "脚本入口不存在", "protocol.js: frame"],
+    ["读取失败", "IO_ERROR", "无法读取协议包", "/tmp/package.wasm"],
+    ["Component 非法", "PROTOCOL_PACKAGE_INVALID", "协议包不是合法 Component", "component: header"],
+    ["Manifest 非法", "PROTOCOL_PACKAGE_INVALID", "Manifest 校验失败", "intercept-proxy:manifest"],
+    ["Schema 非法", "DOCUMENT_SCHEMA_INVALID", "Schema 校验失败", "manifest.document.upstream"],
+    ["接口错误", "PROTOCOL_PACKAGE_INVALID", "协议包接口不完整", "socket-package: upstream-frame"],
     ["身份冲突", "PROTOCOL_PACKAGE_IDENTITY_CONFLICT", "相同身份内容不同", "iso-8583@3.0.0"],
   ])("keeps %s stable, accessible, and never commits", async (_name, code, message, position) => {
     mocks.protocolPackageImport.mockRejectedValue(appError(code, message, position));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveFocus();
@@ -227,7 +226,7 @@ describe("ProtocolPackage ZIP import", () => {
       .mockResolvedValueOnce([importedGroup()]);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
 
     expect(await screen.findByRole("status")).toHaveTextContent(notice);
@@ -249,11 +248,11 @@ describe("ProtocolPackage ZIP import", () => {
       .mockResolvedValueOnce([importedGroup()]);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    const trigger = screen.getByRole("button", { name: "导入协议包 ZIP" });
+    const trigger = screen.getByRole("button", { name: "导入协议包" });
 
     await Promise.all([user.click(trigger), user.click(trigger)]);
     expect(mocks.protocolPackageImport).toHaveBeenCalledTimes(1);
-    expect(screen.getByLabelText("正在选择并完整校验协议包 ZIP")).toBeVisible();
+    expect(screen.getByLabelText("正在选择并完整校验协议包")).toBeVisible();
     prepare.resolve(importPreview());
     const install = await screen.findByRole("button", { name: "确认安装" });
     await Promise.all([user.click(install), user.click(install)]);
@@ -267,18 +266,18 @@ describe("ProtocolPackage ZIP import", () => {
     mocks.protocolPackageImportCommit.mockRejectedValue(appError(
       "PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID",
       "导入确认凭据已失效",
-      "请重新选择 ZIP",
+      "请重新选择协议包",
     ));
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("协议包导入失败");
     expect(alert).toHaveTextContent("PROTOCOL_PACKAGE_IMPORT_TOKEN_INVALID");
     expect(screen.queryByRole("button", { name: "确认安装" })).not.toBeInTheDocument();
-    expect(screen.getByRole("button", { name: "重新选择 ZIP" })).toBeEnabled();
+    expect(screen.getByRole("button", { name: "重新选择协议包" })).toBeEnabled();
     expect(mocks.protocolPackageImportCommit).toHaveBeenCalledTimes(1);
   });
 
@@ -292,7 +291,7 @@ describe("ProtocolPackage ZIP import", () => {
     });
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
     expect(await screen.findByText(/导入结果与已确认预览不一致/)).toBeVisible();
     expect(mocks.protocolPackageList).toHaveBeenCalledTimes(1);
@@ -305,14 +304,14 @@ describe("ProtocolPackage ZIP import", () => {
       .mockResolvedValueOnce([importedGroup()]);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
 
     const alert = await screen.findByRole("alert");
     expect(alert).toHaveTextContent("协议包已安装，但列表刷新失败");
     expect(alert).toHaveTextContent("注册表暂不可读");
     expect(screen.queryByRole("button", { name: "确认安装" })).not.toBeInTheDocument();
-    expect(screen.queryByRole("button", { name: "重新选择 ZIP" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "重新选择协议包" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "重试刷新列表" }));
 
     expect(await screen.findByRole("dialog", { name: "ISO 8583" })).toBeVisible();
@@ -327,7 +326,7 @@ describe("ProtocolPackage ZIP import", () => {
     mocks.protocolPackageList.mockResolvedValueOnce([]).mockResolvedValueOnce(refreshed);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
     expect(await screen.findByText(/刷新后的协议包列表数据不完整|未找到刚安装的精确协议包版本/)).toBeVisible();
     expect(screen.getByRole("button", { name: "重试刷新列表" })).toBeEnabled();
@@ -340,7 +339,7 @@ describe("ProtocolPackage ZIP import", () => {
       .mockResolvedValueOnce([importedGroup()]);
     const user = userEvent.setup();
     render(<ProtocolPackagesView />);
-    await user.click(screen.getByRole("button", { name: "导入协议包 ZIP" }));
+    await user.click(screen.getByRole("button", { name: "导入协议包" }));
     await user.click(await screen.findByRole("button", { name: "确认安装" }));
     expect(await screen.findByRole("dialog", { name: "ISO 8583" })).toBeVisible();
 

@@ -19,7 +19,7 @@ use crate::SqliteStore;
 use crate::{IntoSqlitePersistence, SqliteExecutor};
 
 use super::{
-    PackageTransportClient, PackageTransportError,
+    InProcessWasmRuntime, PackageTransportClient, PackageTransportError,
     common::app_error,
     listener_runtime::{ExternalSocketPackageBinding, ExternalSocketPackageProvider},
 };
@@ -51,12 +51,13 @@ pub struct ExternalPackageRegistryAdapter {
     store: Arc<SqliteStore>,
     executor: SqliteExecutor,
     connection_mutations: Arc<Mutex<HashMap<ProtocolPackageRef, Arc<tokio::sync::Mutex<()>>>>>,
+    application_bundle_mutation: Arc<tokio::sync::Mutex<()>>,
     online: Arc<Mutex<HashMap<ProtocolPackageRef, OnlineConnection>>>,
     service: Arc<Mutex<ExternalPackageServiceSnapshot>>,
     events: Arc<RwLock<Option<Arc<EventHub>>>>,
     connection_details: Arc<Mutex<HashMap<ProtocolPackageRef, ConnectionDetailSnapshot>>>,
     online_changed: Arc<tokio::sync::Notify>,
-    local_supervisor: Arc<RwLock<Option<std::sync::Weak<super::LocalPackageSupervisor>>>>,
+    local_runtimes: Arc<Mutex<HashMap<ProtocolPackageRef, Arc<InProcessWasmRuntime>>>>,
     #[cfg(test)]
     disconnect_barriers: Arc<Mutex<HashMap<ProtocolPackageRef, DisconnectBarrier>>>,
     #[cfg(test)]
@@ -95,6 +96,7 @@ impl ExternalPackageRegistryAdapter {
             store,
             executor,
             connection_mutations: Arc::new(Mutex::new(HashMap::new())),
+            application_bundle_mutation: Arc::new(tokio::sync::Mutex::new(())),
             online: Arc::new(Mutex::new(HashMap::new())),
             service: Arc::new(Mutex::new(ExternalPackageServiceSnapshot {
                 websocket_url: "ws://0.0.0.0:8765/packages".to_owned(),
@@ -105,7 +107,7 @@ impl ExternalPackageRegistryAdapter {
             events: Arc::new(RwLock::new(None)),
             connection_details: Arc::new(Mutex::new(HashMap::new())),
             online_changed: Arc::new(tokio::sync::Notify::new()),
-            local_supervisor: Arc::new(RwLock::new(None)),
+            local_runtimes: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(test)]
             disconnect_barriers: Arc::new(Mutex::new(HashMap::new())),
             #[cfg(test)]
@@ -141,17 +143,6 @@ impl ExternalPackageRegistryAdapter {
         *self.events.write() = Some(events);
     }
 
-    pub(crate) fn set_local_supervisor(&self, supervisor: &Arc<super::LocalPackageSupervisor>) {
-        *self.local_supervisor.write() = Some(Arc::downgrade(supervisor));
-    }
-
-    pub(super) fn local_supervisor(&self) -> Option<Arc<super::LocalPackageSupervisor>> {
-        self.local_supervisor
-            .read()
-            .as_ref()
-            .and_then(std::sync::Weak::upgrade)
-    }
-
     /// 原子接纳完成握手的注册结果，并发布活动 client。
     ///
     /// `fingerprint` 必须由 [`external_package_registration_fingerprint`] 计算；本方法会再次计算并
@@ -162,6 +153,7 @@ impl ExternalPackageRegistryAdapter {
         fingerprint: [u8; 32],
         client: PackageTransportClient,
     ) -> AppResult<AcceptedExternalPackageConnection> {
+        let _bundle_mutation = self.application_bundle_mutation.lock().await;
         let computed = external_package_registration_fingerprint(registration)?;
         let package = registration.package().identity().clone();
         let _environment_apply_gate = self.acquire_environment_apply_package_gate(&package).await;
@@ -175,10 +167,24 @@ impl ExternalPackageRegistryAdapter {
 
         let gate = self.connection_mutation(&package);
         let mutation = gate.lock().await;
+        let selected = package.clone();
+        let local_archive_exists = self
+            .executor
+            .execute(move |store| store.get_external_package(&selected))
+            .await
+            .map_err(app_error)?
+            .is_some_and(|stored| stored.local_archive.is_some());
         if self.online.lock().contains_key(&package) {
             return Err(package_error(
                 "EXTERNAL_PACKAGE_ALREADY_ONLINE",
-                "相同外部协议包精确版本已有在线连接。",
+                "相同协议包精确版本已经有远端调试连接在线。",
+                &package,
+            ));
+        }
+        if self.has_active_local_runtime(&package) || local_archive_exists {
+            return Err(package_error(
+                "PROTOCOL_PACKAGE_SOURCE_CONFLICT",
+                "相同协议包精确版本已由本地 Component 或远端调试连接占有。",
                 &package,
             ));
         }
@@ -391,20 +397,11 @@ impl ExternalPackageRegistryAdapter {
     }
 
     pub(crate) fn is_online(&self, package: &ProtocolPackageRef) -> bool {
-        matches!(
-            self.online.lock().get(package),
-            Some(OnlineConnection::Active { .. })
-        )
-    }
-
-    pub(crate) async fn wait_until_online(&self, package: &ProtocolPackageRef) {
-        loop {
-            let changed = self.online_changed.notified();
-            if self.is_online(package) {
-                return;
-            }
-            changed.await;
-        }
+        self.has_active_local_runtime(package)
+            || matches!(
+                self.online.lock().get(package),
+                Some(OnlineConnection::Active { .. })
+            )
     }
 
     fn service_status_snapshot(&self) -> ExternalPackageServiceStatusViewModel {
@@ -472,6 +469,20 @@ impl ExternalSocketPackageProvider for ExternalPackageRegistryAdapter {
             return Err(package_error(
                 "EXTERNAL_PACKAGE_DISABLED",
                 "外部协议包已停用，无法启动绑定入口。",
+                package,
+            ));
+        }
+        if let Some(runtime) = self.active_local_runtime(package) {
+            return Ok(Some(ExternalSocketPackageBinding::with_limits(
+                stored.registration,
+                runtime,
+                usize::MAX,
+            )));
+        }
+        if stored.local_archive.is_some() {
+            return Err(package_error(
+                "PROTOCOL_PACKAGE_RUNTIME_OFFLINE",
+                "本地 Wasm 协议包当前未成功实例化，无法启动绑定入口。",
                 package,
             ));
         }

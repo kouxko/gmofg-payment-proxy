@@ -1,5 +1,33 @@
 # AU EFTEX External Package
 
+该目录同时保留两种交付方式：
+
+- `au_eftex/`：原有 Python + WebSocket JSON-RPC 实现，用于快速调试和历史 trace 回放。
+- `component/`：等价的 Rust WebAssembly Component 单文件实现，用于 Proxy 进程内导入和运行。
+
+WebAssembly Component 直接使用 Socket WIT 的字节参数，`encode` 同时收到原始线路报文，因此不需要
+Python 外部 RPC 为跨调用状态设计的 AES-GCM `encoding_context`。DUKPT、3DES-OFB、H01、长度头、
+ISO 8583 字段投影、敏感字段展示和 MAC fail-closed 规则保持不变。
+
+构建和运行局部回归：
+
+```bash
+cargo test --manifest-path examples/external-packages/au_eftex/component/Cargo.toml --locked
+pnpm build:protocol-packages
+```
+
+产物是：
+
+```text
+dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm
+```
+
+`cargo build --target wasm32-wasip2` 只生成未追加顶层 Manifest 的编译器原始产物；导入时必须使用
+统一构建入口生成的 `dist` 文件。
+
+运行 Component 时仍须通过 `AU_EFTEX_BDK_FILE` 或 `AU_EFTEX_BDK_HEX` 二选一提供 16 字节 BDK；
+WASI Host 会继承环境变量并提供文件访问。生产环境继续优先使用密钥文件。
+
 `au-eftex@1.1.0` 是 Intercept Proxy 的外部 Socket 软件包。它通过 Python、WebSocket JSON-RPC 和
 PyCryptodome 处理传统 2-key 3DES DUKPT 保护的 AU EFTEX 报文。
 

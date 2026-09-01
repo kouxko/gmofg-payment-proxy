@@ -202,7 +202,7 @@ HTTP transport 已经完成 HTTP framing，Context 保存 header/body 文本，�
 
 - Plain：Rust `TextDecode` 把 header/body 放入 `http-text` Document；Display 返回 body；
   空 RulesChain 后由 `TextEncode` 重建 Context。
-- Protocol：绑定精确 HTTP 协议包版本；Decode/Display/Encode 调用 Sidecar 固定 RPC，
+- Protocol：绑定精确 HTTP 协议包版本；Decode/Display/Encode 调用传输无关的固定 Hook，
   RulesChain 顺序执行两个边界阶段的 Document 规则。
 
 HTTP 标准 Header/JSON/故障规则不隐藏在协议 Decode 中。它们由 `PipelinePorts` 在已 framing

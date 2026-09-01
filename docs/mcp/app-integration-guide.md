@@ -34,7 +34,8 @@
 ### 协议包与规则证据
 
 - HTTP Body Protocol 与 Scripted Socket 都通过精确 `id + version` 的协议包执行；本地包是
-  `manifest.json`、`protocol.js`、`display.js` 严格 ZIP，由 Boa Sidecar 通过 `/packages` 注册。
+  单文件 Component，由 Proxy 主进程直接加载。远端源码调试进程才通过 `/packages` 注册；两者使用
+  同一份协议语义，但远端 JSON-RPC 编码不是本地调用合同。
 - 统一 Document 规则只在 `Proxy -> Server` 和 `Proxy -> App` 两个写出边界运行。App 侧看到连接成功
   不能证明 Decode、Rules 或 Encode 成功，应按同一 Exchange 时间线核对各阶段。
 - `processed.changes` 是 typed action 摘要；`changes_truncated=true` 只表示有界过程证据不完整。

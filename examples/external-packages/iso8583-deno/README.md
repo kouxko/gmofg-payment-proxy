@@ -3,6 +3,10 @@
 这是一个零第三方依赖的 Deno + TypeScript 示例进程。它作为 WebSocket JSON-RPC peer 连接 Intercept
 Proxy 的 `/packages` 服务，为 Socket listener 提供 ISO 8583 报文分帧、解析、重建和安全展示。
 
+同目录的 `component/` 提供等价的 Rust WebAssembly Component 构建，可作为单个 `.wasm` 文件直接
+导入本地运行时。Deno 入口保留用于源码级远程调试；Component 入口不经过 WebSocket、JSON-RPC 或
+Base64 transport。
+
 它是一个明确受限的接入 Profile，不是“完整 ISO 8583 标准实现”。生产接入必须用收单机构、交换网络或厂商
 规范核对字段长度、字符集、二进制域、MAC 和密钥处理。
 
@@ -14,6 +18,16 @@ Proxy 的 `/packages` 服务，为 Socket listener 提供 ISO 8583 报文分帧�
 deno task check
 deno task start
 ```
+
+构建本地 Component：
+
+```bash
+pnpm build:protocol-packages
+```
+
+可导入文件为
+`dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm`。直接执行
+`cargo build` 得到的是尚未追加顶层 Manifest 的编译器原始产物。
 
 默认连接 `ws://127.0.0.1:8765/packages`。可通过环境变量配置：
 
