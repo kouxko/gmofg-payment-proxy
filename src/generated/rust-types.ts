@@ -100,7 +100,6 @@ export const commands = {
 } | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
 	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
 	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
-	protocolPackageRestoreBuiltin: () => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restore_builtin")),
 	protocolPackageExportBuiltin: () => typedError<{
 	bytes_written: number,
 	replaced_existing: boolean,

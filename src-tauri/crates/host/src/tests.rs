@@ -113,7 +113,9 @@ async fn builds_and_invokes_application_without_tauri() {
         draft.stage,
         intercept_proxy_application::RuleStage::ProxyToUpstream
     );
-    let intercept_proxy_application::RuleNewDefinitionContent::Http { description } = &draft.content else {
+    let intercept_proxy_application::RuleNewDefinitionContent::Http { description } =
+        &draft.content
+    else {
         panic!("HTTP structural draft expected");
     };
     assert!(description.is_empty());

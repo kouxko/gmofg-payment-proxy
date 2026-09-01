@@ -67,14 +67,6 @@ async fn baseline_capture_holds_one_gate_against_all_authoritative_mutation_faca
             application.settings_save(valid_settings_draft()).await
         })
     };
-    let (package_started, package_attempted) = tokio::sync::oneshot::channel();
-    let package_mutation = {
-        let application = application.clone();
-        tokio::spawn(async move {
-            package_started.send(()).unwrap();
-            application.protocol_package_restore_builtin().await
-        })
-    };
     let (certificate_started, certificate_attempted) = tokio::sync::oneshot::channel();
     let certificate_mutation = {
         let application = application.clone();
@@ -87,19 +79,16 @@ async fn baseline_capture_holds_one_gate_against_all_authoritative_mutation_faca
     };
     workspace_attempted.await.unwrap();
     settings_attempted.await.unwrap();
-    package_attempted.await.unwrap();
     certificate_attempted.await.unwrap();
     tokio::task::yield_now().await;
     assert!(!workspace_mutation.is_finished());
     assert!(!settings_mutation.is_finished());
-    assert!(!package_mutation.is_finished());
     assert!(!certificate_mutation.is_finished());
 
     portability.continue_backup_baseline.notify_one();
     prepare.await.unwrap().unwrap();
     workspace_mutation.await.unwrap().unwrap();
     settings_mutation.await.unwrap().unwrap();
-    assert!(package_mutation.await.unwrap().is_err());
     certificate_mutation.await.unwrap().unwrap();
     assert_eq!(ports.settings_save_calls.load(Ordering::SeqCst), 1);
     assert_eq!(ports.certificate_import_calls.load(Ordering::SeqCst), 1);

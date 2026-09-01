@@ -231,9 +231,9 @@ fn referenced_workspace() -> ProxyWorkspace {
                             field: intercept_proxy_domain::MatchField::Method,
                             operator: intercept_proxy_domain::MatchOperator::Equals("GET".into()),
                         },
-                        action: intercept_proxy_domain::UnifiedAction::Http(
-                            HttpAction::Delay { milliseconds: 1 },
-                        ),
+                        action: intercept_proxy_domain::UnifiedAction::Http(HttpAction::Delay {
+                            milliseconds: 1,
+                        }),
                     },
                 ),
             },

@@ -177,43 +177,43 @@ fn execute_actions(
     let mut executed = Vec::new();
     let action = rule_action(rule);
     match action {
-            UnifiedAction::Http(
-                action @ (HttpAction::Delay { .. }
-                | HttpAction::Jitter { .. }
-                | HttpAction::Throttle { .. }
-                | HttpAction::Intermittent { .. }
-                | HttpAction::CustomHttpStatus { .. }),
-            ) => {
-                executed.push(action.clone());
-                evaluation.composed_actions.push(action.clone());
-            }
-            UnifiedAction::Terminal(terminal) => {
-                let action = HttpAction::Terminal(terminal.clone());
-                executed.push(action.clone());
-                evaluation.composed_actions.push(action);
-                evaluation.terminal_action = Some(terminal.clone());
-            }
-            UnifiedAction::Http(
-                action @ (HttpAction::SetJsonField { .. }
-                | HttpAction::ReplaceBodyText(_)
-                | HttpAction::SetHeader { .. }),
-            ) if !has_joint_document => {
-                crate::adapters::pipeline::rule_actions::apply_rule_actions(
-                    body_codec.expect("HTTP message owns its codec"),
-                    message
-                        .as_deref_mut()
-                        .expect("HTTP unified evaluation owns a working message"),
-                    std::slice::from_ref(action),
-                    0,
-                )?;
-            }
-            UnifiedAction::Document(_) if !has_joint_document && !has_socket_joint => {
-                return Err(ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    "Document action requires its typed Document transaction",
-                ));
-            }
-            UnifiedAction::RecordMatch | UnifiedAction::Document(_) | UnifiedAction::Http(_) => {}
+        UnifiedAction::Http(
+            action @ (HttpAction::Delay { .. }
+            | HttpAction::Jitter { .. }
+            | HttpAction::Throttle { .. }
+            | HttpAction::Intermittent { .. }
+            | HttpAction::CustomHttpStatus { .. }),
+        ) => {
+            executed.push(action.clone());
+            evaluation.composed_actions.push(action.clone());
+        }
+        UnifiedAction::Terminal(terminal) => {
+            let action = HttpAction::Terminal(terminal.clone());
+            executed.push(action.clone());
+            evaluation.composed_actions.push(action);
+            evaluation.terminal_action = Some(terminal.clone());
+        }
+        UnifiedAction::Http(
+            action @ (HttpAction::SetJsonField { .. }
+            | HttpAction::ReplaceBodyText(_)
+            | HttpAction::SetHeader { .. }),
+        ) if !has_joint_document => {
+            crate::adapters::pipeline::rule_actions::apply_rule_actions(
+                body_codec.expect("HTTP message owns its codec"),
+                message
+                    .as_deref_mut()
+                    .expect("HTTP unified evaluation owns a working message"),
+                std::slice::from_ref(action),
+                0,
+            )?;
+        }
+        UnifiedAction::Document(_) if !has_joint_document && !has_socket_joint => {
+            return Err(ProxyError::new(
+                ErrorCode::ConfigInvalid,
+                "Document action requires its typed Document transaction",
+            ));
+        }
+        UnifiedAction::RecordMatch | UnifiedAction::Document(_) | UnifiedAction::Http(_) => {}
     }
     evaluation.traces.push(RuleTrace {
         rule_id: rule.rule_id(),

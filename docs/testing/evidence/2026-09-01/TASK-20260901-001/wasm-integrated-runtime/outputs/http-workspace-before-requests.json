@@ -1,0 +1,206 @@
+{
+  "android_network_profiles": [],
+  "certificate_references": [],
+  "id": "d7c07776-6a6d-4834-9609-39b3584699be",
+  "listeners": [
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "http",
+        "settings": {
+          "authentication": {
+            "mode": "none"
+          },
+          "body_processing": {
+            "mode": "plain"
+          },
+          "downstream_tls": {
+            "client_authentication": {
+              "mode": "disabled"
+            },
+            "dynamic_sni_allowlist": [],
+            "enabled": false,
+            "server_identity": null
+          },
+          "fixed_server": {
+            "upstream_tls": {
+              "client_identity": null,
+              "server_trust": null,
+              "verify_hostname": true
+            },
+            "upstream_url": "http://127.0.0.1:18083"
+          },
+          "mitm": {
+            "authority_allowlist": [],
+            "enabled": false,
+            "maximum_cached_leaf_certificates": 256,
+            "root_ca": null
+          },
+          "request_body_codec": "auto",
+          "response_body_codec": "auto"
+        }
+      },
+      "enabled": true,
+      "id": "91d62d09-5337-45d6-b325-1a79b950163c",
+      "name": "Phase21 HTTP rule matrix",
+      "port": 8080,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    }
+  ],
+  "name": "默认 Workspace",
+  "revision": 2,
+  "rule_created_order_high_water": 4,
+  "rule_definitions": [
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Method-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": "Method",
+            "operator": {
+              "Equals": "POST"
+            },
+            "source": "http"
+          },
+          "description": "Method POST"
+        }
+      },
+      "created_order": 1,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "91d62d09-5337-45d6-b325-1a79b950163c",
+      "name": "Method POST",
+      "priority": 10,
+      "revision": 1,
+      "rule_id": "65c70147-b09e-4f41-b541-07661cfe5e94",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Header-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": {
+              "Header": "/x-probe"
+            },
+            "operator": {
+              "Equals": "alpha"
+            },
+            "source": "http"
+          },
+          "description": "Header X-Probe alpha"
+        }
+      },
+      "created_order": 2,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "91d62d09-5337-45d6-b325-1a79b950163c",
+      "name": "Header X-Probe alpha",
+      "priority": 11,
+      "revision": 1,
+      "rule_id": "8bb1d138-9cf2-443a-9b4c-60b3985587b8",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Path-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": "RequestTarget",
+            "operator": {
+              "Wildcard": "/orders/*?mode=test"
+            },
+            "source": "http"
+          },
+          "description": "Path and query wildcard"
+        }
+      },
+      "created_order": 3,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "91d62d09-5337-45d6-b325-1a79b950163c",
+      "name": "Path and query wildcard",
+      "priority": 12,
+      "revision": 1,
+      "rule_id": "a480f8ef-42cb-40e0-a90a-235ed6a556b4",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "document",
+            "value": {
+              "path": "/customer/name",
+              "type": "set",
+              "value": "matched"
+            }
+          },
+          "condition": {
+            "path": "/customer/age",
+            "predicate": {
+              "type": "number",
+              "value": {
+                "operator": "equal",
+                "value": 18.0
+              }
+            },
+            "source": "document"
+          },
+          "description": "Body age 18"
+        }
+      },
+      "created_order": 4,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "91d62d09-5337-45d6-b325-1a79b950163c",
+      "name": "Body age 18",
+      "priority": 13,
+      "revision": 1,
+      "rule_id": "6de0aa51-1aa0-442a-91b2-d36e8efe5ec8",
+      "stage": "proxy_to_upstream"
+    }
+  ]
+}

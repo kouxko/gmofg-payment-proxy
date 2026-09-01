@@ -1,0 +1,151 @@
+[
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Method-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": "Method",
+          "operator": {
+            "Equals": "POST"
+          },
+          "source": "http"
+        },
+        "description": "Method POST"
+      }
+    },
+    "created_order": 1,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-01T14:42:57.261420Z"
+    },
+    "listener_id": "13418376-68cc-4811-8897-4eb8ffcab58f",
+    "name": "Method POST",
+    "priority": 10,
+    "revision": 1,
+    "rule_id": "01c5fffe-0ab2-4933-b65c-434fcb0d99e9",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Header-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": {
+            "Header": "/x-probe"
+          },
+          "operator": {
+            "Equals": "alpha"
+          },
+          "source": "http"
+        },
+        "description": "Header X-Probe alpha"
+      }
+    },
+    "created_order": 2,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-01T14:42:57.261423Z"
+    },
+    "listener_id": "13418376-68cc-4811-8897-4eb8ffcab58f",
+    "name": "Header X-Probe alpha",
+    "priority": 11,
+    "revision": 1,
+    "rule_id": "ba6719fa-b5ac-408d-bc5f-4b1b5bc61cd6",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Path-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": "RequestTarget",
+          "operator": {
+            "Wildcard": "/orders/*?mode=test"
+          },
+          "source": "http"
+        },
+        "description": "Path and query wildcard"
+      }
+    },
+    "created_order": 3,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-01T14:42:57.261425Z"
+    },
+    "listener_id": "13418376-68cc-4811-8897-4eb8ffcab58f",
+    "name": "Path and query wildcard",
+    "priority": 12,
+    "revision": 1,
+    "rule_id": "027c9531-06ad-48a3-91f1-d1d24823111a",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "document",
+          "value": {
+            "path": "/customer/name",
+            "type": "set",
+            "value": "matched"
+          }
+        },
+        "condition": {
+          "path": "/customer/age",
+          "predicate": {
+            "type": "number",
+            "value": {
+              "operator": "equal",
+              "value": 18.0
+            }
+          },
+          "source": "document"
+        },
+        "description": "Body age 18"
+      }
+    },
+    "created_order": 4,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-01T14:42:57.261428Z"
+    },
+    "listener_id": "13418376-68cc-4811-8897-4eb8ffcab58f",
+    "name": "Body age 18",
+    "priority": 13,
+    "revision": 1,
+    "rule_id": "a8b5c88b-aab1-49f4-a626-94d44ee28082",
+    "stage": "proxy_to_upstream"
+  }
+]

@@ -1,0 +1,68 @@
+{
+  "baseline_public": null,
+  "candidate_id": "37929ef9-f1ce-4caa-9e80-a027a71d4136",
+  "confirmation_token": null,
+  "errors": [
+    {
+      "code": "VALIDATION_LAYER_FAILED",
+      "field": null,
+      "message": "environment validation layer failed",
+      "severity": "error"
+    }
+  ],
+  "expires_on": "app_exit_or_invalidation",
+  "preview": null,
+  "status": "validation_failed",
+  "target_key": null,
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": "VALIDATION_LAYER_FAILED",
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": "dns_tcp_port_validation_failed",
+      "status": "failed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": "dependency_not_satisfied",
+      "status": "skipped_dependency"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": "dependency_not_satisfied",
+      "status": "skipped_dependency"
+    }
+  ]
+}

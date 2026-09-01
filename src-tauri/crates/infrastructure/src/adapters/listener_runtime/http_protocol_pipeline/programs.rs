@@ -70,7 +70,10 @@ fn compile_program(
     let owns_direction = owns_all_http
         || definitions.iter().any(|(_, content)| {
             is_document_condition(&content.condition)
-                || matches!(content.action, intercept_proxy_domain::UnifiedAction::Document(_))
+                || matches!(
+                    content.action,
+                    intercept_proxy_domain::UnifiedAction::Document(_)
+                )
         });
     if !owns_direction {
         return UnifiedRuleProgram::new(Vec::new()).map_err(AppError::from);
@@ -78,9 +81,7 @@ fn compile_program(
     let mut entries = Vec::new();
     for (definition, content) in definitions {
         let HttpRuleContent {
-            condition,
-            action,
-            ..
+            condition, action, ..
         } = content;
         if let Some(schema) = schema {
             intercept_proxy_domain::validate_document_condition_schema(condition, schema)?;

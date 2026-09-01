@@ -66,10 +66,7 @@ impl RuleProgramEntry {
 
 fn validate_action(action: &UnifiedAction) -> Result<(), DomainError> {
     if matches!(action, UnifiedAction::Http(HttpAction::Terminal(_))) {
-        return Err(rule_error(
-            "action",
-            "终止动作必须使用统一 terminal 变体",
-        ));
+        return Err(rule_error("action", "终止动作必须使用统一 terminal 变体"));
     }
     Ok(())
 }

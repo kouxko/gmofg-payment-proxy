@@ -1,0 +1,143 @@
+{
+  "baseline_public": {
+    "revision": null,
+    "selected": false,
+    "workspace_id": null
+  },
+  "candidate_id": "02709362-0e98-4716-8659-221f70f88e03",
+  "errors": [],
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "phase21-http",
+          "candidate_local_id": "13418376-68cc-4811-8897-4eb8ffcab58f"
+        }
+      ],
+      "rules": [
+        {
+          "candidate_index": 0,
+          "candidate_local_id": "01c5fffe-0ab2-4933-b65c-434fcb0d99e9",
+          "created_order": 1,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 1,
+          "candidate_local_id": "ba6719fa-b5ac-408d-bc5f-4b1b5bc61cd6",
+          "created_order": 2,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 2,
+          "candidate_local_id": "027c9531-06ad-48a3-91f1-d1d24823111a",
+          "created_order": 3,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 3,
+          "candidate_local_id": "a8b5c88b-aab1-49f4-a626-94d44ee28082",
+          "created_order": 4,
+          "listener_alias": "phase21-http"
+        }
+      ]
+    },
+    "target": {
+      "mode": "new",
+      "name": "Live HTTP Replay"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "committed",
+  "target_key": "new:4c6976652048545450205265706c6179",
+  "terminal_result": {
+    "apply_task_id": "d4fcdfbb-56f7-4d14-88ca-5bd1e17a2fc7",
+    "diagnostics": [],
+    "result": "committed",
+    "revision": 1,
+    "selected_workspace_id": "d7c07776-6a6d-4834-9609-39b3584699be",
+    "status_code": null,
+    "workspace_id": "0a40178f-0729-41b4-b9bf-7cb14f3adebf"
+  },
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

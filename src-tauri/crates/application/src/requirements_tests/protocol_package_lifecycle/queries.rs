@@ -379,6 +379,21 @@ async fn external_detail_serializes_the_closed_wire_shape_with_external_metadata
     assert_no_forbidden_protocol_package_keys(&value);
 }
 
+#[tokio::test]
+async fn managed_component_detail_omits_remote_connection_metadata() {
+    let (application, services, _, _) = fixture();
+    let target = package("managed", "1.0.0");
+    let mut version = record(target.clone(), true);
+    version.source = ProtocolPackageSourceViewModel::Managed { online: true };
+    services.insert(version);
+    services.set_description(target.clone(), strict_description(target.clone()));
+
+    let detail = application.protocol_package_detail(target).await.unwrap();
+
+    assert!(detail.external.is_none());
+    assert_eq!(services.detail_calls.load(Ordering::SeqCst), 0);
+}
+
 fn assert_no_forbidden_protocol_package_keys(value: &serde_json::Value) {
     const FORBIDDEN: &[&str] = &[
         "source",

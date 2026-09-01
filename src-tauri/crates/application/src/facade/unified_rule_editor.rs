@@ -15,14 +15,14 @@ use crate::{
     RuleDocumentConditionPathCapability, RuleEditorContentContext, RuleEditorContext,
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
     RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
-    RuleNewDefinitionContent, RuleNewDefinitionDraft,
-    RuleStage, RuleTerminalAction, SocketPayloadProcessing, SocketRuleEditorStageViewModel,
-    SocketTopology, document_schema_field_capabilities, local_document_type_capabilities,
+    RuleNewDefinitionContent, RuleNewDefinitionDraft, RuleStage, RuleTerminalAction,
+    SocketPayloadProcessing, SocketRuleEditorStageViewModel, SocketTopology,
+    document_schema_field_capabilities, local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
-    Condition, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction,
-    JitterScope, MatchField, MatchOperator, TerminalAction as DomainTerminalAction,
-    TrafficDirection, UnifiedAction,
+    Condition, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction, JitterScope,
+    MatchField, MatchOperator, TerminalAction as DomainTerminalAction, TrafficDirection,
+    UnifiedAction,
 };
 
 impl Application {

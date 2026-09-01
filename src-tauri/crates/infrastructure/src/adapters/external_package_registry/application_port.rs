@@ -81,6 +81,21 @@ fn decode_portable_component(package: &PortableApplicationProtocolPackage) -> Ap
     Ok(bytes)
 }
 
+impl ExternalPackageRegistryAdapter {
+    pub(crate) async fn environment_apply_projection(
+        &self,
+        package: &ProtocolPackageRef,
+    ) -> AppResult<Option<ProtocolPackageVersionViewModel>> {
+        ExternalPackageApplicationPort::get(self, package).await
+    }
+
+    pub(crate) async fn environment_apply_projections(
+        &self,
+    ) -> AppResult<Vec<ProtocolPackageVersionViewModel>> {
+        ExternalPackageApplicationPort::list(self).await
+    }
+}
+
 #[async_trait]
 impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
     async fn service_status(&self) -> AppResult<ExternalPackageServiceStatusViewModel> {

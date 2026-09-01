@@ -21,8 +21,6 @@ import {
 } from "./protocol-package-import-model";
 import { ProtocolPackageRow } from "./protocol-package-row";
 import {
-  builtInRestoreResultError,
-  isBuiltInPackage,
   isProtocolPackageGroupList,
   sortPackageVersions,
 } from "./protocol-package-model";
@@ -41,14 +39,11 @@ export function ProtocolPackagesView() {
   const [dialogOpen, setDialogOpen] = useState(false);
   const [importState, setImportState] = useState<ProtocolPackageImportState>({ kind: "closed" });
   const [importNotice, setImportNotice] = useState<string>();
-  const [restoreError, setRestoreError] = useState<string>();
-  const [restorePending, setRestorePending] = useState(false);
   const [exportPending, setExportPending] = useState(false);
   // state 更新发生在下一次渲染；ref 在事件入口同步上锁，阻止同一帧的重复点击。
   const prepareLock = useRef(false);
   const commitLock = useRef(false);
   const discardLock = useRef(false);
-  const restoreLock = useRef(false);
   const exportLock = useRef(false);
   const importGeneration = useRef(0);
   const triggerRef = useRef<HTMLButtonElement | null>(null);
@@ -124,7 +119,7 @@ export function ProtocolPackagesView() {
   }
 
   async function chooseZip() {
-    if (prepareLock.current || commitLock.current || restoreLock.current || exportLock.current) return;
+    if (prepareLock.current || commitLock.current || exportLock.current) return;
     triggerRef.current = importTriggerRef.current;
     const generation = importGeneration.current + 1;
     importGeneration.current = generation;
@@ -161,52 +156,8 @@ export function ProtocolPackagesView() {
     }
   }
 
-  async function restoreBuiltInExample() {
-    if (restoreLock.current || exportLock.current || prepareLock.current || commitLock.current || discardLock.current) return;
-    restoreLock.current = true;
-    setRestorePending(true);
-    setRestoreError(undefined);
-    setImportNotice(undefined);
-    try {
-      const result = await callCommand(commands.protocolPackageRestoreBuiltin());
-      const resultError = builtInRestoreResultError(result);
-      if (resultError) {
-        setRestoreError(resultError);
-        return;
-      }
-      const refreshed = await callCommand(commands.protocolPackageList());
-      if (!isProtocolPackageGroupList(refreshed)) {
-        setRestoreError("内置示例已恢复，但刷新后的协议包列表数据不完整。");
-        return;
-      }
-      const packageRef = result.version.package;
-      const exactGroup = refreshed.find((item) => item.id === packageRef.id);
-      const exactVersion = exactGroup?.versions.find((item) =>
-        item.package.version === packageRef.version
-        && isBuiltInPackage(item)
-        && item.enabled
-        && item.validation.state === "valid");
-      if (!exactGroup || !exactVersion) {
-        setRestoreError("内置示例已恢复，但列表中未找到官方精确版本。");
-        return;
-      }
-      packages.setData(refreshed);
-      setSelectedGroup(exactGroup);
-      setSelectedVersion(exactVersion);
-      setImportNotice(result.outcome === "reused"
-        ? "官方 ISO 8583 示例已存在并通过重新校验。"
-        : "官方 ISO 8583 示例已恢复并启用。");
-      setDialogOpen(true);
-    } catch (reason) {
-      setRestoreError(presentImportError(reason).message);
-    } finally {
-      restoreLock.current = false;
-      setRestorePending(false);
-    }
-  }
-
   async function exportBuiltInTemplate() {
-    if (exportLock.current || restoreLock.current || prepareLock.current || commitLock.current || discardLock.current || importState.kind !== "closed") return;
+    if (exportLock.current || prepareLock.current || commitLock.current || discardLock.current || importState.kind !== "closed") return;
     exportLock.current = true;
     setExportPending(true);
     try {
@@ -339,14 +290,7 @@ export function ProtocolPackagesView() {
         <div className="flex flex-wrap justify-end gap-2">
           <Button
             variant="outline"
-            isDisabled={restorePending || exportPending || importState.kind !== "closed"}
-            onPress={() => void restoreBuiltInExample()}
-          >
-            {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
-          </Button>
-          <Button
-            variant="outline"
-            isDisabled={exportPending || restorePending || importState.kind !== "closed"}
+            isDisabled={exportPending || importState.kind !== "closed"}
             onPress={() => void exportBuiltInTemplate()}
           >
             {exportPending ? "正在导出…" : "导出 ISO 8583 模板"}
@@ -354,7 +298,7 @@ export function ProtocolPackagesView() {
           <Button
             ref={importTriggerRef}
             variant="primary"
-            isDisabled={prepareLock.current || commitLock.current || restorePending || exportPending}
+            isDisabled={prepareLock.current || commitLock.current || exportPending}
             onPress={() => void chooseZip()}
           >
             导入协议包
@@ -362,16 +306,6 @@ export function ProtocolPackagesView() {
         </div>
       </div>
       {importNotice && <p role="status" className="text-sm text-success">{importNotice}</p>}
-      {restoreError && (
-        <Alert status="danger">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>内置示例恢复失败</Alert.Title>
-            <Alert.Description>{restoreError}</Alert.Description>
-          </Alert.Content>
-          <Button size="sm" variant="outline" onPress={() => void restoreBuiltInExample()}>重试</Button>
-        </Alert>
-      )}
       <Alert status="accent">
         <Alert.Indicator />
         <Alert.Content>
@@ -398,13 +332,8 @@ export function ProtocolPackagesView() {
           <p className="font-medium">尚未安装协议包</p>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">导入协议包后可在此查看 HTTP 与 Socket 包的版本、能力与 Schema。</p>
           <div className="mt-4 flex flex-wrap justify-center gap-2">
-            <Button variant="primary"
-              isDisabled={restorePending || exportPending || importState.kind !== "closed"}
-              onPress={() => void restoreBuiltInExample()}>
-              {restorePending ? "正在恢复…" : "恢复 ISO 8583 示例包"}
-            </Button>
             <Button variant="outline"
-              isDisabled={exportPending || restorePending || importState.kind !== "closed"}
+              isDisabled={exportPending || importState.kind !== "closed"}
               onPress={() => void exportBuiltInTemplate()}>
               {exportPending ? "正在导出…" : "导出 ISO 8583 模板"}
             </Button>

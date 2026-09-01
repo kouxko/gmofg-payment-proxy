@@ -51,8 +51,8 @@ Document 条件路径使用 RFC 6901 扩展：完整 token `*` 只展开一个 o
 (priority 升序, rule_id 升序)
 ```
 
-NthHit counter 由 actor 唯一持有。统一 Document gate 返回 typed condition evaluation；普通 HTTP 条件
-仍由 actor 自己求值。Encode 失败不消费 NthHit、不提交 one-shot，也不保留 working Document。
+每条规则只有一个 typed condition 和一个对应 action。统一 Document gate 返回 typed condition
+evaluation；普通 HTTP 条件仍由 actor 自己求值。Encode 失败不提交 hit，也不保留 working Document。
 
 ## 4. 两个写出阶段
 
@@ -67,8 +67,9 @@ Proxy -> App:    working Document 条件 -> 有序 action -> Encode -> write
 ```
 
 每个方向开始时从 Decode 结果创建私有 working Document。规则按
-`(priority, rule_id)` 顺序执行；`created_order` 仅用于编辑历史展示，不参与运行时排序。每条 condition 读取当前 working state，命中的 action
-立即更新它并供后序规则条件观察。方向完成后只 Encode 一次。Document、普通 HTTP action、Encode
+`(priority, rule_id)` 顺序执行；`created_order` 仅用于编辑历史展示，不参与运行时排序。每条规则的唯一
+condition 读取当前 working state，命中后执行唯一 action，并供后序规则条件观察。方向完成后只
+Encode 一次。Document、普通 HTTP action、Encode
 与 actor delta 作为一个事务提交，全部成功才一次提交 lifecycle，任一步失败都回滚。
 
 Direct Socket 不进入 Frame/Decode/Rules/Encode。Display 是未信任观测输出，失败可回退文本/Hex，
@@ -111,8 +112,8 @@ SQLite Schema 100 是产品 1.00 兼容基线。Schema 100 数据原样保留；
 
 ## 8. 验证重点
 
-- recursive Schema、schema-free first condition、扁平 AND 与多规则 OR、Insert/Append/Clear typed capability；
-- 当前 working state 按序匹配、ordered action、前序可见、NthHit/one-shot 成功提交与 Encode rollback；
+- recursive Schema、schema-free condition、单条件/单动作配对与 Insert/Append/Clear typed capability；
+- 当前 working state 按序匹配、前序可见、hit 成功提交与 Encode rollback；
 - HTTP 与 Socket 两个写出阶段共用统一规则但保持 transport DTO 隔离；
 - Component/API 1、WIT、Host WebSocket、远程 `package.register`、断线与精确版本生命周期；
 - received/process/final/encoded typed evidence、`changes_truncated` 和 stable error；

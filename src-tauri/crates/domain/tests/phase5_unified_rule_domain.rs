@@ -350,12 +350,7 @@ fn cloned_rule_configuration_is_deeply_independent() {
         }),
     );
     let mut copied = original.clone();
-    copied
-        .replace_condition(string_condition(
-            "/name",
-            StringOperator::Equal,
-            "copy",
-        ));
+    copied.replace_condition(string_condition("/name", StringOperator::Equal, "copy"));
     assert_ne!(original.condition(), copied.condition());
 
     assert!(UnifiedRuleProgram::new(vec![original.clone(), original]).is_err());

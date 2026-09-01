@@ -100,8 +100,7 @@ HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本。本地 C
 - Request target（只含 path 与 query）
 - Header name/value
 - Body Document RFC 6901 精确路径与单层 `*` 通配符
-- NthHit：命中前、目标次数、目标次数之后
-- channel、stage、priority、created order、enabled、one-shot
+- stage、priority、created order、enabled
 
 ### 4.4 HTTP 动作穷举
 
@@ -160,11 +159,11 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 ### 5.3 统一 Document 规则穷举
 
 - 仅两个写出阶段：`Proxy -> Server`、`Proxy -> App`。
-- 条件：非空扁平列表且固定 AND；OR 通过多条规则表达；覆盖 Document string/有限 number/boolean/null、HTTP typed condition 和 NthHit，类型不匹配为 false。
+- 每条规则必须且只能包含一个条件和一个对应动作；当前不提供单条规则内的 AND/OR 条件组合，多条规则分别独立匹配并执行各自动作；覆盖 Document string/有限 number/boolean/null 与 HTTP typed condition，类型不匹配为 false。
 - RFC 6901 路径覆盖 object、array 和规则本地 metadata；Schema 是编辑元数据，不是 Decode 完整性门。
 - action：RecordMatch、Set、Clear、Insert、Append；严格验证 array index、缺失路径和类型错误。
-- 多规则按权威顺序执行；有序 action 保留完整 payload，成功 transaction 最多 Encode 一次。
-- Encode、action 或 lifecycle commit 失败必须整体回滚，不消费 Nth counter，不提交 hit/one-shot。
+- 多规则按权威顺序执行；每条命中规则执行唯一 action，成功 transaction 最多 Encode 一次。
+- Encode、action 或 lifecycle commit 失败必须整体回滚，不提交 hit。
 - 未修改时保持原始 wire bytes；Schema、精确 package version、listener 或 direction 不匹配时 fail closed。
 
 ## 6. 协议包与外部软件包矩阵

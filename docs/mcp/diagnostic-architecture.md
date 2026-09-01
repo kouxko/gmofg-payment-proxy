@@ -43,8 +43,8 @@ WebSocket JSON-RPC 调用固定的 `hooks.upstream.*`、`hooks.downstream.*` 和
 方法。Proxy 继续拥有 TCP framing、业务连接和规则事务生命周期，两种来源不能抢占同一精确身份。
 
 业务流水线按适用数据面执行 Frame → Decode → Display → Rules → Encode。统一规则只在
-`Proxy -> Server` 与 `Proxy -> App` 两个写出边界运行；Encode 失败会回滚 Document、Nth counter、hit
-和 one-shot 生命周期。不存在旧协议规则投影或另一套运行时 counter。
+`Proxy -> Server` 与 `Proxy -> App` 两个写出边界运行；每条规则只有一个条件和一个对应动作，Encode
+失败会回滚 Document 与 hit。不存在旧协议规则投影或另一套运行时 counter。
 
 同一故障至少要关联：Workspace ID、Listener ID、runtime epoch、业务 connection ID、可选 exchange ID、精确 package id/version、
 方向、stage、JSON-RPC request ID、抓包 ID。缺少这些字段时，应在对应生产日志处补充结构化字段，而不是把上下文只写进中文描述。
