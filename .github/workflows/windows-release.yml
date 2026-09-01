@@ -31,6 +31,10 @@ concurrency:
 
 jobs:
   android-companion:
+    if: >-
+      github.event_name == 'push' ||
+      inputs.run_mode != 'build-only' ||
+      inputs.platform == 'all'
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -178,6 +182,57 @@ jobs:
           cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
           cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets -- -D warnings
 
+  build-windows-executable:
+    if: >-
+      github.event_name == 'workflow_dispatch' &&
+      inputs.run_mode == 'build-only' &&
+      inputs.platform == 'windows'
+    runs-on: windows-latest
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    env:
+      OPENSSL_STATIC: "1"
+      TAURI_CONFIG: '{"bundle":{"resources":[]}}'
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+        with:
+          version: 11.13.1
+
+      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+        with:
+          node-version: 22
+          cache: pnpm
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          targets: wasm32-wasip2
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
+          cache-on-failure: true
+
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm build
+      - run: >-
+          cargo build --manifest-path src-tauri/Cargo.toml --release
+          --features tauri/custom-protocol --bin intercept-proxy
+
+      - name: Reject runtime OpenSSL DLL dependencies
+        shell: pwsh
+        run: ./scripts/verify-windows-openssl-runtime.ps1
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Intercept-Proxy-unsigned-executable-x64
+          path: src-tauri/target/release/intercept-proxy.exe
+          if-no-files-found: error
+
   build:
     needs: [android-companion, verify]
     if: >-
@@ -318,35 +373,7 @@ jobs:
 
       - name: Reject runtime OpenSSL DLL dependencies
         shell: pwsh
-        run: |
-          $app = Get-Item "src-tauri/target/release/intercept-proxy.exe" -ErrorAction Stop
-          $vswhere = Join-Path ${env:ProgramFiles(x86)} `
-            "Microsoft Visual Studio/Installer/vswhere.exe"
-          $installation = & $vswhere `
-            -latest `
-            -products * `
-            -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-            -property installationPath
-          if ([string]::IsNullOrWhiteSpace($installation)) {
-            throw "Visual Studio C++ tools were not found for DLL dependency inspection."
-          }
-          $dumpbin = Get-ChildItem `
-            (Join-Path $installation "VC/Tools/MSVC/*/bin/Hostx64/x64/dumpbin.exe") `
-            -File |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
-          if ($null -eq $dumpbin) {
-            throw "dumpbin.exe was not found for DLL dependency inspection."
-          }
-          $dependencies = & $dumpbin.FullName /DEPENDENTS $app.FullName 2>&1
-          if ($LASTEXITCODE -ne 0) {
-            throw "dumpbin failed while inspecting $($app.FullName)."
-          }
-          $forbidden = $dependencies | Select-String `
-            -Pattern '(?i)\b(libssl|libcrypto|ssleay32|libeay32)[^\s]*\.dll\b'
-          if ($forbidden) {
-            throw "Windows executable depends on an OpenSSL runtime DLL: $forbidden"
-          }
+        run: ./scripts/verify-windows-openssl-runtime.ps1
 
       - name: Verify Authenticode signatures before release
         if: startsWith(github.ref, 'refs/tags/v')
