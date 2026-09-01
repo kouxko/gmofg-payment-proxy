@@ -1740,23 +1740,6 @@
                   "operator"
                 ],
                 "type": "object"
-              },
-              {
-                "additionalProperties": false,
-                "properties": {
-                  "count": {
-                    "minimum": 1,
-                    "type": "integer"
-                  },
-                  "source": {
-                    "const": "nth_hit"
-                  }
-                },
-                "required": [
-                  "source",
-                  "count"
-                ],
-                "type": "object"
               }
             ]
           },
@@ -2471,27 +2454,20 @@
           "httpRuleContent": {
             "additionalProperties": false,
             "properties": {
-              "actions": {
-                "items": {
-                  "$ref": "#/$defs/unifiedAction"
-                },
-                "type": "array"
-              },
-              "conditions": {
-                "items": {
-                  "$ref": "#/$defs/condition"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
               "description": {
                 "type": "string"
+              },
+              "action": {
+                "$ref": "#/$defs/unifiedAction"
+              },
+              "condition": {
+                "$ref": "#/$defs/condition"
               }
             },
             "required": [
               "description",
-              "conditions",
-              "actions"
+              "condition",
+              "action"
             ],
             "type": "object"
           },
@@ -2708,9 +2684,6 @@
               "name": {
                 "type": "string"
               },
-              "one_shot": {
-                "type": "boolean"
-              },
               "priority": {
                 "type": "integer"
               },
@@ -2727,7 +2700,6 @@
               "priority",
               "listener_alias",
               "stage",
-              "one_shot",
               "content"
             ],
             "type": "object"
@@ -3352,27 +3324,20 @@
           "socketRuleContent": {
             "additionalProperties": false,
             "properties": {
-              "actions": {
-                "items": {
-                  "$ref": "#/$defs/unifiedAction"
-                },
-                "type": "array"
-              },
-              "conditions": {
-                "items": {
-                  "$ref": "#/$defs/condition"
-                },
-                "minItems": 1,
-                "type": "array"
-              },
               "package": {
                 "$ref": "#/$defs/packageRef"
+              },
+              "action": {
+                "$ref": "#/$defs/unifiedAction"
+              },
+              "condition": {
+                "$ref": "#/$defs/condition"
               }
             },
             "required": [
               "package",
-              "conditions",
-              "actions"
+              "condition",
+              "action"
             ],
             "type": "object"
           },

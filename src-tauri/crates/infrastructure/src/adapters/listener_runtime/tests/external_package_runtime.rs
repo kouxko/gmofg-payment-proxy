@@ -166,11 +166,10 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
     let upstream_address = upstream.local_addr().unwrap();
     let listener_address = reserve_address().await;
     let listener = external_relay_listener(listener_address, upstream_address, &harness.package);
-    let mut workspace = external_workspace(
+    let workspace = external_workspace(
         listener.clone(),
-        two_stage_one_shot_rules(&listener, &harness.package),
+        two_stage_rules(&listener, &harness.package),
     );
-    configure_nth_one_shot_chain(&mut workspace);
     assert_authoritative_write_stages(&workspace);
     let workspace_id = workspace.id;
     let initial_revision = workspace.revision.get();
@@ -181,7 +180,7 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
         let (mut first, _) = upstream.accept().await.unwrap();
         let mut first_request = [0_u8; 3];
         first.read_exact(&mut first_request).await.unwrap();
-        assert_eq!(first_request, [3, b'a', b'b']);
+        assert_eq!(first_request, [3, b'q', b'b']);
         first.write_all(&first_request).await.unwrap();
         first.shutdown().await.unwrap();
 
@@ -195,11 +194,11 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
         committed.shutdown().await.unwrap();
     });
 
-    let first_miss = socket_roundtrip(listener_address, [3, b'a', b'b']).await;
-    assert_eq!(first_miss, [3, b'a', b'b']);
+    let first_miss = socket_roundtrip(listener_address, [3, b'q', b'b']).await;
+    assert_eq!(first_miss, [3, b'q', b'b']);
     assert!(harness.peer().encode_methods().is_empty());
     let after_first_miss = harness.workspace(workspace_id);
-    assert_eq!(after_first_miss.revision.get(), initial_revision + 1);
+    assert_eq!(after_first_miss.revision.get(), initial_revision);
     assert!(after_first_miss.rule_definitions.iter().all(|rule| {
         rule.enabled() && rule.lifecycle().hit_count == 0 && rule.lifecycle().last_hit_at.is_none()
     }));
@@ -209,7 +208,7 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
     assert!(rejected_response.is_empty());
     assert_eq!(harness.peer().encode_methods(), ["hooks.upstream.encode"]);
     let rolled_back = harness.workspace(workspace_id);
-    assert_eq!(rolled_back.revision.get(), initial_revision + 1);
+    assert_eq!(rolled_back.revision.get(), initial_revision);
     assert!(rolled_back.rule_definitions.iter().all(|rule| {
         rule.enabled() && rule.lifecycle().hit_count == 0 && rule.lifecycle().last_hit_at.is_none()
     }));
@@ -220,13 +219,13 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
         .expect("upstream committed stage observation deadline")
         .unwrap();
     let after_upstream_commit = harness.workspace(workspace_id);
-    assert_eq!(after_upstream_commit.revision.get(), initial_revision + 2);
+    assert_eq!(after_upstream_commit.revision.get(), initial_revision + 1);
     let upstream_rule = after_upstream_commit
         .rule_definitions
         .iter()
         .find(|rule| rule.stage() == intercept_proxy_domain::RuleStage::ProxyToUpstream)
         .unwrap();
-    assert!(!upstream_rule.enabled());
+    assert!(upstream_rule.enabled());
     assert_eq!(upstream_rule.lifecycle().hit_count, 1);
     let downstream_rule = after_upstream_commit
         .rule_definitions
@@ -247,28 +246,14 @@ async fn production_socket_pipeline_rolls_back_failure_and_commits_each_write_st
         ]
     );
     let committed_workspace = harness.workspace(workspace_id);
-    assert_eq!(committed_workspace.revision.get(), initial_revision + 3);
+    assert_eq!(committed_workspace.revision.get(), initial_revision + 2);
     assert!(committed_workspace.rule_definitions.iter().all(|rule| {
-        !rule.enabled() && rule.lifecycle().hit_count == 1 && rule.lifecycle().last_hit_at.is_some()
+        rule.enabled() && rule.lifecycle().hit_count == 1 && rule.lifecycle().last_hit_at.is_some()
     }));
 
     upstream_task.await.unwrap();
     harness.stop_listener(listener.id).await;
     harness.shutdown().await;
-}
-
-fn configure_nth_one_shot_chain(workspace: &mut intercept_proxy_domain::ProxyWorkspace) {
-    for (index, definition) in workspace.rule_definitions.iter_mut().enumerate() {
-        let mut draft = definition.to_draft();
-        draft.one_shot = true;
-        if index == 0 {
-            let RuleContent::Socket(content) = &mut draft.content else {
-                panic!("production Socket fixture must stay Socket-owned");
-            };
-            content.conditions.insert(0, Condition::NthHit { count: 2 });
-        }
-        definition.update(definition.revision(), draft).unwrap();
-    }
 }
 
 fn assert_authoritative_write_stages(workspace: &intercept_proxy_domain::ProxyWorkspace) {
@@ -304,7 +289,7 @@ fn document_number(value: i64) -> intercept_proxy_domain::DocumentNumber {
     value
 }
 
-fn two_stage_one_shot_rules(
+fn two_stage_rules(
     listener: &intercept_proxy_domain::ProxyListener,
     package: &intercept_proxy_domain::ProtocolPackageRef,
 ) -> Vec<RuleDefinition> {
@@ -338,20 +323,19 @@ fn two_stage_one_shot_rules(
                     priority,
                     listener_id: listener.id,
                     stage,
-                    one_shot: false,
                     content: RuleContent::Socket(SocketRuleContent {
                         package: package.clone(),
-                        conditions: vec![Condition::Document {
+                        condition: Condition::Document {
                             path: condition_path,
                             predicate: DocumentPredicate::Number(NumberPredicate {
                                 operator: NumberOperator::Equal,
                                 value: document_number(condition_value),
                             }),
-                        }],
-                        actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                        },
+                        action: UnifiedAction::Document(DocumentMutation::Set {
                             path: field,
                             value: DocumentValue::integer(i64::from(value)).unwrap(),
-                        })],
+                        }),
                     }),
                 },
                 order,

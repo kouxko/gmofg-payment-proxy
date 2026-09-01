@@ -155,41 +155,27 @@ async fn listener_validation_accepts_current_unified_document_rule_shapes() {
                 priority: 0,
                 listener_id,
                 stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: intercept_proxy_domain::RuleContent::Socket(
                     intercept_proxy_domain::SocketRuleContent {
                         package: package.clone(),
-                        conditions: vec![
-                            intercept_proxy_domain::Condition::DocumentPattern {
-                                path: intercept_proxy_domain::DocumentMatchPath::parse("/raw/*")
-                                    .unwrap(),
-                                predicate: intercept_proxy_domain::DocumentPredicate::Number(
-                                    intercept_proxy_domain::NumberPredicate {
-                                        operator: intercept_proxy_domain::NumberOperator::Equal,
-                                        value: intercept_proxy_domain::DocumentNumber::new(7.0)
-                                            .unwrap(),
-                                    },
-                                ),
+                        condition: intercept_proxy_domain::Condition::DocumentPattern {
+                            path: intercept_proxy_domain::DocumentMatchPath::parse("/raw/*")
+                                .unwrap(),
+                            predicate: intercept_proxy_domain::DocumentPredicate::Number(
+                                intercept_proxy_domain::NumberPredicate {
+                                    operator: intercept_proxy_domain::NumberOperator::Equal,
+                                    value: intercept_proxy_domain::DocumentNumber::new(7.0)
+                                        .unwrap(),
+                                },
+                            ),
+                        },
+                        action: intercept_proxy_domain::UnifiedAction::Document(
+                            intercept_proxy_domain::DocumentMutation::Insert {
+                                path: intercept_proxy_domain::JsonPointer::property("raw"),
+                                index: 0,
+                                value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
                             },
-                            intercept_proxy_domain::Condition::NthHit { count: 2 },
-                        ],
-                        actions: vec![
-                            intercept_proxy_domain::UnifiedAction::Document(
-                                intercept_proxy_domain::DocumentMutation::Insert {
-                                    path: intercept_proxy_domain::JsonPointer::property("raw"),
-                                    index: 0,
-                                    value: intercept_proxy_domain::DocumentValue::integer(1)
-                                        .unwrap(),
-                                },
-                            ),
-                            intercept_proxy_domain::UnifiedAction::Document(
-                                intercept_proxy_domain::DocumentMutation::Append {
-                                    path: intercept_proxy_domain::JsonPointer::property("raw"),
-                                    value: intercept_proxy_domain::DocumentValue::integer(2)
-                                        .unwrap(),
-                                },
-                            ),
-                        ],
+                        ),
                     },
                 ),
             },

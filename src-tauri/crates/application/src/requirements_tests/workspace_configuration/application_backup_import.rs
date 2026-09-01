@@ -256,8 +256,8 @@ async fn schema_rule_mismatch_fails_before_token_retention_or_writes() {
             unreachable!()
         };
         properties.insert(
-            "amount".into(),
-            intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+            "text".into(),
+            intercept_proxy_domain::DocumentSchemaNode::Number { title: None },
         );
     }
     let before = workspaces.list().await.unwrap();

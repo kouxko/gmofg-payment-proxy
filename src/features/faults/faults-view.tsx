@@ -40,9 +40,7 @@ export function FaultPresetsView({
   const configurationPanelRef = useRef<HTMLElement>(null);
   const [terminal, setTerminal] = useState("");
   const [target, setTarget] = useState("");
-  const [nthHit, setNthHit] = useState<number>();
   const [priority, setPriority] = useState<number>();
-  const [oneShot, setOneShot] = useState<boolean>();
   const [channel, setChannel] = useState<ChannelId>();
   const [parameterOverrides, setParameterOverrides] = useState<
     Record<string, Record<string, FaultParameterValue>>
@@ -60,9 +58,7 @@ export function FaultPresetsView({
         : {},
     [parameterOverrides, selected],
   );
-  const effectiveNthHit = nthHit ?? selected?.default_nth_hit;
   const effectivePriority = priority ?? selected?.default_priority;
-  const effectiveOneShot = oneShot ?? selected?.default_one_shot;
   const effectiveChannel = channel ?? selected?.default_channel;
   const writePending = configurePending;
   const fieldError = (field: string) => fieldErrors[field]?.join("；");
@@ -71,9 +67,7 @@ export function FaultPresetsView({
     if (
       !selected ||
       effectiveChannel == null ||
-      effectiveNthHit == null ||
-      effectivePriority == null ||
-      effectiveOneShot == null
+      effectivePriority == null
     )
       return;
     return {
@@ -83,15 +77,11 @@ export function FaultPresetsView({
       channel: effectiveChannel,
       terminal: terminal || null,
       target: target || null,
-      nth_hit: effectiveNthHit,
-      one_shot: effectiveOneShot,
       priority: effectivePriority,
       parameters,
     };
   }, [
     effectiveChannel,
-    effectiveNthHit,
-    effectiveOneShot,
     effectivePriority,
     parameters,
     selected,
@@ -124,9 +114,7 @@ export function FaultPresetsView({
     const template = templates.data?.find(
       (item) => item.template_id === templateId,
     );
-    setNthHit(template?.default_nth_hit);
     setPriority(template?.default_priority);
-    setOneShot(template?.default_one_shot);
     setChannel(template?.default_channel);
     if (window.matchMedia("(max-width: 1280px)").matches) {
       requestAnimationFrame(() =>
@@ -167,9 +155,7 @@ export function FaultPresetsView({
         channel={effectiveChannel}
         terminal={terminal}
         target={target}
-        nthHit={effectiveNthHit}
         priority={effectivePriority}
-        oneShot={effectiveOneShot}
         draft={draft}
         configurePending={configurePending}
         writePending={writePending}
@@ -184,15 +170,10 @@ export function FaultPresetsView({
           clearFieldError("target");
           setTarget(value);
         }}
-        onNthHitChange={(value) => {
-          clearFieldError("nth_hit");
-          setNthHit(value);
-        }}
         onPriorityChange={(value) => {
           clearFieldError("priority");
           setPriority(value);
         }}
-        onOneShotChange={setOneShot}
         onConfigure={() => void configure()}
       />
     </section>

@@ -37,8 +37,8 @@ const lifecycle = { hit_count: 0, last_hit_at: null };
 export function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): RuleDefinition_Serialize {
   return {
     rule_id: "http-rule", revision: 3, name: "HTTP combined", enabled: true, priority: 50,
-    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", one_shot: false, lifecycle,
-    content: { type: "http", value: { description: "headers and body", conditions: [httpCondition], actions: [{ source: "record_match" }] } },
+    created_order: 2, listener_id: httpListener.id, stage: "proxy_to_upstream", lifecycle,
+    content: { type: "http", value: { description: "headers and body", condition: httpCondition, action: { source: "record_match" } } },
     ...overrides,
   };
 }
@@ -46,8 +46,8 @@ export function httpRule(overrides: Partial<RuleDefinition_Serialize> = {}): Rul
 export function socketRule(): RuleDefinition_Serialize {
   return {
     rule_id: "socket-rule", revision: 4, name: "Socket document", enabled: true, priority: 20,
-    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", one_shot: false, lifecycle,
-    content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, conditions: [documentCondition()], actions: [{ source: "record_match" }] } },
+    created_order: 1, listener_id: socketListener.id, stage: "proxy_to_app", lifecycle,
+    content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, condition: documentCondition(), action: { source: "record_match" } } },
   };
 }
 

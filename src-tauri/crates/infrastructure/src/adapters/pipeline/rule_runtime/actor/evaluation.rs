@@ -8,7 +8,7 @@ use intercept_proxy_runtime::{
     Result as ProxyResult, SocketJointEvaluation,
 };
 
-use super::{CounterKey, RuleRuntime, message_stage};
+use super::{RuleRuntime, message_stage};
 use crate::adapters::pipeline::{JointDocumentEvaluation, app_to_proxy};
 
 pub(super) fn evaluate_rules(
@@ -27,32 +27,19 @@ pub(super) fn evaluate_rules(
         if !belongs_to_stage(rule, context) {
             continue;
         }
-        let (key, expected_attempts, nth_attempt) = attempt(current, rule, context);
         let condition = evaluate_condition(
             rule,
-            nth_attempt,
             joint_document,
             socket_joint,
             context,
             message.as_deref_mut(),
             body_codec,
         )?;
-        let nth_advance = (condition.contains_nth && condition.eligible_without_nth).then(|| {
-            current.counters.insert(key, nth_attempt);
-            intercept_proxy_domain::NthCounterAdvance {
-                rule_id: rule.rule_id(),
-                terminal: context.terminal.clone(),
-                expected_attempts,
-                increment: 1,
-            }
-        });
         if !condition.matched {
-            record_miss(rule, nth_advance, &mut evaluation, &mut deltas);
+            record_miss(rule, &mut evaluation);
             continue;
         }
-        let mut delta = rule.lifecycle_delta_for_successful_match(Utc::now());
-        delta.nth_counter_advance = nth_advance;
-        deltas.push(delta);
+        deltas.push(rule.lifecycle_delta_for_successful_match(Utc::now()));
         execute_actions(
             rule,
             joint_document.is_some(),
@@ -90,23 +77,8 @@ fn belongs_to_stage(rule: &RuleDefinition, context: &MatchContext<'_>) -> bool {
         && message_stage(rule.stage()) == context.stage
 }
 
-fn attempt(
-    current: &RuleRuntime,
-    rule: &RuleDefinition,
-    context: &MatchContext<'_>,
-) -> (CounterKey, u64, u64) {
-    let key = CounterKey {
-        rule_id: rule.rule_id(),
-        source_ip: context.terminal.source_ip.clone(),
-        certificate_sha256: context.terminal.certificate_sha256.clone(),
-    };
-    let expected = current.counters.get(&key).copied().unwrap_or_default();
-    (key, expected, expected.saturating_add(1))
-}
-
 fn evaluate_condition(
     rule: &RuleDefinition,
-    nth_attempt: u64,
     joint_document: &mut Option<JointDocumentEvaluation>,
     socket_joint: &mut Option<Box<dyn SocketJointEvaluation>>,
     context: &MatchContext<'_>,
@@ -121,17 +93,14 @@ fn evaluate_condition(
         (RuleContent::Http(_), Some(joint), None) => joint
             .gate(
                 rule.rule_id(),
-                nth_attempt,
                 context,
                 message.expect("HTTP unified evaluation owns a working message"),
                 body_codec.expect("HTTP unified evaluation owns its selected body codec"),
             )
             .map_err(|error| app_to_proxy(error.into()))?,
-        (RuleContent::Socket(_), None, Some(joint)) => {
-            joint.gate(rule.rule_id().as_uuid(), nth_attempt)?
-        }
+        (RuleContent::Socket(_), None, Some(joint)) => joint.gate(rule.rule_id().as_uuid())?,
         (RuleContent::Http(http_rule), None, None) => {
-            ordinary_http_condition(http_rule, nth_attempt, context, message.as_deref())?
+            ordinary_http_condition(http_rule, context, message.as_deref())?
         }
         (RuleContent::Socket(_), _, _) => {
             return Err(ProxyError::new(
@@ -158,7 +127,6 @@ fn evaluate_condition(
 
 fn ordinary_http_condition(
     http_rule: &intercept_proxy_domain::HttpRuleContent,
-    nth_attempt: u64,
     match_context: &MatchContext<'_>,
     message: Option<&Message>,
 ) -> ProxyResult<JointRuleConditionEvaluation> {
@@ -179,37 +147,17 @@ fn ordinary_http_condition(
         headers: &headers,
         ..match_context.clone()
     };
-    let condition = intercept_proxy_domain::evaluate_http_context_conditions_with_nth(
-        &http_rule.conditions,
-        nth_attempt,
-        &current,
-    )
-    .map_err(|error| app_to_proxy(error.into()))?;
+    let condition =
+        intercept_proxy_domain::evaluate_http_context_condition(&http_rule.condition, &current)
+            .map_err(|error| app_to_proxy(error.into()))?;
     Ok(JointRuleConditionEvaluation::UnifiedOwned(
         JointConditionEvaluation {
             matched: condition.matched,
-            eligible_without_nth: condition.eligible_without_nth,
-            contains_nth: condition.contains_nth,
         },
     ))
 }
 
-fn record_miss(
-    rule: &RuleDefinition,
-    nth_advance: Option<intercept_proxy_domain::NthCounterAdvance>,
-    evaluation: &mut RuleEvaluation,
-    deltas: &mut Vec<RuleLifecycleDelta>,
-) {
-    if let Some(nth_counter_advance) = nth_advance {
-        deltas.push(RuleLifecycleDelta {
-            rule_id: rule.rule_id(),
-            expected_revision: rule.revision(),
-            hit_count_increment: 0,
-            last_hit_at: None,
-            disable_one_shot: false,
-            nth_counter_advance: Some(nth_counter_advance),
-        });
-    }
+fn record_miss(rule: &RuleDefinition, evaluation: &mut RuleEvaluation) {
     evaluation.traces.push(RuleTrace {
         rule_id: rule.rule_id(),
         matched: false,
@@ -227,8 +175,8 @@ fn execute_actions(
     evaluation: &mut RuleEvaluation,
 ) -> ProxyResult<()> {
     let mut executed = Vec::new();
-    for action in rule_actions(rule) {
-        match action {
+    let action = rule_action(rule);
+    match action {
             UnifiedAction::Http(
                 action @ (HttpAction::Delay { .. }
                 | HttpAction::Jitter { .. }
@@ -244,7 +192,6 @@ fn execute_actions(
                 executed.push(action.clone());
                 evaluation.composed_actions.push(action);
                 evaluation.terminal_action = Some(terminal.clone());
-                break;
             }
             UnifiedAction::Http(
                 action @ (HttpAction::SetJsonField { .. }
@@ -267,7 +214,6 @@ fn execute_actions(
                 ));
             }
             UnifiedAction::RecordMatch | UnifiedAction::Document(_) | UnifiedAction::Http(_) => {}
-        }
     }
     evaluation.traces.push(RuleTrace {
         rule_id: rule.rule_id(),
@@ -278,9 +224,9 @@ fn execute_actions(
     Ok(())
 }
 
-fn rule_actions(rule: &RuleDefinition) -> &[UnifiedAction] {
+fn rule_action(rule: &RuleDefinition) -> &UnifiedAction {
     match rule.content() {
-        RuleContent::Http(content) => &content.actions,
-        RuleContent::Socket(content) => &content.actions,
+        RuleContent::Http(content) => &content.action,
+        RuleContent::Socket(content) => &content.action,
     }
 }

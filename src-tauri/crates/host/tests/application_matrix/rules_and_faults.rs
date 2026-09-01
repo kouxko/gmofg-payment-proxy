@@ -39,10 +39,8 @@ async fn production_host_covers_rule_and_fault_lifecycle_without_ui() {
             existing_rule_id: None,
             expected_revision: None,
             channel: Some(template.default_channel.clone()),
-            terminal: Some("10.0.0.8".into()),
+            terminal: None,
             target: Some("/".into()),
-            nth_hit: Some(template.default_nth_hit),
-            one_shot: template.default_one_shot,
             priority: template.default_priority,
             parameters: template.default_parameters.clone(),
         })
@@ -108,21 +106,22 @@ async fn exercise_unified_rule_lifecycle(
     let intercept_proxy_application::RuleNewDefinitionDraft {
         listener_id,
         stage,
-        mut content,
+        content,
     } = structure;
-    let RuleContent::Http(http_content) = &mut content else {
+    let intercept_proxy_application::RuleNewDefinitionContent::Http { .. } = content else {
         panic!("HTTP rule draft expected");
     };
-    http_content.description = "Application facade matrix".into();
-    http_content.conditions = vec![
-        application
-            .rule_definition_nth_hit_condition_draft(
-                intercept_proxy_application::RuleNthHitConditionDraftInput { count: 1 },
+    let description = "Application facade matrix".into();
+    let condition = application
+            .rule_definition_http_condition_draft(
+                intercept_proxy_application::RuleMatchFieldKind::Method,
+                None,
+                intercept_proxy_application::RuleMatchOperatorKind::Equals,
+                "GET",
+                stage,
             )
-            .expect("explicit positive nth-hit condition"),
-    ];
-    http_content.actions = vec![intercept_proxy_application::UnifiedAction::from(
-        application
+            .expect("method condition");
+    let action = intercept_proxy_application::UnifiedAction::from(application
             .rule_definition_action_draft(
                 intercept_proxy_application::RuleHttpActionDraftInput {
                     kind: RuleActionKind::Delay,
@@ -130,8 +129,7 @@ async fn exercise_unified_rule_lifecycle(
                 },
                 RuleStage::ProxyToUpstream,
             )
-            .expect("explicit delay action"),
-    )];
+            .expect("explicit delay action"));
     let input = intercept_proxy_application::RuleDefinitionSaveInput {
         rule_id: None,
         expected_revision: None,
@@ -141,8 +139,11 @@ async fn exercise_unified_rule_lifecycle(
             priority: 17,
             listener_id,
             stage,
-            one_shot: false,
-            content,
+            content: RuleContent::Http(intercept_proxy_application::HttpRuleContent {
+                description,
+                condition,
+                action,
+            }),
         },
     };
     let saved_rule = application

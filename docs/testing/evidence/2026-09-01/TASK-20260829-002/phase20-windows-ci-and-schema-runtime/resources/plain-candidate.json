@@ -1,0 +1,119 @@
+{
+  "baseline_public": {
+    "revision": 1,
+    "selected": false,
+    "workspace_id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9"
+  },
+  "candidate_id": "44d972ae-ef31-4062-b407-318783dcac21",
+  "confirmation_token": "f381b1be-b2d1-4b0f-845a-89badbfee3cb",
+  "errors": [],
+  "expires_on": "app_exit_or_invalidation",
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "plain-http",
+          "candidate_local_id": "19402382-35bd-4e88-b310-decceaf093b7"
+        }
+      ],
+      "rules": [
+        {
+          "candidate_index": 0,
+          "candidate_local_id": "3a0f9822-e590-4f9d-9ff6-7e6fefe389d6",
+          "created_order": 1,
+          "listener_alias": "plain-http"
+        }
+      ]
+    },
+    "target": {
+      "expected_revision": 1,
+      "mode": "existing",
+      "workspace_id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "preview_ready",
+  "target_key": "existing:ce1905a1-d9cb-4ce4-8c8c-0532772517d9",
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

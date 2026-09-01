@@ -139,7 +139,6 @@ export const commands = {
 	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
 	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
 	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
-	ruleDefinitionNthHitConditionDraft: (input: RuleNthHitConditionDraftInput) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_nth_hit_condition_draft", { input })),
 	ruleDefinitionHttpConditionDraft: (fieldKind: RuleMatchFieldKind, selector: string | null, operatorKind: RuleMatchOperatorKind, value: string, stage: RuleStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_http_condition_draft", { fieldKind, selector, operatorKind, value, stage })),
 	ruleDefinitionActionDraft: (input: RuleHttpActionDraftInput, stage: RuleStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { input, stage })),
 	ruleDefinitionDocumentConditionDraft: (path: string, valueType: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_condition_draft", { path, valueType, predicate, raw })),
@@ -603,11 +602,7 @@ predicate: DocumentPredicate } |
 /**  Typed HTTP field. */
 field: MatchField;
 /**  Typed HTTP comparison. */
-operator: MatchOperator } |
-/**  Shared lifecycle predicate, independent from HTTP capabilities. */
-{ source: "nth_hit";
-/**  Exact next successful hit number. */
-count: number };
+operator: MatchOperator };
 
 /**  Positive number of bytes consumed by one complete frame. */
 export type ConsumedBytes = number;
@@ -990,8 +985,6 @@ export type FaultConfigurationDraft = {
 	channel: ChannelId | null,
 	terminal: string | null,
 	target: string | null,
-	nth_hit: number | null,
-	one_shot: boolean,
 	priority: number,
 	parameters: { [key in string]: FaultParameterValue },
 };
@@ -1019,8 +1012,6 @@ export type FaultTemplateViewModel = {
 	behavior_text: string,
 	affected_party_text: string,
 	default_channel: ChannelId,
-	default_nth_hit: number,
-	default_one_shot: boolean,
 	default_priority: number,
 	default_parameters: { [key in string]: FaultParameterValue },
 	parameter_schema: FaultParameterFieldViewModel[],
@@ -1161,8 +1152,8 @@ export type HttpProtocolFailureViewModel = {
 
 export type HttpRuleContent = {
 	description: string,
-	conditions: Condition[],
-	actions: UnifiedAction[],
+	condition: Condition,
+	action: UnifiedAction,
 };
 
 export type HttpRuleEditorStageViewModel = {
@@ -2038,7 +2029,6 @@ export type RuleDefinitionDraft = {
 	priority: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
-	one_shot: boolean,
 	content: RuleContent,
 };
 
@@ -2057,7 +2047,6 @@ export type RuleDefinitionWire = {
 	created_order: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
-	one_shot: boolean,
 	lifecycle: RuleLifecycle,
 	content: RuleContent,
 };
@@ -2073,7 +2062,6 @@ export type RuleDefinition_Serialize = {
 	created_order: number,
 	listener_id: ListenerId,
 	stage: RuleStage,
-	one_shot: boolean,
 	lifecycle: RuleLifecycle,
 	content: RuleContent,
 };
@@ -2167,14 +2155,16 @@ export type RuleMatchOperatorKind = "equals" | "contains" | "starts_with" | "end
 
 export type RuleMatchSelectorKind = "header_name_pointer";
 
+export type RuleNewDefinitionContent = { type: "http"; value: {
+	description: string,
+} } | { type: "socket"; value: {
+	package: ProtocolPackageRef,
+} };
+
 export type RuleNewDefinitionDraft = {
 	listener_id: ListenerId,
 	stage: RuleStage,
-	content: RuleContent,
-};
-
-export type RuleNthHitConditionDraftInput = {
-	count: number,
+	content: RuleNewDefinitionContent,
 };
 
 export type RuleStage = "proxy_to_upstream" | "proxy_to_app";
@@ -2367,8 +2357,8 @@ export type SocketRelayTopology = {
 
 export type SocketRuleContent = {
 	package: ProtocolPackageRef,
-	conditions: Condition[],
-	actions: UnifiedAction[],
+	condition: Condition,
+	action: UnifiedAction,
 };
 
 export type SocketRuleEditorStageViewModel = {
@@ -2492,7 +2482,7 @@ export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChanged
 /**  与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。 */
 export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
 
-/**  One item in the single ordered action list. */
+/**  The one action paired with a rule condition. */
 export type UnifiedAction =
 /**  Records a match without mutating protocol data. */
 { source: "record_match" } |
@@ -2500,7 +2490,7 @@ export type UnifiedAction =
 { source: "document"; value: DocumentMutation } |
 /**  Existing typed non-terminal HTTP/runtime action. */
 { source: "http"; value: HttpAction } |
-/**  Terminal effect; at most one is allowed and it must be last. */
+/**  Terminal effect that stops later rules. */
 { source: "terminal"; value: TerminalAction };
 
 export type UpstreamTlsSettings = {

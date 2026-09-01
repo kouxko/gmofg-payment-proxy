@@ -20,8 +20,7 @@ pub const MAX_RULE_DEFINITIONS: usize = 1_024;
 pub const MAX_DOCUMENT_RULE_STRING_BYTES: usize = 16 * 1_024;
 
 pub use lifecycle::{
-    NthCounterAdvance, NthCounterSnapshot, RuleDefinitionRestoreSnapshot, RuleLifecycle,
-    RuleLifecycleDelta, RuleLifecycleSnapshot,
+    RuleDefinitionRestoreSnapshot, RuleLifecycle, RuleLifecycleDelta, RuleLifecycleSnapshot,
 };
 
 #[derive(
@@ -47,16 +46,16 @@ impl RuleStage {
 #[serde(deny_unknown_fields)]
 pub struct HttpRuleContent {
     pub description: String,
-    pub conditions: Vec<Condition>,
-    pub actions: Vec<UnifiedAction>,
+    pub condition: Condition,
+    pub action: UnifiedAction,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(deny_unknown_fields)]
 pub struct SocketRuleContent {
     pub package: ProtocolPackageRef,
-    pub conditions: Vec<Condition>,
-    pub actions: Vec<UnifiedAction>,
+    pub condition: Condition,
+    pub action: UnifiedAction,
 }
 
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
@@ -99,7 +98,6 @@ pub struct RuleDefinitionDraft {
     pub priority: i32,
     pub listener_id: ListenerId,
     pub stage: RuleStage,
-    pub one_shot: bool,
     pub content: RuleContent,
 }
 
@@ -114,7 +112,6 @@ pub struct RuleDefinition {
     created_order: u64,
     listener_id: ListenerId,
     stage: RuleStage,
-    one_shot: bool,
     lifecycle: RuleLifecycle,
     content: RuleContent,
 }
@@ -130,7 +127,6 @@ struct RuleDefinitionWire {
     created_order: u64,
     listener_id: ListenerId,
     stage: RuleStage,
-    one_shot: bool,
     lifecycle: RuleLifecycle,
     content: RuleContent,
 }
@@ -148,7 +144,6 @@ impl TryFrom<RuleDefinitionWire> for RuleDefinition {
             created_order: value.created_order,
             listener_id: value.listener_id,
             stage: value.stage,
-            one_shot: value.one_shot,
             lifecycle: value.lifecycle,
             content: value.content,
         };
@@ -168,7 +163,6 @@ impl RuleDefinition {
             created_order,
             listener_id: draft.listener_id,
             stage: draft.stage,
-            one_shot: draft.one_shot,
             lifecycle: RuleLifecycle::default(),
             content: draft.content,
         };
@@ -190,7 +184,6 @@ impl RuleDefinition {
             created_order: snapshot.created_order,
             listener_id: draft.listener_id,
             stage: draft.stage,
-            one_shot: draft.one_shot,
             lifecycle: snapshot.lifecycle,
             content: draft.content,
         };
@@ -223,7 +216,6 @@ impl RuleDefinition {
         candidate.enabled = draft.enabled;
         candidate.priority = draft.priority;
         candidate.stage = draft.stage;
-        candidate.one_shot = draft.one_shot;
         candidate.content = draft.content;
         candidate.validate_for_save()?;
         candidate.revision = self.revision.checked_next()?;
@@ -270,18 +262,18 @@ impl RuleDefinition {
                     self.rule_id,
                     self.priority,
                     self.created_order,
-                    content.conditions.clone(),
-                    content.actions.clone(),
+                    content.condition.clone(),
+                    content.action.clone(),
                 )?;
             }
             RuleContent::Socket(content) => {
-                ensure_socket_only(&content.conditions, &content.actions)?;
+                ensure_socket_only(&content.condition, &content.action)?;
                 RuleProgramEntry::new(
                     self.rule_id,
                     self.priority,
                     self.created_order,
-                    content.conditions.clone(),
-                    content.actions.clone(),
+                    content.condition.clone(),
+                    content.action.clone(),
                 )?;
             }
         }
@@ -343,11 +335,6 @@ impl RuleDefinition {
     }
 
     #[must_use]
-    pub const fn one_shot(&self) -> bool {
-        self.one_shot
-    }
-
-    #[must_use]
     pub fn to_draft(&self) -> RuleDefinitionDraft {
         RuleDefinitionDraft {
             name: self.name.clone(),
@@ -355,7 +342,6 @@ impl RuleDefinition {
             priority: self.priority,
             listener_id: self.listener_id,
             stage: self.stage,
-            one_shot: self.one_shot,
             content: self.content.clone(),
         }
     }

@@ -29,9 +29,7 @@ interface FaultConfigurationPanelProps {
   channel?: ChannelId;
   terminal: string;
   target: string;
-  nthHit?: number;
   priority?: number;
-  oneShot?: boolean;
   draft?: FaultConfigurationDraft;
   configurePending: boolean;
   writePending: boolean;
@@ -40,9 +38,7 @@ interface FaultConfigurationPanelProps {
   onChannelChange: (channel: ChannelId) => void;
   onTerminalChange: (value: string) => void;
   onTargetChange: (value: string) => void;
-  onNthHitChange: (value: number) => void;
   onPriorityChange: (value: number) => void;
-  onOneShotChange: (value: boolean) => void;
   onConfigure: () => void;
 }
 
@@ -144,9 +140,7 @@ export function FaultConfigurationPanel({
   channel,
   terminal,
   target,
-  nthHit,
   priority,
-  oneShot,
   draft,
   configurePending,
   writePending,
@@ -155,9 +149,7 @@ export function FaultConfigurationPanel({
   onChannelChange,
   onTerminalChange,
   onTargetChange,
-  onNthHitChange,
   onPriorityChange,
-  onOneShotChange,
   onConfigure,
 }: FaultConfigurationPanelProps) {
   return (
@@ -242,34 +234,6 @@ export function FaultConfigurationPanel({
               <FieldError>{fieldError("target")}</FieldError>
             )}
           </TextField>
-          <NumberField
-            isInvalid={Boolean(fieldError("nth_hit"))}
-            value={nthHit}
-            minValue={1}
-            onChange={onNthHitChange}
-          >
-            <Label>第 N 次命中</Label>
-            <NumberField.Group className="w-full">
-              <NumberField.DecrementButton />
-              <NumberField.Input />
-              <NumberField.IncrementButton />
-            </NumberField.Group>
-            {fieldError("nth_hit") && (
-              <FieldError>{fieldError("nth_hit")}</FieldError>
-            )}
-          </NumberField>
-          <Switch
-            aria-label="一次性生效"
-            isSelected={oneShot}
-            onChange={onOneShotChange}
-          >
-            <Switch.Content>
-              <Switch.Control>
-                <Switch.Thumb />
-              </Switch.Control>
-              <span>一次性生效（命中后自动停用）</span>
-            </Switch.Content>
-          </Switch>
           <NumberField
             isInvalid={Boolean(fieldError("priority"))}
             value={priority}

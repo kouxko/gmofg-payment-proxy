@@ -18,17 +18,16 @@ async fn production_response_rule_matches_flat_condition_against_associated_requ
             priority: 1,
             listener_id: listener.id,
             stage: RuleStage::ProxyToApp,
-            one_shot: false,
             content: RuleContent::Http(HttpRuleContent {
                 description: String::new(),
-                conditions: vec![Condition::Http {
+                condition: Condition::Http {
                     field: MatchField::RequestTarget,
                     operator: MatchOperator::Wildcard("/phase*".into()),
-                }],
-                actions: vec![UnifiedAction::Http(HttpAction::SetHeader {
+                },
+                action: UnifiedAction::Http(HttpAction::SetHeader {
                     name: "x-response-rule".into(),
                     value: "matched".into(),
-                })],
+                }),
             }),
         },
         1,

@@ -3,8 +3,8 @@ use std::sync::Arc;
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DocumentSchemaNode, HttpRuleContent, ProtocolDirection, ProxyListener, ProxyWorkspace,
-    RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram, contains_document_condition,
-    validate_unified_actions_schema,
+    RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram, is_document_condition,
+    validate_unified_action_schema,
 };
 
 #[derive(Clone)]
@@ -69,10 +69,8 @@ fn compile_program(
         .collect::<Vec<_>>();
     let owns_direction = owns_all_http
         || definitions.iter().any(|(_, content)| {
-            contains_document_condition(&content.conditions)
-                || content.actions.iter().any(|action| {
-                    matches!(action, intercept_proxy_domain::UnifiedAction::Document(_))
-                })
+            is_document_condition(&content.condition)
+                || matches!(content.action, intercept_proxy_domain::UnifiedAction::Document(_))
         });
     if !owns_direction {
         return UnifiedRuleProgram::new(Vec::new()).map_err(AppError::from);
@@ -80,20 +78,20 @@ fn compile_program(
     let mut entries = Vec::new();
     for (definition, content) in definitions {
         let HttpRuleContent {
-            conditions,
-            actions,
+            condition,
+            action,
             ..
         } = content;
         if let Some(schema) = schema {
-            intercept_proxy_domain::validate_document_conditions_schema(conditions, schema)?;
-            validate_unified_actions_schema(actions, schema)?;
+            intercept_proxy_domain::validate_document_condition_schema(condition, schema)?;
+            validate_unified_action_schema(action, schema)?;
         }
         entries.push(RuleProgramEntry::new(
             definition.rule_id(),
             definition.priority(),
             definition.created_order(),
-            conditions.clone(),
-            actions.clone(),
+            condition.clone(),
+            action.clone(),
         )?);
     }
     UnifiedRuleProgram::new(entries).map_err(AppError::from)
@@ -122,20 +120,19 @@ mod tests {
                 priority: 1,
                 listener_id: listener.id,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: vec![Condition::Document {
+                    condition: Condition::Document {
                         path: JsonPointer::root(),
                         predicate: DocumentPredicate::String(StringPredicate {
                             operator: StringOperator::Equal,
                             value: "before".into(),
                         }),
-                    }],
-                    actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                    },
+                    action: UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::root(),
                         value: DocumentValue::String("after".into()),
-                    })],
+                    }),
                 }),
             },
             1,

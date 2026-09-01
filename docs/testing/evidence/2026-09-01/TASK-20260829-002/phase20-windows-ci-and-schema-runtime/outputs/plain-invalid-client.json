@@ -1,0 +1,6 @@
+{
+  "case": "invalid-json",
+  "request_path": "/body?case=invalid",
+  "request_body_hex": "7b",
+  "transport_error": "RemoteDisconnected('Remote end closed connection without response')"
+}

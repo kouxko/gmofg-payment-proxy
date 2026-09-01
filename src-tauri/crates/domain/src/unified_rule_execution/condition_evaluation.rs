@@ -1,9 +1,7 @@
-/// Result of one condition-tree pass, including whether an Nth counter may advance.
+/// Result of one condition pass.
 #[derive(Clone, Copy, Debug, Eq, PartialEq)]
 pub struct ConditionEvaluation {
     pub matched: bool,
-    pub eligible_without_nth: bool,
-    pub contains_nth: bool,
 }
 
 /// Declares whether one rule's condition tree is owned by the unified Document runtime.
@@ -15,11 +13,7 @@ pub enum RuleConditionEvaluation {
 
 impl ConditionEvaluation {
     pub(super) const fn ordinary(matched: bool) -> Self {
-        Self {
-            matched,
-            eligible_without_nth: matched,
-            contains_nth: false,
-        }
+        Self { matched }
     }
 }
 use crate::{DocumentValue, DocumentValueType};

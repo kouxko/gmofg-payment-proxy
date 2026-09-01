@@ -2,8 +2,7 @@ use std::collections::BTreeSet;
 
 use super::{
     Condition, ConditionEvaluation, Document, DomainError, HttpAction, MatchField, MatchOperator,
-    RuleId, TerminalAction, UnifiedAction, evaluate_conditions_with_nth, rule_error,
-    validate_conditions,
+    RuleId, TerminalAction, UnifiedAction, evaluate_condition, rule_error,
 };
 
 /// Immutable rule program input. `created_order` is history/UI metadata only.
@@ -12,8 +11,8 @@ pub struct RuleProgramEntry {
     rule_id: RuleId,
     priority: i32,
     created_order: u64,
-    conditions: Vec<Condition>,
-    actions: Vec<UnifiedAction>,
+    condition: Condition,
+    action: UnifiedAction,
 }
 
 impl RuleProgramEntry {
@@ -22,17 +21,16 @@ impl RuleProgramEntry {
         rule_id: RuleId,
         priority: i32,
         created_order: u64,
-        conditions: Vec<Condition>,
-        actions: Vec<UnifiedAction>,
+        condition: Condition,
+        action: UnifiedAction,
     ) -> Result<Self, DomainError> {
-        validate_conditions(&conditions)?;
-        validate_actions(&actions)?;
+        validate_action(&action)?;
         Ok(Self {
             rule_id,
             priority,
             created_order,
-            conditions,
-            actions,
+            condition,
+            action,
         })
     }
 
@@ -52,42 +50,26 @@ impl RuleProgramEntry {
     }
 
     #[must_use]
-    pub fn conditions(&self) -> &[Condition] {
-        &self.conditions
+    pub const fn condition(&self) -> &Condition {
+        &self.condition
     }
 
     #[must_use]
-    pub fn actions(&self) -> &[UnifiedAction] {
-        &self.actions
+    pub const fn action(&self) -> &UnifiedAction {
+        &self.action
     }
 
-    pub fn replace_conditions(&mut self, conditions: Vec<Condition>) -> Result<(), DomainError> {
-        validate_conditions(&conditions)?;
-        self.conditions = conditions;
-        Ok(())
+    pub fn replace_condition(&mut self, condition: Condition) {
+        self.condition = condition;
     }
 }
 
-fn validate_actions(actions: &[UnifiedAction]) -> Result<(), DomainError> {
-    if actions.is_empty() {
-        return Err(rule_error("actions", "动作列表不能为空"));
-    }
-    let mut terminal = None;
-    for (index, action) in actions.iter().enumerate() {
-        if matches!(action, UnifiedAction::Http(HttpAction::Terminal(_))) {
-            return Err(rule_error(
-                &format!("actions.{index}"),
-                "终止动作必须使用统一 terminal 变体",
-            ));
-        }
-        if matches!(action, UnifiedAction::Terminal(_))
-            && (terminal.replace(index).is_some() || index + 1 != actions.len())
-        {
-            return Err(rule_error(
-                &format!("actions.{index}"),
-                "终止动作至多一个且必须位于动作列表末尾",
-            ));
-        }
+fn validate_action(action: &UnifiedAction) -> Result<(), DomainError> {
+    if matches!(action, UnifiedAction::Http(HttpAction::Terminal(_))) {
+        return Err(rule_error(
+            "action",
+            "终止动作必须使用统一 terminal 变体",
+        ));
     }
     Ok(())
 }
@@ -106,8 +88,7 @@ impl UnifiedRuleProgram {
             if !rule_ids.insert(rule.rule_id) {
                 return Err(rule_error("rules.rule_id", "规则 ID 不能重复"));
             }
-            validate_conditions(&rule.conditions)?;
-            validate_actions(&rule.actions)?;
+            validate_action(&rule.action)?;
         }
         rules.sort_by_key(|rule| (rule.priority, rule.rule_id));
         Ok(Self { rules })
@@ -131,22 +112,14 @@ impl UnifiedRuleProgram {
         &self,
         rule_id: RuleId,
         document: &mut Document,
-        nth_attempt: u64,
         mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<ConditionEvaluation, DomainError> {
         let rule = self.rule_or_error(rule_id)?;
-        let evaluation = evaluate_conditions_with_nth(
-            &rule.conditions,
-            document,
-            nth_attempt,
-            &mut http_matches,
-        )?;
-        if evaluation.matched {
-            for action in &rule.actions {
-                if let UnifiedAction::Document(mutation) = action {
-                    mutation.apply(document)?;
-                }
-            }
+        let evaluation = evaluate_condition(&rule.condition, document, &mut http_matches)?;
+        if evaluation.matched
+            && let UnifiedAction::Document(mutation) = &rule.action
+        {
+            mutation.apply(document)?;
         }
         Ok(evaluation)
     }
@@ -155,11 +128,10 @@ impl UnifiedRuleProgram {
         &self,
         rule_id: RuleId,
         document: &Document,
-        nth_attempt: u64,
         mut http_matches: impl FnMut(&MatchField, &MatchOperator) -> Result<bool, DomainError>,
     ) -> Result<ConditionEvaluation, DomainError> {
         let rule = self.rule_or_error(rule_id)?;
-        evaluate_conditions_with_nth(&rule.conditions, document, nth_attempt, &mut http_matches)
+        evaluate_condition(&rule.condition, document, &mut http_matches)
     }
 
     #[must_use]
@@ -182,21 +154,17 @@ impl UnifiedRuleProgram {
         let mut http_actions = Vec::new();
         let mut terminal_action = None;
         'rules: for rule in &self.rules {
-            if !evaluate_conditions_with_nth(&rule.conditions, &working, 1, &mut http_matches)?
-                .matched
-            {
+            if !evaluate_condition(&rule.condition, &working, &mut http_matches)?.matched {
                 continue;
             }
-            for action in &rule.actions {
-                match action {
-                    UnifiedAction::Document(mutation) => mutation.apply(&mut working)?,
-                    UnifiedAction::RecordMatch => {}
-                    UnifiedAction::Http(action) => http_actions.push(action.clone()),
-                    UnifiedAction::Terminal(action) => {
-                        terminal_action = Some(action.clone());
-                        matched_rule_ids.push(rule.rule_id);
-                        break 'rules;
-                    }
+            match &rule.action {
+                UnifiedAction::Document(mutation) => mutation.apply(&mut working)?,
+                UnifiedAction::RecordMatch => {}
+                UnifiedAction::Http(action) => http_actions.push(action.clone()),
+                UnifiedAction::Terminal(action) => {
+                    terminal_action = Some(action.clone());
+                    matched_rule_ids.push(rule.rule_id);
+                    break 'rules;
                 }
             }
             matched_rule_ids.push(rule.rule_id);

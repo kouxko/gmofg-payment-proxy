@@ -44,8 +44,6 @@ pub struct FaultTemplateViewModel {
     pub behavior_text: String,
     pub affected_party_text: String,
     pub default_channel: ChannelId,
-    pub default_nth_hit: u32,
-    pub default_one_shot: bool,
     pub default_priority: i32,
     pub default_parameters: BTreeMap<String, FaultParameterValue>,
     pub parameter_schema: Vec<FaultParameterFieldViewModel>,
@@ -61,8 +59,6 @@ pub struct FaultConfigurationDraft {
     pub channel: Option<ChannelId>,
     pub terminal: Option<String>,
     pub target: Option<String>,
-    pub nth_hit: Option<u32>,
-    pub one_shot: bool,
     pub priority: i32,
     pub parameters: BTreeMap<String, FaultParameterValue>,
 }

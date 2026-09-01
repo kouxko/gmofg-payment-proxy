@@ -3,9 +3,9 @@ use crate::{
     RuleLocalDocumentValueType,
 };
 use intercept_proxy_domain::{
-    BooleanPredicate, Condition, Document, DocumentMatchPath, DocumentMutation, DocumentPredicate,
+    BooleanPredicate, Condition, DocumentMatchPath, DocumentMutation, DocumentPredicate,
     DocumentValue, JsonPointer, NumberOperator, NumberPredicate, StringOperator, StringPredicate,
-    UnifiedAction,
+    UnifiedAction, MAX_DOCUMENT_RULE_STRING_BYTES,
 };
 
 pub(super) fn condition_draft(
@@ -129,7 +129,18 @@ const fn domain_value_type(
 }
 
 fn parse_value(expected: RuleLocalDocumentValueType, raw: &str) -> AppResult<DocumentValue> {
-    let value = Document::parse_json(raw)?.root().clone();
+    if expected == RuleLocalDocumentValueType::String {
+        if raw.len() > MAX_DOCUMENT_RULE_STRING_BYTES {
+            return Err(AppError::new(
+                "RULE_INVALID",
+                "Document 文本值不能超过 16 KiB UTF-8 字节。",
+            ));
+        }
+        return Ok(DocumentValue::String(raw.to_owned()));
+    }
+    let value = intercept_proxy_domain::Document::parse_json(raw)?
+        .root()
+        .clone();
     let actual = match value.value_type() {
         intercept_proxy_domain::DocumentValueType::String => RuleLocalDocumentValueType::String,
         intercept_proxy_domain::DocumentValueType::Number => RuleLocalDocumentValueType::Number,
@@ -210,5 +221,42 @@ mod tests {
             serde_json::to_value(clear).unwrap()["value"]["value_type"],
             "boolean"
         );
+    }
+
+    #[test]
+    fn string_condition_and_action_preserve_unquoted_leading_zero() {
+        let condition = condition_draft(
+            "/message_type",
+            RuleLocalDocumentValueType::String,
+            RuleLocalDocumentPredicateKind::Equals,
+            "0100",
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(condition).unwrap()["predicate"]["value"]["value"],
+            "0100"
+        );
+
+        let action = action_draft(
+            "/message_type",
+            RuleLocalDocumentValueType::String,
+            RuleLocalDocumentActionKind::Set,
+            Some("0100"),
+            None,
+        )
+        .unwrap();
+        assert_eq!(
+            serde_json::to_value(action).unwrap()["value"]["value"],
+            "0100"
+        );
+    }
+
+    #[test]
+    fn string_condition_and_action_enforce_the_document_string_limit() {
+        let exact = "x".repeat(intercept_proxy_domain::MAX_DOCUMENT_RULE_STRING_BYTES);
+        assert!(condition_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentPredicateKind::Equals, &exact).is_ok());
+        let oversized = format!("{exact}x");
+        assert_eq!(condition_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentPredicateKind::Equals, &oversized).unwrap_err().view_model.code, "RULE_INVALID");
+        assert_eq!(action_draft("/value", RuleLocalDocumentValueType::String, RuleLocalDocumentActionKind::Set, Some(&oversized), None).unwrap_err().view_model.code, "RULE_INVALID");
     }
 }

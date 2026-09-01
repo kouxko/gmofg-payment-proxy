@@ -351,12 +351,4 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
             .iter()
             .any(|action| action.kind == RuleActionKind::MockResponse)
     );
-    assert_eq!(
-        application
-            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
-                count: 1,
-            })
-            .unwrap(),
-        intercept_proxy_domain::Condition::NthHit { count: 1 }
-    );
 }

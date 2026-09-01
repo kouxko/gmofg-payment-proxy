@@ -9,7 +9,7 @@ use std::collections::{HashMap, HashSet};
 use intercept_proxy_domain::{
     Condition, DocumentSchemaNode, ListenerDataPlane, ProtocolDirection, ProtocolPackageRef,
     ProxyWorkspace, RuleContent, RuleDefinition, UnifiedAction,
-    validate_document_conditions_schema, validate_unified_actions_schema,
+    validate_document_condition_schema, validate_unified_action_schema,
 };
 
 use super::protocol_packages::ensure_description_identity;
@@ -133,28 +133,28 @@ fn validate_rule_binding(
     }
     if let Some(schema) = schema_for_direction(description, binding.direction) {
         let schema = domain_schema(schema);
-        validate_document_conditions_schema(binding.conditions, &schema)?;
-        validate_unified_actions_schema(binding.actions, &schema)?;
+        validate_document_condition_schema(binding.condition, &schema)?;
+        validate_unified_action_schema(binding.action, &schema)?;
     }
     Ok(())
 }
 
 struct RuleProtocolBinding<'a> {
     direction: ProtocolDirection,
-    conditions: &'a [Condition],
-    actions: &'a [UnifiedAction],
+    condition: &'a Condition,
+    action: &'a UnifiedAction,
 }
 
 fn rule_protocol_binding(rule: &RuleDefinition) -> RuleProtocolBinding<'_> {
-    let (conditions, actions) = match rule.content() {
-        RuleContent::Http(content) => (content.conditions.as_slice(), content.actions.as_slice()),
-        RuleContent::Socket(content) => (content.conditions.as_slice(), content.actions.as_slice()),
+    let (condition, action) = match rule.content() {
+        RuleContent::Http(content) => (&content.condition, &content.action),
+        RuleContent::Socket(content) => (&content.condition, &content.action),
     };
     let direction = rule.stage().direction();
     RuleProtocolBinding {
         direction,
-        conditions,
-        actions,
+        condition,
+        action,
     }
 }
 

@@ -6,7 +6,7 @@ use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DocumentSchemaNode, ListenerId, ProtocolDirection, ProtocolPackageRef, ProxyListener,
     ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, SocketRuleContent, SocketTopology,
-    UnifiedRuleProgram, validate_unified_actions_schema,
+    UnifiedRuleProgram, validate_unified_action_schema,
 };
 use parking_lot::RwLock;
 
@@ -90,8 +90,8 @@ pub(super) fn compile_document_rules(
         for definition in &workspace.rule_definitions {
             let RuleContent::Socket(SocketRuleContent {
                 package: rule_package,
-                conditions,
-                actions,
+                condition,
+                action,
             }) = definition.content()
             else {
                 continue;
@@ -107,15 +107,15 @@ pub(super) fn compile_document_rules(
                 .entity(definition.rule_id().to_string()));
             }
             if let Some(schema) = schema {
-                intercept_proxy_domain::validate_document_conditions_schema(conditions, schema)?;
-                validate_unified_actions_schema(actions, schema)?;
+                intercept_proxy_domain::validate_document_condition_schema(condition, schema)?;
+                validate_unified_action_schema(action, schema)?;
             }
             entries.push(RuleProgramEntry::new(
                 definition.rule_id(),
                 definition.priority(),
                 definition.created_order(),
-                conditions.clone(),
-                actions.clone(),
+                condition.clone(),
+                action.clone(),
             )?);
         }
         UnifiedRuleProgram::new(entries)
@@ -168,20 +168,19 @@ mod tests {
                 priority: 1,
                 listener_id: listener.id,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Socket(SocketRuleContent {
                     package: package.clone(),
-                    conditions: vec![Condition::Document {
+                    condition: Condition::Document {
                         path: JsonPointer::root(),
                         predicate: DocumentPredicate::String(StringPredicate {
                             operator: StringOperator::Equal,
                             value: "before".into(),
                         }),
-                    }],
-                    actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                    },
+                    action: UnifiedAction::Document(DocumentMutation::Set {
                         path: JsonPointer::root(),
                         value: DocumentValue::String("after".into()),
-                    })],
+                    }),
                 }),
             },
             1,

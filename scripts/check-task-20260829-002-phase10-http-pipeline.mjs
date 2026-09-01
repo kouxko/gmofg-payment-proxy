@@ -52,19 +52,19 @@ for (const text of [
   "intercept_proxy_runtime::ErrorCode::Internal.as_str()",
   "assert_production_changed_commit",
   "assert_production_encode_failure_rolls_back",
-  "production_response_rule_matches_recursive_tree_against_associated_request_metadata",
+  "production_response_rule_matches_flat_condition_against_associated_request_metadata",
 ])
   requireText("test", text, `Cargo Phase10 test missing ${text}`);
 
 const requiredCargoTests = [
   "changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed",
   "http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding",
-  "production_http_joint_leaves_ordinary_false_rule_to_actor_matching",
-  "production_http_actor_owns_unified_nth_attempt_and_one_shot_commit",
-  "production_snapshot_compiles_recursive_or_with_insert_and_append",
+  "prior_header_action_is_visible_to_the_next_rule_condition",
+  "production_http_actor_keeps_rules_enabled_after_commit",
+  "production_snapshot_compiles_flat_conditions_with_insert_and_append",
   "production_snapshot_uses_shared_provider_for_both_directions_and_joint_encode",
   "remote_decode_and_display_failures_keep_typed_json_rpc_identity",
-  "production_response_rule_matches_recursive_tree_against_associated_request_metadata",
+  "production_response_rule_matches_flat_condition_against_associated_request_metadata",
   "strict_http_package_codec_reads_original_utf8_and_shift_jis_wire_bytes",
   "unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc",
 ];

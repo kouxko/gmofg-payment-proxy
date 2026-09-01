@@ -55,8 +55,6 @@ const templates: FaultTemplateViewModel[] = [
     behavior_text: "绕过上游并返回 Mock",
     affected_party_text: "客户端",
     default_channel: "api-primary",
-    default_nth_hit: 1,
-    default_one_shot: false,
     default_priority: 100,
     default_parameters: {
       status: { kind: "integer", value: 200 },
@@ -132,6 +130,7 @@ describe("HTTP fault presets", () => {
       screen.getByRole("textbox", { name: "JSON Body" }),
     ).toHaveValue("{}");
     expect(screen.getByLabelText("代理通道")).toBeInTheDocument();
+    expect(screen.queryByText("第 N 次命中")).not.toBeInTheDocument();
     await user.click(screen.getByLabelText("代理通道"));
     expect(
       await screen.findByRole("option", { name: "辅助接口" }),
@@ -150,6 +149,7 @@ describe("HTTP fault presets", () => {
         },
       }),
     );
+    expect(commandMocks.faultConfigure.mock.calls[0]?.[0]).not.toHaveProperty("nth_hit");
   });
 
   it("submits the explicitly selected secondary channel", async () => {

@@ -205,8 +205,8 @@ async fn fresh_rule_schema_revalidation_failure_writes_nothing() {
             unreachable!()
         };
         properties.insert(
-            "amount".into(),
-            intercept_proxy_domain::DocumentSchemaNode::String { title: None },
+            "text".into(),
+            intercept_proxy_domain::DocumentSchemaNode::Number { title: None },
         );
     }
 

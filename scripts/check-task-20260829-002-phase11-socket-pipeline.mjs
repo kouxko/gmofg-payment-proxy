@@ -41,17 +41,15 @@ for (const text of ["ListenerRuntimePipelineAssembly", "configure_listener_runti
   requireText("bundle", text, `single production listener pipeline assembly missing ${text}`);
 for (const text of ["ListenerRuntimePipelineAssembly", "RuleRepositoryAdapter::new", "configure_listener_runtime_pipeline"])
   requireText("runtimeSupport", text, `production runtime fixture must use real assembly dependency ${text}`);
-for (const text of ["nth_attempt", "JointRuleConditionEvaluation::UnifiedOwned", "JointRuleConditionEvaluation::NotOwned"])
-  requireText("evaluation", text, `Socket joint typed NthHit evaluation missing ${text}`);
+for (const text of ["JointRuleConditionEvaluation::UnifiedOwned", "JointRuleConditionEvaluation::NotOwned"])
+  requireText("evaluation", text, `Socket joint typed evaluation missing ${text}`);
 for (const text of [
   "rules: &[RuleDefinition]",
-  "joint.gate(rule.rule_id().as_uuid(), nth_attempt)?",
-  "current.counters.insert(key, nth_attempt)",
+  "joint.gate(rule.rule_id().as_uuid())?",
   "rule.lifecycle_delta_for_successful_match",
   "RuleLifecycleDelta",
 ]) requireText("actorEvaluation", text, `RuleDefinition actor evaluation missing ${text}`);
 for (const text of [
-  "current.counters.retain",
   "current.snapshot = snapshot",
   "reset_runtime_hit_metadata",
   "commit_runtime_deltas",
@@ -68,15 +66,16 @@ forbid("socketHandler", /runtime_epoch:\s*run\.listener_run_epoch/u, "Socket act
 for (const text of [
   "production_socket_pipeline_rolls_back_failure_and_commits_each_write_stage_once",
   'assert_eq!(harness.peer().encode_methods(), ["hooks.upstream.encode"])',
-  "Condition::NthHit { count: 2 }",
+  "condition: Condition::Document",
+  "action: UnifiedAction::Document",
   "initial_revision + 1",
-  "initial_revision + 3",
-  "after_upstream_commit.revision.get(), initial_revision + 2",
+  "after_upstream_commit.revision.get(), initial_revision + 1",
+  "committed_workspace.revision.get(), initial_revision + 2",
   '"hooks.downstream.encode"',
   "hit_count == 0",
   "hit_count == 1",
 ]) requireText("runtimeTest", text, `real production Socket/SQLite transaction test missing ${text}`);
-const stageFixture = source.runtimeTest.match(/fn two_stage_one_shot_rules[\s\S]*?\.collect\(\)\n\}/u)?.[0] ?? "";
+const stageFixture = source.runtimeTest.match(/fn two_stage_rules[\s\S]*?\.collect\(\)\n\}/u)?.[0] ?? "";
 const stageSequence = [...stageFixture.matchAll(/RuleStage::(\w+)/gu)].map((match) => match[1]);
 if (stageSequence.join(",") !== "ProxyToUpstream,ProxyToApp") {
   failures.push("production Relay fixture must use the two authoritative distinct write stages in order");

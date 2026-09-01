@@ -188,8 +188,6 @@ fn every_template_exposes_matching_typed_defaults_and_schema() {
             definition.view.default_channel,
             intercept_proxy_domain::ChannelId::new("default").unwrap()
         );
-        assert_eq!(definition.view.default_nth_hit, 1);
-        assert!(!definition.view.default_one_shot);
         assert_eq!(definition.view.default_priority, 100);
         assert_eq!(
             definition.view.default_parameters.len(),
@@ -253,19 +251,19 @@ fn every_template_default_produces_a_domain_valid_action_for_its_declared_stage(
             priority: definition.view.default_priority,
             listener_id: intercept_proxy_domain::ListenerId::new(),
             stage: domain_stage,
-            one_shot: definition.view.default_one_shot,
             content: intercept_proxy_domain::RuleContent::Http(
                 intercept_proxy_domain::HttpRuleContent {
                     description: definition.view.behavior_text.clone(),
-                    conditions: vec![intercept_proxy_domain::Condition::NthHit {
-                        count: u64::from(definition.view.default_nth_hit),
-                    }],
-                    actions: vec![match action {
+                    condition: intercept_proxy_domain::Condition::Http {
+                        field: intercept_proxy_domain::MatchField::Method,
+                        operator: intercept_proxy_domain::MatchOperator::Equals("GET".into()),
+                    },
+                    action: match action {
                         intercept_proxy_domain::HttpAction::Terminal(action) => {
                             intercept_proxy_domain::UnifiedAction::Terminal(action)
                         }
                         action => intercept_proxy_domain::UnifiedAction::Http(action),
-                    }],
+                    },
                 },
             ),
         };

@@ -1,7 +1,7 @@
 {
   "task_id": "TASK-20260829-002",
   "case_id": "phase6-rule-chain-transaction",
-  "version": 1,
+  "version": 2,
   "derived_from": {
     "task_id": "TASK-20260829-002",
     "case_id": "phase5-unified-rule-domain",
@@ -9,45 +9,22 @@
   },
   "discoverable_tests": {
     "domain": [
-      "common_nth_hit_rejects_zero_at_the_domain_owner",
       "draft_rejects_forged_runtime_statistics",
       "lifecycle_delta_is_tentative_until_explicitly_applied",
-      "nth_hit_is_a_common_leaf_and_a_miss_does_not_consume_lifecycle",
-      "nth_only_delta_is_valid_for_the_shared_commit_contract_and_does_not_mutate_definition",
-      "nth_only_delta_cannot_disable_one_shot_without_a_successful_hit",
       "one_shot_disables_and_advances_revision_only_when_delta_is_applied",
       "save_draft_cannot_supply_runtime_statistics_and_create_initializes_them",
       "update_preserves_runtime_statistics_and_copy_resets_them"
     ],
-    "application": [
-      "commit_conflict_returns_no_partial_output_and_is_not_retried",
-      "commit_validation_failure_returns_no_partial_output_and_is_not_retried",
-      "concurrent_same_revision_has_one_winner_and_one_single_conflict",
-      "condition_action_encode_and_cancel_fail_before_commit",
-      "condition_error_preserves_the_complete_application_error",
-      "nth_snapshot_is_isolated_by_ip_and_certificate",
-      "nth_two_advances_on_successful_miss_then_matches_same_terminal",
-      "plan_rejects_mismatched_and_duplicate_rule_owners_before_execution",
-      "terminal_is_pending_until_commit_and_stops_lower_rules",
-      "terminal_mismatch_fails_before_any_port_or_commit_call",
-      "transaction_exposes_prior_mutations_only_after_single_commit"
-    ],
     "infrastructure": [
-      "adapters::listener_runtime::tests::http_protocol_pipeline_tests::revision_conflict_keeps_joint_message_and_lifecycle_uncommitted",
-      "adapters::pipeline::tests::aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine",
-      "adapters::pipeline::tests::actor_validation_failure_restores_nth_checkpoint_before_next_evaluation",
-      "adapters::pipeline::tests::nth_hit_conflict_is_not_retried_or_consumed"
-      ,"adapters::pipeline::tests::nth_hit_actor_isolates_attempts_by_terminal_ip_and_certificate"
-      ,"adapters::rules::rules_tests::conversion::repository_conversion_rejects_zero_duplicate_oversized_and_wrong_id_deltas",
-      "adapters::rules::rules_tests::conversion::repository_conversion_rejects_nth_only_one_shot_disable_without_partial_write",
-      "adapters::rules::rules_tests::conversion::runtime_delta_rejects_decrease_instead_of_saturating_it"
+      "production_http_actor_owns_one_shot_commit",
+      "socket_encode_failure_rolls_back_lifecycle_before_successful_commit",
+      "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"
     ]
   },
   "contracts": [
     "lifecycle state has one common owner shared by HTTP and Socket rule definitions",
-    "NthHit is a common condition leaf and a miss or failed transaction consumes no lifecycle",
-    "RuleChainTransaction privately owns working message, document, trace, control, and deltas",
-    "typed HTTP and Document mutations are visible to later rules before one encode and one commit",
+    "each rule has exactly one condition and one corresponding action",
+    "the runtime actor privately owns working message, document, trace, control, and deltas",
     "condition, action, encode, cancellation, validation, and revision failures publish no partial output",
     "revision conflicts are attempted once and never replay the transaction",
     "terminal control remains pending until lifecycle commit succeeds",

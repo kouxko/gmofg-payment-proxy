@@ -8,7 +8,7 @@ use chrono::Utc;
 use intercept_proxy_application::{
     AppError, EventHub, RuleSummaryViewModel, UiEventPayload, UiTone,
 };
-use intercept_proxy_domain::{MessageStage, RuleContent, RuleDefinition, RuleStage};
+use intercept_proxy_domain::{MessageStage, RuleDefinition, RuleStage};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::http::HttpRequestMetadata;
 use intercept_proxy_runtime::{
@@ -238,10 +238,7 @@ fn rule_summary(
     rule: &RuleDefinition,
     channel_labels: &BTreeMap<String, String>,
 ) -> RuleSummaryViewModel {
-    let (condition_count, action_count) = match rule.content() {
-        RuleContent::Http(content) => (content.conditions.len(), content.actions.len()),
-        RuleContent::Socket(content) => (content.conditions.len(), content.actions.len()),
-    };
+    let (condition_count, action_count) = (1, 1);
     let listener = rule.listener_id().to_string();
     RuleSummaryViewModel {
         rule_id: rule.rule_id().as_uuid(),

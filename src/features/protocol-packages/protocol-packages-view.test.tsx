@@ -262,7 +262,7 @@ describe("ProtocolPackagesView list", () => {
     await waitFor(() => expect(mocks.protocolPackageList).toHaveBeenCalledTimes(2));
   });
 
-  it("renders status, version count, reference count and active usage", async () => {
+  it("renders package identity, version information and only the online state", async () => {
     mocks.protocolPackageList.mockResolvedValue([group()]);
     render(<ProtocolPackagesView />);
 
@@ -270,9 +270,12 @@ describe("ProtocolPackagesView list", () => {
     expect(row).toHaveClass("h-auto", "min-h-16");
     expect(row).toHaveTextContent("2.0.0");
     expect(row).toHaveTextContent("3 个版本");
-    expect(row).toHaveTextContent("3 个引用");
-    expect(row).toHaveTextContent("部分启用 1/3");
-    expect(row).toHaveTextContent("1 个运行中");
+    expect(row).toHaveTextContent("在线");
+    expect(row).not.toHaveTextContent("3 个引用");
+    expect(row).not.toHaveTextContent("部分启用 1/3");
+    expect(row).not.toHaveTextContent("1 个运行中");
+    expect(row).not.toHaveTextContent("外部软件包");
+    expect(row).not.toHaveTextContent("内置示例");
   });
 
   it("shows HTTP and Socket packages in one list without protocol tabs", async () => {
@@ -303,7 +306,7 @@ describe("ProtocolPackagesView list", () => {
     expect(screen.getByRole("button", { name: "查看协议包 JSON Body" })).toHaveTextContent("HTTP");
   });
 
-  it("marks a built-in example in the package list", async () => {
+  it("does not mark a built-in example in the package list", async () => {
     mocks.protocolPackageList.mockResolvedValue([group({
       id: "iso8583-ascii-standard",
       versions: [version("1.0.0", {
@@ -313,8 +316,9 @@ describe("ProtocolPackagesView list", () => {
     })]);
     render(<ProtocolPackagesView />);
 
-    expect(await screen.findByRole("button", { name: "查看协议包 ISO 8583" }))
-      .toHaveTextContent("内置示例");
+    const row = await screen.findByRole("button", { name: "查看协议包 ISO 8583" });
+    expect(row).toHaveTextContent("在线");
+    expect(row).not.toHaveTextContent("内置示例");
   });
 
   it("opens by click, Enter and Space, then restores focus after closing", async () => {
@@ -368,7 +372,7 @@ describe("ProtocolPackagesView list", () => {
     expect(mocks.protocolPackageDetail).not.toHaveBeenCalled();
   });
 
-  it("renders disabled, mixed and invalid version badges without hiding errors", async () => {
+  it("keeps enablement and validation details out of the list without hiding them in detail", async () => {
     const user = userEvent.setup();
     mocks.protocolPackageList.mockResolvedValue([
       group({
@@ -398,10 +402,13 @@ describe("ProtocolPackagesView list", () => {
     ]);
     render(<ProtocolPackagesView />);
 
-    expect(await screen.findByRole("button", { name: "查看协议包 Disabled" })).toHaveTextContent("已停用");
+    const disabledRow = await screen.findByRole("button", { name: "查看协议包 Disabled" });
+    expect(disabledRow).toHaveTextContent("在线");
+    expect(disabledRow).not.toHaveTextContent("已停用");
     const invalidRow = screen.getByRole("button", { name: "查看协议包 Invalid" });
-    expect(invalidRow).toHaveTextContent("已启用");
-    expect(invalidRow).toHaveTextContent("1 个校验异常");
+    expect(invalidRow).toHaveTextContent("在线");
+    expect(invalidRow).not.toHaveTextContent("已启用");
+    expect(invalidRow).not.toHaveTextContent("校验异常");
     await user.click(invalidRow);
     expect(await screen.findByRole("button", { name: /3\.0\.0校验失败：COMPILE_FAILED/ })).toHaveTextContent("无效");
   });
@@ -416,7 +423,7 @@ describe("ProtocolPackagesView list", () => {
     expect(screen.queryByRole("button", { name: /查看协议包/ })).not.toBeInTheDocument();
   });
 
-  it("shows external source and online state in both list and detail", async () => {
+  it("shows only online or offline in the list while detail keeps source information", async () => {
     const external = version("4.0.0", {
       package: { id: "vendor-iso", version: "4.0.0" },
       name: "Vendor ISO",
@@ -435,9 +442,28 @@ describe("ProtocolPackagesView list", () => {
     render(<ProtocolPackagesView />);
 
     const row = await screen.findByRole("button", { name: "查看协议包 Vendor ISO" });
-    expect(row).toHaveTextContent("外部软件包");
-    expect(row).toHaveTextContent("外部在线");
+    expect(row).toHaveTextContent("在线");
+    expect(row).not.toHaveTextContent("外部软件包");
+    expect(row).not.toHaveTextContent("已启用");
     await user.click(row);
     expect(await screen.findByText("外部 · 在线")).toBeVisible();
+  });
+
+  it("shows a single offline state when every installed version is offline", async () => {
+    mocks.protocolPackageList.mockResolvedValue([group({
+      versions: [
+        version("1.0.0", { package_source: { type: "external", online: false } }),
+        version("2.0.0", { package_source: { type: "external", online: false } }),
+      ],
+      reference_count: 2,
+      active_reference_count: 0,
+    })]);
+    render(<ProtocolPackagesView />);
+
+    const row = await screen.findByRole("button", { name: "查看协议包 ISO 8583" });
+    expect(row).toHaveTextContent("离线");
+    expect(row).not.toHaveTextContent("外部离线");
+    expect(row).not.toHaveTextContent("已停用");
+    expect(row).not.toHaveTextContent("2 个引用");
   });
 });

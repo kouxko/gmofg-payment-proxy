@@ -17,8 +17,8 @@ const lifecycle = { hit_count: 0, last_hit_at: null };
 function rule(stage: RuleDefinition_Serialize["stage"], priority: number, createdOrder: number): RuleDefinition_Serialize {
   return {
     rule_id: `${stage}-${createdOrder}`, revision: 1, name: stage, enabled: true, priority,
-    created_order: createdOrder, listener_id: "listener", stage, one_shot: false, lifecycle,
-    content: { type: "socket", value: { package: { id: "pkg", version: "1" }, conditions: [stringCondition()], actions: [{ source: "record_match" }] } },
+    created_order: createdOrder, listener_id: "listener", stage, lifecycle,
+    content: { type: "socket", value: { package: { id: "pkg", version: "1" }, condition: stringCondition(), action: { source: "record_match" } } },
   };
 }
 
@@ -34,9 +34,9 @@ describe("ruleStageIncompatibility", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_upstream", one_shot: false,
+        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_upstream",
         content: { type: "http", value: {
-          description: "", conditions: [stringCondition()], actions: [{ source: "document", value: { type: "set", path: "/amount", value: 1 } }],
+          description: "", condition: stringCondition(), action: { source: "document", value: { type: "set", path: "/amount", value: 1 } },
         } },
       },
     };
@@ -48,7 +48,7 @@ describe("ruleStageIncompatibility", () => {
         stage: "proxy_to_app", http: null, package: { id: "pkg", version: "1" },
         document_common_actions: [],
         document_fields: [{ path: "/value", label: "Value", value_type: "string", item_template: false, predicates: ["equals"], actions: [documentAction("set", "string", "string"), documentAction("clear", "string", null)] }],
-        new_rule_draft: { listener_id: input.draft.listener_id, stage: "proxy_to_app", content: input.draft.content },
+        new_rule_draft: { listener_id: input.draft.listener_id, stage: "proxy_to_app", content: { type: "http", value: { description: "" } } },
       }] } },
     };
 
@@ -59,10 +59,10 @@ describe("ruleStageIncompatibility", () => {
     const base: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
+        name: "document", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app",
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          conditions: [stringCondition("/value", "Null")], actions: [{ source: "record_match" }],
+          condition: stringCondition("/value", "Null"), action: { source: "record_match" },
         } },
       },
     };
@@ -76,7 +76,7 @@ describe("ruleStageIncompatibility", () => {
           stage: "proxy_to_app",
           document_fields: [{ path: "/value", label: "Value", value_type: "string", item_template: false, predicates: ["equals"], actions: [documentAction("set", "string", "string"), documentAction("clear", "string", null)] }],
           common_actions: ["record_match"],
-          new_rule_draft: { listener_id: base.draft.listener_id, stage: base.draft.stage, content: base.draft.content },
+          new_rule_draft: { listener_id: base.draft.listener_id, stage: base.draft.stage, content: { type: "socket", value: { package: { id: "pkg", version: "1" } } } },
         }],
       } },
     };
@@ -84,24 +84,21 @@ describe("ruleStageIncompatibility", () => {
     expect(ruleStageIncompatibility(base, context, "proxy_to_app")).toBeNull();
     const actualNull = structuredClone(base);
     if (actualNull.draft.content.type !== "socket") throw new Error("invalid fixture");
-    actualNull.draft.content.value.conditions = [{ source: "document", path: "/value", predicate: { type: "null_equal" } }];
+    actualNull.draft.content.value.condition = { source: "document", path: "/value", predicate: { type: "null_equal" } };
     expect(ruleStageIncompatibility(actualNull, context, "proxy_to_app")).toBe(
       "目标阶段不能编辑 Document 条件字段 /value。",
     );
   });
 
-  it("accepts Rust-factory Insert and Append on an undeclared rule-local path", () => {
+  it("accepts a Rust-factory Insert on an undeclared rule-local path", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
+        name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app",
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          conditions: [{ source: "nth_hit", count: 1 }],
-          actions: [
-            { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } },
-            { source: "document", value: { type: "append", path: "/items", value: "last" } },
-          ],
+          condition: stringCondition(),
+          action: { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } },
         } },
       },
     };
@@ -111,7 +108,7 @@ describe("ruleStageIncompatibility", () => {
       document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
       content: { type: "socket", value: { package: { id: "pkg", version: "1" }, stages: [{
         stage: "proxy_to_app", document_fields: [], common_actions: [],
-        new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: input.draft.content },
+        new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: { type: "socket", value: { package: { id: "pkg", version: "1" } } } },
       }] } },
     };
 
@@ -122,11 +119,11 @@ describe("ruleStageIncompatibility", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "schema action", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
+        name: "schema action", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app",
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          conditions: [{ source: "nth_hit", count: 1 }],
-          actions: [{ source: "document", value: { type: "insert", path: "/name", index: 0, value: "first" } }],
+          condition: stringCondition(),
+          action: { source: "document", value: { type: "insert", path: "/name", index: 0, value: "first" } },
         } },
       },
     };
@@ -137,7 +134,7 @@ describe("ruleStageIncompatibility", () => {
       content: { type: "socket", value: { package: { id: "pkg", version: "1" }, stages: [{
         stage: "proxy_to_app",
         document_fields: [{ path: "/name", label: "Name", value_type: "string", item_template: false, predicates: ["equals"], actions: [documentAction("set", "string", "string"), documentAction("clear", "string", null)] }],
-        common_actions: [], new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: input.draft.content },
+        common_actions: [], new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: { type: "socket", value: { package: { id: "pkg", version: "1" } } } },
       }] } },
     };
 
@@ -146,7 +143,7 @@ describe("ruleStageIncompatibility", () => {
     );
 
     if (input.draft.content.type !== "socket") throw new Error("invalid fixture");
-    input.draft.content.value.actions = [{ source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } }];
+    input.draft.content.value.action = { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } };
     if (context.content.type !== "socket") throw new Error("invalid context");
     context.content.value.stages[0].document_fields = [{
       path: "/items", label: "Items", value_type: "array", item_template: false, predicates: [],
@@ -159,11 +156,11 @@ describe("ruleStageIncompatibility", () => {
     const input: RuleDefinitionSaveInput = {
       rule_id: "rule", expected_revision: 1,
       draft: {
-        name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app", one_shot: false,
+        name: "local array", enabled: true, priority: 1, listener_id: "listener", stage: "proxy_to_app",
         content: { type: "socket", value: {
           package: { id: "pkg", version: "1" },
-          conditions: [{ source: "nth_hit", count: 1 }],
-          actions: [{ source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } }],
+          condition: stringCondition(),
+          action: { source: "document", value: { type: "insert", path: "/items", index: 0, value: "first" } },
         } },
       },
     };
@@ -175,7 +172,7 @@ describe("ruleStageIncompatibility", () => {
       document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
       content: { type: "socket", value: { package: { id: "pkg", version: "1" }, stages: [{
         stage: "proxy_to_app", document_fields: [], common_actions: [],
-        new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: input.draft.content },
+        new_rule_draft: { listener_id: input.draft.listener_id, stage: input.draft.stage, content: { type: "socket", value: { package: { id: "pkg", version: "1" } } } },
       }] } },
     };
 
@@ -193,19 +190,8 @@ describe("ruleStageIncompatibility", () => {
 });
 
 describe("unified lifecycle wire", () => {
-  it("keeps lifecycle at the rule definition and exposes nth-hit as a common condition leaf", () => {
+  it("keeps lifecycle at the rule definition", () => {
     const socket = rule("proxy_to_app", 1, 1);
     expect(socket.lifecycle).toEqual(lifecycle);
-    expect(socket.one_shot).toBe(false);
-    expect(socket.content.value).not.toHaveProperty("one_shot");
-    const nthHit: RuleDefinitionSaveInput["draft"]["content"] = {
-      type: "socket",
-      value: {
-        package: { id: "pkg", version: "1" },
-        conditions: [{ source: "nth_hit", count: 2 }],
-        actions: [{ source: "record_match" }],
-      },
-    };
-    expect(nthHit.value.conditions).toEqual([{ source: "nth_hit", count: 2 }]);
   });
 });

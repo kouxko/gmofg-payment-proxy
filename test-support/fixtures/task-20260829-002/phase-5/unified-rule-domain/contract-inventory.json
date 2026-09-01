@@ -13,10 +13,10 @@
     "rust_names": [
       "clear_document_value_type_survives_strict_serde_round_trip",
       "cloned_rule_configuration_is_deeply_independent",
-      "document_actions_apply_in_order_with_strict_set_clear_insert_and_append",
-      "flat_conditions_reject_empty_and_apply_fixed_and_semantics",
-      "large_flat_condition_and_action_lists_are_valid",
       "number_equal_uses_javascript_numeric_equality_for_signed_zero",
+      "rule_program_rejects_large_condition_and_action_lists",
+      "rule_program_rejects_multiple_document_actions",
+      "rule_program_rejects_zero_or_multiple_conditions",
       "runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation",
       "schema_declared_paths_validate_and_undeclared_paths_keep_rule_local_type",
       "schema_enforces_insert_append_array_target_and_nested_item_type",
@@ -27,23 +27,22 @@
     ],
     "typescript_names": [
       "ruleDirectionLabel > labels the two message directions shown in the unified rule list",
-      "ruleStageIncompatibility > exposes only the two proxy write stages for new message rules",
       "ruleStageIncompatibility > keeps a Schema-undeclared Document action as rule-local metadata",
       "ruleStageIncompatibility > treats the JSON string Null as a string and actual null as null",
       "ruleStageIncompatibility > accepts Rust-factory Insert and Append on an undeclared rule-local path",
       "ruleStageIncompatibility > does not apply schema-free array actions to a declared scalar path",
       "ruleStageIncompatibility > rejects schema-free Insert when either the target descriptor or operand descriptor differs",
-      "unified lifecycle wire > keeps lifecycle at the rule definition and exposes nth-hit as a common condition leaf"
+      "unified lifecycle wire > keeps lifecycle at the rule definition"
     ]
   },
   "generated_wire_golden": "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/generated-wire-golden.json",
   "phase12_legacy_owner_allowlist": [],
   "contracts": [
-    "one nonempty flat condition list with fixed AND semantics; OR is represented by multiple rules",
+    "exactly one condition per rule; multiple conditions are represented by multiple rules",
     "typed predicates use RFC6901 and fail false on missing or runtime type mismatch",
     "declared schema paths require matching types and undeclared paths preserve rule-local types",
-    "one nonempty ordered unified action list with strict document mutation primitives",
-    "at most one terminal action, terminal action is last, and terminal execution stops later rules",
+    "exactly one unified action per rule with strict document mutation primitives",
+    "a terminal action stops later rules",
     "runtime ordering is priority then rule_id and excludes created_order",
     "later rules observe the working document mutated by earlier rules",
     "cloned rule configuration is deeply independent",

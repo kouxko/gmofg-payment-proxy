@@ -31,9 +31,6 @@ pub(crate) fn apply_runtime_deltas(
             .hit_count
             .checked_add(delta.hit_count_increment)
             .ok_or_else(|| AppError::new("RULE_INVALID", "规则命中次数溢出。"))?;
-        if delta.disable_one_shot {
-            rule.revision().checked_next().map_err(AppError::from)?;
-        }
     }
     let mut rules = snapshot.rules.clone();
     for delta in deltas {

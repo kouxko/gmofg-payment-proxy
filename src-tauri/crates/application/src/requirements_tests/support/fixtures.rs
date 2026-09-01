@@ -237,21 +237,13 @@ pub(in crate::requirements_tests) fn scripted_workspace(
                 priority: -10,
                 listener_id,
                 stage,
-                one_shot: false,
                 content: RuleContent::Socket(intercept_proxy_domain::SocketRuleContent {
                     package,
-                    conditions: vec![
-                        document_equals("text", DocumentValue::String("sale".into())),
-                        document_equals("amount", DocumentValue::integer(1234).unwrap()),
-                        document_equals("approved", DocumentValue::Boolean(true)),
-                    ],
-                    actions: vec![
-                        UnifiedAction::RecordMatch,
-                        document_set("text", DocumentValue::String("reply".into())),
-                        document_set("amount", DocumentValue::integer(4321).unwrap()),
-                        document_set("approved", DocumentValue::Boolean(false)),
-                        document_set("raw", DocumentValue::byte_array(vec![9, 8, 7])),
-                    ],
+                    condition: document_equals(
+                        "text",
+                        DocumentValue::String("sale".into()),
+                    ),
+                    action: document_set("text", DocumentValue::String("reply".into())),
                 }),
             },
             41,
@@ -273,11 +265,11 @@ pub(in crate::requirements_tests) fn http_rule_definitions(
             matches!(
                 rule.content(),
                 intercept_proxy_domain::RuleContent::Http(content)
-                    if !intercept_proxy_domain::contains_document_condition(&content.conditions)
-                        && !content.actions.iter().any(|action| matches!(
-                            action,
+                    if !intercept_proxy_domain::is_document_condition(&content.condition)
+                        && !matches!(
+                            content.action,
                             intercept_proxy_domain::UnifiedAction::Document(_)
-                        ))
+                        )
             )
         })
         .collect()
@@ -293,11 +285,11 @@ pub(in crate::requirements_tests) fn protocol_rule_definitions(
             !matches!(
                 rule.content(),
                 intercept_proxy_domain::RuleContent::Http(content)
-                    if !intercept_proxy_domain::contains_document_condition(&content.conditions)
-                        && !content.actions.iter().any(|action| matches!(
-                            action,
+                    if !intercept_proxy_domain::is_document_condition(&content.condition)
+                        && !matches!(
+                            content.action,
                             intercept_proxy_domain::UnifiedAction::Document(_)
-                        ))
+                        )
             )
         })
         .collect()

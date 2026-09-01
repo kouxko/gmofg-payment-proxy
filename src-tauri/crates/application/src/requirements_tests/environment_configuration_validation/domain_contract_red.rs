@@ -105,31 +105,21 @@ async fn duplicate_enabled_listener_endpoint_fails_domain_before_preview() {
 }
 
 #[tokio::test]
-async fn http_rule_without_actions_fails_domain_before_preview() {
+async fn http_rule_without_action_fails_schema_before_preview() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["actions"] = serde_json::json!([]);
+        candidate["workspace"]["rules"][0]["content"]["value"].as_object_mut().unwrap().remove("action");
     });
 
-    assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
+    selector_parse_red::assert_schema_code(&candidate, EnvironmentStatusCode::SchemaInvalid).await;
 }
 
 #[tokio::test]
 async fn http_method_with_non_equals_operator_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["conditions"][1]["field"] =
+        candidate["workspace"]["rules"][0]["content"]["value"]["condition"]["field"] =
             serde_json::json!("Method");
-        candidate["workspace"]["rules"][0]["content"]["value"]["conditions"][1]["operator"] =
+        candidate["workspace"]["rules"][0]["content"]["value"]["condition"]["operator"] =
             serde_json::json!({"Contains": "PO"});
-    });
-
-    assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
-}
-
-#[tokio::test]
-async fn http_rule_zero_nth_hit_fails_domain_with_exact_code() {
-    let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["conditions"][2]["count"] =
-            serde_json::json!(0);
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -138,8 +128,10 @@ async fn http_rule_zero_nth_hit_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_action_value_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["actions"][3]["value"]["Delay"]["milliseconds"] =
-            serde_json::json!(0);
+        candidate["workspace"]["rules"][0]["content"]["value"]["action"] = serde_json::json!({
+            "source": "http",
+            "value": {"Delay": {"milliseconds": 0}}
+        });
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -148,8 +140,14 @@ async fn http_rule_invalid_action_value_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_rate_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["rules"][0]["content"]["value"]["actions"][5]["value"]["Throttle"]
-            ["bytes_per_second"] = serde_json::json!(0);
+        candidate["workspace"]["rules"][0]["content"]["value"]["action"] = serde_json::json!({
+            "source": "http",
+            "value": {"Throttle": {
+                "bytes_per_second": 0,
+                "chunk_bytes": 1,
+                "direction": "Upstream"
+            }}
+        });
     });
 
     assert_domain_code_before_preview(&candidate, EnvironmentStatusCode::HttpRuleInvalid).await;
@@ -158,7 +156,7 @@ async fn http_rule_invalid_rate_fails_domain_with_exact_code() {
 #[tokio::test]
 async fn http_rule_invalid_timeout_fails_domain_with_exact_code() {
     let candidate = candidate_json_with(|candidate| {
-        rule_named_mut(candidate, "Upstream connect timeout")["content"]["value"]["actions"][0]["value"]
+        rule_named_mut(candidate, "Upstream connect timeout")["content"]["value"]["action"]["value"]
             ["UpstreamConnectTimeout"]["milliseconds"] = serde_json::json!(0);
     });
 

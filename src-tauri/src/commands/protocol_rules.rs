@@ -7,8 +7,8 @@ use intercept_proxy_application::{
     DocumentValue, OperationResultViewModel, ProtocolPackageSchemaFieldTypeViewModel,
     RuleCommonActionCapability, RuleDefinition, RuleDefinitionSaveInput, RuleEditorContext,
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
-    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
-    RuleNthHitConditionDraftInput, RuleStage, parse_protocol_rule_value,
+    RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind, RuleStage,
+    parse_protocol_rule_value,
 };
 use intercept_proxy_domain::{Condition, HttpAction, ListenerId, Revision, RuleId, UnifiedAction};
 use tauri::State;
@@ -24,19 +24,6 @@ pub fn rule_parse_document_value(
     raw: String,
 ) -> CommandResult<DocumentValue> {
     parse_protocol_rule_value(field_type, &raw).map_err(command_error)
-}
-
-#[tauri::command]
-#[specta::specta]
-#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
-pub fn rule_definition_nth_hit_condition_draft(
-    app_state: State<'_, AppState>,
-    input: RuleNthHitConditionDraftInput,
-) -> CommandResult<Condition> {
-    app_state
-        .application
-        .rule_definition_nth_hit_condition_draft(input)
-        .map_err(command_error)
 }
 
 #[tauri::command]

@@ -70,20 +70,20 @@ fn document_wildcard_path_matches_any_single_level_only() {
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
     };
 
-    assert!(crate::matches_document_conditions(&[condition], &document).expect("wildcard match"));
+    assert!(crate::matches_document_condition(&condition, &document).expect("wildcard match"));
 
     let too_shallow = Condition::DocumentPattern {
         path: DocumentMatchPath::parse("/customer/*/child/active").expect("match path"),
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
     };
-    assert!(crate::matches_document_conditions(&[too_shallow], &document).expect("exact depth"));
+    assert!(crate::matches_document_condition(&too_shallow, &document).expect("exact depth"));
 
     let does_not_cross_levels = Condition::DocumentPattern {
         path: DocumentMatchPath::parse("/customer/*/active/value").expect("match path"),
         predicate: DocumentPredicate::Boolean(BooleanPredicate::Equal(true)),
     };
     assert!(
-        !crate::matches_document_conditions(&[does_not_cross_levels], &document)
+        !crate::matches_document_condition(&does_not_cross_levels, &document)
             .expect("wildcard must not cross levels")
     );
 }
@@ -138,12 +138,12 @@ fn unified_program_rejects_unknown_rule_id_instead_of_matching_it() {
     let mut document = Document::parse_json(r"{}").expect("document");
 
     let apply_error = program
-        .evaluate_and_apply_rule_with_http(RuleId::new(), &mut document, 1, |_, _| Ok(false))
+        .evaluate_and_apply_rule_with_http(RuleId::new(), &mut document, |_, _| Ok(false))
         .expect_err("unknown rule must not match or mutate");
     assert_eq!(apply_error.code, crate::ErrorCode::RuleInvalid);
 
     let evaluate_error = program
-        .evaluate_rule_with_http(RuleId::new(), &document, 1, |_, _| Ok(false))
+        .evaluate_rule_with_http(RuleId::new(), &document, |_, _| Ok(false))
         .expect_err("unknown rule must not match");
     assert_eq!(evaluate_error.code, crate::ErrorCode::RuleInvalid);
 }

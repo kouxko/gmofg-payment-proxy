@@ -81,7 +81,7 @@ impl PipelinePorts for GenerationRecordingPipeline {
     ) -> ProxyResult<SocketContext> {
         self.observed_new_generation.store(
             matches!(
-                evaluation.gate(self.expected_rule.as_uuid(), 1)?,
+                evaluation.gate(self.expected_rule.as_uuid())?,
                 JointRuleConditionEvaluation::UnifiedOwned(_)
             ),
             Ordering::Release,
@@ -112,8 +112,11 @@ async fn socket_frame_waits_for_listener_gate_before_reading_rule_generation() {
                     expected_rule,
                     1,
                     1,
-                    vec![Condition::NthHit { count: 1 }],
-                    vec![UnifiedAction::RecordMatch],
+                    Condition::Document {
+                        path: intercept_proxy_domain::JsonPointer::parse("").unwrap(),
+                        predicate: intercept_proxy_domain::DocumentPredicate::NullEqual,
+                    },
+                    UnifiedAction::RecordMatch,
                 )
                 .unwrap(),
             ])

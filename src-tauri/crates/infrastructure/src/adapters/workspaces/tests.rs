@@ -224,14 +224,16 @@ fn referenced_workspace() -> ProxyWorkspace {
                 priority: 1,
                 listener_id,
                 stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: intercept_proxy_domain::RuleContent::Http(
                     intercept_proxy_domain::HttpRuleContent {
                         description: String::new(),
-                        conditions: vec![Condition::NthHit { count: 1 }],
-                        actions: vec![intercept_proxy_domain::UnifiedAction::Http(
+                        condition: Condition::Http {
+                            field: intercept_proxy_domain::MatchField::Method,
+                            operator: intercept_proxy_domain::MatchOperator::Equals("GET".into()),
+                        },
+                        action: intercept_proxy_domain::UnifiedAction::Http(
                             HttpAction::Delay { milliseconds: 1 },
-                        )],
+                        ),
                     },
                 ),
             },

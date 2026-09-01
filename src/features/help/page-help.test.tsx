@@ -47,6 +47,15 @@ describe("page-specific usage guides", () => {
     expect(listenerGuide).not.toContain("运行监控");
   });
 
+  it("does not describe the removed nth-hit rule behavior", () => {
+    const allGuidance = Object.values(pageHelpGuides)
+      .flatMap((guide) => guide.sections)
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(allGuidance).not.toMatch(/第 N 次命中|默认命中次数|一次性生效|仅命中一次/);
+  });
+
   it("documents the native and non-mutating protocol-package import boundary", () => {
     const protocolPackageGuide = pageHelpGuides["/protocol-packages"].sections
       .flatMap((section) => section.steps)

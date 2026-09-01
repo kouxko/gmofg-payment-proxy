@@ -64,18 +64,11 @@ async fn persisted_joint_http_shape(
     store: &InMemoryWorkspaceStore,
 ) -> (ProxyWorkspace, serde_json::Value) {
     let mut value: serde_json::Value = serde_json::from_slice(FULL_SHAPE).unwrap();
-    value["workspace"]["rules"][0]["content"]["value"]["conditions"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({
-            "source":"document",
-            "path":"/amount",
-            "predicate":{"type":"number","value":{"operator":"equal","value":1000}}
-        }));
-    value["workspace"]["rules"][0]["content"]["value"]["actions"]
-        .as_array_mut()
-        .unwrap()
-        .push(serde_json::json!({"source":"record_match"}));
+    value["workspace"]["rules"][0]["content"]["value"]["condition"] = serde_json::json!({
+        "source":"document",
+        "path":"/amount",
+        "predicate":{"type":"number","value":{"operator":"equal","value":1000}}
+    });
     let typed =
         crate::parse_environment_configuration_candidate_v1(&serde_json::to_vec(&value).unwrap())
             .unwrap();
@@ -386,7 +379,7 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
             matches!(
                 rule.content(),
                 intercept_proxy_domain::RuleContent::Http(content)
-                    if intercept_proxy_domain::contains_document_condition(&content.conditions)
+                    if intercept_proxy_domain::is_document_condition(&content.condition)
             )
         })
         .unwrap();
@@ -405,8 +398,8 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
         serde_json::json!(original_socket.rule_id());
     candidate["workspace"]["rules"][0]["name"] = serde_json::json!("Joint HTTP updated");
     candidate["workspace"]["rules"][0]["stage"] = serde_json::json!("proxy_to_upstream");
-    candidate["workspace"]["rules"][0]["content"]["value"]["actions"] =
-        serde_json::json!([{"source":"http","value":{"Delay": {"milliseconds": 7}}}]);
+    candidate["workspace"]["rules"][0]["content"]["value"]["action"] =
+        serde_json::json!({"source":"http","value":{"Delay": {"milliseconds": 7}}});
     let capture = Arc::new(CapturingBaseline::default());
     let report = validate_existing(store, capture.clone(), candidate).await;
 
@@ -427,8 +420,8 @@ async fn existing_joint_http_rule_updates_editable_fields_and_keeps_immutable_bi
     let intercept_proxy_domain::RuleContent::Http(content) = updated.content() else {
         panic!("joint HTTP rule must remain HTTP content");
     };
-    assert!(intercept_proxy_domain::contains_document_condition(
-        &content.conditions
+    assert!(intercept_proxy_domain::is_document_condition(
+        &content.condition
     ));
 }
 

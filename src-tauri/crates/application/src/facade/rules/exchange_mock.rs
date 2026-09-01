@@ -102,18 +102,17 @@ impl<'a> MockDraftSource<'a> {
                 priority: 100,
                 listener_id: record.listener_id,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: format!("由 HTTP 抓包 {} 的服务器响应生成。", record.exchange_id),
-                    conditions: vec![Condition::Http {
+                    condition: Condition::Http {
                         field: MatchField::RequestTarget,
                         operator: MatchOperator::Equals(self.request_target),
-                    }],
-                    actions: vec![UnifiedAction::Terminal(TerminalAction::MockResponse {
+                    },
+                    action: UnifiedAction::Terminal(TerminalAction::MockResponse {
                         status,
                         headers,
                         body_bytes: self.response_body.as_bytes().to_vec(),
-                    })],
+                    }),
                 }),
             },
         })

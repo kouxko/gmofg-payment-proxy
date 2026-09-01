@@ -1,14 +1,6 @@
 use super::*;
 use intercept_proxy_domain::{HttpRuleContent, SocketRuleContent, UnifiedAction};
 
-fn document_actions(actions: Vec<UnifiedAction>) -> Vec<UnifiedAction> {
-    actions
-}
-
-fn http_actions(actions: Vec<intercept_proxy_domain::HttpAction>) -> Vec<UnifiedAction> {
-    actions.into_iter().map(UnifiedAction::from).collect()
-}
-
 fn unified_socket_input(
     listener_id: ListenerId,
     package: ProtocolPackageRef,
@@ -23,11 +15,10 @@ fn unified_socket_input(
             priority: 10,
             listener_id,
             stage,
-            one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                actions: document_actions(vec![set("amount", DocumentValue::integer(2).unwrap())]),
+                condition: equals("trace_id", DocumentValue::String("abc".into())),
+                action: set("amount", DocumentValue::integer(2).unwrap()),
             }),
         },
     }
@@ -50,8 +41,7 @@ async fn stopped_listener_rejects_invalid_unified_document_before_persistence() 
         match invalid_case {
             "package" => content.package = pkg("forged-package", "1.0.0"),
             "type" => {
-                content.actions =
-                    document_actions(vec![set("amount", DocumentValue::String("wrong".into()))]);
+                content.action = set("amount", DocumentValue::String("wrong".into()));
             }
             _ => unreachable!(),
         }
@@ -74,8 +64,8 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
     let RuleContent::Socket(content) = &mut input.draft.content else {
         unreachable!()
     };
-    content.conditions = vec![equals("missing_field", DocumentValue::String("abc".into()))];
-    content.actions = document_actions(vec![set("extension_value", DocumentValue::Boolean(true))]);
+    content.condition = equals("missing_field", DocumentValue::String("abc".into()));
+    content.action = set("extension_value", DocumentValue::Boolean(true));
 
     application
         .rule_definition_save(input)
@@ -86,13 +76,13 @@ async fn stopped_listener_accepts_rule_paths_missing_from_incomplete_schema_meta
 
 #[tokio::test]
 async fn unified_document_save_enforces_direction_decode_and_encode_capabilities() {
-    for (case, decode, encode, actions) in [
-        ("decode", false, true, vec![UnifiedAction::RecordMatch]),
+    for (case, decode, encode, action) in [
+        ("decode", false, true, UnifiedAction::RecordMatch),
         (
             "encode",
             true,
             false,
-            vec![set("amount", DocumentValue::integer(2).unwrap())],
+            set("amount", DocumentValue::integer(2).unwrap()),
         ),
     ] {
         let (application, services, workspaces, runtime) = fixture();
@@ -108,7 +98,7 @@ async fn unified_document_save_enforces_direction_decode_and_encode_capabilities
         let RuleContent::Socket(content) = &mut input.draft.content else {
             unreachable!()
         };
-        content.actions = document_actions(actions);
+        content.action = action;
 
         let error = application.rule_definition_save(input).await.unwrap_err();
 
@@ -149,22 +139,13 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
                 priority: 10,
                 listener_id: http_listener,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
-                    description: "header + document".into(),
-                    conditions: vec![
-                        intercept_proxy_domain::Condition::NthHit { count: 1 },
-                        equals("trace_id", DocumentValue::String("abc".into())),
-                    ],
-                    actions: http_actions(vec![intercept_proxy_domain::HttpAction::Delay {
-                        milliseconds: 1,
-                    }])
-                    .into_iter()
-                    .chain(document_actions(vec![set(
+                    description: "document".into(),
+                    condition: equals("trace_id", DocumentValue::String("abc".into())),
+                    action: set(
                         "amount",
                         DocumentValue::integer(2).unwrap(),
-                    )]))
-                    .collect(),
+                    ),
                 }),
             },
         })
@@ -176,10 +157,7 @@ async fn stopped_listener_accepts_valid_unified_socket_and_joint_http_documents(
 
 #[tokio::test]
 async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
-    for (stage, joint) in [
-        (RuleStage::ProxyToUpstream, true),
-        (RuleStage::ProxyToApp, true),
-    ] {
+    for stage in [RuleStage::ProxyToUpstream, RuleStage::ProxyToApp] {
         let (application, services, workspaces, runtime) = fixture();
         let package = pkg("http-valid-stage", "1.0.0");
         let listener_id = configure_http(&services, &workspaces, &package).await;
@@ -193,21 +171,13 @@ async fn stopped_http_listener_accepts_pure_document_and_exact_joint_stages() {
                     priority: 10,
                     listener_id,
                     stage,
-                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions: vec![equals("trace_id", DocumentValue::String("abc".into()))],
-                        actions: http_actions(
-                            joint
-                                .then_some(intercept_proxy_domain::HttpAction::Delay {
-                                    milliseconds: 1,
-                                })
-                                .into_iter()
-                                .collect(),
-                        )
-                        .into_iter()
-                        .chain([UnifiedAction::RecordMatch])
-                        .collect(),
+                        condition: equals("trace_id", DocumentValue::String("abc".into())),
+                        action: set(
+                            "amount",
+                            DocumentValue::integer(2).unwrap(),
+                        ),
                     }),
                 },
             })

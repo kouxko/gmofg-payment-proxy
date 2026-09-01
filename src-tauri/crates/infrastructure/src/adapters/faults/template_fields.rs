@@ -23,8 +23,6 @@ pub(super) fn template(
             affected_party_text: affected.into(),
             default_channel: intercept_proxy_domain::ChannelId::new("default")
                 .expect("generic placeholder channel"),
-            default_nth_hit: 1,
-            default_one_shot: false,
             default_priority: 100,
             default_parameters,
             parameter_schema,
@@ -58,8 +56,6 @@ pub(super) fn encoded_template(
             affected_party_text: affected.into(),
             default_channel: intercept_proxy_domain::ChannelId::new("default")
                 .expect("generic placeholder channel"),
-            default_nth_hit: 1,
-            default_one_shot: false,
             default_priority: 100,
             default_parameters,
             parameter_schema,

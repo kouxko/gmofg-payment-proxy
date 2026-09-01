@@ -4,10 +4,6 @@ use intercept_proxy_domain::{
     UnifiedAction,
 };
 
-fn http_actions(actions: Vec<DomainRuleAction>) -> Vec<UnifiedAction> {
-    actions.into_iter().map(UnifiedAction::from).collect()
-}
-
 #[derive(Debug, Default)]
 struct FailFirstUnifiedReplacementRuntime {
     inner: InMemoryListenerRuntime,
@@ -94,11 +90,13 @@ async fn unified_copy_persists_an_independent_rule_with_monotonic_order() {
                 priority: 10,
                 listener_id: workspace.listeners[0].id,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: "source".into(),
-                    conditions: vec![Condition::NthHit { count: 1 }],
-                    actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
+                    condition: Condition::Http {
+                        field: MatchField::Method,
+                        operator: MatchOperator::Equals("GET".into()),
+                    },
+                    action: UnifiedAction::from(DomainRuleAction::Delay { milliseconds: 10 }),
                 }),
             },
         })
@@ -205,27 +203,6 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
     );
 }
 
-#[test]
-fn nth_hit_factory_requires_an_explicit_positive_count() {
-    let application = application_with_fake_ports(Arc::new(FakePorts::default()));
-
-    assert!(
-        application
-            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
-                count: 0,
-            })
-            .is_err()
-    );
-    assert_eq!(
-        application
-            .rule_definition_nth_hit_condition_draft(crate::RuleNthHitConditionDraftInput {
-                count: 3,
-            })
-            .unwrap(),
-        Condition::NthHit { count: 3 }
-    );
-}
-
 #[tokio::test]
 async fn plain_http_editor_exposes_schema_free_body_document_capability() {
     let application = application_with_fake_ports(Arc::new(FakePorts::default()));
@@ -282,11 +259,13 @@ async fn unified_runtime_failure_does_not_persist_or_advance_revision() {
                 priority: 10,
                 listener_id: before.listeners[0].id,
                 stage: RuleStage::ProxyToUpstream,
-                one_shot: false,
                 content: RuleContent::Http(HttpRuleContent {
                     description: String::new(),
-                    conditions: vec![Condition::NthHit { count: 1 }],
-                    actions: http_actions(vec![DomainRuleAction::Delay { milliseconds: 10 }]),
+                    condition: Condition::Http {
+                        field: MatchField::Method,
+                        operator: MatchOperator::Equals("GET".into()),
+                    },
+                    action: UnifiedAction::from(DomainRuleAction::Delay { milliseconds: 10 }),
                 }),
             },
         })
@@ -305,30 +284,27 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
     let invalid_shapes = [
         (
             RuleStage::ProxyToUpstream,
-            vec![Condition::NthHit { count: 0 }],
-            vec![DomainRuleAction::Delay { milliseconds: 10 }],
-        ),
-        (
-            RuleStage::ProxyToUpstream,
-            vec![Condition::Http {
+            Condition::Http {
                 field: MatchField::Method,
                 operator: MatchOperator::Contains("OS".into()),
-            }],
-            vec![DomainRuleAction::Delay { milliseconds: 10 }],
+            },
+            DomainRuleAction::Delay { milliseconds: 10 },
         ),
         (
             RuleStage::ProxyToApp,
-            Vec::new(),
-            vec![DomainRuleAction::Terminal(TerminalAction::MockResponse {
+            Condition::Http {
+                field: MatchField::Method,
+                operator: MatchOperator::Equals("GET".into()),
+            },
+            DomainRuleAction::Terminal(TerminalAction::MockResponse {
                 status: 200,
                 headers: Vec::new(),
                 body_bytes: Vec::new(),
-            })],
+            }),
         ),
-        (RuleStage::ProxyToUpstream, Vec::new(), Vec::new()),
     ];
 
-    for (stage, conditions, actions) in invalid_shapes {
+    for (stage, condition, action) in invalid_shapes {
         let workspaces = Arc::new(InMemoryWorkspaceStore::default());
         let application = application_with_workspace_ports(
             Arc::new(FakePorts::default()),
@@ -346,11 +322,10 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
                     priority: 10,
                     listener_id: before.listeners[0].id,
                     stage,
-                    one_shot: false,
                     content: RuleContent::Http(HttpRuleContent {
                         description: String::new(),
-                        conditions,
-                        actions: http_actions(actions),
+                        condition,
+                        action: UnifiedAction::from(action),
                     }),
                 },
             })

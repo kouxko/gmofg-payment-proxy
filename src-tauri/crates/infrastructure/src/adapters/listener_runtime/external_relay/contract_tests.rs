@@ -16,20 +16,19 @@ fn socket_rule(
             priority: 10,
             listener_id,
             stage: RuleStage::ProxyToUpstream,
-            one_shot: false,
             content: RuleContent::Socket(SocketRuleContent {
                 package,
-                conditions: vec![Condition::Document {
+                condition: Condition::Document {
                     path: JsonPointer::property("request"),
                     predicate: DocumentPredicate::String(StringPredicate {
                         operator: StringOperator::Equal,
                         value: "original".to_owned(),
                     }),
-                }],
-                actions: vec![UnifiedAction::Document(DocumentMutation::Set {
+                },
+                action: UnifiedAction::Document(DocumentMutation::Set {
                     path: JsonPointer::property("request"),
                     value: DocumentValue::String("updated".to_owned()),
-                })],
+                }),
             }),
         },
         1,

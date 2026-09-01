@@ -1,0 +1,201 @@
+{
+  "schema_version": 1,
+  "target": {
+    "mode": "existing",
+    "workspace_id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df",
+    "expected_revision": 27
+  },
+  "workspace": {
+    "listeners": [
+      {
+        "alias": "phase21-http",
+        "name": "Phase21 HTTP rule matrix",
+        "enabled": true,
+        "bind_address": "127.0.0.1",
+        "port": 8080,
+        "connect_timeout_ms": 5000,
+        "read_timeout_ms": 10000,
+        "write_timeout_ms": 10000,
+        "data_plane": {
+          "kind": "http",
+          "settings": {
+            "authentication": {
+              "mode": "none"
+            },
+            "mitm": {
+              "enabled": false,
+              "authority_allowlist": [],
+              "root_ca_selector": null,
+              "maximum_cached_leaf_certificates": 256
+            },
+            "downstream_tls": {
+              "enabled": false,
+              "server_identity_alias": null,
+              "dynamic_sni_allowlist": [],
+              "client_authentication": {
+                "mode": "disabled"
+              }
+            },
+            "request_body_codec": "auto",
+            "response_body_codec": "auto",
+            "body_processing": {
+              "mode": "plain"
+            },
+            "fixed_server": {
+              "upstream_url": "http://127.0.0.1:18083",
+              "upstream_tls": {
+                "verify_hostname": true,
+                "server_trust_alias": null,
+                "client_identity_alias": null
+              }
+            }
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "name": "Method POST",
+        "enabled": true,
+        "priority": 10,
+        "listener_alias": "phase21-http",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Method POST",
+            "conditions": [
+              {
+                "source": "http",
+                "field": "Method",
+                "operator": {
+                  "Equals": "POST"
+                }
+              }
+            ],
+            "actions": [
+              {
+                "source": "http",
+                "value": {
+                  "SetHeader": {
+                    "name": "X-Method-Hit",
+                    "value": "yes"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "Header X-Probe alpha",
+        "enabled": true,
+        "priority": 11,
+        "listener_alias": "phase21-http",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Header X-Probe alpha",
+            "conditions": [
+              {
+                "source": "http",
+                "field": {
+                  "Header": "/x-probe"
+                },
+                "operator": {
+                  "Equals": "alpha"
+                }
+              }
+            ],
+            "actions": [
+              {
+                "source": "http",
+                "value": {
+                  "SetHeader": {
+                    "name": "X-Header-Hit",
+                    "value": "yes"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "Path and query wildcard",
+        "enabled": true,
+        "priority": 12,
+        "listener_alias": "phase21-http",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Path and query wildcard",
+            "conditions": [
+              {
+                "source": "http",
+                "field": "RequestTarget",
+                "operator": {
+                  "Wildcard": "/orders/*?mode=test"
+                }
+              }
+            ],
+            "actions": [
+              {
+                "source": "http",
+                "value": {
+                  "SetHeader": {
+                    "name": "X-Path-Hit",
+                    "value": "yes"
+                  }
+                }
+              }
+            ]
+          }
+        }
+      },
+      {
+        "name": "Body age 18",
+        "enabled": true,
+        "priority": 13,
+        "listener_alias": "phase21-http",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Body age 18",
+            "conditions": [
+              {
+                "source": "document",
+                "path": "/customer/age",
+                "predicate": {
+                  "type": "number",
+                  "value": {
+                    "operator": "equal",
+                    "value": 18
+                  }
+                }
+              }
+            ],
+            "actions": [
+              {
+                "source": "document",
+                "value": {
+                  "type": "set",
+                  "path": "/customer/name",
+                  "value": "matched"
+                }
+              }
+            ]
+          }
+        }
+      }
+    ],
+    "android_network_profiles": []
+  },
+  "materials": {
+    "certificates": [],
+    "secrets": []
+  }
+}

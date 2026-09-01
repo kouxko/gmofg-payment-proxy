@@ -7,8 +7,9 @@ const sources = new Map([
   ["rules-workspace", "src/features/rules/rules-workspace-shell.tsx"],
   ["rule-list", "src/features/rules/rule-definition-list.tsx"],
   ["rule-editor", "src/features/rules/rule-definition-editor.tsx"],
+  ["rule-creation", "src/features/rules/rule-creation-editor.tsx"],
   ["rule-model", "src/features/rules/rule-definition-model.ts"],
-  ["list-editors", "src/features/rules/rule-list-editors.tsx"],
+  ["single-pair-editor", "src/features/rules/rule-single-pair-editor.tsx"],
   ["capture-detail", "src/features/capture/exchange-observation-detail.tsx"],
   ["package-detail", "src/features/protocol-packages/protocol-package-detail.tsx"],
   ["application-rule", "src-tauri/crates/application/src/models/unified_rule.rs"],
@@ -18,11 +19,13 @@ const sources = new Map([
   ["application-portability", "src-tauri/crates/application/src/facade/protocol_package_portability.rs"],
   ["application-facade", "src-tauri/crates/application/src/facade.rs"],
   ["domain-workspace", "src-tauri/crates/domain/src/workspace.rs"],
+  ["domain-rule", "src-tauri/crates/domain/src/unified_rule.rs"],
   ["domain-matching", "src-tauri/crates/domain/src/rule/matching.rs"],
   ["http-metadata", "src-tauri/crates/proxy/src/http/contracts.rs"],
   ["exchange-observation", "src-tauri/crates/exchange/src/observation.rs"],
   ["joint-runtime", "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs"],
   ["unified-execution", "src-tauri/crates/domain/src/unified_rule_execution.rs"],
+  ["unified-program", "src-tauri/crates/domain/src/unified_rule_execution/program.rs"],
   ["unified-mutation", "src-tauri/crates/domain/src/unified_rule_execution/mutation.rs"],
   ["runtime-contract", "src-tauri/crates/proxy/src/socket_relay/processing.rs"],
   ["runtime-actor", "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs"],
@@ -39,13 +42,16 @@ const sources = new Map([
 const requirements = [
   ["rules-view", "<RulesWorkspaceShell>", "inline split rules workspace"],
   ["rules-view", "<RuleDefinitionEditor", "inline rule editor"],
+  ["rules-view", "<RuleCreationEditor", "inline rule creation editor"],
   ["rules-workspace", "grid-cols-[minmax(600px,1fr)_560px]", "fixed inline editor column"],
   ["rule-list", "上行与下行规则统一显示", "single combined direction list"],
   ["rule-list", "ruleDirectionLabel(rule.stage)", "per-card direction badge"],
-  ["rule-editor", "<FlatConditionList", "flat condition editor"],
-  ["rule-editor", "<OrderedActionList", "ordered unified action editor"],
-  ["list-editors", "所有条件固定为 AND", "flat condition semantics"],
-  ["list-editors", "下移动作", "action reorder control"],
+  ["rule-editor", "<RuleSinglePairEditor", "single condition/action pair editor"],
+  ["single-pair-editor", "async function materialize()", "save-time factory materialization owner"],
+  ["single-pair-editor", "condition, action", "single condition/action materialization"],
+  ["single-pair-editor", "value: { description: creation.description, condition, action }", "single creation pair owner"],
+  ["single-pair-editor", "保存规则", "single final save action"],
+  ["rule-creation", "const ready = context != null && structure != null", "continuous creation readiness owner"],
   ["capture-detail", "call.stable_code", "stable failure code"],
   ["capture-detail", "call.method", "failed package method"],
   ["capture-detail", "Original Decode Document", "received Document evidence"],
@@ -53,19 +59,18 @@ const requirements = [
   ["capture-detail", "Final working Document", "typed final working Document evidence"],
   ["capture-detail", "Encode result", "typed Encode evidence"],
   ["capture-detail", "Encode / Sent result", "Encode and sent result evidence"],
-  ["rule-editor", "手动 Document 条件路径", "schema-free manual path input"],
-  ["rule-editor", "commands.ruleDefinitionDocumentConditionDraft", "Rust-owned local condition factory"],
-  ["rule-editor", "commands.ruleDefinitionDocumentActionDraft", "Rust-owned local action factory"],
-  ["rule-editor", "commands.ruleDefinitionHttpConditionDraft", "Rust-owned HTTP condition factory"],
-  ["rule-editor", "commands.ruleDefinitionNthHitConditionDraft", "Rust-owned Nth condition factory"],
-  ["rule-editor", "stage.http.match_fields", "Rust-owned HTTP field capabilities"],
+  ["single-pair-editor", "const manualAriaLabel = `手动 Document ${props.pathKind}路径`;", "schema-free manual path input"],
+  ["single-pair-editor", "commands.ruleDefinitionDocumentConditionDraft", "Rust-owned local condition factory"],
+  ["single-pair-editor", "commands.ruleDefinitionDocumentActionDraft", "Rust-owned local action factory"],
+  ["single-pair-editor", "commands.ruleDefinitionHttpConditionDraft", "Rust-owned HTTP condition factory"],
+  ["single-pair-editor", "httpStage?.match_fields", "Rust-owned HTTP field capabilities"],
   ["application-editor", "rule_definition_http_condition_draft", "Rust-owned HTTP condition contract"],
   ["application-editor", "document_schema_field_capabilities", "Rust-owned Document schema capability projection"],
   ["application-capabilities", "match_fields", "Rust-owned HTTP match field catalog"],
   ["application-capabilities", "RuleMatchSelectorKind::HeaderNamePointer", "Header selector capability"],
   ["application-portability", "workspace.rule_definitions", "authoritative portable rule collection"],
-  ["application-portability", "validate_document_conditions_schema", "typed portable condition schema validation"],
-  ["application-portability", "validate_unified_actions_schema", "typed portable action schema validation"],
+  ["application-portability", "validate_document_condition_schema(binding.condition", "typed portable condition schema validation"],
+  ["application-portability", "validate_unified_action_schema(binding.action", "typed portable action schema validation"],
   ["runtime-rule-bundle", "enum RuntimeRuleBundleBaseline", "typed stopped/running baseline owner"],
   ["runtime-rule-bundle", "Running(uuid::Uuid)", "run-token baseline identity"],
   ["listener-runtime-port", "if current != baseline", "strict runtime baseline compare before persistence"],
@@ -90,7 +95,10 @@ const requirements = [
   ["rule-model", "descriptor.operand_value_type", "Document action operand compatibility"],
   ["generated", "export type RuleDocumentActionCapability", "generated Document action capability"],
   ["generated", "document_fields: RuleDocumentSchemaFieldCapability[]", "generated schema field capability catalog"],
-  ["generated", "conditions: Condition[]", "generated flat condition list"],
+  ["generated", "condition: Condition", "generated singular condition"],
+  ["generated", "action: UnifiedAction", "generated singular action"],
+  ["domain-rule", "pub condition: Condition", "singular condition domain contract"],
+  ["domain-rule", "pub action: UnifiedAction", "singular action domain contract"],
   ["generated", 'export type RuleStage = "proxy_to_upstream" | "proxy_to_app";', "generated two-stage rule contract"],
   ["exchange-observation", "RuleProcessingAccumulator", "bounded process evidence accumulator"],
   ["exchange-observation", "MAX_OBSERVATION_TEXT_BYTES.saturating_sub", "shared observation serialization budget"],
@@ -98,25 +106,21 @@ const requirements = [
   ["exchange-observation", "event = \"processed\"", "Exchange processed event"],
   ["exchange-observation", "observe_context::<P, D>(\"encoded\"", "Exchange encoded event"],
   ["joint-runtime", "RuleProcessingChange", "runtime per-rule changes"],
-  ["joint-runtime", "nth_attempt", "actor-owned Nth attempt consumer"],
   ["unified-execution", "schema.resolve_match_path(path)", "wildcard schema path validation"],
   ["unified-mutation", "DocumentMutation::Clear { path, value_type }", "typed Clear schema validation"],
   ["unified-mutation", "Some((items.as_ref(), value.value_type()))", "array item operand schema validation"],
-  ["rule-editor", "selectedSchemaField?.predicates", "schema-owned predicate capability"],
-  ["rule-editor", "selectedSchemaField?.actions", "schema-owned action capability"],
+  ["single-pair-editor", "selectedSchema?.predicates", "schema-owned predicate capability"],
+  ["single-pair-editor", "selectedDocumentActions", "schema-owned action capability"],
   ["rule-model", "return unreachableContract(field);", "exhaustive HTTP field mapping"],
   ["rule-model", "return unreachableContract(operator);", "exhaustive HTTP operator mapping"],
   ["rule-model", 'if ("UpstreamConnectTimeout" in action)', "exhaustive terminal action mapping"],
   ["runtime-contract", "JointRuleConditionEvaluation", "shared typed joint condition evaluation"],
   ["runtime-contract", "UnifiedOwned(JointConditionEvaluation)", "explicit unified-owned gate result"],
   ["runtime-contract", "NotOwned", "explicit ordinary-rule gate result"],
-  ["runtime-contract", "nth_attempt: u64", "shared actor-owned Nth attempt contract"],
   ["runtime-actor", "let checkpoint = current.clone()", "actor lifecycle checkpoint"],
-  ["runtime-actor", "current.counters.retain", "actor hot replace counter ownership"],
   ["runtime-actor", "commit_runtime_deltas", "actor lifecycle commit owner"],
   ["runtime-evaluation", "rules: &[RuleDefinition]", "active RuleDefinition evaluation owner"],
-  ["runtime-evaluation", "joint.gate(rule.rule_id().as_uuid(), nth_attempt)?", "Socket typed Nth attempt forwarding"],
-  ["runtime-evaluation", "current.counters.insert(key, nth_attempt)", "actor-owned Nth counter"],
+  ["runtime-evaluation", "joint.gate(rule.rule_id().as_uuid())?", "Socket typed ownership gate"],
   ["runtime-evaluation", "rule.lifecycle_delta_for_successful_match", "typed lifecycle delta"],
   ["joint-runtime", "JointRuleConditionEvaluation::NotOwned", "joint ownership miss result"],
   ["http-rule-runtime", "UnifiedRuleProgram", "HTTP unified runtime program"],
@@ -141,11 +145,14 @@ for (const [owner, token, label] of requirements) {
 if (/\bModal\b|<Modal\./u.test(sources.get("rules-view"))) {
   failures.push("rules-view: modal rule editor remains");
 }
+if (sources.get("rule-creation").includes("进入规则编辑器")) {
+  failures.push("rule-creation: retired intermediate creation step remains");
+}
 if (sources.get("rule-list").includes("rule-stage-heading")) {
   failures.push("rule-list: removed stage grouping remains");
 }
 for (const removedTree of ["ConditionTreeEditor", "DocumentMetadataTree"]) {
-  if (sources.get("rule-editor").includes(removedTree)) {
+  if (sources.get("single-pair-editor").includes(removedTree)) {
     failures.push(`rule-editor: removed recursive editor remains: ${removedTree}`);
   }
 }
@@ -184,6 +191,11 @@ if (/\bConditionTree\b/u.test(sources.get("generated"))) failures.push("generate
 if (sources.get("generated").includes("RejectTlsHandshake")) failures.push("generated: removed TLS rule action remains");
 if (/\b(?:Breakpoint|BreakpointDecision|HttpDocumentRuleContent)\b|\bPause\b/u.test(sources.get("generated"))) {
   failures.push("generated: removed breakpoint/Pause or duplicate HTTP Document binding remains");
+}
+for (const [owner, source] of sources) {
+  if (/\b(?:NthHit|NthCounter)\b|\bnth_hit\b|ruleDefinitionNthHit/u.test(source)) {
+    failures.push(`${owner}: removed Nth capability remains`);
+  }
 }
 if (sources.get("rule-model").includes('mutation.type === "set" ? "set_field"')) {
   failures.push("rule-model: legacy set/clear action mapping remains");
