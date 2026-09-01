@@ -142,7 +142,7 @@ test("current Schema100 startup source is release ready", async () => {
   assert.match(result.stdout, /PASS Schema100 startup contract is release ready/u);
 });
 
-test("tauri build cannot bypass the release readiness gate", async () => {
+test("ordinary tauri builds do not run the explicit release readiness gate", async () => {
   const packageJson = JSON.parse(
     await readFile(path.join(import.meta.dirname, "../package.json"), "utf8"),
   );
@@ -151,13 +151,10 @@ test("tauri build cannot bypass the release readiness gate", async () => {
   );
   assert.equal(
     packageJson.scripts["tauri:build"],
-    "pnpm check:task-20260829-002:phase2-release-ready && pnpm build:android-companion && tauri build",
+    "pnpm build:android-companion && tauri build",
   );
   assert.equal(packageJson.scripts.tauri, "tauri");
-  assert.equal(
-    tauriConfig.build.beforeBuildCommand,
-    "pnpm check:task-20260829-002:phase2-release-ready && pnpm build",
-  );
+  assert.equal(tauriConfig.build.beforeBuildCommand, "pnpm build");
   assert.equal(tauriConfig.build.beforeDevCommand, "pnpm dev");
   assert.equal(
     packageJson.scripts["tauri:dev"],

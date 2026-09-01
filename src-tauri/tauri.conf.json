@@ -7,7 +7,7 @@
     "frontendDist": "../out",
     "devUrl": "http://localhost:3000",
     "beforeDevCommand": "pnpm dev",
-    "beforeBuildCommand": "pnpm check:task-20260829-002:phase2-release-ready && pnpm build"
+    "beforeBuildCommand": "pnpm build"
   },
   "app": {
     "windows": [

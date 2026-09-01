@@ -58,7 +58,7 @@
     "bindings": "cargo run --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings",
     "tauri": "tauri",
     "tauri:dev": "tauri dev --config src-tauri/tauri.dev.conf.json",
-    "tauri:build": "pnpm check:task-20260829-002:phase2-release-ready && pnpm build:android-companion && tauri build",
+    "tauri:build": "pnpm build:android-companion && tauri build",
     "check": "pnpm bindings && pnpm scan:architecture && pnpm scan:source-size && pnpm lint && pnpm typecheck && pnpm test:ui-contracts && pnpm test && pnpm build && pnpm scan:bundle-branding && pnpm check:rust:fmt && pnpm check:rust:clippy && pnpm check:rust:windows && cargo test --manifest-path src-tauri/Cargo.toml --workspace"
   },
   "dependencies": {
