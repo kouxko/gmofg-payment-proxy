@@ -1,0 +1,102 @@
+{
+  "api": 1,
+  "kind": "socket",
+  "package": {
+    "id": "iso8583-deno-ascii",
+    "version": "1.0.0",
+    "name": "ISO 8583 Deno ASCII",
+    "description": "Single-file Component build of the bounded ISO 8583:1987 ASCII example"
+  },
+  "document": {
+    "upstream": {
+      "schema": {
+        "type": "object",
+        "title": "ISO 8583:1987 ASCII Upstream",
+        "properties": {
+          "message_type": { "type": "string", "title": "MTI" },
+          "primary_account_number": { "type": "string", "title": "DE2 Primary Account Number" },
+          "processing_code": { "type": "string", "title": "DE3 Processing Code" },
+          "amount": { "type": "number", "title": "DE4 Transaction Amount" },
+          "transmission_time": { "type": "string", "title": "DE7 Transmission Date And Time" },
+          "stan": { "type": "string", "title": "DE11 System Trace Audit Number" },
+          "local_transaction_time": { "type": "string", "title": "DE12 Local Transaction Time" },
+          "local_transaction_date": { "type": "string", "title": "DE13 Local Transaction Date" },
+          "expiration_date": { "type": "string", "title": "DE14 Expiration Date" },
+          "merchant_type": { "type": "string", "title": "DE18 Merchant Type" },
+          "pos_entry_mode": { "type": "string", "title": "DE22 POS Entry Mode" },
+          "card_sequence_number": { "type": "string", "title": "DE23 Card Sequence Number" },
+          "pos_condition_code": { "type": "string", "title": "DE25 POS Condition Code" },
+          "acquiring_institution_id": { "type": "string", "title": "DE32 Acquiring Institution ID" },
+          "track_2_data": { "type": "string", "title": "DE35 Track 2 Data" },
+          "retrieval_reference_number": { "type": "string", "title": "DE37 Retrieval Reference Number" },
+          "authorization_id_response": { "type": "string", "title": "DE38 Authorization ID Response" },
+          "response_code": { "type": "string", "title": "DE39 Response Code" },
+          "terminal_id": { "type": "string", "title": "DE41 Terminal ID" },
+          "card_acceptor_id": { "type": "string", "title": "DE42 Card Acceptor ID" },
+          "card_acceptor_name_location": { "type": "string", "title": "DE43 Card Acceptor Name And Location" },
+          "currency": { "type": "string", "title": "DE49 Transaction Currency" },
+          "pin_data": { "type": "string", "title": "DE52 PIN Data Base64" },
+          "security_control_information": { "type": "string", "title": "DE53 Security Control Information" },
+          "additional_amounts": { "type": "string", "title": "DE54 Additional Amounts" },
+          "icc_data": { "type": "string", "title": "DE55 ICC Data Base64" },
+          "reserved_private_60": { "type": "string", "title": "DE60 Reserved Private" },
+          "reserved_private_61": { "type": "string", "title": "DE61 Reserved Private" },
+          "reserved_private_62": { "type": "string", "title": "DE62 Reserved Private" },
+          "reserved_private_63": { "type": "string", "title": "DE63 Reserved Private" },
+          "message_authentication_code": { "type": "string", "title": "DE64 Message Authentication Code Base64" },
+          "network_management_code": { "type": "string", "title": "DE70 Network Management Code" },
+          "original_data_elements": { "type": "string", "title": "DE90 Original Data Elements" },
+          "receiving_institution_id": { "type": "string", "title": "DE100 Receiving Institution ID" },
+          "account_id_1": { "type": "string", "title": "DE102 Account ID 1" },
+          "account_id_2": { "type": "string", "title": "DE103 Account ID 2" },
+          "message_authentication_code_2": { "type": "string", "title": "DE128 Message Authentication Code Base64" }
+        }
+      }
+    },
+    "downstream": {
+      "schema": {
+        "type": "object",
+        "title": "ISO 8583:1987 ASCII Downstream",
+        "properties": {
+          "message_type": { "type": "string", "title": "MTI" },
+          "primary_account_number": { "type": "string", "title": "DE2 Primary Account Number" },
+          "processing_code": { "type": "string", "title": "DE3 Processing Code" },
+          "amount": { "type": "number", "title": "DE4 Transaction Amount" },
+          "transmission_time": { "type": "string", "title": "DE7 Transmission Date And Time" },
+          "stan": { "type": "string", "title": "DE11 System Trace Audit Number" },
+          "local_transaction_time": { "type": "string", "title": "DE12 Local Transaction Time" },
+          "local_transaction_date": { "type": "string", "title": "DE13 Local Transaction Date" },
+          "expiration_date": { "type": "string", "title": "DE14 Expiration Date" },
+          "merchant_type": { "type": "string", "title": "DE18 Merchant Type" },
+          "pos_entry_mode": { "type": "string", "title": "DE22 POS Entry Mode" },
+          "card_sequence_number": { "type": "string", "title": "DE23 Card Sequence Number" },
+          "pos_condition_code": { "type": "string", "title": "DE25 POS Condition Code" },
+          "acquiring_institution_id": { "type": "string", "title": "DE32 Acquiring Institution ID" },
+          "track_2_data": { "type": "string", "title": "DE35 Track 2 Data" },
+          "retrieval_reference_number": { "type": "string", "title": "DE37 Retrieval Reference Number" },
+          "authorization_id_response": { "type": "string", "title": "DE38 Authorization ID Response" },
+          "response_code": { "type": "string", "title": "DE39 Response Code" },
+          "terminal_id": { "type": "string", "title": "DE41 Terminal ID" },
+          "card_acceptor_id": { "type": "string", "title": "DE42 Card Acceptor ID" },
+          "card_acceptor_name_location": { "type": "string", "title": "DE43 Card Acceptor Name And Location" },
+          "currency": { "type": "string", "title": "DE49 Transaction Currency" },
+          "pin_data": { "type": "string", "title": "DE52 PIN Data Base64" },
+          "security_control_information": { "type": "string", "title": "DE53 Security Control Information" },
+          "additional_amounts": { "type": "string", "title": "DE54 Additional Amounts" },
+          "icc_data": { "type": "string", "title": "DE55 ICC Data Base64" },
+          "reserved_private_60": { "type": "string", "title": "DE60 Reserved Private" },
+          "reserved_private_61": { "type": "string", "title": "DE61 Reserved Private" },
+          "reserved_private_62": { "type": "string", "title": "DE62 Reserved Private" },
+          "reserved_private_63": { "type": "string", "title": "DE63 Reserved Private" },
+          "message_authentication_code": { "type": "string", "title": "DE64 Message Authentication Code Base64" },
+          "network_management_code": { "type": "string", "title": "DE70 Network Management Code" },
+          "original_data_elements": { "type": "string", "title": "DE90 Original Data Elements" },
+          "receiving_institution_id": { "type": "string", "title": "DE100 Receiving Institution ID" },
+          "account_id_1": { "type": "string", "title": "DE102 Account ID 1" },
+          "account_id_2": { "type": "string", "title": "DE103 Account ID 2" },
+          "message_authentication_code_2": { "type": "string", "title": "DE128 Message Authentication Code Base64" }
+        }
+      }
+    }
+  }
+}

@@ -54,14 +54,16 @@ impl Application {
                 continue;
             }
             let description = match version.source {
-                ProtocolPackageSourceViewModel::External { online: true } => {
+                ProtocolPackageSourceViewModel::Managed { online: true }
+                | ProtocolPackageSourceViewModel::External { online: true } => {
                     let Ok(description) = self.external_packages.describe(&version.package).await
                     else {
                         continue;
                     };
                     description
                 }
-                ProtocolPackageSourceViewModel::External { online: false } => continue,
+                ProtocolPackageSourceViewModel::Managed { online: false }
+                | ProtocolPackageSourceViewModel::External { online: false } => continue,
             };
             let description_valid = ensure_external_description(&version.package, &description);
             if description_valid.is_err() {

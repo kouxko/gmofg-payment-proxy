@@ -142,18 +142,18 @@ LocalServer 不配置上游 host、上游 CA 或上游客户端身份。
 
 “协议包”页面统一显示 HTTP Body 与 Socket 本地包；远端包在线状态也在此处体现。
 
-### 5.1 本地 JavaScript ZIP 包
+### 5.1 本地单文件协议包
 
-导入 ZIP 前应确认：
+导入 `.wasm` 前应确认：
 
-- `manifest.json`、`protocol.js`、`display.js` 和上下行递归 Schema 齐全；
-- Socket 包上下行都声明 Frame；HTTP 包两边都不声明 Frame；
+- 文件是 WebAssembly Component，不是 Core Wasm、ZIP 或脚本源码；
+- 唯一顶层 `intercept-proxy:manifest`、目标 WIT world 和上下行递归 Schema 齐全；
 - 包 ID + SemVer 是不可变身份，新内容使用新版本；
-- package API 1 的固定文件与模块路径符合静态合同。
+- HTTP/Socket 的 Frame、Decode、Encode、Display exports 符合 package API 1。
 
-prepare 只校验 ZIP、strict Manifest、递归 Schema 和模块路径。commit 后记录立即为 enabled，独立 Boa
-Sidecar 再加载/求值模块，并在注册前检查 fixed exports 是否存在且 callable。该阶段失败会保留
-installed + enabled 记录并显示 failed/offline，便于诊断；不会自动回滚、重试或切换执行路径。
+prepare 静态校验 Component、Manifest 和 Schema。commit 会先在主进程内完成 Wasmtime 编译与实例化，
+再原子持久化并发布 enabled runtime；任一步失败都不留下记录或缓存，也不会重试、切换远端调试包或
+透明转发。停用会回收实例，启用和重启从已保存的同一文件重新实例化。
 
 ### 5.2 远端协议包
 

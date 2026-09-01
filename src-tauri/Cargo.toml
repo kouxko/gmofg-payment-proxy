@@ -21,7 +21,6 @@ rust-version = "1.97"
 [workspace.dependencies]
 async-trait = "0.1.89"
 base64 = "0.22.1"
-boa_engine = "=0.22.0"
 bytes = "1.11"
 chrono = { version = "0.4.44", features = ["serde"] }
 encoding_rs = "0.8.35"
@@ -63,6 +62,11 @@ tower-service = "0.3.3"
 tracing = "0.1.44"
 tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
 uuid = { version = "1.22", features = ["serde", "v4"] }
+wasm-encoder = "=0.239.0"
+wasmparser = "=0.239.0"
+wasmtime = { version = "=48.0.1", features = ["async", "component-model"] }
+wasmtime-wasi = "=48.0.1"
+wasmtime-wasi-http = "=48.0.1"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
 x509-parser = { version = "=0.18.1", features = ["verify"] }
 zeroize = { version = "1.8.2", features = ["zeroize_derive"] }
@@ -101,8 +105,9 @@ path = "src/bin/export-bindings.rs"
 required-features = ["export-bindings"]
 
 [build-dependencies]
+serde_json.workspace = true
 tauri-build = { version = "2.6.3", features = [] }
-zip.workspace = true
+wasm-encoder.workspace = true
 
 [dependencies]
 async-trait.workspace = true

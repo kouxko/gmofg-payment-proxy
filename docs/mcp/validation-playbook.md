@@ -47,10 +47,10 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
 - 无修改时比较原始 wire bytes；JSON 或 Document 重新序列化即使语义相同也可能改变 MAC/签名字节。
 - 协议包必须使用 manifest 中的精确名称和版本。确认方向、schema、stage 以及外部包 generation/RPC ID。
 - Display 失败只影响观测；Frame/Decode/Rules/Encode/hook 失败必须终止当前 Exchange，不能透明转发。
-- 本地协议包必须是包含 `manifest.json`、`protocol.js`、`display.js` 的严格 ZIP，并由 Boa Sidecar 主动
-  连接 `/packages`；第三方进程也先发送无 `id` 的 `package.register` notification。
-- HTTP Hook 使用 string；Socket JSON-RPC wire 使用 canonical padded Base64，本地 JavaScript Hook 中才转换为
-  `Uint8Array`。不要把两种编码混用。
+- 本地协议包必须是带顶层 manifest custom section 的单文件 Component，由 Proxy 主进程直接校验、加载
+  和调用；远端源码调试进程先向 `/packages` 发送无 `id` 的 `package.register` notification。
+- 本地 Component Hook 直接使用字符串或字节；只有远端 JSON-RPC Socket wire 使用 canonical padded
+  Base64。不要把传输编码泄漏进本地协议实现。
 - 统一规则只在 `Proxy -> Server` 和 `Proxy -> App` 执行。Encode 失败必须回滚 Document、Nth、hit 与
   one-shot 生命周期，不能把处理过程或命中统计作为已提交结果。
 - `processed.changes_truncated=true` 表示 typed operation 摘要被有界截断；继续比较 `final_document`、

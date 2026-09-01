@@ -1,8 +1,8 @@
 //! v4 可移植文档中的协议包文件载荷。
 //!
 //! 这里只验证 JSON wire 自身可以安全、确定地交给恢复层：身份唯一、路径规范、Base64
-//! 规范且资源有界。Manifest、Schema、JavaScript 和完整的跨平台路径冲突检查仍由
-//! infrastructure 调用协议脚本恢复/编译器完成，Application 不复制第二套解析器。
+//! 规范且资源有界。Component、Manifest、Schema 和完整的跨平台路径冲突检查仍由
+//! infrastructure 的协议包运行时完成，Application 不复制第二套解析器。
 
 use std::{cmp::Ordering, collections::HashSet};
 
@@ -14,11 +14,7 @@ use specta::Type;
 use crate::{AppError, AppResult};
 
 pub const MAX_PORTABLE_PROTOCOL_PACKAGES: usize = 256;
-pub const MAX_PORTABLE_PACKAGE_FILES: usize = 512;
-pub const MAX_PORTABLE_PACKAGE_FILE_BYTES: usize = 8 * 1024 * 1024;
-pub const MAX_PORTABLE_PACKAGE_TOTAL_BYTES: usize = 32 * 1024 * 1024;
-pub const MAX_PORTABLE_PACKAGE_PATH_BYTES: usize = 256;
-pub const MAX_PORTABLE_PACKAGE_PATH_DEPTH: usize = 32;
+pub const PORTABLE_COMPONENT_PATH: &str = "component.wasm";
 
 /// 一个协议包文件。`contents_base64` 使用标准、有填充的 RFC 4648 Base64。
 #[derive(Clone, Debug, Eq, PartialEq, Deserialize, Serialize, Type)]
@@ -103,53 +99,14 @@ fn compare_package_identity(left: &ProtocolPackageRef, right: &ProtocolPackageRe
 }
 
 fn validate_files(files: &[PortableProtocolPackageFile]) -> AppResult<()> {
-    if files.is_empty() || files.len() > MAX_PORTABLE_PACKAGE_FILES {
-        return Err(invalid("协议包文件数量必须为 1 到 512。"));
+    if files.len() != 1 || files[0].path != PORTABLE_COMPONENT_PATH {
+        return Err(invalid("协议包必须且只能包含 component.wasm。"));
     }
-
-    let mut previous_path: Option<&str> = None;
-    let mut total_bytes = 0_usize;
-    for file in files {
-        validate_basic_path(&file.path)?;
-        if previous_path.is_some_and(|previous| previous >= file.path.as_str()) {
-            return Err(invalid("协议包文件必须按路径严格升序排列且不能重复。"));
-        }
-        previous_path = Some(&file.path);
-
-        let decoded = STANDARD
-            .decode(&file.contents_base64)
-            .map_err(|_| invalid("协议包文件内容不是有效的标准 Base64。"))?;
-        if STANDARD.encode(&decoded) != file.contents_base64 {
-            return Err(invalid("协议包文件内容必须使用规范的标准 Base64 编码。"));
-        }
-        if decoded.len() > MAX_PORTABLE_PACKAGE_FILE_BYTES {
-            return Err(invalid("协议包单文件超过 8 MiB 安全上限。"));
-        }
-        total_bytes = total_bytes
-            .checked_add(decoded.len())
-            .ok_or_else(|| invalid("协议包文件累计大小溢出。"))?;
-        if total_bytes > MAX_PORTABLE_PACKAGE_TOTAL_BYTES {
-            return Err(invalid("单个协议包文件累计超过 32 MiB 安全上限。"));
-        }
-    }
-    Ok(())
-}
-
-fn validate_basic_path(path: &str) -> AppResult<()> {
-    let valid_segments = path
-        .split('/')
-        .all(|segment| !segment.is_empty() && segment != "." && segment != "..");
-    let valid_characters = path
-        .chars()
-        .all(|character| !character.is_control() && character != '\\' && character != ':');
-    if path.is_empty()
-        || path.len() > MAX_PORTABLE_PACKAGE_PATH_BYTES
-        || path.starts_with('/')
-        || path.split('/').count() > MAX_PORTABLE_PACKAGE_PATH_DEPTH
-        || !valid_segments
-        || !valid_characters
-    {
-        return Err(invalid("协议包文件路径不是安全的相对路径。"));
+    let decoded = STANDARD
+        .decode(&files[0].contents_base64)
+        .map_err(|_| invalid("协议包文件内容不是有效的标准 Base64。"))?;
+    if STANDARD.encode(&decoded) != files[0].contents_base64 {
+        return Err(invalid("协议包文件内容必须使用规范的标准 Base64 编码。"));
     }
     Ok(())
 }
@@ -205,7 +162,7 @@ mod tests {
                 version: ProtocolPackageVersion::new("1.0.0").unwrap(),
             },
             files: vec![PortableProtocolPackageFile {
-                path: "manifest.json".into(),
+                path: PORTABLE_COMPONENT_PATH.into(),
                 contents_base64: STANDARD.encode(b"manifest"),
             }],
         }
@@ -278,7 +235,7 @@ mod tests {
     }
 
     #[test]
-    fn package_and_file_count_limits_accept_the_boundary_and_reject_one_more() {
+    fn package_count_limit_accepts_the_boundary_and_rejects_one_more() {
         let packages = (1..=MAX_PORTABLE_PROTOCOL_PACKAGES + 1)
             .map(|major| {
                 let mut value = package();
@@ -289,64 +246,24 @@ mod tests {
             .collect::<Vec<_>>();
         validate_portable_packages(&packages[..MAX_PORTABLE_PROTOCOL_PACKAGES]).unwrap();
         assert!(validate_portable_packages(&packages).is_err());
-
-        let mut value = package();
-        value.files = (0..=MAX_PORTABLE_PACKAGE_FILES)
-            .map(|index| PortableProtocolPackageFile {
-                path: format!("{index:04}.js"),
-                contents_base64: String::new(),
-            })
-            .collect();
-        validate_portable_packages(std::slice::from_ref(&PortableProtocolPackage {
-            files: value.files[..MAX_PORTABLE_PACKAGE_FILES].to_vec(),
-            ..value.clone()
-        }))
-        .unwrap();
-        assert!(validate_portable_packages(&[value]).is_err());
     }
 
     #[test]
-    fn file_and_package_byte_limits_are_exact() {
-        let mut at_file_limit = package();
-        at_file_limit.files[0].contents_base64 =
-            STANDARD.encode(vec![0_u8; MAX_PORTABLE_PACKAGE_FILE_BYTES]);
-        validate_portable_packages(std::slice::from_ref(&at_file_limit)).unwrap();
+    fn package_requires_one_component_and_has_no_component_byte_limit() {
+        let mut large = package();
+        large.files[0].contents_base64 = STANDARD.encode(vec![0_u8; 9 * 1024 * 1024]);
+        validate_portable_packages(std::slice::from_ref(&large)).unwrap();
 
-        let mut over_file_limit = package();
-        over_file_limit.files[0].contents_base64 =
-            STANDARD.encode(vec![0_u8; MAX_PORTABLE_PACKAGE_FILE_BYTES + 1]);
-        assert!(validate_portable_packages(&[over_file_limit]).is_err());
+        let mut wrong_path = package();
+        wrong_path.files[0].path = "protocol.js".into();
+        assert!(validate_portable_packages(&[wrong_path]).is_err());
 
-        let mut at_total_limit = package();
-        at_total_limit.files = (0..4)
-            .map(|index| PortableProtocolPackageFile {
-                path: format!("{index}.bin"),
-                contents_base64: STANDARD.encode(vec![0_u8; MAX_PORTABLE_PACKAGE_FILE_BYTES]),
-            })
-            .collect();
-        validate_portable_packages(std::slice::from_ref(&at_total_limit)).unwrap();
-
-        at_total_limit.files.push(PortableProtocolPackageFile {
-            path: "4.bin".into(),
-            contents_base64: STANDARD.encode([0_u8]),
+        let mut multiple = package();
+        multiple.files.push(PortableProtocolPackageFile {
+            path: "manifest.json".into(),
+            contents_base64: STANDARD.encode(b"manifest"),
         });
-        assert!(validate_portable_packages(&[at_total_limit]).is_err());
-    }
-
-    #[test]
-    fn path_length_and_depth_limits_are_exact() {
-        let mut value = package();
-        value.files[0].path = "a".repeat(MAX_PORTABLE_PACKAGE_PATH_BYTES);
-        validate_portable_packages(std::slice::from_ref(&value)).unwrap();
-        value.files[0].path.push('a');
-        assert!(validate_portable_packages(std::slice::from_ref(&value)).is_err());
-
-        value.files[0].path = std::iter::repeat_n("a", MAX_PORTABLE_PACKAGE_PATH_DEPTH)
-            .collect::<Vec<_>>()
-            .join("/");
-        validate_portable_packages(std::slice::from_ref(&value)).unwrap();
-        value.files[0].path.push_str("/a");
-        assert!(validate_portable_packages(&[value]).is_err());
+        assert!(validate_portable_packages(&[multiple]).is_err());
     }
 
     #[test]

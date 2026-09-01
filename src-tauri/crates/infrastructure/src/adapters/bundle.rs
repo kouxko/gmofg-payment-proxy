@@ -25,11 +25,11 @@ use super::{
     CertificateServiceAdapter, EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
     EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
     ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
-    FaultServiceAdapter, ListenerRuntimeAdapter, LocalPackageSupervisor,
-    ManagedListenerCertificateAdapter, NativeFileDialog, PackageTransportConfig,
-    ProtectedSecretAdapter, ProtocolPackageImportAdapter, ProtocolPackageUsageQueryAdapter,
-    RuleRepositoryAdapter, RuntimePipelineAdapter, RuntimePipelineProductHooks,
-    SettingsRepositoryAdapter, WorkspaceBodyCodecResolver, WorkspaceRepositoryAdapter,
+    FaultServiceAdapter, ListenerRuntimeAdapter, ManagedListenerCertificateAdapter,
+    NativeFileDialog, PackageTransportConfig, ProtectedSecretAdapter, ProtocolPackageImportAdapter,
+    ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
+    RuntimePipelineProductHooks, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
+    WorkspaceRepositoryAdapter,
 };
 
 #[derive(Debug)]
@@ -44,7 +44,7 @@ pub struct InfrastructureServiceBundle {
     protected_secrets: Arc<ProtectedSecretAdapter>,
     /// 应用级协议包文件、启用位和可重建编译缓存；生命周期约束由 T14 Application 用例接管。
     builtin_protocol_package: Arc<BuiltinProtocolPackageAdapter>,
-    /// 原生文件选择与有界 ZIP 读取；路径和 ZIP 字节不越过 Application 端口。
+    /// 原生文件选择与 Component 读取；路径和二进制字节不越过 Application 端口。
     protocol_package_import: Arc<ProtocolPackageImportAdapter>,
     /// 汇总全部 Workspace 的精确引用，并与 Listener 运行态合并。
     protocol_package_usage: Arc<ProtocolPackageUsageQueryAdapter>,
@@ -173,7 +173,7 @@ impl InfrastructureServiceBundle {
 
     pub async fn initialize_installation_state(&self) -> AppResult<()> {
         // 先完整解码现有配置，再执行内建包、证书或默认 Workspace 的任何写入。
-        // 不兼容的持久化记录必须 fail-closed，并保持数据库及 sidecar 原样等待用户处理。
+        // 不兼容的持久化记录必须 fail-closed，并保持数据库及本地 Component 原样等待用户处理。
         let workspaces = self.workspaces.list().await?;
         let stored = self.settings.get().await?.stored;
         self.builtin_protocol_package.ensure_seeded().await?;
@@ -236,24 +236,12 @@ impl InfrastructureServiceBundle {
             1024 * 1024,
             128 * 1024,
         );
-        let websocket_url = format!("ws://{}:{}/packages", ip, external.port);
-        let executable = std::env::current_exe()
-            .map_err(|error| AppError::new("EXTERNAL_PACKAGE_PROCESS_FAILED", error.to_string()))?
-            .with_file_name(if cfg!(windows) {
-                "intercept-proxy-package-sidecar.exe"
-            } else {
-                "intercept-proxy-package-sidecar"
-            });
-        let supervisor = Arc::new(LocalPackageSupervisor::new(
-            executable,
-            websocket_url,
-            self.external_packages.clone(),
-        ));
-        self.external_packages.set_local_supervisor(&supervisor);
-        self.protocol_package_import
-            .set_supervisor(supervisor.clone());
-        let enabled = self.external_packages.enabled_local_archives().await?;
-        let server = ExternalPackageServer::start(
+        for (package, component) in self.external_packages.enabled_local_archives().await? {
+            self.external_packages
+                .activate_local_component(&package, &component)
+                .await?;
+        }
+        Ok(ExternalPackageServer::start(
             ExternalPackageServerConfig {
                 bind_address: SocketAddr::new(ip, external.port),
                 connection,
@@ -262,10 +250,7 @@ impl InfrastructureServiceBundle {
             self.protocol_package_usage.clone(),
             self.listener_runtime.clone(),
         )
-        .await
-        .with_local_supervisor(supervisor.clone());
-        supervisor.start_enabled(enabled);
-        Ok(server)
+        .await)
     }
 
     pub async fn into_application(

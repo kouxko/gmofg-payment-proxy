@@ -1,6 +1,33 @@
 # Nuvei Tango JSON Read-Only Rhai Package
 
-`nuvei-tango-json-rhai@1.0.0` 是可直接导入 Intercept Proxy 的 Socket Rhai 协议包。它只观察
+## WebAssembly Component 版本
+
+`component/` 提供与该历史 Rhai 包相同 manifest、Socket Frame、Decode、只读 Encode 和 Display
+行为的 Rust WebAssembly Component。旧 Rhai/ZIP 文件保留为行为参考和迁移前产物。
+
+从仓库根目录构建可直接导入的单文件 Component：
+
+```bash
+pnpm build:protocol-packages
+```
+
+产物位于：
+
+```text
+dist/protocol-package-components/intercept-proxy-nuvei-tango-json-rhai-component.wasm
+```
+
+直接执行 `cargo build --target wasm32-wasip2` 得到的是尚未追加顶层 Manifest 的编译器原始产物。
+
+局部 Rust 行为测试：
+
+```bash
+cargo test --locked \
+  --manifest-path examples/protocol-packages/nuvei_tango_rhai/component/Cargo.toml
+```
+
+`nuvei-tango-json-rhai@1.0.0` 的历史 Rhai/ZIP 文件仅作为迁移前行为参考；当前可导入产物是上述
+Rust Component。它只观察
 Nuvei Tango 的长度前缀 JSON Frame；任何 Document 字段变化都会在 Encode 阶段失败，包不会重建或
 修改线路 JSON。
 

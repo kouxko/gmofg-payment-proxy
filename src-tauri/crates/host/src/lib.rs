@@ -313,7 +313,7 @@ impl ApplicationHost {
         self.application
             .environment_candidate_shutdown_and_drain()
             .await;
-        self.external_package_server.shutdown_local_packages().await;
+        self.external_package_server.shutdown_local_packages();
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;
         self.shutdown_completed.store(true, Ordering::Release);

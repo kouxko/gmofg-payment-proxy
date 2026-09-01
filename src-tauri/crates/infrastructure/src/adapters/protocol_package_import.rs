@@ -1,8 +1,8 @@
-//! 原生 ZIP 文件选择到协议包注册表的导入适配器。
+//! 原生 WebAssembly Component 文件选择到协议包注册表的导入适配器。
 //!
 //! Tauri/WebView 不提交路径或文件字节。平台对话框返回的本机路径在本适配器内受限读取，
-//! 随后在本边界执行严格 ZIP/Manifest/resources 校验；提交后由本地 Sidecar
-//! 进程主动连接统一 `/packages` WebSocket 注册，不进入旧 JSON/JavaScript 导入路径。
+//! 随后在本边界执行严格 Component/Manifest/world 校验；提交后由主进程内 Wasmtime
+//! runtime 直接提供协议 Hook，不进入远端 `/packages` WebSocket 路径。
 
 use std::{collections::HashMap, sync::Arc};
 
@@ -14,17 +14,14 @@ use intercept_proxy_application::{
     ProtocolPackageImportViewModel,
 };
 use intercept_proxy_package_contract::PackageManifest;
-use intercept_proxy_package_runtime::read_package_zip;
-use parking_lot::{Mutex, RwLock};
+use intercept_proxy_package_runtime::read_package_component;
+use parking_lot::Mutex;
 use uuid::Uuid;
 
 use crate::AtomicFileExporter;
 
 use super::external_package_registry::application_description;
-use super::{
-    ExternalPackageRegistryAdapter, LocalPackageSupervisor, NativeFileDialog, PackageArchiveLimits,
-    common::infra,
-};
+use super::{ExternalPackageRegistryAdapter, NativeFileDialog, common::infra};
 use crate::sqlite::external_packages::StoredLocalPackageInstallOutcome;
 
 fn invalid_token() -> AppError {
@@ -41,13 +38,12 @@ pub struct ProtocolPackageImportAdapter {
     dialog: Arc<dyn NativeFileDialog>,
     files: AtomicFileExporter,
     pending: Mutex<HashMap<Uuid, PendingLocalPackage>>,
-    supervisor: RwLock<Option<Arc<LocalPackageSupervisor>>>,
 }
 
 #[derive(Debug)]
 struct PendingLocalPackage {
     manifest: PackageManifest,
-    archive: Vec<u8>,
+    component: Vec<u8>,
 }
 
 impl ProtocolPackageImportAdapter {
@@ -61,25 +57,19 @@ impl ProtocolPackageImportAdapter {
             dialog,
             files: AtomicFileExporter,
             pending: Mutex::new(HashMap::new()),
-            supervisor: RwLock::new(None),
         }
-    }
-
-    pub(crate) fn set_supervisor(&self, supervisor: Arc<LocalPackageSupervisor>) {
-        *self.supervisor.write() = Some(supervisor);
     }
 }
 
 #[async_trait]
 impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
-    async fn prepare_zip(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
-        let Some(path) = self.dialog.choose_open_file("protocol_package_zip")? else {
+    async fn prepare_component(&self) -> AppResult<Option<ProtocolPackageImportPreviewViewModel>> {
+        let Some(path) = self.dialog.choose_open_file("protocol_package_wasm")? else {
             return Ok(None);
         };
-        let bytes = infra(self.files.read_bounded(&path, 8 * 1024 * 1024))?;
-        let archive = read_package_zip(std::io::Cursor::new(&bytes), &PackageArchiveLimits)
-            .map_err(AppError::from)?;
-        let manifest = archive.manifest().clone();
+        let bytes = infra(self.files.read_bounded(&path, u64::MAX))?;
+        let component = read_package_component(&bytes).map_err(AppError::from)?;
+        let manifest = component.manifest().clone();
         let disposition = match self
             .registry
             .preview_local_archive(&manifest, &bytes)
@@ -103,7 +93,7 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
                 token.as_uuid(),
                 PendingLocalPackage {
                     manifest: manifest.clone(),
-                    archive: bytes,
+                    component: bytes,
                 },
             );
             Some(token)
@@ -122,7 +112,7 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         }))
     }
 
-    async fn commit_zip(
+    async fn commit_component(
         &self,
         token: ProtocolPackageImportToken,
     ) -> AppResult<ProtocolPackageImportViewModel> {
@@ -133,7 +123,7 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
             .ok_or_else(invalid_token)?;
         let registry = Arc::clone(&self.registry);
         let outcome = registry
-            .install_local_archive(&pending.manifest, &pending.archive)
+            .install_and_activate_local_component(&pending.manifest, &pending.component)
             .await?;
         let outcome = match outcome {
             StoredLocalPackageInstallOutcome::Installed => {
@@ -150,19 +140,6 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
             }
         };
         let package = pending.manifest.package().identity();
-        let supervisor = self.supervisor.read().clone().ok_or_else(|| {
-            AppError::new(
-                "EXTERNAL_PACKAGE_PROCESS_FAILED",
-                "本地软件包进程监督器尚未启动。",
-            )
-        })?;
-        if let Err(error) = supervisor.launch(package.clone(), &pending.archive).await {
-            registry.record_package_operation_failure(
-                "local_sidecar_import_start",
-                &package,
-                &error,
-            );
-        }
         let version = registry.get(&package).await?.ok_or_else(|| {
             AppError::new(
                 "PROTOCOL_PACKAGE_NOT_FOUND",
@@ -180,7 +157,7 @@ impl ProtocolPackageImportPort for ProtocolPackageImportAdapter {
         })
     }
 
-    async fn discard_zip(&self, token: ProtocolPackageImportToken) -> AppResult<()> {
+    async fn discard_component(&self, token: ProtocolPackageImportToken) -> AppResult<()> {
         self.pending
             .lock()
             .remove(&token.as_uuid())

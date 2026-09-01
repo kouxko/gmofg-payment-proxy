@@ -11,7 +11,7 @@ use intercept_proxy_runtime::{
 };
 use parking_lot::Mutex;
 
-use super::ExternalPackageRpc;
+use crate::adapters::ProtocolPackageRuntime;
 use crate::adapters::listener_runtime::JointDocumentEvaluation;
 
 #[derive(Clone)]
@@ -24,7 +24,7 @@ pub(super) struct JointSocketRules {
     pipeline: Arc<dyn PipelinePorts>,
     connection: SocketConnectionIdentity,
     listener_id: String,
-    rpc: Arc<dyn ExternalPackageRpc>,
+    runtime: Arc<dyn ProtocolPackageRuntime>,
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
     prepared: Arc<Mutex<Option<SocketContext>>>,
@@ -39,7 +39,7 @@ impl JointSocketRules {
         pipeline: Arc<dyn PipelinePorts>,
         connection: SocketConnectionIdentity,
         listener_id: String,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalSocketObserved>>>,
         prepared: Arc<Mutex<Option<SocketContext>>>,
@@ -51,7 +51,7 @@ impl JointSocketRules {
             pipeline,
             connection,
             listener_id,
-            rpc,
+            runtime,
             direction,
             observed,
             prepared,
@@ -87,7 +87,7 @@ impl Rules for JointSocketRules {
             document.clone(),
             observed.document,
             observed.input,
-            Arc::clone(&self.rpc),
+            Arc::clone(&self.runtime),
             self.direction,
             self.package.clone(),
             direction_programs,

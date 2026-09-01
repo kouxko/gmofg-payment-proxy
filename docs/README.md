@@ -15,6 +15,7 @@
 
 ## 待实现任务
 
+- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)
 - [TASK-20260829-002：嵌套 Document、扁平规则条件与统一 JavaScript WebSocket 协议包](tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md)
 - [TASK-20260829-001：建立数据库版本 100 的 1.00 正式兼容基线](tasks/pending/2026-08-29/establish-database-version-100-baseline.md)
 
@@ -40,9 +41,11 @@
 - [ADR-006：统一 Exchange 观测（已被替代）](architecture/decisions/ADR-006-unified-exchange-observation.md)
 - [ADR-007：Exchange/Pipeline 运行边界（已被 ADR-009 替代）](architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md)
 - [ADR-008：MCP 环境配置合同与分阶段启用](architecture/decisions/ADR-008-mcp-environment-configuration.md)
-- [ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时](architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md)
+- [ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时（本地运行时已被 ADR-010 替代）](architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md)
+- [ADR-010：进程内 WebAssembly Component 协议包](architecture/decisions/ADR-010-in-process-webassembly-protocol-packages.md)
 
-ADR-002、ADR-006 和 ADR-007 仅作为决策历史保留；当前实现以 ADR-009、当前架构文档和源码为准。
+ADR-002、ADR-006 和 ADR-007 仅作为决策历史保留；统一规则以 ADR-009 为准，本地协议包运行时以
+ADR-010 为准，当前源码是最终事实来源。
 [Exchange Pipeline Template](architecture/exchange-pipeline-template/README.md) 只保留历史抽象来源，
 不再是 current authority，也不替代生产源码。
 

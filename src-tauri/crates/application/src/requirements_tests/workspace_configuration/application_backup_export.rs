@@ -1,4 +1,4 @@
-use std::{collections::BTreeMap, future::Future, path::Path, pin::Pin, sync::Arc, task::Poll};
+use std::{collections::BTreeMap, future::Future, pin::Pin, sync::Arc, task::Poll};
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 
@@ -323,34 +323,7 @@ async fn backup_snapshot_includes_portable_configuration_and_raw_iso_package_fil
 }
 
 fn iso_package_files() -> BTreeMap<String, Vec<u8>> {
-    let root = Path::new(env!("CARGO_MANIFEST_DIR"))
-        .ancestors()
-        .nth(3)
-        .unwrap()
-        .join("templates/socket-protocol/iso8583-standard");
-    let mut files = BTreeMap::new();
-    collect_files(&root, &root, &mut files);
-    files
-}
-
-fn collect_files(root: &Path, directory: &Path, files: &mut BTreeMap<String, Vec<u8>>) {
-    let mut entries = std::fs::read_dir(directory)
-        .unwrap()
-        .map(|entry| entry.unwrap().path())
-        .collect::<Vec<_>>();
-    entries.sort();
-    for path in entries {
-        if path.is_dir() {
-            collect_files(root, &path, files);
-        } else {
-            let relative = path
-                .strip_prefix(root)
-                .unwrap()
-                .to_string_lossy()
-                .replace('\\', "/");
-            files.insert(relative, std::fs::read(path).unwrap());
-        }
-    }
+    BTreeMap::from([("component.wasm".into(), b"portable-component".to_vec())])
 }
 
 fn collect_json_keys<'a>(value: &'a serde_json::Value, keys: &mut Vec<&'a str>) {

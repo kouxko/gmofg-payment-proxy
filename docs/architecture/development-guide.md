@@ -9,7 +9,7 @@
 | --- | --- | --- |
 | 实体、不变量、稳定错误语义 | `src-tauri/crates/domain` | 页面、Tauri command |
 | Exchange/Pipeline 协议抽象 | `src-tauri/crates/exchange` | HTTP/Socket 具体 I/O |
-| Frame/Decode/Encode/Display Sidecar 合同与执行 | `src-tauri/crates/package-contract`、`src-tauri/crates/package-runtime` | 数据库、真实网络 |
+| Frame/Decode/Encode/Display WIT 合同与执行 | `src-tauri/crates/package-contract`、`src-tauri/crates/package-runtime` | 数据库、真实网络 |
 | 用户用例、Port、ViewModel、事件 | `src-tauri/crates/application` | SQLite/ADB 命令细节 |
 | SQLite、证书、文件、外部包、ADB 适配 | `src-tauri/crates/infrastructure` | 前端展示逻辑 |
 | HTTP/Socket/TLS/Exchange 网络运行 | `src-tauri/crates/proxy` | Workspace 持久化 |
@@ -167,7 +167,7 @@ Exchange 事件顺序。不能只验证 happy path DTO。
 1. HTTP LocalResponder 和真实 Server 转发；
 2. Socket Direct、Scripted、LocalResponder 和透明转发；
 3. TCP、TLS、HTTPS、mTLS 的上下游组合；
-4. 本地与远端 WebSocket Sidecar 包；
+4. 本地 Component 与远端 WebSocket 调试包；
 5. 规则实际改写、Decode/Display、四方向 Received/Sent；
 6. 连接断开后 Closed/Failed 是否追加；
 7. Android ADB reverse/LAN、目标 App、非目标 App 和停止恢复。

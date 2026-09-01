@@ -14,20 +14,7 @@ function run(command, args) {
   if (result.status !== 0) process.exit(result.status ?? 1);
 }
 
-for (const target of ["aarch64-apple-darwin", "x86_64-apple-darwin"]) {
-  run(process.execPath, ["scripts/stage-package-sidecar.mjs", target]);
-}
-const universalSidecar =
-  "src-tauri/binaries/intercept-proxy-package-sidecar-universal-apple-darwin";
-run("lipo", [
-  "-create",
-  "src-tauri/binaries/intercept-proxy-package-sidecar-aarch64-apple-darwin",
-  "src-tauri/binaries/intercept-proxy-package-sidecar-x86_64-apple-darwin",
-  "-output",
-  universalSidecar,
-]);
-run("chmod", ["755", universalSidecar]);
-run("lipo", [universalSidecar, "-verify_arch", "arm64", "x86_64"]);
+run("rustup", ["target", "add", "wasm32-wasip2"]);
 run("pnpm", [
   "exec",
   "tauri",

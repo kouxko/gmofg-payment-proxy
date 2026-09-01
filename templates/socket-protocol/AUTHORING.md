@@ -1,26 +1,26 @@
-# Authoring a Socket Sidecar package
+# Authoring a Socket protocol package
 
-1. Copy the three root files from `iso8583-standard`.
+1. Copy the Rust starter under `iso8583-standard` or generate the same WIT world from another
+   Component-capable language.
 2. Change the exact identity and recursive schemas in `manifest.json`.
-3. Implement both directions of Frame, Decode and Encode in `protocol.js`.
-4. Implement both Display exports in `display.js`.
-5. ZIP the file contents at the archive root, without a containing directory.
+3. Implement both directions of Frame, Decode, Encode, and Display from the versioned WIT contract.
+4. Build one `wasm32-wasip2` Component file.
+5. Append `manifest.json` as the unique top-level `intercept-proxy:manifest` custom section. In this
+   repository, `pnpm build:protocol-packages` owns that packaging step; direct Cargo artifacts are
+   not importable until packaged.
 
-Keep framing independent per direction. `complete.consumedBytes` must be positive and no greater
-than the current buffer length. Decode returns natural JSON values. Encode must preserve unchanged
-bytes when the Document is unchanged and return the complete frame when it changes.
+Frame receives raw `list<u8>` and returns need-more, complete, or reject. Decode receives raw
+`list<u8>` and returns Document JSON. Encode receives the original raw `list<u8>` plus Document JSON
+and returns the complete raw frame. Display returns untrusted HTML text.
 
-JavaScript modules may import only relative package modules. The current Boa host does not inject
-Node, filesystem, process, Buffer, fetch, timer, or WebSocket bindings; this statement describes the
-host surface and does not redefine Boa default/native capabilities. The local Sidecar itself
-initiates `/packages` registration with `package.register`; the Proxy never opens a second package
-protocol. Local exports receive `Uint8Array`, while public `/packages` JSON-RPC represents bytes as
-canonical padded Base64 text.
+The Host provides WASI and an optional outbound WebSocket interface. Packages can use `ws` or `wss`
+when their protocol implementation requires it; local Hook calls themselves are direct WIT calls.
+Remote source-language debugging remains available through `/packages` WebSocket JSON-RPC, where
+the remote adapter alone uses Base64 for binary values.
 
 Rules run only at `Proxy -> Server` and `Proxy -> App`. Each direction creates a private working
 Document; every rule condition reads its current state, matching actions update it immediately, and
-later rules observe earlier changes. The final Document is encoded once. Package code must not expect
-a rule callback at Reader/Decode/Display boundaries.
+later rules observe earlier changes. The final Document is encoded once.
 
-There is no compatibility mode. An archive that does not match package API 1 must be corrected and
-re-imported.
+There is no compatibility mode. A ZIP, core Wasm module, duplicate Manifest, wrong WIT world, or
+invalid Component must be corrected and re-imported.

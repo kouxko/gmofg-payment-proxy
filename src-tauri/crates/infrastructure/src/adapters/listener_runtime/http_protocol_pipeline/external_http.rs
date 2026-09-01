@@ -7,14 +7,15 @@ use intercept_proxy_exchange::{
     Decode, Direction, Display, Encode, Error, ExternalPackageCallFailure,
     ExternalPackageCallStage, Http, HttpContext, Rules,
 };
-use intercept_proxy_package_contract::{DecodeParams, DisplayParams};
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{HttpConnectionIdentity, HttpDirectionCapabilities, Message};
 use parking_lot::Mutex;
 
-use crate::adapters::{PackageTransportError, body_codecs::resolve_message_codec};
+use crate::adapters::{
+    PackageTransportError, ProtocolPackageRuntime, body_codecs::resolve_message_codec,
+};
 
-use super::super::external_relay::{ExternalPackageRpc, RuntimeExternalSocketPackageBinding};
+use super::super::external_relay::RuntimeExternalSocketPackageBinding;
 use super::{HttpDocumentRulePrograms, JointDocumentEvaluation, JointHttpRuleRuntime};
 
 #[cfg(test)]
@@ -72,13 +73,13 @@ pub(super) fn build_capabilities<D: Direction>(
     listener_transaction: Arc<tokio::sync::Mutex<()>>,
 ) -> HttpDirectionCapabilities<D> {
     let observed = Arc::new(Mutex::new(None));
-    let rpc = binding.rpc();
+    let runtime_handle = binding.runtime();
     let package = binding.registration().package().identity().clone();
     let rules = ExternalHttpDocumentRules::new(
         runtime,
         connection.clone(),
         response,
-        Arc::clone(&rpc),
+        Arc::clone(&runtime_handle),
         direction,
         Arc::clone(&observed),
         programs,
@@ -87,14 +88,14 @@ pub(super) fn build_capabilities<D: Direction>(
     );
     HttpDirectionCapabilities::new(
         Box::new(ExternalHttpDecode::<D>::new(
-            Arc::clone(&rpc),
+            Arc::clone(&runtime_handle),
             direction,
             codec,
             Arc::clone(&observed),
             package.clone(),
         )),
         Box::new(ExternalHttpDisplay::new(
-            Arc::clone(&rpc),
+            Arc::clone(&runtime_handle),
             direction,
             package,
         )),
@@ -110,7 +111,7 @@ struct ExternalHttpObserved {
 }
 
 struct ExternalHttpDecode<D: Direction> {
-    rpc: Arc<dyn ExternalPackageRpc>,
+    runtime: Arc<dyn ProtocolPackageRuntime>,
     direction: ProtocolDirection,
     codec: BodyCodecKind,
     observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
@@ -120,14 +121,14 @@ struct ExternalHttpDecode<D: Direction> {
 
 impl<D: Direction> ExternalHttpDecode<D> {
     fn new(
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         codec: BodyCodecKind,
         observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
         package: intercept_proxy_domain::ProtocolPackageRef,
     ) -> Self {
         Self {
-            rpc,
+            runtime,
             direction,
             codec,
             observed,
@@ -145,13 +146,8 @@ impl<D: Direction> Decode<Http, D> for ExternalHttpDecode<D> {
             .decode(&context.wire_body)
             .map_err(|error| Error::new(format!("{}\n{}", error.code, error.message)))?;
         let document = self
-            .rpc
-            .decode(
-                self.direction,
-                DecodeParams {
-                    input: input.clone(),
-                },
-            )
+            .runtime
+            .decode_http(self.direction, input.clone())
             .await
             .map_err(|error| {
                 external_rpc_error(
@@ -172,19 +168,19 @@ impl<D: Direction> Decode<Http, D> for ExternalHttpDecode<D> {
 }
 
 struct ExternalHttpDisplay {
-    rpc: Arc<dyn ExternalPackageRpc>,
+    runtime: Arc<dyn ProtocolPackageRuntime>,
     direction: ProtocolDirection,
     package: intercept_proxy_domain::ProtocolPackageRef,
 }
 
 impl ExternalHttpDisplay {
     fn new(
-        rpc: Arc<dyn ExternalPackageRpc>,
+        runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         package: intercept_proxy_domain::ProtocolPackageRef,
     ) -> Self {
         Self {
-            rpc,
+            runtime,
             direction,
             package,
         }
@@ -194,13 +190,8 @@ impl ExternalHttpDisplay {
 #[async_trait]
 impl Display for ExternalHttpDisplay {
     async fn display(&mut self, document: &Document) -> Result<String, Error> {
-        self.rpc
-            .display(
-                self.direction,
-                DisplayParams {
-                    document: document.clone(),
-                },
-            )
+        self.runtime
+            .display(self.direction, document.clone())
             .await
             .map_err(|error| {
                 external_rpc_error(
@@ -218,7 +209,7 @@ struct ExternalHttpDocumentRules {
     runtime: Arc<JointHttpRuleRuntime>,
     connection: HttpConnectionIdentity,
     response: bool,
-    rpc: Arc<dyn ExternalPackageRpc>,
+    package_runtime: Arc<dyn ProtocolPackageRuntime>,
     direction: ProtocolDirection,
     observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
     programs: Arc<parking_lot::RwLock<HttpDocumentRulePrograms>>,
@@ -232,7 +223,7 @@ impl ExternalHttpDocumentRules {
         runtime: Arc<JointHttpRuleRuntime>,
         connection: HttpConnectionIdentity,
         response: bool,
-        rpc: Arc<dyn ExternalPackageRpc>,
+        package_runtime: Arc<dyn ProtocolPackageRuntime>,
         direction: ProtocolDirection,
         observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
         programs: Arc<parking_lot::RwLock<HttpDocumentRulePrograms>>,
@@ -243,7 +234,7 @@ impl ExternalHttpDocumentRules {
             runtime,
             connection,
             response,
-            rpc,
+            package_runtime,
             direction,
             observed,
             programs,
@@ -269,7 +260,7 @@ impl Rules for ExternalHttpDocumentRules {
                 document.clone(),
                 observed.original_document,
                 observed.original_input,
-                Arc::clone(&self.rpc),
+                Arc::clone(&self.package_runtime),
                 self.direction,
                 observed.codec,
                 self.package.clone(),
@@ -301,6 +292,14 @@ fn external_rpc_error(
                 Some(error.data().code().as_str().to_owned()),
                 Some(error.message().to_owned()),
                 Some("object(fields=1)".to_owned()),
+            ),
+            PackageTransportError::Package { error } => (
+                default_method.to_owned(),
+                None,
+                None,
+                Some(error.code.as_str().to_owned()),
+                Some(error.message.clone()),
+                None,
             ),
             _ => (default_method.to_owned(), None, None, None, None, None),
         };

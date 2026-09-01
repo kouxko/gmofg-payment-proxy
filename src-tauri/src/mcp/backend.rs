@@ -306,11 +306,11 @@ impl McpBackend for ApplicationBackend {
         if let Some((mime_type, text)) = resources::text(uri) {
             return Ok(json!({ "uri": uri, "mimeType": mime_type, "text": text }));
         }
-        if uri == resources::ISO8583_ARCHIVE_URI {
+        if uri == resources::ISO8583_COMPONENT_URI {
             let bytes = self.application.protocol_package_builtin_archive().await?;
             return Ok(json!({
                 "uri": uri,
-                "mimeType": "application/zip",
+                "mimeType": "application/wasm",
                 "blob": STANDARD.encode(bytes),
             }));
         }

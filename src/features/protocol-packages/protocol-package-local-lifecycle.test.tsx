@@ -28,20 +28,20 @@ describe("local protocol package lifecycle", () => {
     vi.resetAllMocks();
     mocks.protocolPackageDisable.mockImplementation(async (packageRef) => version(packageRef.version, {
       package: packageRef,
-      package_source: { type: "external", online: true },
+      package_source: { type: "managed", online: false },
       enabled: false,
     }));
   });
 
   it("allows an offline local package to enable", async () => {
     const local = version("2.0.0", {
-      package_source: { type: "external", online: false },
+      package_source: { type: "managed", online: false },
       enabled: false,
     });
     mocks.protocolPackageList.mockResolvedValue([group({ versions: [local] })]);
     mocks.protocolPackageDetail.mockResolvedValue(detail(local, {
       usages: [],
-      external: { ...detail(local).external!, local_process: true },
+      external: null,
     }));
     mocks.protocolPackageEnable.mockResolvedValue({ ...local, enabled: true });
 
@@ -58,13 +58,13 @@ describe("local protocol package lifecycle", () => {
 
   it("restarts once and locks lifecycle controls while pending", async () => {
     const local = version("2.0.0", {
-      package_source: { type: "external", online: false },
+      package_source: { type: "managed", online: true },
       enabled: true,
     });
     const pending = deferred<ReturnType<typeof version>>();
     const localDetail = detail(local, {
       usages: [],
-      external: { ...detail(local).external!, local_process: true },
+      external: null,
     });
     mocks.protocolPackageList.mockResolvedValue([group({ versions: [local] })]);
     mocks.protocolPackageDetail.mockResolvedValue(localDetail);
@@ -78,8 +78,8 @@ describe("local protocol package lifecycle", () => {
 
     expect(mocks.protocolPackageRestart).toHaveBeenCalledTimes(1);
     expect(screen.getByRole("button", { name: "正在重启…" })).toBeDisabled();
-    expect(screen.getByRole("button", { name: "停用外部软件包" })).toBeDisabled();
-    pending.resolve({ ...local, package_source: { type: "external", online: true } });
+    expect(screen.getByRole("button", { name: "停用协议包" })).toBeDisabled();
+    pending.resolve({ ...local, package_source: { type: "managed", online: true } });
     await waitFor(() => expect(screen.getByRole("button", { name: "重启本地软件包" })).toBeEnabled());
   });
 });
