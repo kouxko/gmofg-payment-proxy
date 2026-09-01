@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-01 23:18:03 +08:00`
+- 最后更新时间：`2026-09-01 23:55:00 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -139,8 +139,8 @@
 | WPC-06 | 将内置包、四个 example、模板和测试向量转换为 Rust Wasm Component，并提供统一构建入口 | WPC-05 | 是（按目录隔离） | 已完成 | 五个仓库 Component 均可一次构建、静态校验、Wasmtime 实例化；局部业务字段和最终 bytes 与当前权威向量一致 |
 | WPC-07 | 删除 Boa、Sidecar binary、Tauri externalBin、staging/签名脚本和失效 checker/docs | WPC-06 | 否 | 已完成 | 源码、Cargo、Tauri、macOS/Windows workflow 均无 Sidecar/Boa 活动依赖 |
 | WPC-08 | 验证本轮已确认的 Wasm Host、持久化和失败语义 | WPC-04、WPC-05 | 否 | 已完成 | 当前正式 Host runtime 直接加载 Component；AU EFTEX Decode/Display/Encode 旧向量通过；文件系统和出站 HTTP 按用户要求本轮 NOT_RUN |
-| WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 进行中 | macOS Release App 与真实 HTTP/Socket 回放已通过；Windows executable-only CI 待推送后终态验证 |
-| WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 进行中 | 活动文档已同步当前规则和 Wasm-only 合同；最终独立审查待源码冻结后执行 |
+| WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 已完成 | macOS Release App 与真实 HTTP/Socket 回放通过；Windows executable-only CI run 33525227567 成功并完成产物校验 |
+| WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 已完成 | 活动文档已同步当前规则和 Wasm-only 合同；独立 code reviewer 与 architect 无提交阻断 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -228,7 +228,8 @@
 - `VERIFIED`：Application 414/414、Infrastructure 463/463、备份归档 24+7+8、相关 UI 97/97、严格 Clippy、typecheck、lint、bindings 和架构门通过。
 - `VERIFIED`：当前 macOS Release App 中 HTTP Method/Header/path wildcard/Plain Body 条件与动作、miss、非法 JSON fail-closed，以及 Socket ISO8583 Schema match/action、miss、非法 Frame fail-closed 均通过；App 保持运行供用户检查。
 - `VERIFIED`：当前 AU EFTEX Component 经正式 Host runtime 的上下行旧向量 Frame/Decode/Display/Encode 通过；当前 App 数据面因未配置 BDK 明确失败，属于配置阻断，不是成功验收。
-- `NOT_RUN`：文件系统和出站 HTTP Host capability 按用户明确范围不执行；Windows raw executable CI 仍待推送后终态验证。
+- `VERIFIED`：Windows executable-only CI run [`33525227567`](https://github.com/kouxko/gmofg-payment-proxy/actions/runs/33525227567) 在提交 `bbdd7eb848178d7516b8091140f86d5d8d420f65` 上成功；仅 `build-windows-executable` 执行，Android、Verify、installer 和 macOS 均跳过。Artifact `Intercept-Proxy-unsigned-executable-x64` 未过期，下载后的 `intercept-proxy.exe` 为 PE32+ x86-64 GUI，80,178,176 bytes，SHA-256 `09918b5754f65516cd52a7edcd060ec5bae2de3d2b61875249b758cba5542e91`。
+- `NOT_RUN`：文件系统和出站 HTTP Host capability 按用户明确范围不执行。
 
 ## 测试结果
 
@@ -242,12 +243,13 @@
 - `PASS`：五个仓库 Component 的正式 Host runtime/集成证据见 [`wasm-integrated-runtime`](../../testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md)。
 - `PASS`：托管 Component 详情隔离回归见 [`managed-component-detail-regression`](../../testing/evidence/2026-09-01/TASK-20260901-001/managed-component-detail-regression/README.md)。
 - `PASS`：Workspace all-target/all-feature check 与 strict Clippy、Rust fmt、bindings、typecheck、协议包 UI 77 项、Next production build、source-size、diff-check。
-- `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除；Windows CI 尚未触发。
+- `PASS`：Windows executable-only CI run 33525227567；Cargo Release、OpenSSL DLL 依赖拒绝门和 artifact upload 均通过，本地下载产物类型、大小与 SHA-256 已核验。
+- `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除。
 
 ## CI 情况
 
-- `PENDING`：用户已授权推送后仅触发 `workflow_dispatch(run_mode=build-only, platform=windows)`；不创建 tag/Release，不运行 Android、Verify、installer 或 macOS job。CI run ID、终态和 executable artifact 将在运行完成后回填。
+- `SUCCESS`：[`Windows signed release and cache warmup / run 33525227567`](https://github.com/kouxko/gmofg-payment-proxy/actions/runs/33525227567)，head `bbdd7eb848178d7516b8091140f86d5d8d420f65`。`build-windows-executable` 30m29s 成功；Android、Verify、installer、macOS 均 `SKIPPED`。唯一 artifact 为 `Intercept-Proxy-unsigned-executable-x64`（GitHub archive 26,879,183 bytes，artifact digest `sha256:d498f8b47c2fcd3f3315ae1c68c8a18701a7ea8dc624d98fd10d7be0932fa601`，expires 2026-11-30）。未创建 tag 或 GitHub Release。
 
 ## 完成总结
 
-- `进行中`：实现、macOS App、真实 HTTP/Socket 回放、Wasm Host 旧向量、静态门和本地 build 已完成；等待最终独立审查、推送及 Windows executable-only CI 终态。文件系统和出站 HTTP 不在本轮验收范围；任务在 Windows artifact 验证前不归档。
+- `当前交付完成`：实现、macOS App、真实 HTTP/Socket 回放、Wasm Host 旧向量、静态门、本地 build、独立审查、推送和 Windows executable-only CI 均完成。文件系统和出站 HTTP 按用户明确要求不在本轮验收范围；AU EFTEX 当前 App 数据面仍需明日提供 BDK 配置后做配置型人工复测，因此任务暂不归档。
