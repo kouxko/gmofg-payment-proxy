@@ -39,15 +39,14 @@ try {
   cpSync(app, path.join(dmgSource, "Intercept Proxy.app"), { recursive: true });
   mkdirSync(dmgDirectory, { recursive: true });
   rmSync(dmg, { force: true });
-  run("diskutil", [
-    "image",
+  run("hdiutil", [
     "create",
-    "from",
-    "--format",
-    "UDZO",
-    "--volumeName",
+    "-volname",
     "Intercept Proxy",
+    "-srcfolder",
     dmgSource,
+    "-format",
+    "UDZO",
     dmg,
   ]);
 } finally {
