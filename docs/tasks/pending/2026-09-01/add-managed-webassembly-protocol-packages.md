@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 17:58:52 +08:00`
+- 最后更新时间：`2026-09-02 18:01:55 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -129,6 +129,7 @@
 - 已确认根因：脚本使用了当前 GitHub macOS runner 不支持的 `diskutil image create from --volumeName` 参数组合；App universal binary 已完成编译，失败边界只在 DMG 容器创建。正确修复边界是改用 macOS 稳定的 `hdiutil create -volname ... -srcfolder ... -format UDZO` 合同并增加命令形状回归测试，不修改 App、签名、版本或其他发布步骤。
 - 当前已验证：完整桌面 run `33613664943` 的 macOS Verify 在 `Verify Rust formatting` 失败；本地对当前 head 执行同一 `cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check` 精确复现为 `repository_components.rs` 中单个 `assert!` 的非标准换行。根因是前一轮测试补充后未对该文件应用 rustfmt，修复边界仅为 rustfmt 机械格式化，不改变断言或业务行为。
 - 当前已验证：PR CI run `33615348276` 的 Coverage gates 在 `Verify frontend coverage` 失败。本地先清除旧 pnpm `node_modules` 并执行权威 `deno ci`，随后用同一 `deno task check:coverage:frontend` 复现为 63 files/532 tests 全部通过，但 `src/features/protocol-packages/**` branches 为 `638/710 = 89.859%`，低于 90% 门禁且只缺 1 个分支。根因是详情防御性空安装时间分支没有测试；正确修复边界是补充该已有 UI 行为的回归，不降低阈值、不改生产逻辑。
+- 当前已验证：全平台 run `33615357063` 的 rustfmt 已通过，随后 `Verify Rust lints` 失败；本地同一 strict Clippy 命令复现 `repository_components.rs` 的仓库 Component 集成测试函数为 160 行，超过 100 行门禁。根因是新增三套包级 Display/Encode 断言仍内联在统一库存测试；正确修复边界是按包提取测试辅助函数，保持输入、断言和生产代码不变。
 
 ## 最小改动与最优设计比较
 

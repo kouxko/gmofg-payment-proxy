@@ -1,4 +1,8 @@
-use std::{collections::BTreeSet, path::PathBuf, process::Command};
+use std::{
+    collections::BTreeSet,
+    path::{Path, PathBuf},
+    process::Command,
+};
 
 use intercept_proxy_domain::ProtocolDirection;
 use intercept_proxy_package_contract::{FrameResult, PackageKind};
@@ -93,88 +97,96 @@ async fn every_repository_example_and_template_builds_and_loads_as_a_component()
             .unwrap_or_else(|error| panic!("call {artifact} frame export: {error:?}"));
 
         match package_id.as_str() {
-            "iso8583-deno-ascii" => {
-                let frame = decode_hex(
-                    "0039303230303220000000808000303030303030303030303030303031303030303831333134333035393132333435365445524d30303031333932",
-                );
-                let document = runtime
-                    .decode_socket(ProtocolDirection::Upstream, &frame)
-                    .await
-                    .expect("decode ISO8583 Deno replay vector");
-                let html = runtime
-                    .display(ProtocolDirection::Upstream, &document)
-                    .await
-                    .expect("display ISO8583 Deno Host-normalized Document");
-                assert!(html.contains("<td>1000</td>"));
-                assert_eq!(
-                    runtime
-                        .encode_socket(ProtocolDirection::Upstream, &frame, &document)
-                        .await
-                        .expect("encode ISO8583 Deno Host-normalized Document"),
-                    frame
-                );
-            }
-            "nuvei-tango-json" => {
-                let frame = decode_hex(
-                    "0000002c0100010030303030303032307b224163637074724175746873746e526571223a7b2276616c7565223a317d7d",
-                );
-                let document = runtime
-                    .decode_socket(ProtocolDirection::Upstream, &frame)
-                    .await
-                    .expect("decode Nuvei JSON replay vector");
-                let html = runtime
-                    .display(ProtocolDirection::Upstream, &document)
-                    .await
-                    .expect("display Nuvei JSON nested preview");
-                assert!(html.contains("<table class=\"protocol-document-nested\">"));
-                assert!(html.contains("<th>AccptrAuthstnReq</th>"));
-                assert!(html.contains("<th>value</th>"));
-                assert!(!html.contains("<pre>"));
-                assert_eq!(
-                    runtime
-                        .encode_socket(ProtocolDirection::Upstream, &frame, &document)
-                        .await
-                        .expect("encode Nuvei JSON replay vector"),
-                    frame
-                );
-            }
+            "iso8583-deno-ascii" => assert_iso8583_deno_replay(&mut runtime).await,
+            "nuvei-tango-json" => assert_nuvei_json_replay(&mut runtime).await,
             "nuvei-tango-json-rhai" => {
-                let payload = std::fs::read(repository.join(
-                    "examples/protocol-packages/nuvei_tango_rhai/tests/fixtures/request.json",
-                ))
-                .expect("read Nuvei Rhai replay payload");
-                let body_bytes = 4 + 8 + payload.len();
-                let mut frame = Vec::with_capacity(4 + body_bytes);
-                frame.extend_from_slice(
-                    &u32::try_from(body_bytes)
-                        .expect("Nuvei Rhai replay body fits u32")
-                        .to_be_bytes(),
-                );
-                frame.extend_from_slice(&[0x01, 0x00, 0x01, 0x00]);
-                frame.extend_from_slice(b"00000020");
-                frame.extend_from_slice(&payload);
-                let document = runtime
-                    .decode_socket(ProtocolDirection::Upstream, &frame)
-                    .await
-                    .expect("decode Nuvei Rhai replay vector");
-                let html = runtime
-                    .display(ProtocolDirection::Upstream, &document)
-                    .await
-                    .expect("display Nuvei Rhai nested JSON");
-                assert!(html.contains("<table class=\"protocol-document-nested\">"));
-                assert!(html.contains("<th>AccptrAuthstnReq</th>"));
-                assert!(html.contains("<th>PlainCardData</th>"));
-                assert_eq!(
-                    runtime
-                        .encode_socket(ProtocolDirection::Upstream, &frame, &document)
-                        .await
-                        .expect("encode Nuvei Rhai replay vector"),
-                    frame
-                );
+                assert_nuvei_rhai_replay(&repository, &mut runtime).await;
             }
             _ => {}
         }
     }
+}
+
+async fn assert_iso8583_deno_replay(runtime: &mut WasmPackageRuntime) {
+    let frame = decode_hex(
+        "0039303230303220000000808000303030303030303030303030303031303030303831333134333035393132333435365445524d30303031333932",
+    );
+    let document = runtime
+        .decode_socket(ProtocolDirection::Upstream, &frame)
+        .await
+        .expect("decode ISO8583 Deno replay vector");
+    let html = runtime
+        .display(ProtocolDirection::Upstream, &document)
+        .await
+        .expect("display ISO8583 Deno Host-normalized Document");
+    assert!(html.contains("<td>1000</td>"));
+    assert_eq!(
+        runtime
+            .encode_socket(ProtocolDirection::Upstream, &frame, &document)
+            .await
+            .expect("encode ISO8583 Deno Host-normalized Document"),
+        frame
+    );
+}
+
+async fn assert_nuvei_json_replay(runtime: &mut WasmPackageRuntime) {
+    let frame = decode_hex(
+        "0000002c0100010030303030303032307b224163637074724175746873746e526571223a7b2276616c7565223a317d7d",
+    );
+    let document = runtime
+        .decode_socket(ProtocolDirection::Upstream, &frame)
+        .await
+        .expect("decode Nuvei JSON replay vector");
+    let html = runtime
+        .display(ProtocolDirection::Upstream, &document)
+        .await
+        .expect("display Nuvei JSON nested preview");
+    assert!(html.contains("<table class=\"protocol-document-nested\">"));
+    assert!(html.contains("<th>AccptrAuthstnReq</th>"));
+    assert!(html.contains("<th>value</th>"));
+    assert!(!html.contains("<pre>"));
+    assert_eq!(
+        runtime
+            .encode_socket(ProtocolDirection::Upstream, &frame, &document)
+            .await
+            .expect("encode Nuvei JSON replay vector"),
+        frame
+    );
+}
+
+async fn assert_nuvei_rhai_replay(repository: &Path, runtime: &mut WasmPackageRuntime) {
+    let payload = std::fs::read(
+        repository.join("examples/protocol-packages/nuvei_tango_rhai/tests/fixtures/request.json"),
+    )
+    .expect("read Nuvei Rhai replay payload");
+    let body_bytes = 4 + 8 + payload.len();
+    let mut frame = Vec::with_capacity(4 + body_bytes);
+    frame.extend_from_slice(
+        &u32::try_from(body_bytes)
+            .expect("Nuvei Rhai replay body fits u32")
+            .to_be_bytes(),
+    );
+    frame.extend_from_slice(&[0x01, 0x00, 0x01, 0x00]);
+    frame.extend_from_slice(b"00000020");
+    frame.extend_from_slice(&payload);
+    let document = runtime
+        .decode_socket(ProtocolDirection::Upstream, &frame)
+        .await
+        .expect("decode Nuvei Rhai replay vector");
+    let html = runtime
+        .display(ProtocolDirection::Upstream, &document)
+        .await
+        .expect("display Nuvei Rhai nested JSON");
+    assert!(html.contains("<table class=\"protocol-document-nested\">"));
+    assert!(html.contains("<th>AccptrAuthstnReq</th>"));
+    assert!(html.contains("<th>PlainCardData</th>"));
+    assert_eq!(
+        runtime
+            .encode_socket(ProtocolDirection::Upstream, &frame, &document)
+            .await
+            .expect("encode Nuvei Rhai replay vector"),
+        frame
+    );
 }
 
 #[tokio::test]
