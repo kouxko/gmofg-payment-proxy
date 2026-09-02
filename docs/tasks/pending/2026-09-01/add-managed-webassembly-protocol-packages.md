@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 12:21:42 +08:00`
+- 最后更新时间：`2026-09-02 14:15:00 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -209,6 +209,7 @@
 - `2026-09-01 23:08:58 +08:00`：完成共享源码收口：Wasm Host/Registry 超长文件按职责拆分，托管 Component detail 不再读取远端连接元数据并有回归测试，活动架构/MCP/发布文档删除旧 Nth/one-shot/TLS 规则描述。Workspace check、strict Clippy、Rust fmt、bindings、typecheck、lint、Next production build、source-size 和 diff-check 均通过；进入最终独立审查。
 - `2026-09-01 23:18:03 +08:00`：补充托管 Component 详情派生证据：精确 Rust 查询测试 1/1 与协议包前端 7 files/77 tests 通过；详情不调用远端 connection metadata port。同步修正规则文档，明确多条规则独立匹配，不能把它们描述成单条规则 AND/OR 的等价表达。
 - `2026-09-02 12:21:42 +08:00`：最终 CI 调用合同收敛为两条独立 workflow：完整流程使用 `windows-release.yml` 的 `platform=all`，Windows 快速可执行文件使用无参数的 `windows-quick-build.yml`。本地 Rust、全部活动 manifest、CI 与操作文档统一到 `1.98.0`；Windows workflow 合同、Deno/Rust pin 合同和最终独立审查通过。
+- `2026-09-02 14:15:00 +08:00`：完整 CI run 33590640554 的 Android、macOS Verify、Windows bindings/前端/架构/rustfmt/Clippy/全量 Rust tests 均通过；Windows Verify 在 90 分钟 job 上限到达时取消了正在执行的 independent runtime gates，后续 Windows/macOS 打包因此跳过。根因是 Rust 1.98 Windows 冷缓存完整验证超过既有时间预算，不是测试失败。将 `ci.yml` 与 `windows-release.yml` 的 Verify 上限统一提高到 150 分钟，并增加 workflow 合同断言；不删除或跳过任何验证步骤。
 
 ## 修改文件
 
@@ -258,6 +259,7 @@
 ## CI 情况
 
 - `SUCCESS`：[`Windows signed release and cache warmup / run 33525227567`](https://github.com/kouxko/gmofg-payment-proxy/actions/runs/33525227567)，head `bbdd7eb848178d7516b8091140f86d5d8d420f65`。`build-windows-executable` 30m29s 成功；Android、Verify、installer、macOS 均 `SKIPPED`。唯一 artifact 为 `Intercept-Proxy-unsigned-executable-x64`（GitHub archive 26,879,183 bytes，artifact digest `sha256:d498f8b47c2fcd3f3315ae1c68c8a18701a7ea8dc624d98fd10d7be0932fa601`，expires 2026-11-30）。未创建 tag 或 GitHub Release。
+- `CANCELLED`：[`Desktop release / run 33590640554`](https://github.com/kouxko/gmofg-payment-proxy/actions/runs/33590640554)，head `50288ddb495bb8279c95a4ef7dcce003590de373`。Android 与 macOS Verify 成功；Windows Verify 的 Rust tests 成功，independent runtime gates 在 job 启动满 90 分钟时被强制取消，Windows installer/portable 与 macOS Universal 均因此跳过。已按实际耗时修正 Verify timeout，等待新提交复跑；未创建 tag 或 GitHub Release。
 
 ## 完成总结
 
