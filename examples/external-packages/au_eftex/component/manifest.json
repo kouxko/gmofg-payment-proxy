@@ -5,7 +5,7 @@
     "id": "au-eftex",
     "version": "1.1.0",
     "name": "AU EFTEX",
-    "description": "Rust WebAssembly Component for AU EFTEX DUKPT protected messages"
+    "description": "Test-record replay Component with the public ANSI DUKPT test BDK"
   },
   "document": {
     "upstream": {

@@ -1,8 +1,6 @@
 mod crypto;
 mod iso8583;
 
-use std::{env, fs};
-
 use serde_json::{Map, Value};
 
 wit_bindgen::generate!({
@@ -16,6 +14,10 @@ const _: &str =
 const HEADER_BYTES: usize = 39;
 const MAX_FRAME_BYTES: usize = 65_535;
 const IV_MASK: [u8; 8] = [0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef];
+// Public ANSI DUKPT test vector. This Component is built for test-record replay only.
+const EMBEDDED_TEST_BDK: [u8; 16] = [
+    0x01, 0x23, 0x45, 0x67, 0x89, 0xab, 0xcd, 0xef, 0xfe, 0xdc, 0xba, 0x98, 0x76, 0x54, 0x32, 0x10,
+];
 
 #[derive(Clone, Copy, PartialEq)]
 enum Direction {
@@ -146,8 +148,7 @@ impl AuEftex {
 
 impl Guest for AuEftex {
     fn upstream_frame(buffer: Vec<u8>) -> Result<FrameResult, PackageError> {
-        Self::frame(Direction::Upstream, &buffer)
-            .map_err(package_error("PROTOCOL_PACKAGE_INVALID"))
+        Self::frame(Direction::Upstream, &buffer).map_err(package_error("PROTOCOL_PACKAGE_INVALID"))
     }
     fn downstream_frame(buffer: Vec<u8>) -> Result<FrameResult, PackageError> {
         Self::frame(Direction::Downstream, &buffer)
@@ -174,8 +175,7 @@ impl Guest for AuEftex {
             .map_err(package_error("BODY_ENCODE_FAILED"))
     }
     fn upstream_display(document_json: String) -> Result<String, PackageError> {
-        Self::display(Direction::Upstream, &document_json)
-            .map_err(package_error("INTERNAL_ERROR"))
+        Self::display(Direction::Upstream, &document_json).map_err(package_error("INTERNAL_ERROR"))
     }
     fn downstream_display(document_json: String) -> Result<String, PackageError> {
         Self::display(Direction::Downstream, &document_json)
@@ -190,33 +190,9 @@ fn package_error(code: &'static str) -> impl FnOnce(String) -> PackageError {
     }
 }
 
-fn load_bdk() -> Result<[u8; 16], String> {
-    let file = env::var("AU_EFTEX_BDK_FILE").ok();
-    let inline = env::var("AU_EFTEX_BDK_HEX").ok();
-    let value = match (file, inline) {
-        (Some(path), None) => {
-            fs::read_to_string(path).map_err(|_| "unable to read AU_EFTEX_BDK_FILE".to_owned())?
-        }
-        (None, Some(value)) => value,
-        _ => return Err("configure exactly one of AU_EFTEX_BDK_FILE or AU_EFTEX_BDK_HEX".into()),
-    };
-    decode_hex_16(value.trim(), "AU_EFTEX_BDK")
-}
-
-fn decode_hex_16(value: &str, name: &str) -> Result<[u8; 16], String> {
-    if value.len() != 32 || !value.bytes().all(|byte| byte.is_ascii_hexdigit()) {
-        return Err(format!("{name} must contain exactly 16 hexadecimal bytes"));
-    }
-    let mut output = [0; 16];
-    for (index, byte) in output.iter_mut().enumerate() {
-        *byte = u8::from_str_radix(&value[index * 2..index * 2 + 2], 16).unwrap();
-    }
-    Ok(output)
-}
-
 fn data_key(direction: Direction, ksn: [u8; 10]) -> Result<[u8; 16], String> {
-    let bdk = load_bdk()?;
-    let transaction = crypto::derive_transaction_key(crypto::derive_ipek(bdk, ksn), ksn)?;
+    let transaction =
+        crypto::derive_transaction_key(crypto::derive_ipek(EMBEDDED_TEST_BDK, ksn), ksn)?;
     Ok(crypto::derive_data_key(
         transaction,
         direction == Direction::Upstream,
@@ -473,7 +449,6 @@ export!(AuEftex);
 #[cfg(test)]
 mod tests {
     use super::*;
-    const BDK: &str = "0123456789ABCDEFFEDCBA9876543210";
     fn header() -> [u8; 39] {
         let bytes=b"T\xdf\x00\x012\xdf\x01\x0812345678\xdf\x02\x06000001\xdf\x03\x0a\xff\xff\x98\x76\x54\x32\x10\xe0\x00\x08B";
         *bytes
@@ -492,7 +467,6 @@ mod tests {
     }
     #[test]
     fn golden_upstream_round_trip() {
-        unsafe { env::set_var("AU_EFTEX_BDK_HEX", BDK) };
         let frame = encrypt(Direction::Upstream, header(), &message(), Prefix::None).unwrap();
         assert_eq!(
             hex(&frame),
@@ -506,7 +480,6 @@ mod tests {
     }
     #[test]
     fn modified_mac_message_fails_closed() {
-        unsafe { env::set_var("AU_EFTEX_BDK_HEX", BDK) };
         let frame = encrypt(Direction::Upstream, header(), &message(), Prefix::None).unwrap();
         let mut document = iso8583::decode(&message()).unwrap();
         document.insert(
@@ -526,7 +499,6 @@ mod tests {
 
     #[test]
     fn downstream_and_length_prefixed_golden_round_trip() {
-        unsafe { env::set_var("AU_EFTEX_BDK_HEX", BDK) };
         let mut bitmap = [0u8; 8];
         bitmap[0] |= 0x20;
         let message = [b"1210".as_slice(), &bitmap, b"000000"].concat();

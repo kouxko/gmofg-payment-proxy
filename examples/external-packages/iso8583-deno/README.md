@@ -29,6 +29,10 @@ pnpm build:protocol-packages
 `dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm`。直接执行
 `cargo build` 得到的是尚未追加顶层 Manifest 的编译器原始产物。
 
+当前 Component 版本为 `iso8583-deno-ascii@1.0.1`；该版本接受 Host 按 JavaScript Number
+合同序列化的非负整数金额，并保持非整数和负数 fail-closed。下述 Deno 外部调试进程仍为
+`iso8583-deno-ascii@1.0.0`。
+
 默认连接 `ws://127.0.0.1:8765/packages`。可通过环境变量配置：
 
 ```bash

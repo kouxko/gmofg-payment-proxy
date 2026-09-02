@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 14:15:00 +08:00`
+- 最后更新时间：`2026-09-02 17:02:32 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -82,6 +82,11 @@
 | `2026-09-02 09:54:16 +08:00` | 用户扩大交付验收：整体审查功能、文档和测试并修复所有确认问题；本地完整验证通过后提交推送，分别触发 `verify-and-build/all` 完整 CI 与 `build-only/windows` Windows-only 快速出包 CI，持续监控到终态并校验 Windows 产物。此授权替代上一条“仅 Windows CI”的限制；仍不创建 tag 或 GitHub Release。 |
 | `2026-09-02 11:18:09 +08:00` | 用户确认开发与 CI Rust 工具链升级到正式版 `1.98.0`，并计划卸载本机 `1.97`。活动 toolchain、workspace MSRV、CI 和当前操作文档必须统一到 `1.98.0`；历史测试证据中的实际 `1.97.1` 环境记录保持不可变。 |
 | `2026-09-02 12:21:42 +08:00` | `09:54:16` 记录中的旧 `run_mode` 调用方式已被最终 CI 设计替代：完整流程使用 `.github/workflows/windows-release.yml` 并传入 `platform=all`；Windows 快速可执行文件使用独立 `.github/workflows/windows-quick-build.yml`，无输入参数。两条流程使用独立 concurrency group；仍不创建 tag 或 GitHub Release。 |
+| `2026-09-02 15:57:27 +08:00` | 用户要求在远端 Windows 设备 `10.0.28.77` 重放以往测试部署并包含 Wasm。范围按本任务既有 `release-app-replay` 与 `wasm-integrated-runtime` 权威用例执行：Plain HTTP 六类有效请求与非法 JSON、内置 ISO8583 Wasm 的 match/miss/非法 Frame，以及可用时的 AU EFTEX Wasm 旧向量；远端拓扑允许把原本单机 loopback 调整为设备监听、当前 Mac 提供受控上游，但输入、规则、阶段和逐字节断言不得改变。MCP 配置写入、远端协议包导入和 Listener 启停属于本次明确授权；不得用配置提交、包在线或 Listener 启动代替数据面 PASS。 |
+| `2026-09-02 16:08:24 +08:00` | 用户暂停远端部署，要求测试环境的 AU EFTEX Component 将 BDK 直接写入源码并编译成供外部导入的 Wasm；该产物必须能够重放既有 AU EFTEX 测试记录。现有 71 字节公开旧向量、组件 golden 和 trace verifier 已确认共同使用公开 ANSI 测试 BDK `0123456789ABCDEFFEDCBA9876543210`，因此本轮只嵌入该公开测试值，不写入真实生产 BDK。 |
+| `2026-09-02 16:08:24 +08:00` | 验收必须覆盖当前权威旧向量的 Frame、Decode、Display、Encode，并比较请求逐字节往返及 63 字节预期响应；仅编译成功、静态校验成功、导入成功或 Listener 启动均不算完成。完成本地 Wasmtime 数据面验证后再恢复 `10.0.28.77` 的导入与重放。 |
+| `2026-09-02 16:29:10 +08:00` | 用户要求修复 ISO Deno Display 的整数兼容问题，并把 Nuvei JSON 的 Display 改为 object/array 递归嵌套 HTML table；不得继续把嵌套 JSON 输出为 `<pre>`。两项修复均需重新构建 Wasm 放入 Downloads 并在远端双向 Display 实测。 |
+| `2026-09-02 16:52:48 +08:00` | 用户要求补充测试全部 5 个 Wasm 包的规则。规则验收必须分别证明命中、适用的未命中保持、非法 Frame fail-closed、规则持久化命中计数和上游/客户端实际字节；AU EFTEX 与 Nuvei 的 MAC/只读字段只使用同值动作观测规则命中，不绕过 Encode 合同。 |
 
 ## 未确认事项
 
@@ -145,6 +150,8 @@
 | WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 已完成 | macOS Release App 与真实 HTTP/Socket 回放通过；Windows executable-only CI run 33525227567 成功并完成产物校验 |
 | WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 已完成 | 活动文档已同步当前规则和 Wasm-only 合同；独立 code reviewer 与 architect 无提交阻断 |
 | WPC-11 | 将本地、workspace MSRV、活动文档与全部 CI Rust 工具链统一到 `1.98.0` | WPC-10 | 否 | 已完成 | `rustc`/`cargo` 实际版本为 1.98.0，活动配置无 1.97，受影响检查和 CI 合同通过 |
+| WPC-12 | 在 `10.0.28.77` Windows App 重放历史 HTTP、ISO8583 Wasm 与 AU EFTEX Wasm 部署 | WPC-08、WPC-09、WPC-13 | 否 | 进行中 | 5 个 Socket Wasm 的真实加载、Display、规则命中/miss/fail-closed、客户端/受控上游原始字节、Exchange/diagnostics 和最终运行态已 VERIFIED；历史 HTTP 本轮 NOT_RUN，因此小任务不记为全部完成 |
+| WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -153,6 +160,7 @@
 - 旧行为向量：复用现有 JavaScript/Boa 测试输入和 expected 作为迁移前权威业务向量；新生产路径只执行 Wasm，不保留 JS runtime 回归目标。
 - WIT/Component：HTTP 与 Socket world 正例；Core Wasm、错误 world、缺 export、类型错误、损坏 binary、缺失/重复/非法 Manifest section、Manifest/WIT 身份不一致以及 ZIP/JavaScript 载荷负例。
 - 数据适配：HTTP Unicode string、Socket `list<u8>`、FrameResult 全 variant、Document JSON、Display text 和错误结果逐字段/逐字节比较。
+- AU EFTEX 测试 Wasm：嵌入公开 ANSI 测试 BDK `0123456789ABCDEFFEDCBA9876543210`，使用 `release-app-replay` 的 71 字节请求和 63 字节预期响应验证无环境变量条件下的 Frame、Decode、Display、Encode、请求原字节往返及响应原字节生成；产物必须经统一 Manifest 追加入口构建并由正式 Wasmtime Host 加载。
 - WASI 外部能力：实际执行 DNS、TCP、UDP、HTTP、Unix/macOS `/` 文件读写、Windows `/host/<盘符>` 文件读写、环境、stdio、时间和随机数；保存目标、输入、响应、文件和错误，不用静态 API 存在替代运行证明。
 - Host WebSocket：使用至少两个不同 guest 语言 fixture 实际连接外部 `ws` 与 `wss`，验证文本/二进制收发、关闭和连接/协议失败；证明不依赖 guest 自带 WebSocket/TLS 库。
 - 进程内调用：八类 Hook 由应用端口直接调用 Wasmtime runtime，验证顺序执行、异步 Host I/O、停用、重启和关闭；不存在本地 JSON-RPC、注册、Ping/Pong 或 heartbeat。
@@ -165,6 +173,8 @@
 - 资源与打包：验证 macOS/Windows/Linux Release 只有主 executable、无 Tauri externalBin、无 Sidecar staging/签名/孤儿进程、无需外部 Wasmtime 安装；安装体积、冷启动耗时和 RSS 只作为观察信息。
 
 正式证据保存到 `docs/testing/evidence/<执行日期>/TASK-20260901-001/<用例ID>/`。Component fixture 必须保存源码、WIT、编译工具版本、复现命令、生成 `.wasm`、SHA-256、实际输入输出和跨语言工具链说明；不得只提交不可重建的 binary。
+
+远端 Windows 重放使用 `docs/testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/`，并以 `derived_from` 同时引用父任务 `TASK-20260901-001`、父用例 `release-app-replay` / `wasm-integrated-runtime` 及其证据路径。执行前保存当前默认 Workspace revision、Listener、规则、已安装包和运行态；远端写入仅使用 MCP 候选的预览/确认/终态流程与 App 现有原生 UI。受控上游在当前 Mac 启动，记录两端 IP/Port；MCP、HTTP、Socket 客户端均绕过系统代理。结束时保留本次部署供检查；若无法完整保留则记录真实最终状态，不静默清理或伪造恢复。
 
 ## 对抗审查计划
 
@@ -210,6 +220,9 @@
 - `2026-09-01 23:18:03 +08:00`：补充托管 Component 详情派生证据：精确 Rust 查询测试 1/1 与协议包前端 7 files/77 tests 通过；详情不调用远端 connection metadata port。同步修正规则文档，明确多条规则独立匹配，不能把它们描述成单条规则 AND/OR 的等价表达。
 - `2026-09-02 12:21:42 +08:00`：最终 CI 调用合同收敛为两条独立 workflow：完整流程使用 `windows-release.yml` 的 `platform=all`，Windows 快速可执行文件使用无参数的 `windows-quick-build.yml`。本地 Rust、全部活动 manifest、CI 与操作文档统一到 `1.98.0`；Windows workflow 合同、Deno/Rust pin 合同和最终独立审查通过。
 - `2026-09-02 14:15:00 +08:00`：完整 CI run 33590640554 的 Android、macOS Verify、Windows bindings/前端/架构/rustfmt/Clippy/全量 Rust tests 均通过；Windows Verify 在 90 分钟 job 上限到达时取消了正在执行的 independent runtime gates，后续 Windows/macOS 打包因此跳过。根因是 Rust 1.98 Windows 冷缓存完整验证超过既有时间预算，不是测试失败。将 `ci.yml` 与 `windows-release.yml` 的 Verify 上限统一提高到 150 分钟，并增加 workflow 合同断言；不删除或跳过任何验证步骤。
+- `2026-09-02 15:57:27 +08:00`：开始 WPC-12 远端 Windows 重放。MCP `tools/list`、`mcp_environment_capabilities` 与 `workspace_list` 已实时成功；远端当前只有默认 Workspace revision 1、一个 disabled HTTP Listener、无运行 Listener。内置 `iso8583-ascii-standard@1.0.0` 为 managed Wasm、enabled/online/valid，Frame/Decode/Encode/Display 与双向 Schema 可读；`au-eftex@1.1.0` 未安装。远端日志路径确认 Windows 用户数据目录，RDP 3389、SMB 445、MCP 17653 与外部包 8765 可达。以上只读盘点不算部署或重放完成。
+- `2026-09-02 16:43:08 +08:00`：修复 ISO Deno Host 整数规范化兼容并发布 `1.0.1`；Nuvei Rhai `1.0.1` 将 object/array 递归渲染为 nested table。远端五包逐字节重放通过后，用户截图证明另一个 `nuvei-tango-json@1.0.0` 仍在输出原始 JSON；随后只修改其 Display renderer、升级到 `1.0.1` 并增加正式 Host 回归，重新统一构建 5 个 Wasm。
+- `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
 
 ## 修改文件
 
@@ -233,11 +246,13 @@
 
 - `VERIFIED`：本地 Component 静态读取仅接受合法 Component encoding、唯一合法 `intercept-proxy:manifest`，并在实例化时核验 Manifest 选择的 HTTP/Socket world exports。
 - `VERIFIED`：Rust HTTP fixture、内置 Socket template 与 Host WebSocket 由 Wasmtime 在当前进程实际加载调用；package-runtime 合同测试 11/11 通过。
-- `VERIFIED`：AU EFTEX 5、ISO8583 Deno 2、Nuvei Tango Rhai 5、Nuvei Tango JSON 5、ISO8583 模板 2 项逻辑测试全部通过；五个 release Component 已统一构建并由 Wasmtime 实际加载调用。
+- `VERIFIED`：AU EFTEX 5、ISO8583 Deno 3、Nuvei Tango Rhai 5、Nuvei Tango JSON 5、ISO8583 模板 2 项逻辑测试全部通过；五个 release Component 已统一构建并由 Wasmtime 实际加载调用。
 - `VERIFIED`：Application 414/414、Infrastructure 463/463、备份归档 24+7+8、相关 UI 97/97、严格 Clippy、typecheck、lint、bindings 和架构门通过。
 - `VERIFIED`：当前 macOS Release App 中 HTTP Method/Header/path wildcard/Plain Body 条件与动作、miss、非法 JSON fail-closed，以及 Socket ISO8583 Schema match/action、miss、非法 Frame fail-closed 均通过；App 保持运行供用户检查。
 - `VERIFIED`：当前 AU EFTEX Component 经正式 Host runtime 的上下行旧向量 Frame/Decode/Display/Encode 通过；当前 App 数据面因未配置 BDK 明确失败，属于配置阻断，不是成功验收。
 - `VERIFIED`：Windows executable-only CI run [`33525227567`](https://github.com/kouxko/gmofg-payment-proxy/actions/runs/33525227567) 在提交 `bbdd7eb848178d7516b8091140f86d5d8d420f65` 上成功；仅 `build-windows-executable` 执行，Android、Verify、installer 和 macOS 均跳过。Artifact `Intercept-Proxy-unsigned-executable-x64` 未过期，下载后的 `intercept-proxy.exe` 为 PE32+ x86-64 GUI，80,178,176 bytes，SHA-256 `09918b5754f65516cd52a7edcd060ec5bae2de3d2b61875249b758cba5542e91`。
+- `VERIFIED`：远端 `10.0.28.77` 的 5 个 Socket Wasm、5 条规则命中、4 条 miss、4 条非法 Frame fail-closed、两套 Nuvei 递归嵌套 Display、13 条 Exchange 和 5 条 running Listener 均有可重放证据；AU 71/63 bytes 使用内置公开测试 BDK 完成真实数据面。
+- `NOT_RUN`：远端历史 HTTP 本轮未重跑；WPC-12 因此保持进行中，不把 Socket/Wasm PASS 扩大为 HTTP PASS。
 - `NOT_RUN`：文件系统和出站 HTTP Host capability 按用户明确范围不执行。
 
 ## 测试结果
@@ -252,6 +267,7 @@
 - `PASS`：当前 macOS Release App HTTP 与 Socket 真实数据面回放，证据见 [`release-app-replay`](../../testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay/README.md)。
 - `PASS`：五个仓库 Component 的正式 Host runtime/集成证据见 [`wasm-integrated-runtime`](../../testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md)。
 - `PASS`：托管 Component 详情隔离回归见 [`managed-component-detail-regression`](../../testing/evidence/2026-09-01/TASK-20260901-001/managed-component-detail-regression/README.md)。
+- `PASS`：远端 5 个 Wasm 与规则完整重放见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)；规则 hit 5/5、miss 4/4、非法 Frame fail-closed 4/4，远端 Listener 5/5 保持 running。
 - `PASS`：Workspace all-target/all-feature check 与 strict Clippy、Rust fmt、bindings、typecheck、协议包 UI 77 项、Next production build、source-size、diff-check。
 - `PASS`：Windows executable-only CI run 33525227567；Cargo Release、OpenSSL DLL 依赖拒绝门和 artifact upload 均通过，本地下载产物类型、大小与 SHA-256 已核验。
 - `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除。
@@ -263,4 +279,4 @@
 
 ## 完成总结
 
-- `当前交付完成`：实现、macOS App、真实 HTTP/Socket 回放、Wasm Host 旧向量、静态门、本地 build、独立审查、推送和 Windows executable-only CI 均完成。文件系统和出站 HTTP 按用户明确要求不在本轮验收范围；AU EFTEX 当前 App 数据面仍需明日提供 BDK 配置后做配置型人工复测，因此任务暂不归档。
+- `当前 Wasm/规则交付完成`：AU EFTEX 已内置公开测试 BDK，5 个最终 Wasm、两项 Display 修复和远端规则数据面均通过。远端 5 条 Listener 与受控上游保持运行供检查。历史 HTTP 未按本轮范围重跑，完整 CI 的 Windows 冷缓存超时复跑也尚未完成，因此总任务继续保持进行中，不归档。

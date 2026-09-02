@@ -134,15 +134,17 @@ impl NuveiTangoJson {
     fn display(document_json: &str, direction: Direction) -> Result<String, String> {
         let document = serde_json::from_str::<NuveiTangoDocument>(document_json)
             .map_err(|_| "Nuvei Tango read-only document is missing a display field".to_owned())?;
+        let preview = serde_json::from_str::<Value>(&document.json_preview)
+            .map_err(|error| format!("Nuvei Tango JSON preview is invalid: {error}"))?;
         let label = match direction {
             Direction::Upstream => "Upstream",
             Direction::Downstream => "Downstream",
         };
         Ok(format!(
-            "<section class=\"protocol-document\"><h3>Nuvei Tango JSON</h3><table><tbody><tr><th>Direction</th><td>{label}</td></tr><tr><th>Sequence</th><td>{}</td></tr><tr><th>Message type</th><td>{}</td></tr></tbody></table><pre>{}</pre></section>",
+            "<section class=\"protocol-document\"><h3>Nuvei Tango JSON</h3><table><tbody><tr><th>Direction</th><td>{label}</td></tr><tr><th>Sequence</th><td>{}</td></tr><tr><th>Message type</th><td>{}</td></tr></tbody></table>{}</section>",
             escape_html(&document.sequence),
             escape_html(&document.message_type),
-            escape_html(&document.json_preview),
+            render_json(&preview),
         ))
     }
 
@@ -220,8 +222,7 @@ impl Guest for NuveiTangoJson {
     }
 
     fn upstream_display(document_json: String) -> Result<String, PackageError> {
-        Self::display(&document_json, Direction::Upstream)
-            .map_err(package_error("INTERNAL_ERROR"))
+        Self::display(&document_json, Direction::Upstream).map_err(package_error("INTERNAL_ERROR"))
     }
 
     fn downstream_display(document_json: String) -> Result<String, PackageError> {
@@ -244,6 +245,38 @@ fn escape_html(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#39;")
+}
+
+fn render_json(value: &Value) -> String {
+    match value {
+        Value::Object(values) => {
+            let rows = values
+                .iter()
+                .map(|(name, value)| {
+                    format!(
+                        "<tr><th>{}</th><td>{}</td></tr>",
+                        escape_html(name),
+                        render_json(value)
+                    )
+                })
+                .collect::<String>();
+            format!("<table class=\"protocol-document-nested\"><tbody>{rows}</tbody></table>")
+        }
+        Value::Array(values) => {
+            let rows = values
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    format!("<tr><th>[{index}]</th><td>{}</td></tr>", render_json(value))
+                })
+                .collect::<String>();
+            format!("<table class=\"protocol-document-nested\"><tbody>{rows}</tbody></table>")
+        }
+        Value::String(value) => escape_html(value),
+        Value::Number(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Null => "null".to_owned(),
+    }
 }
 
 #[cfg(target_arch = "wasm32")]
@@ -305,6 +338,9 @@ mod tests {
 
         let html = NuveiTangoJson::display(&upstream, Direction::Upstream).unwrap();
         assert!(html.contains("<td>Upstream</td>"));
+        assert!(html.contains("<table class=\"protocol-document-nested\">"));
+        assert!(html.contains("<th>Message</th>"));
+        assert!(html.contains("<th>value</th>"));
         assert!(html.contains("&lt;synthetic&gt;"));
         assert!(!html.contains("<synthetic>"));
     }

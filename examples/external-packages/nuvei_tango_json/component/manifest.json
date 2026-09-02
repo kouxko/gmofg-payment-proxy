@@ -3,7 +3,7 @@
   "kind": "socket",
   "package": {
     "id": "nuvei-tango-json",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "Nuvei Tango JSON",
     "description": "Read-only parser for length-prefixed Nuvei Tango JSON messages"
   },

@@ -375,12 +375,14 @@ impl NuveiTangoJson {
         if document.public() != stored.public {
             return Err("Nuvei Tango read-only document was modified".to_owned());
         }
+        let preview = serde_json::from_str::<Value>(&document.json_preview.value)
+            .map_err(|error| format!("Nuvei Tango JSON preview is invalid: {error}"))?;
         Ok(format!(
-            "<section class=\"protocol-document\"><h3>Nuvei Tango JSON</h3><table><tbody><tr><th>Direction</th><td>{}</td></tr><tr><th>Sequence</th><td>{}</td></tr><tr><th>Message type</th><td>{}</td></tr></tbody></table><pre>{}</pre></section>",
+            "<section class=\"protocol-document\"><h3>Nuvei Tango JSON</h3><table><tbody><tr><th>Direction</th><td>{}</td></tr><tr><th>Sequence</th><td>{}</td></tr><tr><th>Message type</th><td>{}</td></tr></tbody></table>{}</section>",
             escape_html(direction.label()),
             escape_html(&document.sequence.value),
             escape_html(&document.message_type.value),
-            escape_html(&document.json_preview.value),
+            render_json(&preview),
         ))
     }
 }
@@ -419,8 +421,7 @@ impl Guest for NuveiTangoJson {
     }
 
     fn upstream_display(document_json: String) -> Result<String, PackageError> {
-        Self::display(Direction::Upstream, &document_json)
-            .map_err(package_error("INTERNAL_ERROR"))
+        Self::display(Direction::Upstream, &document_json).map_err(package_error("INTERNAL_ERROR"))
     }
 
     fn downstream_display(document_json: String) -> Result<String, PackageError> {
@@ -524,6 +525,38 @@ fn escape_html(value: &str) -> String {
         .replace('>', "&gt;")
         .replace('"', "&quot;")
         .replace('\'', "&#x27;")
+}
+
+fn render_json(value: &Value) -> String {
+    match value {
+        Value::Object(values) => {
+            let rows = values
+                .iter()
+                .map(|(name, value)| {
+                    format!(
+                        "<tr><th>{}</th><td>{}</td></tr>",
+                        escape_html(name),
+                        render_json(value)
+                    )
+                })
+                .collect::<String>();
+            format!("<table class=\"protocol-document-nested\"><tbody>{rows}</tbody></table>")
+        }
+        Value::Array(values) => {
+            let rows = values
+                .iter()
+                .enumerate()
+                .map(|(index, value)| {
+                    format!("<tr><th>[{index}]</th><td>{}</td></tr>", render_json(value))
+                })
+                .collect::<String>();
+            format!("<table class=\"protocol-document-nested\"><tbody>{rows}</tbody></table>")
+        }
+        Value::String(value) => escape_html(value),
+        Value::Number(value) => value.to_string(),
+        Value::Bool(value) => value.to_string(),
+        Value::Null => "null".to_owned(),
+    }
 }
 
 struct NoDuplicateValue(Value);
@@ -757,6 +790,8 @@ mod tests {
             let rendered = NuveiTangoJson::display(Direction::Downstream, &document).unwrap();
             assert!(rendered.contains("&lt;Message&gt;"));
             assert!(rendered.contains("&lt;script&gt;"));
+            assert!(rendered.contains("<table class=\"protocol-document-nested\">"));
+            assert!(!rendered.contains("<pre>"));
             assert!(!rendered.contains("synthetic-pan"));
             assert!(!rendered.contains("<script>"));
         });

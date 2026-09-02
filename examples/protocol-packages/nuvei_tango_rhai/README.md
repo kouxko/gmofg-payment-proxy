@@ -19,6 +19,9 @@ dist/protocol-package-components/intercept-proxy-nuvei-tango-json-rhai-component
 
 直接执行 `cargo build --target wasm32-wasip2` 得到的是尚未追加顶层 Manifest 的编译器原始产物。
 
+当前 Component 版本为 `nuvei-tango-json-rhai@1.0.1`，Display 会把 JSON object 和 array
+递归渲染为嵌套 HTML table；标量值继续执行 HTML 转义。
+
 局部 Rust 行为测试：
 
 ```bash

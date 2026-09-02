@@ -3,7 +3,7 @@
   "kind": "socket",
   "package": {
     "id": "iso8583-deno-ascii",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "ISO 8583 Deno ASCII",
     "description": "Single-file Component build of the bounded ISO 8583:1987 ASCII example"
   },
