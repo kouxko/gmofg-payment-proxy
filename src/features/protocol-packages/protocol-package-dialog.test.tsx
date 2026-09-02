@@ -249,7 +249,7 @@ describe("ProtocolPackageDialog details", () => {
     mocks.protocolPackageList.mockResolvedValue([
       group({ name: `协议包${"很长".repeat(80)}`, versions: [version("3.0.0")] }),
     ]);
-    mocks.protocolPackageDetail.mockResolvedValue(detail(version("3.0.0"), {
+    mocks.protocolPackageDetail.mockResolvedValue(detail(version("3.0.0", { installed_at: "" }), {
       upstream_schema: { root: { type: "object", title: "长字段 Schema", properties: { long_field: { type: "string", title: longName } } } },
       usages: [],
     }));
@@ -259,6 +259,7 @@ describe("ProtocolPackageDialog details", () => {
 
     expect(await screen.findByText(longName)).toBeVisible();
     expect(screen.getByText("当前没有入口引用此版本。")).toBeVisible();
+    expect(screen.getByText("安装时间").nextElementSibling).toHaveTextContent("—");
   });
 
   it("contains no source entry, source text, or source request", async () => {
