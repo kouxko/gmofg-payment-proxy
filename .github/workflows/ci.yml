@@ -128,7 +128,9 @@ jobs:
     name: Verify (${{ matrix.os }})
     needs: android-companion
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # Keep the verification budget aligned with the release workflow so a
+    # Windows Rust 1.98 cold-cache run can complete all runtime gates.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:

@@ -43,6 +43,7 @@ test("full desktop release never exposes the quick-build bypass", async () => {
   assert.doesNotMatch(source, /group: windows-quick-executable-/u);
   assert.match(source, /^  android-companion:$/mu);
   assert.match(source, /^  verify:$/mu);
+  assert.match(source, /^    timeout-minutes: 150$/mu);
   assert.match(source, /^  build:$/mu);
   assert.match(source, /^  build-macos:$/mu);
   assert.doesNotMatch(source, /build-only|build-windows-executable|inputs\.run_mode/u);

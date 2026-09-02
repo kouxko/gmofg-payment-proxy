@@ -70,7 +70,9 @@ jobs:
     name: Verify before packaging (${{ matrix.os }})
     needs: android-companion
     runs-on: ${{ matrix.os }}
-    timeout-minutes: 90
+    # Windows Rust 1.98 cold-cache verification exceeded the former 90-minute
+    # budget before the independent runtime gates could finish.
+    timeout-minutes: 150
     strategy:
       fail-fast: false
       matrix:
