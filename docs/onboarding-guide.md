@@ -516,13 +516,15 @@ deno task check
 
 - `platform=windows`：只构建 Windows；
 - `platform=all`：构建 Windows 和 macOS；
-- `v*` tag：正式发布，必须完整验证并使用 GitHub Secrets 中的 Authenticode 材料签名 Windows 产物。
+- `v*` tag：正式发布并执行完整验证；三项 Authenticode 配置全部存在时签名 Windows 产物，全部缺失时明确发布 unsigned 产物。
 
 `.github/workflows/windows-quick-build.yml` 是独立的 Windows 快速出包入口，只构建并上传未签名
 `intercept-proxy.exe`，不运行 Android、完整 Verify、installer 或 macOS job，也不能替代完整门禁。
 
-Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigned；正式 tag 对主程序、MSI、NSIS 的
-签名、签发者和时间戳执行 fail-closed 检查。发布凭据只存在于 GitHub runner，不能放进仓库、编辑器任务或文档。
+Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigned；正式 tag 在签名配置完整时对主程序、
+MSI、NSIS 的签名、签发者和时间戳执行 fail-closed 检查，在三项配置全部缺失时校验产物确实未签名并使用
+`unsigned` artifact 名称。只配置部分签名参数属于错误并 fail-closed，不会静默降级。发布凭据只存在于
+GitHub runner，不能放进仓库、编辑器任务或文档。
 
 ## 13. 安全红线
 
