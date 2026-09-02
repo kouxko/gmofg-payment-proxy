@@ -4,15 +4,15 @@
 //! 保留 HTTP/1.1 原有大小写、顺序、重复项和可选空白。无法安全解码的正文按二进制呈现，
 //! 不猜测编码，也不为展示方便改写线上字节。
 
-use std::collections::{BTreeMap, BTreeSet};
-
-use bytes::Bytes;
-use gmofg_proxy_application::{MessageContentViewModel, RawHttpHeaderViewModel};
-use gmofg_proxy_product_api::{BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier};
-use gmofg_proxy_runtime::{
-    ChannelId, ErrorCode, Message, ProxyError, RawHeader, Result as ProxyResult,
+use intercept_proxy_application::{MessageContentViewModel, RawHttpHeaderViewModel};
+use intercept_proxy_product_api::{
+    BodyCodec, ProductHeader, ProductMessageContext, RequestClassifier,
 };
+use intercept_proxy_runtime::{ChannelId, Message, ProxyError, Result as ProxyResult};
 use serde_json::Value;
+use std::collections::BTreeMap;
+
+use crate::adapters::body_codecs::decode_message_body;
 
 pub(super) fn content_view(
     body_codec: &dyn BodyCodec,
@@ -29,10 +29,31 @@ pub(super) fn content_view(
         })
         .collect::<Vec<_>>();
     let headers = display_headers(&raw_headers);
-    let body_text = decode_body(body_codec, &message.body).ok();
-    let json = body_text
+    let (metadata, body_text, codec_id, mut decode_error) =
+        decode_message_body(message, body_codec);
+    if codec_id
         .as_deref()
-        .and_then(|text| serde_json::from_str(text).ok());
+        .is_some_and(|id| id.ends_with("unsupported"))
+    {
+        decode_error = Some(format!(
+            "unsupported charset: {}",
+            metadata.charset.as_deref().unwrap_or("unknown")
+        ));
+    }
+    let json = if metadata.content_kind == intercept_proxy_application::MessageContentKind::Json {
+        body_text
+            .as_deref()
+            .filter(|text| !text.trim().is_empty())
+            .and_then(|text| match serde_json::from_str(text) {
+                Ok(value) => Some(value),
+                Err(error) => {
+                    decode_error = Some(format!("invalid JSON body: {error}"));
+                    None
+                }
+            })
+    } else {
+        None
+    };
     MessageContentViewModel {
         http_status: message.http_status(),
         start_line_bytes: message.start_line.as_bytes().to_vec(),
@@ -42,7 +63,26 @@ pub(super) fn content_view(
         body_bytes: message.body.to_vec(),
         json,
         content_length: message.body.len(),
+        media_type: metadata.media_type,
+        charset: metadata.charset,
+        content_kind: metadata.content_kind,
+        codec_id,
+        decode_error,
+        query_string: query_string(&message.start_line),
+        protocol: None,
+        protocol_failure: None,
     }
+}
+
+fn query_string(start_line: &str) -> Option<String> {
+    let mut fields = start_line.split_ascii_whitespace();
+    let first = fields.next()?;
+    if first.starts_with("HTTP/") {
+        return None;
+    }
+    let target = fields.next()?;
+    let (_, query) = target.split_once('?')?;
+    Some(query.split('#').next().unwrap_or_default().to_owned())
 }
 
 pub(super) fn display_headers(
@@ -60,120 +100,11 @@ pub(super) fn display_headers(
     groups.into_values().collect()
 }
 
-fn group_edited_headers(
-    headers: &BTreeMap<String, Vec<String>>,
-) -> BTreeMap<String, (String, Vec<String>)> {
-    let mut groups = BTreeMap::<String, (String, Vec<String>)>::new();
-    for (name, values) in headers {
-        groups.insert(name.to_ascii_lowercase(), (name.clone(), values.clone()));
-    }
-    groups
-}
-
-pub(super) fn proxy_message(
-    view: &MessageContentViewModel,
-    fallback_start_line: &str,
-) -> ProxyResult<Message> {
-    // The start-line is immutable transport metadata. Breakpoint IPC may
-    // display its exact bytes, but it can only change the response status
-    // through the separately validated `http_status` field.
-    let mut start_line = fallback_start_line.to_owned();
-    if let Some(status) = view.http_status {
-        let current = Message {
-            start_line: start_line.clone(),
-            headers: Vec::new(),
-            body: Bytes::new(),
-            body_modified: false,
-        }
-        .http_status();
-        if current != Some(status) {
-            if !(100..=599).contains(&status) {
-                return Err(ProxyError::new(
-                    ErrorCode::ConfigInvalid,
-                    format!("invalid modified HTTP status: {status}"),
-                ));
-            }
-            let version = start_line
-                .split_ascii_whitespace()
-                .next()
-                .filter(|version| version.starts_with("HTTP/"))
-                .unwrap_or("HTTP/1.1");
-            let reason = start_line.splitn(3, ' ').nth(2).unwrap_or_default();
-            let modified = format!("{version} {status} {reason}");
-            start_line.clear();
-            start_line.push_str(modified.trim_end());
-        }
-    }
-    let headers = merge_edited_headers(&view.raw_headers, &view.headers)?;
-    Ok(Message {
-        start_line,
-        headers,
-        body: view.body_bytes.clone().into(),
-        body_modified: true,
-    })
-}
-
-pub(super) fn merge_edited_headers(
-    raw_headers: &[RawHttpHeaderViewModel],
-    edited: &BTreeMap<String, Vec<String>>,
-) -> ProxyResult<Vec<RawHeader>> {
-    if raw_headers.is_empty() {
-        return Ok(edited
-            .iter()
-            .flat_map(|(name, values)| {
-                values.iter().map(|value| {
-                    RawHeader::new(
-                        Bytes::copy_from_slice(name.as_bytes()),
-                        Bytes::copy_from_slice(value.as_bytes()),
-                    )
-                })
-            })
-            .collect());
-    }
-
-    let original = group_edited_headers(&display_headers(raw_headers));
-    let edited = group_edited_headers(edited);
-    let mut emitted_edited_keys = BTreeSet::<String>::new();
-    let mut headers = Vec::new();
-    for raw in raw_headers {
-        let key = String::from_utf8_lossy(&raw.name_bytes).to_ascii_lowercase();
-        let original_values = original.get(&key).map(|(_, values)| values);
-        let edited_values = edited.get(&key).map(|(_, values)| values);
-        if original_values == edited_values {
-            headers.push(RawHeader::with_wire_ows(
-                Bytes::copy_from_slice(&raw.name_bytes),
-                Bytes::copy_from_slice(&raw.value_bytes),
-                Bytes::copy_from_slice(&raw.leading_ows_bytes),
-                Bytes::copy_from_slice(&raw.trailing_ows_bytes),
-            )?);
-        } else if emitted_edited_keys.insert(key.clone())
-            && let Some((edited_name, values)) = edited.get(&key)
-        {
-            headers.extend(values.iter().map(|value| {
-                RawHeader::new(
-                    Bytes::copy_from_slice(edited_name.as_bytes()),
-                    Bytes::copy_from_slice(value.as_bytes()),
-                )
-            }));
-        }
-    }
-    for (normalized, (name, values)) in edited {
-        if !original.contains_key(&normalized) {
-            headers.extend(values.iter().map(|value| {
-                RawHeader::new(
-                    Bytes::copy_from_slice(name.as_bytes()),
-                    Bytes::copy_from_slice(value.as_bytes()),
-                )
-            }));
-        }
-    }
-    Ok(headers)
-}
-
 pub(super) fn decode_body(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResult<String> {
     body_codec.decode(bytes).map_err(|error| ProxyError {
         code: error.code,
         message: error.message,
+        external_package_call: None,
     })
 }
 
@@ -181,6 +112,7 @@ pub(super) fn encode_body(body_codec: &dyn BodyCodec, text: &str) -> ProxyResult
     body_codec.encode(text).map_err(|error| ProxyError {
         code: error.code,
         message: error.message,
+        external_package_call: None,
     })
 }
 
@@ -189,6 +121,7 @@ pub(super) fn decode_json(body_codec: &dyn BodyCodec, bytes: &[u8]) -> ProxyResu
     serde_json::from_str(&text).map_err(|error| ProxyError {
         code: "JSON_INVALID",
         message: format!("decoded body is not valid JSON: {error}"),
+        external_package_call: None,
     })
 }
 
@@ -212,7 +145,7 @@ pub(super) fn classify_request(
     classifier: &dyn RequestClassifier,
     channel: &ChannelId,
     message: &Message,
-) -> gmofg_proxy_product_api::ClassifiedRequest {
+) -> intercept_proxy_product_api::ClassifiedRequest {
     let headers = message
         .headers
         .iter()

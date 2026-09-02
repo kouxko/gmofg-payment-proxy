@@ -1,0 +1,20 @@
+{
+  "description": "A 0200 financial request split across three TCP reads",
+  "tcp_chunks_hex": [
+    "003930323030322000",
+    "00008080003030303030303030303030303030313030",
+    "30303831333134333035393132333435365445524d30303031333932"
+  ],
+  "complete_frame_hex": "0039303230303220000000808000303030303030303030303030303031303030303831333134333035393132333435365445524d30303031333932",
+  "expected_document": {
+    "message_type": "0200",
+    "processing_code": "000000",
+    "amount": 1000,
+    "transmission_time": "0813143059",
+    "stan": "123456",
+    "terminal_id": "TERM0001",
+    "currency": "392"
+  },
+  "expected_encode": "same_as_complete_frame",
+  "expected_display": "html"
+}

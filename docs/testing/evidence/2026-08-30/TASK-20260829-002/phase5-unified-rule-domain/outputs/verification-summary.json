@@ -1,0 +1,48 @@
+{
+  "commands": [
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --test phase5_unified_rule_domain", "result": "EXPECTED_RED_EXIT_101", "details": "Cargo discovered the real integration target; Phase5 domain owners were absent" },
+    { "command": "node --test scripts/check-task-20260829-002-phase5-contract.test.mjs", "result": "PASS", "details": "15/15 mutation and positive-control tests" },
+    { "command": "pnpm test:task-20260829-002:phase5", "result": "PASS", "details": "checker 15/15; canonical Cargo9/Vitest4 discovered; Domain 119/119; focused Vitest 4/4" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --all-targets --all-features -q", "result": "PASS", "details": "497/497" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets --all-features -q", "result": "PASS", "details": "690/690" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --all-targets --all-features -q", "result": "PASS", "details": "33/33" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --all-targets --all-features -q", "result": "PASS", "details": "133/133" },
+    { "command": "pnpm check:bindings", "result": "PASS", "details": "fresh and deterministic" },
+    { "command": "pnpm scan:architecture", "result": "PASS" },
+    { "command": "pnpm scan:source-size", "result": "PASS", "details": "500-line handwritten source limit" },
+    { "command": "pnpm lint", "result": "PASS" },
+    { "command": "pnpm typecheck", "result": "PASS" },
+    { "command": "pnpm check:rust:fmt", "result": "PASS" },
+    { "command": "pnpm check:rust:clippy", "result": "PASS", "details": "workspace all-target/all-feature -D warnings" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "FAILED", "details": "first repair run stopped at gate 7: frontend 541/542; protocol-package-dialog focus timing; gates 8-10 NOT_RUN" },
+    { "command": "complete-name protocol-package-dialog focused test", "result": "PASS", "details": "3/3; no timeout/retry/product change" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "PASS", "details": "complete fresh rerun; ten ordered gates; frontend 63 files/542 tests; Rust workspace all-target/all-feature exit 0" },
+    { "command": "git diff --check", "result": "PASS" }
+  ],
+  "legacy_scan": {
+    "created_order_runtime_comparator": 0,
+    "new_unified_flat_condition_or_parallel_action_owner": 0,
+    "legacy_phase12_owners": [
+      "src-tauri/crates/domain/src/protocol_document_rule.rs",
+      "src-tauri/crates/domain/src/rule/types.rs"
+    ],
+    "old_message_stage_new_save_capability": 0
+  },
+  "independent_findings": {
+    "initial_verifier": "FAILED P0=0 P1=3 P2=1",
+    "initial_review": "REQUEST CHANGES P1=6 P2=1",
+    "repair_status": "ALL FINDINGS FIXED",
+    "final_reviewer": "APPROVE P0=0 P1=0 P2=0",
+    "final_verifier": "VERIFIED / APPROVED / CHECKPOINT READY P0=0 P1=0 P2=0",
+    "blockers": []
+  },
+  "not_run": [
+    "Phase6 RuleChainTransaction and lifecycle commit",
+    "Phase10/11 pipeline and codec switch",
+    "Phase12 removal of legacy four-stage runtime and enum",
+    "Phase15 complete modal/editor",
+    "remote CI, push and Release"
+  ],
+  "status": "VERIFIED / APPROVED / CHECKPOINT READY",
+  "checkpoint_ready": true
+}

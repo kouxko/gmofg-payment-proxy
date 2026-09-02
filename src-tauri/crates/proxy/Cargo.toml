@@ -1,8 +1,11 @@
 [package]
-name = "gmofg-proxy-runtime"
+name = "intercept-proxy-runtime"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
+
+[features]
+macos-universal-vendored-openssl = ["openssl/vendored"]
 
 [dependencies]
 async-trait.workspace = true
@@ -12,17 +15,28 @@ http.workspace = true
 http-body-util.workspace = true
 hyper.workspace = true
 hyper-util.workspace = true
+intercept-proxy-exchange = { path = "../exchange" }
 ring.workspace = true
 rustls.workspace = true
+rustls-native-certs.workspace = true
 serde.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
+tokio-openssl.workspace = true
 tokio-rustls.workspace = true
 tokio-util.workspace = true
 tracing.workspace = true
 uuid.workspace = true
 x509-parser.workspace = true
 zeroize.workspace = true
+
+# 单架构 macOS 默认链接系统 OpenSSL；Universal 交叉编译由显式 feature 启用同一固定版本的
+# vendored OpenSSL，避免依赖构建机上与 Host 架构绑定的 Homebrew 安装。
+[target.'cfg(target_os = "macos")'.dependencies]
+openssl = "=0.10.81"
+
+[target.'cfg(not(target_os = "macos"))'.dependencies]
+openssl.workspace = true
 
 [dev-dependencies]
 rcgen.workspace = true

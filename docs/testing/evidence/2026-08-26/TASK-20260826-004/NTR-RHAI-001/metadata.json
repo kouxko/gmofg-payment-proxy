@@ -1,0 +1,47 @@
+{
+  "task_id": "TASK-20260826-004",
+  "case_id": "NTR-RHAI-001",
+  "executed_at": "2026-08-26 16:33:09 +08:00",
+  "result": "PASS",
+  "derived_from": {
+    "task_id": "TASK-20260826-003",
+    "case_id": "NUVEI-PKG-003",
+    "evidence": "docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-003/"
+  },
+  "subject": "examples/protocol-packages/nuvei_tango_rhai",
+  "environment": {
+    "rustc": "1.97.1",
+    "cargo": "1.97.1",
+    "python": "3.14.7",
+    "protocol_host_api": 1
+  },
+  "resources": [
+    "resources/request.json",
+    "resources/response.json",
+    "resources/nuvei-tango-json-rhai-1.0.0.zip"
+  ],
+  "outputs": [
+    "outputs/source-manifest.json",
+    "outputs/python-expected.json",
+    "outputs/rhai-actual.json",
+    "outputs/comparison.json",
+    "outputs/tests-and-static.txt",
+    "outputs/zip-listing.txt"
+  ],
+  "replay": "steps/replay.md",
+  "result_detail": {
+    "tests_passed": 6,
+    "tests_failed": 0,
+    "known_size_frames": [1602, 647, 1602, 914, 1322, 896],
+    "zip_entries": 4,
+    "byte_exact_encode": true,
+    "raw_json_values_preserved": true,
+    "payload_logged": false
+  },
+  "not_applicable": {
+    "invalid_utf8": "explicitly excluded by the task",
+    "duplicate_json_keys": "explicitly excluded by the task",
+    "real_transaction": "covered separately by NTR-RHAI-002",
+    "ci": "not authorized"
+  }
+}

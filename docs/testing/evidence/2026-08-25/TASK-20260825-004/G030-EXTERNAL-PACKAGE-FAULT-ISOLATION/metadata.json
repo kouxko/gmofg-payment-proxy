@@ -1,0 +1,47 @@
+{
+  "task_id": "TASK-20260825-004",
+  "case_id": "G030-EXTERNAL-PACKAGE-FAULT-ISOLATION",
+  "executed_at": "2026-08-25 18:05:04 +08:00",
+  "result": "PASS_WITH_UNRELATED_REPOSITORY_GATE_FAILURE",
+  "environment": {
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)",
+    "node": "v26.7.0",
+    "pnpm": "11.13.1",
+    "platform": "macOS",
+    "timezone": "Asia/Shanghai"
+  },
+  "inputs": [
+    "inputs/malformed-raw-websocket-frame.hex",
+    "inputs/oversized-frame-boundary.json"
+  ],
+  "outputs": [
+    "outputs/fault-isolation-results.json",
+    "outputs/verification-summary.txt",
+    "outputs/task-state.txt",
+    "outputs/task-related.diff"
+  ],
+  "replay": "replay/commands.txt",
+  "tests": {
+    "infrastructure_external_package": {"passed": 124, "failed": 0},
+    "domain_external_package": {"passed": 37, "failed": 0},
+    "application_external_package": {"passed": 7, "failed": 0},
+    "host_external_package": {"passed": 1, "failed": 0},
+    "tauri_mcp": {"passed": 23, "failed": 0}
+  },
+  "gates": {
+    "rust_fmt": "PASS",
+    "infrastructure_clippy_deny_warnings": "PASS",
+    "architecture": "PASS",
+    "frontend_boundaries": "PASS",
+    "git_diff_check": "PASS",
+    "repository_source_size": "FAIL_UNRELATED_G030"
+  },
+  "not_applicable": {
+    "connection_counter": "Stable diagnostic is the selected observable contract; no duplicate cumulative owner added.",
+    "screenshots": "Backend-only deterministic tests.",
+    "raw_bin": "Exact bytes are archived as canonical hex and replayed directly in Rust; repository edits use text patches.",
+    "real_device_or_production": "Not part of this local fault-isolation task.",
+    "ci_release_artifact_business_result": "No CI, push, deploy, release, or production operation was authorized."
+  }
+}

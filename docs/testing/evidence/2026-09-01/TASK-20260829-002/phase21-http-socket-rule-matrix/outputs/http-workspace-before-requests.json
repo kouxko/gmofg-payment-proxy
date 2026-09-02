@@ -1,0 +1,222 @@
+{
+  "android_network_profiles": [],
+  "certificate_references": [],
+  "id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df",
+  "listeners": [
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "http",
+        "settings": {
+          "authentication": {
+            "mode": "none"
+          },
+          "body_processing": {
+            "mode": "plain"
+          },
+          "downstream_tls": {
+            "client_authentication": {
+              "mode": "disabled"
+            },
+            "dynamic_sni_allowlist": [],
+            "enabled": false,
+            "server_identity": null
+          },
+          "fixed_server": {
+            "upstream_tls": {
+              "client_identity": null,
+              "server_trust": null,
+              "verify_hostname": true
+            },
+            "upstream_url": "http://127.0.0.1:18083"
+          },
+          "mitm": {
+            "authority_allowlist": [],
+            "enabled": false,
+            "maximum_cached_leaf_certificates": 256,
+            "root_ca": null
+          },
+          "request_body_codec": "auto",
+          "response_body_codec": "auto"
+        }
+      },
+      "enabled": true,
+      "id": "bede1b59-f69f-4d2b-9647-4ad97149443f",
+      "name": "Phase21 HTTP rule matrix",
+      "port": 8080,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    }
+  ],
+  "name": "默认 Workspace",
+  "revision": 28,
+  "rule_created_order_high_water": 4,
+  "rule_definitions": [
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "actions": [
+            {
+              "source": "http",
+              "value": {
+                "SetHeader": {
+                  "name": "X-Method-Hit",
+                  "value": "yes"
+                }
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              },
+              "source": "http"
+            }
+          ],
+          "description": "Method POST"
+        }
+      },
+      "created_order": 1,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "bede1b59-f69f-4d2b-9647-4ad97149443f",
+      "name": "Method POST",
+      "priority": 10,
+      "revision": 1,
+      "rule_id": "37b0aac4-3b62-4964-91d9-f7d57c40eddd",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "actions": [
+            {
+              "source": "http",
+              "value": {
+                "SetHeader": {
+                  "name": "X-Header-Hit",
+                  "value": "yes"
+                }
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "field": {
+                "Header": "/x-probe"
+              },
+              "operator": {
+                "Equals": "alpha"
+              },
+              "source": "http"
+            }
+          ],
+          "description": "Header X-Probe alpha"
+        }
+      },
+      "created_order": 2,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "bede1b59-f69f-4d2b-9647-4ad97149443f",
+      "name": "Header X-Probe alpha",
+      "priority": 11,
+      "revision": 1,
+      "rule_id": "af547acb-d5b3-4aac-a094-22e270afbfd4",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "actions": [
+            {
+              "source": "http",
+              "value": {
+                "SetHeader": {
+                  "name": "X-Path-Hit",
+                  "value": "yes"
+                }
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "field": "RequestTarget",
+              "operator": {
+                "Wildcard": "/orders/*?mode=test"
+              },
+              "source": "http"
+            }
+          ],
+          "description": "Path and query wildcard"
+        }
+      },
+      "created_order": 3,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "bede1b59-f69f-4d2b-9647-4ad97149443f",
+      "name": "Path and query wildcard",
+      "priority": 12,
+      "revision": 1,
+      "rule_id": "c8e6af5a-2613-432f-ac11-e3f4c8440198",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "actions": [
+            {
+              "source": "document",
+              "value": {
+                "path": "/customer/name",
+                "type": "set",
+                "value": "matched"
+              }
+            }
+          ],
+          "conditions": [
+            {
+              "path": "/customer/age",
+              "predicate": {
+                "type": "number",
+                "value": {
+                  "operator": "equal",
+                  "value": 18.0
+                }
+              },
+              "source": "document"
+            }
+          ],
+          "description": "Body age 18"
+        }
+      },
+      "created_order": 4,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "bede1b59-f69f-4d2b-9647-4ad97149443f",
+      "name": "Body age 18",
+      "priority": 13,
+      "revision": 1,
+      "rule_id": "8e333e6e-3051-4e0c-86ef-46f1179d819c",
+      "stage": "proxy_to_upstream"
+    }
+  ]
+}

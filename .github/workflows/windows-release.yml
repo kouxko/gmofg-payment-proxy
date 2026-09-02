@@ -1,51 +1,263 @@
-name: Windows signed release and cache warmup
+name: Desktop release
+run-name: Desktop release · ${{ github.ref_name }} · ${{ github.event_name }}
 
 on:
   workflow_dispatch:
+    inputs:
+      platform:
+        description: 完整验证与安装包构建平台；Windows 快速可执行文件使用独立 workflow
+        type: choice
+        required: true
+        default: windows
+        options:
+          - windows
+          - all
   push:
-    branches:
-      # 该分支只用于提前填充 Windows/Rust/Tauri 缓存并验证安装包能构建，不发布产物。
-      - "codex/windows-ci-cache-warmup"
     tags:
-      # 只有 v* 标签进入签名、签名校验和 artifact 上传步骤。
+      # 正式版本标签自动发布；签名配置完整时签名，全部缺失时明确产出 unsigned 制品。
       - "v*"
 
+concurrency:
+  group: desktop-release-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
 jobs:
+  android-companion:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
+        with:
+          distribution: temurin
+          java-version: 21
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
+        with:
+          gradle-version: 9.6.1
+          # setup-gradle 默认只允许默认分支写缓存。手动发布来自可信分支，
+          # 允许写入当前分支缓存，后续重复验证可复用 Gradle/Android 构建产物。
+          cache-read-only: ${{ github.event_name != 'workflow_dispatch' }}
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.0
+      - name: Install Android SDK/NDK
+        shell: bash
+        run: |
+          sdkmanager "platforms;android-36" "build-tools;36.0.0" "ndk;29.0.14206865"
+          echo "ANDROID_NDK_HOME=$ANDROID_HOME/ndk/29.0.14206865" >> "$GITHUB_ENV"
+
+      - name: Build, verify and stage fixed-identity Companion
+        run: ./scripts/build-android-companion.sh
+
+      - name: Prepare stable Companion artifact name
+        shell: bash
+        run: |
+          mkdir -p android-companion-artifact
+          cp android-companion/app/build/outputs/apk/release/app-release.apk \
+            android-companion-artifact/intercept-proxy-android-companion.apk
+
+      - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: intercept-proxy-android-companion
+          path: android-companion-artifact/intercept-proxy-android-companion.apk
+          if-no-files-found: error
+
+  verify:
+    name: Verify before packaging (${{ matrix.os }})
+    needs: android-companion
+    runs-on: ${{ matrix.os }}
+    # Windows Rust 1.98 cold-cache verification exceeded the former 90-minute
+    # budget before the independent runtime gates could finish.
+    timeout-minutes: 150
+    strategy:
+      fail-fast: false
+      matrix:
+        os: ${{ fromJSON((github.event_name == 'push' || inputs.platform == 'all') && '["windows-latest","macos-14"]' || '["windows-latest"]') }}
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.6
+          cache: true
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json') }}-
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.0
+          components: rustfmt, clippy
+          targets: wasm32-wasip2
+
+      - uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
+          cache-on-failure: true
+
+      - run: deno ci
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: intercept-proxy-android-companion
+          path: companion-artifact
+
+      - name: Stage Companion desktop resource
+        shell: bash
+        run: >-
+          ./scripts/stage-android-companion.sh
+          companion-artifact/intercept-proxy-android-companion.apk
+
+      - name: Audit production frontend dependencies
+        run: deno audit --level high --frozen-lockfile
+
+      - name: Verify generated IPC bindings twice
+        shell: pwsh
+        run: |
+          # 先编译一次生成器，再执行同一个二进制两次验证确定性，避免两次 cargo run。
+          cargo build --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings
+          $generator = if ($IsWindows) {
+            "src-tauri/target/release/export-bindings.exe"
+          } else {
+            "src-tauri/target/release/export-bindings"
+          }
+          & $generator
+          git diff --exit-code -- src/generated/rust-types.ts
+          & $generator
+          git diff --exit-code -- src/generated/rust-types.ts
+
+      - name: Verify frontend and architecture boundaries
+        run: |
+          deno task scan:architecture
+          deno task scan:source-size
+          deno task lint
+          deno task typecheck
+          deno task test
+          deno task build
+          deno task scan:bundle-branding
+
+      - name: Verify Rust formatting
+        run: cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
+
+      - name: Verify Rust lints
+        run: cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+
+      - name: Verify Rust tests
+        if: runner.os != 'Windows'
+        run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets
+
+      - name: Verify Rust tests (Windows)
+        if: runner.os == 'Windows'
+        run: |
+          # The headless Windows runner cannot load the Tauri test executable
+          # (STATUS_ENTRYPOINT_NOT_FOUND). Compile/link it, and execute every
+          # platform-independent workspace test; macOS executes root tests.
+          cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --exclude intercept-proxy
+          cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --all-targets --no-run
+
+      - name: Verify independent runtime gates
+        run: |
+          deno task check:rust:windows
+          cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml --all-targets
+          cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
+          cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets -- -D warnings
+
   build:
+    needs: [android-companion, verify]
+    if: needs.android-companion.result == 'success' && needs.verify.result == 'success'
     runs-on: windows-latest
     timeout-minutes: 60
     permissions:
       contents: read
+    env:
+      # Socket 上游 TLS 使用 vendored OpenSSL；测试产物必须静态链接，目标机器无需安装 DLL。
+      OPENSSL_STATIC: "1"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          version: 11.13.1
+          deno-version: 2.9.6
+          cache: true
 
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
-          node-version: 22
-          cache: pnpm
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json') }}-
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.0
+          targets: wasm32-wasip2
 
-      - name: Restore Rust and Tauri tool caches
+      - name: Restore Rust cache
         uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
         with:
           workspaces: src-tauri -> target
-          shared-key: windows-release
-          cache-directories: |
-            ~/AppData/Local/tauri
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
           cache-on-failure: true
 
-      - run: pnpm install --frozen-lockfile
+      - name: Restore Tauri tool cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: ~/AppData/Local/tauri
+          key: ${{ runner.os }}-tauri-tools-v1
+
+      - run: deno ci
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: intercept-proxy-android-companion
+          path: companion-artifact
+
+      - name: Stage Companion desktop resource
+        shell: bash
+        run: >-
+          ./scripts/stage-android-companion.sh
+          companion-artifact/intercept-proxy-android-companion.apk
 
       - name: Audit production frontend dependencies
-        run: pnpm audit --prod --audit-level high
+        run: deno audit --level high --frozen-lockfile
+
+      - name: Resolve Windows signing mode
+        if: startsWith(github.ref, 'refs/tags/v')
+        id: windows_signing_mode
+        shell: pwsh
+        env:
+          WINDOWS_CERTIFICATE: ${{ secrets.WINDOWS_CERTIFICATE }}
+          WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
+          WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
+        run: |
+          $configuredCount = @(
+            $env:WINDOWS_CERTIFICATE,
+            $env:WINDOWS_CERTIFICATE_PASSWORD,
+            $env:WINDOWS_TIMESTAMP_URL
+          ).Where({ -not [string]::IsNullOrWhiteSpace($_) }).Count
+          if ($configuredCount -eq 0) {
+            "mode=unsigned" >> $env:GITHUB_OUTPUT
+          } elseif ($configuredCount -eq 3) {
+            "mode=signed" >> $env:GITHUB_OUTPUT
+          } else {
+            throw "Windows signing configuration must be either complete or absent."
+          }
 
       - name: Configure Authenticode signing for tagged releases
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.windows_signing_mode.outputs.mode == 'signed'
         id: windows_signing
         shell: pwsh
         env:
@@ -53,13 +265,6 @@ jobs:
           WINDOWS_CERTIFICATE_PASSWORD: ${{ secrets.WINDOWS_CERTIFICATE_PASSWORD }}
           WINDOWS_TIMESTAMP_URL: ${{ vars.WINDOWS_TIMESTAMP_URL }}
         run: |
-          # 标签发布采用 fail-closed：任一密钥/密码/时间戳地址缺失就中止，绝不降级成未签名发布。
-          if ([string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE) -or
-              [string]::IsNullOrWhiteSpace($env:WINDOWS_CERTIFICATE_PASSWORD) -or
-              [string]::IsNullOrWhiteSpace($env:WINDOWS_TIMESTAMP_URL)) {
-            throw "Tagged releases require WINDOWS_CERTIFICATE, WINDOWS_CERTIFICATE_PASSWORD and WINDOWS_TIMESTAMP_URL."
-          }
-
           $pfxPath = Join-Path $env:RUNNER_TEMP "windows-code-signing.pfx"
           # GitHub Secret 中保存 Base64 PFX，只在临时 runner 上还原；导入后禁止再次导出私钥。
           [IO.File]::WriteAllBytes(
@@ -113,17 +318,21 @@ jobs:
         with:
           args: >-
             --bundles msi,nsis
-            ${{ startsWith(github.ref, 'refs/tags/v') && '--config src-tauri/tauri.signing.conf.json' || '' }}
+            ${{ steps.windows_signing_mode.outputs.mode == 'signed' && '--config src-tauri/tauri.signing.conf.json' || '' }}
+
+      - name: Reject runtime OpenSSL DLL dependencies
+        shell: pwsh
+        run: ./scripts/verify-windows-openssl-runtime.ps1
 
       - name: Verify Authenticode signatures before release
-        if: startsWith(github.ref, 'refs/tags/v')
+        if: startsWith(github.ref, 'refs/tags/v') && steps.windows_signing_mode.outputs.mode == 'signed'
         shell: pwsh
         env:
           EXPECTED_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
         run: |
           # “构建成功”不等于“签名成功”。主程序、MSI、NSIS 都必须签名有效、签发者一致且有时间戳。
           $app = Get-Item `
-            "src-tauri/target/release/gmofg-payment-proxy.exe" `
+            "src-tauri/target/release/intercept-proxy.exe" `
             -ErrorAction Stop
           $msi = @(
             Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" `
@@ -155,37 +364,65 @@ jobs:
             }
           }
 
+      - name: Verify unsigned Windows release artifacts
+        if: startsWith(github.ref, 'refs/tags/v') && steps.windows_signing_mode.outputs.mode == 'unsigned'
+        shell: pwsh
+        run: |
+          $app = Get-Item `
+            "src-tauri/target/release/intercept-proxy.exe" `
+            -ErrorAction Stop
+          $msi = @(
+            Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" `
+              -File -ErrorAction SilentlyContinue
+          )
+          $nsis = @(
+            Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" `
+              -File -ErrorAction SilentlyContinue
+          )
+          if ($msi.Count -lt 1) {
+            throw "Expected at least one unsigned MSI installer."
+          }
+          if ($nsis.Count -lt 1) {
+            throw "Expected at least one unsigned NSIS installer."
+          }
+          $artifacts = @($app.FullName)
+          $artifacts += $msi | Select-Object -ExpandProperty FullName
+          $artifacts += $nsis | Select-Object -ExpandProperty FullName
+          foreach ($artifact in $artifacts) {
+            $signature = Get-AuthenticodeSignature -FilePath $artifact
+            if ($signature.Status -ne "NotSigned") {
+              throw "Expected an unsigned release artifact at $artifact, got $($signature.Status)."
+            }
+          }
+
       - name: Upload MSI and NSIS installers
-        if: startsWith(github.ref, 'refs/tags/v')
         uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         with:
-          name: GMO-FG-Payment-Proxy-signed-installers-x64
+          name: ${{ steps.windows_signing_mode.outputs.mode == 'signed' && 'Intercept-Proxy-signed-installers-x64' || 'Intercept-Proxy-unsigned-installers-x64' }}
           path: |
             src-tauri/target/release/bundle/msi/*.msi
             src-tauri/target/release/bundle/nsis/*.exe
           if-no-files-found: error
 
       - name: Package portable executable
-        if: startsWith(github.ref, 'refs/tags/v')
         shell: pwsh
         run: ./scripts/package-portable.ps1 -SkipBuild
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
-        if: startsWith(github.ref, 'refs/tags/v')
         with:
-          name: GMO-FG-Payment-Proxy-signed-portable-x64
+          name: ${{ steps.windows_signing_mode.outputs.mode == 'signed' && 'Intercept-Proxy-signed-portable-x64' || 'Intercept-Proxy-unsigned-portable-x64' }}
           path: dist/*.zip
           if-no-files-found: error
 
       - name: Remove imported signing material
-        if: always() && startsWith(github.ref, 'refs/tags/v')
+        if: always() && startsWith(github.ref, 'refs/tags/v') && steps.windows_signing_mode.outputs.mode == 'signed'
         shell: pwsh
         env:
           SIGNING_THUMBPRINT: ${{ steps.windows_signing.outputs.thumbprint }}
           SIGNING_PFX_PATH: ${{ steps.windows_signing.outputs.pfx_path }}
         run: |
           # always() 保证前面任何发布步骤失败时也会清理证书、PFX 和临时 Tauri 配置。
-          # 分支预热从未导入签名材料，因此该步骤只在 v* 标签运行。
+          # 分支预热与 unsigned tag 从未导入签名材料，因此只清理 signed tag。
           if (-not [string]::IsNullOrWhiteSpace($env:SIGNING_THUMBPRINT)) {
             Remove-Item "Cert:\CurrentUser\My\$env:SIGNING_THUMBPRINT" -Force -ErrorAction SilentlyContinue
           }
@@ -193,3 +430,87 @@ jobs:
             Remove-Item $env:SIGNING_PFX_PATH -Force -ErrorAction SilentlyContinue
           }
           Remove-Item "src-tauri/tauri.signing.conf.json" -Force -ErrorAction SilentlyContinue
+
+  build-macos:
+    name: build-macos-universal
+    needs: [android-companion, verify]
+    if: >-
+      always() &&
+      needs.android-companion.result == 'success' &&
+      needs.verify.result == 'success' &&
+      (github.event_name == 'push' || inputs.platform == 'all')
+    runs-on: macos-14
+    timeout-minutes: 60
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
+
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
+        with:
+          deno-version: 2.9.6
+          cache: true
+
+      - name: Restore Next.js build cache
+        uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
+        with:
+          path: .next/cache
+          key: ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          restore-keys: |
+            ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json') }}-
+
+      - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.0
+          targets: wasm32-wasip2
+
+      - name: Install both macOS Rust targets
+        shell: bash
+        run: rustup target add aarch64-apple-darwin x86_64-apple-darwin
+
+      - name: Restore Rust and Tauri tool caches
+        uses: Swatinem/rust-cache@e18b497796c12c097a38f9edb9d0641fb99eee32 # v2
+        with:
+          workspaces: src-tauri -> target
+          shared-key: desktop-${{ runner.os }}
+          add-job-id-key: false
+          cache-on-failure: true
+
+      - run: deno ci
+
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
+        with:
+          name: intercept-proxy-android-companion
+          path: companion-artifact
+
+      - name: Stage Companion desktop resource
+        shell: bash
+        run: >-
+          ./scripts/stage-android-companion.sh
+          companion-artifact/intercept-proxy-android-companion.apk
+
+      - name: Audit production frontend dependencies
+        run: deno audit --level high --frozen-lockfile
+
+      - name: Build universal macOS app and DMG
+        run: deno task build:macos:universal
+
+      - name: Package macOS app bundle
+        shell: bash
+        run: |
+          mkdir -p dist
+          app_path="$(find src-tauri/target/universal-apple-darwin/release/bundle/macos -maxdepth 1 -name '*.app' -print -quit)"
+          if [[ -z "$app_path" ]]; then
+            echo "未找到 macOS .app 构建产物。" >&2
+            exit 1
+          fi
+          ditto -c -k --sequesterRsrc --keepParent "$app_path" dist/Intercept-Proxy-macos-universal-app.zip
+
+      - name: Upload universal macOS artifacts
+        uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
+        with:
+          name: Intercept-Proxy-macos-universal
+          path: |
+            src-tauri/target/universal-apple-darwin/release/bundle/dmg/*.dmg
+            dist/Intercept-Proxy-macos-universal-app.zip
+          if-no-files-found: error

@@ -1,7 +1,8 @@
-//! 基础设施错误的稳定分类与脱敏展示。
+//! 基础设施错误的稳定分类与边界化展示。
 //!
-//! 底层库错误在这里被归并成应用可识别的错误码；消息可以说明失败阶段和路径，但禁止
-//! 携带证书私钥、口令、HTTP 载荷等敏感字节。
+//! 底层库错误在这里被归并成应用可识别的错误码。错误只承担失败分类与定位，不复制
+//! HTTP/Socket payload；完整业务报文属于 capture/Exchange observation。私钥和口令不是业务
+//! payload，始终只由专用凭据边界持有。
 
 use std::path::PathBuf;
 
@@ -10,7 +11,7 @@ use thiserror::Error;
 /// Stable infrastructure error categories mapped to application error codes.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum InfrastructureErrorCode {
-    DatabaseMigrationFailed,
+    DatabaseSchemaFailed,
     DatabaseWriteFailed,
     RevisionConflict,
     DpapiProtectFailed,
@@ -26,19 +27,37 @@ pub enum InfrastructureErrorCode {
     ExportFailed,
 }
 
-/// Infrastructure failures deliberately omit secret data and payload bytes.
+/// Infrastructure failures carry stable error context; payload evidence belongs to observation stores.
 #[derive(Debug, Error)]
 pub enum InfrastructureError {
-    #[error("数据库迁移失败")]
-    DatabaseMigration {
+    #[error("数据库结构初始化或校验失败")]
+    DatabaseSchema {
         #[source]
         source: rusqlite::Error,
+    },
+    #[error("数据库结构版本无效：当前版本 {current}，实际标记 {found:?}")]
+    DatabaseSchemaInvalid {
+        current: i64,
+        found: Vec<(i64, i64)>,
+    },
+    #[error("旧数据库清除失败：{path}")]
+    DatabaseReset {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
     },
     #[error("数据库操作失败")]
     Database {
         #[source]
         source: rusqlite::Error,
     },
+    #[error("数据库阻塞任务异常终止")]
+    DatabaseExecutorTerminated {
+        #[source]
+        source: tokio::task::JoinError,
+    },
+    #[error("数据库阻塞执行器不可用")]
+    DatabaseExecutorUnavailable,
     #[error("数据已被其他操作更新")]
     RevisionConflict,
     #[error("当前平台不支持 Windows DPAPI")]
@@ -78,6 +97,12 @@ pub enum InfrastructureError {
         #[source]
         source: std::io::Error,
     },
+    #[error("目标文件已替换，但父目录持久化状态无法确认：{path}")]
+    ExportParentSync {
+        path: PathBuf,
+        #[source]
+        source: std::io::Error,
+    },
     #[error("目标文件已存在：{path}")]
     ExportTargetExists { path: PathBuf },
 }
@@ -86,8 +111,12 @@ impl InfrastructureError {
     #[must_use]
     pub const fn code(&self) -> InfrastructureErrorCode {
         match self {
-            Self::DatabaseMigration { .. } => InfrastructureErrorCode::DatabaseMigrationFailed,
-            Self::Database { .. } => InfrastructureErrorCode::DatabaseWriteFailed,
+            Self::DatabaseSchema { .. }
+            | Self::DatabaseSchemaInvalid { .. }
+            | Self::DatabaseReset { .. } => InfrastructureErrorCode::DatabaseSchemaFailed,
+            Self::Database { .. }
+            | Self::DatabaseExecutorTerminated { .. }
+            | Self::DatabaseExecutorUnavailable => InfrastructureErrorCode::DatabaseWriteFailed,
             Self::RevisionConflict => InfrastructureErrorCode::RevisionConflict,
             Self::DpapiUnsupported => InfrastructureErrorCode::DpapiUnsupported,
             Self::DpapiProtect => InfrastructureErrorCode::DpapiProtectFailed,
@@ -99,9 +128,9 @@ impl InfrastructureError {
             Self::ImportTooLarge { .. } => InfrastructureErrorCode::ImportTooLarge,
             Self::PersistenceCorrupt { .. } => InfrastructureErrorCode::PersistenceCorrupt,
             Self::Import { .. } => InfrastructureErrorCode::ImportFailed,
-            Self::Export { .. } | Self::ExportTargetExists { .. } => {
-                InfrastructureErrorCode::ExportFailed
-            }
+            Self::Export { .. }
+            | Self::ExportParentSync { .. }
+            | Self::ExportTargetExists { .. } => InfrastructureErrorCode::ExportFailed,
         }
     }
 }

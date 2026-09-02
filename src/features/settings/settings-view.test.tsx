@@ -3,19 +3,30 @@
 /** 验证设置草稿、字段错误、保存/重启门禁与恢复默认值确认。 */
 
 import "@testing-library/jest-dom/vitest";
+import { useState } from "react";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import type {
+  McpInfoViewModel,
+  ExternalPackageServiceStatusViewModel,
   SettingsDraft,
   SettingsViewModel,
 } from "@/generated/rust-types";
 import { SettingsView } from "./settings-view";
+import { isExternalPackageServiceStatus } from "./external-package-service-settings";
 
 const commandMocks = vi.hoisted(() => ({
+  applicationDataReset: vi.fn(),
   settingsResetDefaults: vi.fn(),
   settingsSave: vi.fn(),
+  settingsValidate: vi.fn(),
+  settingsGet: vi.fn(),
+  mcpInfo: vi.fn(),
+  externalPackageServiceStatus: vi.fn(),
+  settingsSetData: vi.fn(),
 }));
+const appEventRefreshMock = vi.hoisted(() => vi.fn());
 
 vi.mock("@/generated/rust-types", () => ({
   commands: commandMocks,
@@ -53,15 +64,16 @@ const draft: SettingsDraft = {
   max_body_bytes: 4 * 1024 * 1024,
   max_sessions: 500,
   max_memory_bytes: 256 * 1024 * 1024,
+  ui_event_capacity: 4096,
   leaf_sans: ["127.0.0.1"],
+  external_package_service: {
+    bind_address: "0.0.0.0",
+    port: 8765,
+  },
 };
 
 const settings: SettingsViewModel = {
   stored: draft,
-  effective: draft,
-  pending_changes: false,
-  requires_restart: false,
-  restart_reason: null,
   revision: 1,
   can_write: true,
   disabled_reason: null,
@@ -71,23 +83,107 @@ const settings: SettingsViewModel = {
   payload_policy_text: "Payload 仅保存在内存中。",
 };
 
+const mcpInfo: McpInfoViewModel = {
+  available: true,
+  endpoint: "http://0.0.0.0:17653/mcp",
+  protocol_version: "2026-07-28",
+  transport: "Streamable HTTP（明文）",
+  access_scope: "所有可达网络接口；客户端须把 0.0.0.0 替换为本机可达地址",
+  authentication: "无认证；任何可达主机均可读取并修改 Proxy 配置",
+  plaintext_http: true,
+  ipv4: { available: true, bind_address: "0.0.0.0", port: 17653, warning_codes: [] },
+  ipv6: { available: false, bind_address: "[::]", port: 17653, warning_codes: ["IPV6_DEGRADED"] },
+  warning_codes: ["IPV6_DEGRADED"],
+  tool_count: 42,
+  resource_count: 11,
+};
+let mcpAvailable = true;
+
+const externalStatus: ExternalPackageServiceStatusViewModel = {
+  websocket_url: "ws://0.0.0.0:8765/packages",
+  fixed_path: "/packages",
+  online_connection_count: 2,
+  state: { state: "listening" },
+  authentication_enabled: false,
+};
+
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
-  useIpcQuery: () => ({
-    data: settings,
-    error: undefined,
-    isLoading: false,
-    refresh: vi.fn(),
-    setData: vi.fn(),
-  }),
+  useIpcQuery: (key: string) => {
+    const [data, setData] = useState(key === "mcp-info"
+      ? { ...mcpInfo, available: mcpAvailable }
+      : key === "external-package-service-status" ? externalStatus : settings);
+    return {
+      data,
+      error: undefined,
+      isLoading: false,
+      refresh: vi.fn(),
+      setData: (next: SettingsViewModel | McpInfoViewModel | ExternalPackageServiceStatusViewModel) => {
+        commandMocks.settingsSetData(next);
+        setData(next);
+      },
+    };
+  },
 }));
 
 vi.mock("@/features/shell/bootstrap-context", () => ({
-  useAppEventRefresh: vi.fn(),
+  useAppEventRefresh: appEventRefreshMock,
 }));
 
 describe("production SettingsView overlay", () => {
   beforeEach(() => {
     vi.clearAllMocks();
+    mcpAvailable = true;
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: true,
+      field_errors: {},
+      warnings: ["Rust 校验警告"],
+    });
+    commandMocks.settingsSave.mockResolvedValue({
+      ...settings,
+      stored: { ...draft, max_sessions: 501 },
+    });
+  });
+
+  it("refreshes the external package service card from authoritative service events", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("tab", { name: "外部软件包" }));
+
+    expect(appEventRefreshMock).toHaveBeenCalledWith(
+      ["external_package_service_status_changed", "snapshot_required"],
+      expect.any(Function),
+    );
+  });
+
+  it("does not expose manual validation controls or validation-result landmarks", () => {
+    render(<SettingsView />);
+    expect(screen.queryByText("校验结果")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "校验设置" })).not.toBeInTheDocument();
+  });
+
+  it("fails closed for malformed external service runtime snapshots", () => {
+    expect(isExternalPackageServiceStatus(externalStatus)).toBe(true);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, fixed_path: "/legacy" })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, authentication_enabled: undefined })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, online_connection_count: -1 })).toBe(false);
+    expect(isExternalPackageServiceStatus({ ...externalStatus, legacy_endpoint: true })).toBe(false);
+  });
+
+  it("saves through Rust and replaces the displayed stored snapshot", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() =>
+      expect(commandMocks.settingsSave).toHaveBeenCalledWith(draft),
+    );
+    expect(commandMocks.settingsValidate).toHaveBeenCalledWith(draft);
+    expect(commandMocks.settingsSetData).toHaveBeenCalledWith(
+      expect.objectContaining({
+        stored: expect.objectContaining({ max_sessions: 501 }),
+      }),
+    );
   });
 
   it("keeps the real reset AlertDialog open while Rust is pending", async () => {
@@ -123,52 +219,167 @@ describe("production SettingsView overlay", () => {
     );
   });
 
-  it(
-    "sends raw SAN text to Rust without TypeScript normalization",
-    async () => {
-      commandMocks.settingsSave.mockResolvedValue(settings);
-      const user = userEvent.setup();
-      render(<SettingsView />);
-
-      const raw = " Proxy.Local，10.0.34.50, proxy.local ";
-      await user.clear(
-        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-      );
-      await user.type(
-        screen.getByRole("textbox", { name: "服务端证书 SAN" }),
-        raw,
-      );
-      await user.click(screen.getByRole("button", { name: "保存设置" }));
-
-      expect(commandMocks.settingsSave).toHaveBeenCalledWith(
-        expect.any(Object),
-        raw,
-      );
-    },
-    10_000,
-  );
-
-  it("renders channel editors from the Rust settings catalog", () => {
+  it("requires destructive confirmation before clearing all persisted data", async () => {
+    let finish!: () => void;
+    commandMocks.applicationDataReset.mockReturnValue(
+      new Promise<void>((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const user = userEvent.setup();
     render(<SettingsView />);
 
-    expect(screen.getByText("通道 ID：transaction")).toBeVisible();
-    expect(screen.getByText("通道 ID：dll")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "清除全部配置与数据" }),
+    );
     expect(
-      screen.getByRole("switch", { name: "启用交易" }),
-    ).toBeChecked();
-    expect(screen.getByRole("switch", { name: "启用DLL" })).toBeChecked();
+      screen.getByRole("alertdialog", { name: "清除全部配置与测试数据？" }),
+    ).toBeVisible();
+    expect(commandMocks.applicationDataReset).not.toHaveBeenCalled();
+
+    await user.click(screen.getByRole("button", { name: "确认清除并重启" }));
+    expect(commandMocks.applicationDataReset).toHaveBeenCalledWith(true);
+    expect(screen.getByRole("button", { name: "取消" })).toBeDisabled();
+    expect(
+      screen.getByRole("button", { name: "正在清除并重启…" }),
+    ).toBeDisabled();
+
+    finish();
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("alertdialog", {
+          name: "清除全部配置与测试数据？",
+        }),
+      ).not.toBeInTheDocument(),
+    );
   });
 
-  it("switches setting tabs without replacing the page document", async () => {
+  it("keeps listener addresses, upstream targets and lifecycle out of system settings", () => {
+    render(<SettingsView />);
+
+    expect(screen.queryByText("通道 ID：transaction")).not.toBeInTheDocument();
+    expect(screen.queryByText("通道 ID：dll")).not.toBeInTheDocument();
+    expect(screen.queryByLabelText("服务端证书 SAN")).not.toBeInTheDocument();
+    expect(screen.queryByText("上游 URL")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "保存并重启代理" })).not.toBeInTheDocument();
+    expect(screen.getByText(/代理入口的监听地址、端口、上游和 TLS/)).toBeVisible();
+  });
+
+  it("keeps the compact settings tabs without the summary sidebar", () => {
+    render(<SettingsView />);
+
+    expect(screen.getAllByRole("tab").map((tab) => tab.textContent)).toEqual([
+      "超时与容量",
+      "应用",
+      "外部软件包",
+      "AI 助手（MCP）",
+    ]);
+    expect(screen.queryByText("数据与导出")).not.toBeInTheDocument();
+    expect(screen.queryByText("配置摘要与校验")).not.toBeInTheDocument();
+  });
+
+  it("shows the MCP address, client configuration and App-side guidance", async () => {
     const user = userEvent.setup();
-    const { container } = render(<SettingsView />);
-    const viewRoot = container.firstElementChild;
-    const locationBefore = window.location.href;
+    render(<SettingsView />);
 
-    await user.click(screen.getByRole("tab", { name: "超时与容量" }));
+    await user.click(screen.getByRole("tab", { name: "AI 助手（MCP）" }));
 
-    expect(screen.getByRole("textbox", { name: "最大会话数" })).toBeVisible();
-    expect(container.firstElementChild).toBe(viewRoot);
-    expect(window.location.href).toBe(locationBefore);
+    expect(screen.getByText("http://0.0.0.0:17653/mcp")).toBeVisible();
+    expect(screen.getByText("42 个工具（含读写能力） · 11 个参考资源")).toBeVisible();
+    expect(screen.getByText(/技术验证、预览和一次性确认流程/)).toBeVisible();
+    expect(screen.getByText(/Root CA、服务端证书、客户端证书/)).toBeVisible();
+    expect(screen.getByText(/"type": "http"/)).toBeVisible();
+    expect(screen.getByText(/<本机可达地址>/)).toBeVisible();
+    expect(screen.getByText(/IPV6_DEGRADED/)).toBeVisible();
+    expect(screen.getByText(/任何能访问该端口的主机/)).toBeVisible();
+  });
+
+  it("treats a missing MCP runtime as an invariant failure instead of a restartable port conflict", async () => {
+    mcpAvailable = false;
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("tab", { name: "AI 助手（MCP）" }));
+
+    expect(screen.getByText("运行状态异常")).toBeVisible();
+    expect(screen.getByText(/IPv4 MCP 绑定失败会直接阻止应用完成启动/)).toBeVisible();
+    expect(screen.queryByText(/确认本机 17653 端口没有被其他程序占用/)).not.toBeInTheDocument();
+  });
+
+  it("shows the authoritative external package service status and restart boundary", async () => {
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("tab", { name: "外部软件包" }));
+
+    expect(screen.getByText("正在监听")).toBeVisible();
+    expect(screen.getByText("ws://0.0.0.0:8765/packages")).toBeVisible();
+    expect(screen.getByText("/packages")).toBeVisible();
+    expect(screen.getByText("2 个")).toBeVisible();
+    expect(screen.getByText("当前版本不提供连接认证")).toBeVisible();
+    expect(screen.getByText(/重启应用后生效/)).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "监听地址" })).toHaveValue("0.0.0.0");
+    expect(screen.getByRole("textbox", { name: "端口" })).toHaveValue("8,765");
+    expect(screen.getByRole("button", { name: "保存设置" })).toBeVisible();
+  });
+
+  it("does not write when Rust validation rejects the current draft", async () => {
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: false,
+      field_errors: { max_sessions: ["最大会话数无效"] },
+      warnings: [],
+    });
+    const user = userEvent.setup();
+    render(<SettingsView />);
+
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+
+    await waitFor(() =>
+      expect(screen.getByText("最大会话数无效")).toBeVisible(),
+    );
+    expect(commandMocks.settingsSave).not.toHaveBeenCalled();
+  });
+
+  it("shows only unmapped validation errors in the page-level alert", async () => {
+    commandMocks.settingsValidate.mockResolvedValue({
+      valid: false,
+      field_errors: { bind_address: ["监听地址由入口配置管理"] },
+      warnings: [],
+    });
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(await screen.findByText("设置无法保存")).toBeVisible();
+    expect(screen.getByText("监听地址由入口配置管理")).toBeVisible();
+  });
+
+  it("shows compact saved and dirty draft states", async () => {
+    commandMocks.settingsSave.mockResolvedValue({
+      ...settings,
+      stored: { ...draft, connect_timeout_seconds: 71 },
+    });
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    expect(screen.getByText("已保存")).toBeVisible();
+    await user.click(
+      screen.getByRole("button", { name: "Increase 连接超时（秒）" }),
+    );
+    expect(screen.getByText("有未保存更改")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(await screen.findByText("已保存")).toBeVisible();
+  });
+
+  it("disables Rust-backed fields while save validation is pending", async () => {
+    let finish!: (value: { valid: boolean; field_errors: object; warnings: string[] }) => void;
+    commandMocks.settingsValidate.mockReturnValue(new Promise((resolve) => { finish = resolve; }));
+    const user = userEvent.setup();
+    render(<SettingsView />);
+    await user.click(screen.getByRole("button", { name: "保存设置" }));
+    expect(screen.getByRole("textbox", { name: "连接超时（秒）" })).toBeDisabled();
+    expect(screen.getByRole("switch", { name: "Host 头重写为目标主机" })).toBeDisabled();
+    finish({ valid: false, field_errors: {}, warnings: [] });
+    await waitFor(() =>
+      expect(screen.getByRole("button", { name: "保存设置" })).toBeEnabled(),
+    );
   });
 });

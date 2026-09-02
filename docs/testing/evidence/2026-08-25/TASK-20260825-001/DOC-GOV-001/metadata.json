@@ -1,0 +1,21 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-001",
+  "case_id": "DOC-GOV-001",
+  "executed_at": "2026-08-25T16:41:05+08:00",
+  "result": "PASS",
+  "tested_files": [
+    "AGENTS.md",
+    "docs/README.md",
+    "docs/tasks/completed/2026-08-25/generate-project-agents-governance.md",
+    "docs/tasks/README.md",
+    "docs/testing/evidence/2026-08-25/TASK-20260825-001/DOC-GOV-001/README.md",
+    "docs/testing/evidence/2026-08-25/TASK-20260825-001/DOC-GOV-001/metadata.json"
+  ],
+  "not_applicable": {
+    "network_packets": "Documentation governance task",
+    "screenshots": "No UI behavior",
+    "markdown_lsp": "No applicable Markdown LSP available"
+  },
+  "replay": "Run the commands in README.md from the repository root"
+}

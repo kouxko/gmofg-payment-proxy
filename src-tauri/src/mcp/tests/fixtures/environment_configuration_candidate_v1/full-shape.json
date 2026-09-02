@@ -1,0 +1,701 @@
+{
+  "schema_version": 1,
+  "target": {
+    "mode": "new",
+    "name": "Store Lab"
+  },
+  "workspace": {
+    "listeners": [
+      {
+        "alias": "http-entry",
+        "name": "HTTP entry",
+        "enabled": true,
+        "bind_address": "0.0.0.0",
+        "port": 8080,
+        "connect_timeout_ms": 5000,
+        "read_timeout_ms": 30000,
+        "write_timeout_ms": 30000,
+        "data_plane": {
+          "kind": "http",
+          "settings": {
+            "authentication": {
+              "mode": "basic",
+              "credential_alias": "proxy-admin"
+            },
+            "mitm": {
+              "enabled": true,
+              "authority_allowlist": [
+                "example.com"
+              ],
+              "root_ca_selector": "installation:root-ca",
+              "maximum_cached_leaf_certificates": 256
+            },
+            "downstream_tls": {
+              "enabled": true,
+              "server_identity_alias": "http-listener-identity",
+              "dynamic_sni_allowlist": [
+                "example.com"
+              ],
+              "client_authentication": {
+                "mode": "required",
+                "trust_alias": "downstream-trust"
+              }
+            },
+            "request_body_codec": "auto",
+            "response_body_codec": "shift_jis",
+            "body_processing": {
+              "mode": "protocol",
+              "package": {
+                "id": "au-eftex",
+                "version": "1.1.0"
+              }
+            },
+            "fixed_server": {
+              "upstream_url": "https://pay.example.test",
+              "upstream_tls": {
+                "verify_hostname": true,
+                "server_trust_alias": "upstream-trust",
+                "client_identity_alias": "http-upstream-client"
+              }
+            }
+          }
+        }
+      },
+      {
+        "alias": "socket-entry",
+        "name": "Socket entry",
+        "enabled": true,
+        "bind_address": "0.0.0.0",
+        "port": 9000,
+        "connect_timeout_ms": 5000,
+        "read_timeout_ms": 30000,
+        "write_timeout_ms": 30000,
+        "data_plane": {
+          "kind": "socket",
+          "settings": {
+            "topology": {
+              "mode": "relay",
+              "settings": {
+                "upstream": {
+                  "host": "pay.example.test",
+                  "port": 443
+                },
+                "security": {
+                  "mode": "tls_to_tls",
+                  "downstream_tls": {
+                    "server_identity_alias": "socket-listener-identity",
+                    "client_authentication": {
+                      "mode": "required",
+                      "trust_alias": "downstream-trust"
+                    }
+                  },
+                  "upstream_tls": {
+                    "verify_hostname": true,
+                    "tls_server_name": "pay.example.test",
+                    "server_trust_alias": "upstream-trust",
+                    "client_identity_alias": "socket-upstream-client"
+                  }
+                }
+              }
+            },
+            "maximum_connections": 16,
+            "runtime_limits": {
+              "read_chunk_bytes": 4096,
+              "diagnostic_event_capacity": 256,
+              "diagnostic_memory_bytes": 1048576
+            },
+            "processing": {
+              "mode": "scripted",
+              "settings": {
+                "package": {
+                  "id": "au-eftex",
+                  "version": "1.1.0"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "alias": "socket-responder",
+        "name": "Socket local responder",
+        "enabled": true,
+        "bind_address": "0.0.0.0",
+        "port": 9001,
+        "connect_timeout_ms": 5000,
+        "read_timeout_ms": 30000,
+        "write_timeout_ms": 30000,
+        "data_plane": {
+          "kind": "socket",
+          "settings": {
+            "topology": {
+              "mode": "local_responder",
+              "settings": {
+                "downstream_security": {
+                  "mode": "tcp"
+                }
+              }
+            },
+            "maximum_connections": 16,
+            "runtime_limits": {
+              "read_chunk_bytes": 4096,
+              "diagnostic_event_capacity": 256,
+              "diagnostic_memory_bytes": 1048576
+            },
+            "processing": {
+              "mode": "direct"
+            }
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "name": "Request transformations",
+        "enabled": true,
+        "priority": 10,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Canonical request-stage non-terminal actions",
+            "condition": {
+              "source": "http",
+              "field": "TerminalIp",
+              "operator": {
+                "Equals": "192.0.2.10"
+              }
+            },
+            "action": {
+              "source": "http",
+              "value": {
+                "SetJsonField": {
+                  "path": "$.amount",
+                  "value": 1000
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Response transformations",
+        "enabled": true,
+        "priority": 11,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Canonical response-stage non-terminal actions",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "http",
+              "value": {
+                "Intermittent": {
+                  "available_milliseconds": 10,
+                  "blocked_milliseconds": 5,
+                  "direction": "Downstream"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Disconnect before upstream",
+        "enabled": true,
+        "priority": 13,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": "DisconnectBeforeUpstream"
+            }
+          }
+        }
+      },
+      {
+        "name": "Upstream connect timeout",
+        "enabled": true,
+        "priority": 14,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamConnectTimeout": {
+                  "milliseconds": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Upstream write timeout",
+        "enabled": true,
+        "priority": 15,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamWriteTimeout": {
+                  "milliseconds": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Disconnect during upstream write",
+        "enabled": true,
+        "priority": 16,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Request terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DisconnectDuringUpstreamWrite": {
+                  "after_bytes": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Upstream read timeout",
+        "enabled": true,
+        "priority": 17,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "UpstreamReadTimeout": {
+                  "milliseconds": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Drop upstream response",
+        "enabled": true,
+        "priority": 18,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DropUpstreamResponse": {
+                  "mode": "ReadCompleteResponse"
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Mock response",
+        "enabled": true,
+        "priority": 19,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "MockResponse": {
+                  "status": 200,
+                  "headers": [
+                    [
+                      "X-Test",
+                      "yes"
+                    ]
+                  ],
+                  "body_bytes": [
+                    79,
+                    75
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Invalid JSON response",
+        "enabled": true,
+        "priority": 20,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "InvalidJson": {
+                  "body_bytes": [
+                    123
+                  ]
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Incorrect content length",
+        "enabled": true,
+        "priority": 21,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "IncorrectContentLength": {
+                  "delta": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Truncate response",
+        "enabled": true,
+        "priority": 22,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "TruncateResponse": {
+                  "bytes": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Disconnect during downstream write",
+        "enabled": true,
+        "priority": 23,
+        "listener_alias": "http-entry",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "Response terminal action",
+            "condition": {
+              "source": "http",
+              "field": "Method",
+              "operator": {
+                "Equals": "POST"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "DisconnectDuringDownstreamWrite": {
+                  "after_bytes": 1
+                }
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Protocol Document values",
+        "enabled": true,
+        "priority": 20,
+        "listener_alias": "socket-entry",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "socket",
+          "value": {
+            "package": {
+              "id": "au-eftex",
+              "version": "1.1.0"
+            },
+            "condition": {
+              "source": "document",
+              "path": "/amount",
+              "predicate": {
+                "type": "number",
+                "value": {
+                  "operator": "equal",
+                  "value": 1000
+                }
+              }
+            },
+            "action": {
+              "source": "record_match"
+            }
+          }
+        }
+      }
+    ],
+    "android_network_profiles": [
+      {
+        "id": "android-lab",
+        "name": "Android lab",
+        "target_applications": [
+          {
+            "package_name": "com.example.payment",
+            "uid": 10001,
+            "display_name": null
+          }
+        ],
+        "destination_targets": [
+          {
+            "cidr": "203.0.113.10/32",
+            "ports": [
+              443
+            ]
+          }
+        ],
+        "proxy_routes": [
+          {
+            "destination": "203.0.113.10",
+            "ports": [
+              443
+            ],
+            "listener_alias": "http-entry"
+          }
+        ],
+        "confirmed_shared_uids": [
+          10001
+        ],
+        "auto_resume_after_reboot": false,
+        "weak_network": {
+          "seed": 1,
+          "fixed_delay_millis": 0,
+          "uniform_jitter_millis": 0,
+          "upload_bytes_per_second": null,
+          "download_bytes_per_second": null,
+          "random_loss_basis_points": 0,
+          "burst_loss": {
+            "enter_bad_state_basis_points": 100,
+            "leave_bad_state_basis_points": 9000,
+            "good_state_loss_basis_points": 25,
+            "bad_state_loss_basis_points": 7500
+          },
+          "duplicate_basis_points": 0,
+          "reorder_basis_points": 0,
+          "maximum_reorder_hold_millis": 0,
+          "blackout_windows": [
+            {
+              "start_after_millis": 1000,
+              "duration_millis": 500
+            }
+          ],
+          "dns_blackhole": false,
+          "nth_tcp_flag_drops": [
+            {
+              "direction": "upload",
+              "flag": "syn",
+              "nth": 1
+            },
+            {
+              "direction": "download",
+              "flag": "syn_ack",
+              "nth": 2
+            }
+          ],
+          "path_mtu": {
+            "mtu": null,
+            "mss_clamp": null,
+            "mode": "pass"
+          },
+          "corruption": {
+            "probability_basis_points": 0,
+            "bits_per_packet": 0
+          }
+        },
+        "stop_vpn_on_control_loss": true
+      }
+    ]
+  },
+  "materials": {
+    "certificates": [
+      {
+        "alias": "http-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "content": "AQID",
+        "password": null,
+        "label": "HTTP listener identity"
+      },
+      {
+        "alias": "socket-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "content": "AQID",
+        "password": null,
+        "label": "Socket listener identity"
+      },
+      {
+        "alias": "downstream-trust",
+        "role": "downstream_client_trust",
+        "encoding": "pem",
+        "content": "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----",
+        "password": null,
+        "label": "Downstream trust"
+      },
+      {
+        "alias": "upstream-trust",
+        "role": "upstream_server_trust",
+        "encoding": "pem",
+        "content": "-----BEGIN CERTIFICATE-----\nAQID\n-----END CERTIFICATE-----",
+        "password": null,
+        "label": "Upstream trust"
+      },
+      {
+        "alias": "http-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "content": "AQID",
+        "password": "fixture-password",
+        "label": "HTTP upstream client"
+      },
+      {
+        "alias": "socket-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "content": "AQID",
+        "password": "fixture-password",
+        "label": "Socket upstream client"
+      }
+    ],
+    "secrets": [
+      {
+        "alias": "proxy-admin",
+        "role": "proxy_basic_auth",
+        "username": "operator",
+        "password": "fixture-password",
+        "label": "Proxy operator"
+      }
+    ]
+  }
+}

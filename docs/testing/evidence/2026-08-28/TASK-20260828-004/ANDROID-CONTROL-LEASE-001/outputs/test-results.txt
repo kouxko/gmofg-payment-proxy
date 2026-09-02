@@ -1,0 +1,9 @@
+Kotlin control lease, protocol and generation: 17/17 PASS
+Rust heartbeat contract: 1/1 PASS
+Rust forward ownership and cancellation cleanup: 11/11 PASS
+Rust per-device lease isolation: 3/3 PASS
+Android engine: 47/47 PASS
+Android Network frontend: 32/32 PASS
+Strict static checks, formatting, type checking, source-size and generated bindings: PASS
+Android Gradle offline plugin resolution: NOT_RUN
+Physical USB removal and desktop termination: NOT_RUN

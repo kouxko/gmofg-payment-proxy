@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260825-006",
+  "case_id": "MCP-CONFIG-CONTRACT-001",
+  "goal_id": "G033-task-006-contract-dto-and-regression",
+  "archive_created_at": "2026-08-26T08:23:59+08:00",
+  "status": "PASS",
+  "result": "G033 contract, DTO, schema and regression lock passed",
+  "root_validation_execution_time": null,
+  "root_validation_time_note": "Exact execution time was not separately retained",
+  "archive_replay_result_captured_at": "2026-08-26T08:21:56+08:00",
+  "tests": {
+    "application": { "groups": [211, 14, 7, 5, 12], "passed": 249, "failed": 0 },
+    "mcp": { "passed": 31, "failed": 0, "filtered_out": 62 }
+  },
+  "quality_gates": {
+    "strict_clippy": "PASS",
+    "rust_fmt": "PASS",
+    "architecture_scan": "PASS",
+    "source_size_scan": "PASS"
+  },
+  "red_phase": {
+    "execution_time": null,
+    "negative": { "passed": 4, "failed": 1, "reason": "nested unknown field was not rejected" },
+    "document": { "passed": 6, "failed": 1, "reason": "terminal unknown field was not rejected" },
+    "schema": { "passed": 4, "failed": 3, "reason": "published schema and closed literal gaps" }
+  },
+  "adversarial_review": {
+    "round": 3,
+    "reviewer": "/root/g033_contract_red_complete",
+    "execution_time": null,
+    "verdict": "APPROVE",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "fresh_application_negative": "5/5 PASS",
+    "fresh_mcp_schema": "12/12 PASS"
+  },
+  "fixture_snapshots": {
+    "count": 7,
+    "byte_identical": true,
+    "manifest": "resources/fixture-manifest.json"
+  },
+  "not_applicable": {
+    "network_and_protocol_frames": "Contract-only story; no transport or business payload",
+    "ui_and_screenshots": "No UI changes",
+    "database_and_persistence": "Deferred to later stories",
+    "real_device_and_external_package": "Not exercised",
+    "release_artifacts": "Not exercised"
+  }
+}

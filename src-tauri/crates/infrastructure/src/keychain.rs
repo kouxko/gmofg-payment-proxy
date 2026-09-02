@@ -6,7 +6,7 @@
 
 use std::{fmt, sync::Mutex};
 
-use gmofg_proxy_product_api::ProductStorageNamespace;
+use intercept_proxy_product_api::ProductStorageNamespace;
 use ring::{
     aead::{AES_256_GCM, Aad, LessSafeKey, Nonce, UnboundKey},
     rand::{SecureRandom, SystemRandom},

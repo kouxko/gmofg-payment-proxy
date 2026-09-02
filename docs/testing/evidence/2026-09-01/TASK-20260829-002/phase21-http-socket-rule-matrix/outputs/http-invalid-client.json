@@ -1,0 +1,7 @@
+{
+  "name": "invalid",
+  "method": "POST",
+  "target": "/other",
+  "error_type": "RemoteDisconnected",
+  "error": "Remote end closed connection without response"
+}

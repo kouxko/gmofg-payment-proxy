@@ -1,0 +1,19 @@
+# Run from the repository root on the recorded branch/HEAD or an equivalent checked-out tree.
+
+git branch --show-current
+git rev-parse HEAD
+git status --short
+shasum -a 256 src/generated/rust-types.ts
+
+pnpm test:bindings-check
+pnpm test:task-20260829-002:phase1
+pnpm check:bindings
+
+for run_index in 1 2 3; do
+  printf 'TARGETED_RUN=%s\n' "$run_index"
+  cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib --all-features adapters::android_adb::tests::forward_control::cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial -- --exact || exit $?
+done
+
+pnpm check:task-20260829-002:checkpoint
+git diff --check
+shasum -a 256 src/generated/rust-types.ts

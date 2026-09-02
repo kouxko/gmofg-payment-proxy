@@ -1,0 +1,22 @@
+{
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "initial_review": { "verdict": "REQUEST_CHANGES", "p1": 4, "p2": 1 },
+  "initial_verifier": { "verdict": "FAILED", "p1": 2 },
+  "second_independent_review": { "verdict": "REQUEST_CHANGES", "p1": 2, "p2": 0 },
+  "final_reviewer": { "verdict": "APPROVE", "p0": 0, "p1": 0, "p2": 0 },
+  "final_verifier": { "verdict": "VERIFIED", "p0": 0, "p1": 0, "p2": 0 },
+  "phase6_checker": { "passed": 28, "failed": 0 },
+  "cargo_discovery": { "domain": 9, "application": 11, "infrastructure": 8 },
+  "domain_all_targets_all_features": { "passed": 128, "failed": 0 },
+  "application_all_targets_all_features": { "passed": 508, "failed": 0 },
+  "infrastructure_all_targets_all_features": { "passed": 695, "failed": 0 },
+  "host_all_targets_all_features": { "passed": 33, "failed": 0 },
+  "tauri_all_targets_all_features": { "passed": 133, "failed": 0 },
+  "frontend_full": { "files": 63, "passed": 543, "failed": 0 },
+  "bindings": "PASS fresh and deterministic",
+  "architecture_source_size_lint_typecheck_fmt_workspace_clippy_diff": "PASS",
+  "checkpoint": "PASS exit 0; ten ordered gates; one process",
+  "blockers": [],
+  "checkpoint_ready": true,
+  "remaining_failures": []
+}

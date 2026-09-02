@@ -5,8 +5,12 @@
 
 use std::sync::Arc;
 
-use gmofg_proxy_application::Application;
-use gmofg_proxy_host::ApplicationHost;
+use intercept_proxy_application::Application;
+use intercept_proxy_host::ApplicationHost;
+use intercept_proxy_infrastructure::ExchangeObservationStore;
+
+use crate::mcp::McpServer;
+use crate::runtime_logs::RuntimeLogStore;
 
 /// Tauri exposes only the application facade to commands.
 ///
@@ -16,14 +20,48 @@ use gmofg_proxy_host::ApplicationHost;
 pub struct AppState {
     pub application: Arc<Application>,
     host: Arc<ApplicationHost>,
+    mcp: Option<McpServer>,
+    runtime_logs: Arc<RuntimeLogStore>,
+    exchange_observations: Arc<ExchangeObservationStore>,
 }
 
 impl AppState {
+    /// Builds command state without outer adapters. Used by command-level tests.
+    #[cfg(test)]
     pub fn new(host: ApplicationHost) -> Self {
+        let observations = Arc::new(ExchangeObservationStore::new(host.capacity()));
+        Self::with_optional_mcp(
+            host,
+            None,
+            Arc::new(RuntimeLogStore::memory(128)),
+            observations,
+        )
+    }
+
+    /// Builds production state after the required IPv4 MCP listener has started successfully.
+    /// The optional shape is retained only for command tests that omit outer adapters.
+    pub fn production(
+        host: ApplicationHost,
+        mcp: Option<McpServer>,
+        runtime_logs: Arc<RuntimeLogStore>,
+        exchange_observations: Arc<ExchangeObservationStore>,
+    ) -> Self {
+        Self::with_optional_mcp(host, mcp, runtime_logs, exchange_observations)
+    }
+
+    fn with_optional_mcp(
+        host: ApplicationHost,
+        mcp: Option<McpServer>,
+        runtime_logs: Arc<RuntimeLogStore>,
+        exchange_observations: Arc<ExchangeObservationStore>,
+    ) -> Self {
         let host = Arc::new(host);
         Self {
             application: host.application(),
             host,
+            mcp,
+            runtime_logs,
+            exchange_observations,
         }
     }
 
@@ -37,11 +75,26 @@ impl AppState {
     }
 
     pub fn shutdown(&self) {
+        if let Some(mcp) = &self.mcp {
+            mcp.cancel();
+        }
         self.host.cancel_background_tasks();
     }
 
     pub fn host(&self) -> Arc<ApplicationHost> {
         Arc::clone(&self.host)
+    }
+
+    pub fn mcp(&self) -> Option<McpServer> {
+        self.mcp.clone()
+    }
+
+    pub(crate) fn runtime_logs(&self) -> Arc<RuntimeLogStore> {
+        Arc::clone(&self.runtime_logs)
+    }
+
+    pub(crate) fn exchange_observations(&self) -> Arc<ExchangeObservationStore> {
+        Arc::clone(&self.exchange_observations)
     }
 }
 

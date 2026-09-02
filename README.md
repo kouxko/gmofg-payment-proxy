@@ -1,110 +1,144 @@
-# GMO-FG Payment Proxy
+# Intercept Proxy
 
-面向 GMO-FG Payment 联机调试的 Windows/macOS 桌面代理工具。它把原来的
-`Server ↔ App` 通信改为 `Server ↔ Proxy ↔ App`，由 Rust 实现双向 mTLS、
-HTTP/1.1 转发、抓包、断点、规则、故障注入、证书、设置、校验和导出。
-Next.js + HeroUI 仅负责展示 Rust ViewModel 和发送用户操作。
+Intercept Proxy 是一个由 Rust 驱动的桌面网络测试代理，用于观察、解析、修改和转发 HTTP 与
+Socket 数据。桌面端使用 Tauri + Next.js，Android Companion 通过按应用 allowlist 的
+`VpnService` 把指定应用流量导向代理。
 
-产品、UI、Rust 架构、IPC 和测试的唯一实施基线是
-[`docs/requirements.md`](docs/requirements.md)。
+当前实现强调三件事：真实网络字节由 Rust 掌控、HTTP 与 Socket 保留各自协议边界、同一 App
+连接的所有收发和失败证据按顺序归入一个 Exchange。
 
-## 第一次阅读本项目
+## 当前能力
 
-如果你暂时不了解 Rust、Tauri、mTLS 或网络代理，建议按下面顺序阅读：
+- HTTP 正向 absolute-form 请求与固定 Server 反向转发。
+- 固定 Server 的 HTTP/HTTPS、下游 TLS/mTLS、上游 TLS/mTLS 和双侧 TLS/mTLS。
+- Socket RemoteServer/LocalServer、TCP/TLS/mTLS、按协议转发与透明转发。
+- 单文件 WebAssembly Component 协议包在 Rust 主进程内运行；远端源码调试包保留 WebSocket JSON-RPC 接口。
+- Frame、Decode、Document Rules、Encode、Display 的强类型 Pipeline。
+- HTTP 基础规则、协议 Document 规则、断点、Mock、弱网与故障注入。
+- HTTP/Socket 统一规则列表和统一实时抓包列表。
+- 连接级 ExchangeObservation、运行日志、37 个 MCP 只读查询、五个环境配置工具和复现报告。
+- Workspace、协议包、Listener TLS 材料和设置的应用级导入导出。
 
-1. 先读 [`docs/requirements.md`](docs/requirements.md) 的“给第一次接触本项目的读者”、
-   “新手术语表”和“第一次使用的端到端旅程”。它是需求与代码设计的唯一事实来源。
-2. 再读 [`docs/user-operation-guide.md`](docs/user-operation-guide.md)，按页面学习怎样操作成品。
-3. 想理解为什么核心能脱离 UI 复用时，读
-   [`docs/generic-core-product-boundary.md`](docs/generic-core-product-boundary.md)。
-4. 想理解限速、抖动、间歇通断和中途断连时，读
-   [`docs/proxy-weak-network-fault-injection-design.md`](docs/proxy-weak-network-fault-injection-design.md)。
-5. 最后从 `src-tauri/crates/domain` 开始读 Rust，再依次阅读 `application`、`proxy`、
-   `infrastructure`、`host`、`product-payment`、`src-tauri` 和 `src`。关键模块已经补充
-   中文注释，重点解释职责、调用方向、状态机、失败边界和不能跨越的边界。
+当前不支持 HTTP CONNECT、HTTP Upgrade/WebSocket tunnel、CONNECT MITM 和 HTTP 外部
+WebSocket 协议包。这些请求会在创建 Server connection 与 Exchange 前明确返回 `501`，不会
+静默进入透明转发或其他兜底路径。
 
-可以把仓库先简化理解为：
+## 数据流摘要
+
+协议模式严格按一问一答推进：
 
 ```text
-Next.js + HeroUI（只显示和收集操作）
-                 │ Tauri Command / Channel
-                 ▼
-Tauri 薄适配层 ──► UI 无关的 Rust Host / Application
-                             │
-          ┌──────────────────┼──────────────────┐
-          ▼                  ▼                  ▼
-      领域规则           代理运行时          基础设施
-   domain/application   rustls/HTTP/1      SQLite/密钥/文件
-                             ▲
-                             │ ProductProfile
-                      Payment 产品适配层
+App read
+  -> Upstream Reader Pipeline
+  -> Server write
+  -> Server read
+  -> Downstream Reader Pipeline
+  -> App write
 ```
 
-如果代码注释与需求文档出现冲突，以 `docs/requirements.md` 为准，并先修正文档和测试，
-再修改实现。不要只根据截图或某一次实机结果推断完整需求。
+HTTP Reader 执行 `Decode -> Display`，Socket Reader 先执行 `Frame`，再执行
+`Decode -> Display`。Writer 对 Reader 产生的 Envelope 克隆 Document，顺序执行 Rules，
+随后 Encode 并写入真实连接。Socket 透明模式不构造 Document，读取多少就向另一端写多少。
 
-## 技术边界
+LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是本地回环服务，不是第二套
+交易流程。观测链路 fail-open，不能改变成功交易；Frame、Decode、Rules、Encode 或 transport
+失败则 fail-closed，结束当前 Exchange。
 
-- Tauri 2 加载 Next.js 静态导出，不运行 Node.js 服务端。
-- 前端不直接访问网络、文件、证书、数据库、`localStorage` 或 `IndexedDB`。
-- SQLite 不保存 Session Payload；Payload 仅在 Rust 受限内存中存在。
-- 私钥和密码在 Windows 上使用当前用户范围 DPAPI、在 macOS 上使用 Keychain 保护。
-- App → Proxy 与 Proxy → Server 均使用 TLS 1.2 双向认证。
+## 代码组织
 
-## 本地开发
+| 目录 | 职责 |
+| --- | --- |
+| `src-tauri/crates/domain` | Workspace、Document、规则、证书引用等领域不变量 |
+| `src-tauri/crates/application` | Use Case、ViewModel、端口、事件和能力矩阵 |
+| `src-tauri/crates/exchange` | Exchange、Pipeline、Envelope、Reader/Writer 与方向约束 |
+| `src-tauri/crates/proxy` | HTTP、Socket、TCP/TLS、连接和 Listener runtime |
+| `src-tauri/crates/package-contract` | 协议包 API 1 Manifest、固定 RPC、FrameResult 与错误 wire |
+| `src-tauri/crates/package-runtime` | 单文件 Component 校验、Wasmtime/WASI 与 Host WebSocket |
+| `src-tauri/crates/infrastructure` | SQLite、证书、ADB、协议包、外部包和运行适配器 |
+| `src-tauri/crates/host` | 无 UI 的完整 Rust 组合根与后台任务所有权 |
+| `src-tauri/src` | Tauri Command、AppState、日志、MCP 和桌面生命周期 |
+| `src/features` | 前端 feature、交互草稿和 Rust ViewModel 展示 |
+| `android-companion` | Android VpnService、TUN、SOCKS5 与弱网数据面 |
 
-需要 Node.js 22、pnpm 11、稳定版 Rust，以及 Tauri 2 对应的平台依赖。
+更完整的依赖方向、源码入口和测试锚点见
+[模块与代码组织](docs/architecture/modules.md)。
+
+## 文档导航
+
+- [新人接手与项目全景指南](docs/onboarding-guide.md)：从零开始理解系统、运行项目、定位代码、测试和发布。
+- [文档总览](docs/README.md)：产品、架构、操作、诊断和测试文档入口。
+- [架构总览](docs/architecture/README.md)：推荐阅读顺序与当前架构结论。
+- [Exchange 与 Pipeline](docs/architecture/exchange-pipeline.md)：核心 trait、泛型约束和连接生命周期。
+- [真实数据流](docs/architecture/data-flow.md)：HTTP、Socket、LocalServer、透明转发和错误传播。
+- [规则与协议包](docs/architecture/rules-and-protocol-packages.md)：规则能力矩阵、Document 与进程内协议包。
+- [观测与诊断](docs/architecture/runtime-observability.md)：ExchangeObservation、日志、UI 刷新和 MCP。
+- [安全与持久化](docs/architecture/security-and-persistence.md)：TLS/mTLS、SQLite、证书和导入导出。
+- [用户操作说明](docs/user-operation-guide.md)：从 Workspace 到真实交易验证的操作步骤。
+- [发布级验证矩阵](docs/testing/release-validation-matrix.md)：可重复执行的完整验收合同。
+- [2026-08-25 App 测试结果](docs/testing/release-validation-results-20260825.md)：最新 release App 测试用例与结果。
+- [2026-08-24 发布验证结果](docs/testing/release-validation-results-20260824.md)：完整自动化、真实 App 与外部包证据。
+
+## 开发
+
+桌面开发需要 Deno 2.9.6、Rust 和 Tauri 对应平台的构建依赖。前端依赖安装、开发、测试、正式构建
+和 CI 统一使用 Deno，不要求系统安装 Node.js 或 pnpm。需要 Android Companion 时还要安装 JDK 和 Android SDK。
+桌面端使用系统已有的 `adb`，不内置 platform-tools。
+
+Deno 2.9.6：
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm bindings
-pnpm tauri:dev
+deno install --allow-scripts
+deno task tauri:dev
 ```
 
-前端静态预览：
+只启动浏览器前端时使用 `deno task dev`。Deno 读取 `package.json` 中的 npm 依赖和 scripts，使用
+`deno.lock` 冻结版本，并通过 npm/Node 兼容层及 `node-globals`、`unsafe-proto`、`sloppy-imports`、
+`detect-cjs` 运行 Next.js/Tauri 工具；它不会把 Deno 引入最终 Tauri App 运行时。
+
+常用验证：
 
 ```bash
-pnpm dev
+deno task bindings
+deno task scan:architecture
+deno task scan:source-size
+deno task lint
+deno task typecheck
+deno task test:ui-contracts
+deno task test
+deno task build
+cargo test --manifest-path src-tauri/Cargo.toml --workspace
 ```
 
-## 验证
+完整门禁：
 
 ```bash
-pnpm check
+deno task check
 ```
 
-`pnpm check` 统一执行类型绑定生成、Rust-only 前端边界扫描、UI 合约测试、
-ESLint、TypeScript、Next.js 静态构建、Rust fmt、Clippy 和 workspace 测试。
-`src/generated/rust-types.ts` 只能由 Rust 生成：
+只构建 macOS App：
 
 ```bash
-pnpm bindings
-git diff --exit-code -- src/generated/rust-types.ts
+deno task tauri build --bundles app
 ```
 
-## Windows 交付
+`deno task tauri:build` 会先构建并验证固定升级签名的 Android Companion release APK，再构建桌面
+安装包。测试脚本和固定端口见 [发布级验证矩阵](docs/testing/release-validation-matrix.md)。
 
-安装包：
+## 维护约束
 
-```powershell
-pnpm tauri build --bundles msi,nsis
-```
+- Rust 是规则、网络、证书、持久化和能力合法性的唯一真相源。
+- 前端只渲染 Rust 返回的能力；保存时领域层再次校验，不能把隐藏控件当安全边界。
+- 请求阶段不能配置响应状态/响应故障；响应阶段不能配置 request terminal；TLS 只允许证书条件与
+  拒绝握手。限速方向由阶段固定，终止动作唯一且必须位于最后。
+- HTTP 与 Socket 可以共用 Exchange 抽象、Document 和 UI 列表，但不能混用 Header/Status 与
+  Frame/原始字节语义。
+- 运行时报文只保存在有界内存，不写 SQLite。普通诊断日志使用独立滚动 JSONL。
+- 修改架构、数据流、规则能力或验证范围时，同步更新 `docs/architecture`、ADR 和测试矩阵。
+- 生产源码文件保持小于 500 行；优先拆分职责，不用压缩格式规避门禁。
 
-便携包：
+## 安全边界
 
-```powershell
-./scripts/package-portable.ps1
-```
-
-便携版依赖目标机器已有 Microsoft Edge WebView2 Runtime。证书密文使用
-DPAPI 当前用户范围保护，因此不能复制到另一 Windows 用户后继续解密。
-`.github/workflows/windows-release.yml` 在分支构建时只编译并预热 Windows/Tauri
-缓存，不上传未签名二进制。只有 `v*` 标签构建才会上传 MSI、NSIS 和便携 ZIP；
-标签构建必须配置以下受保护的 GitHub Actions 值，否则 fail closed：
-
-- Secret `WINDOWS_CERTIFICATE`：组织 Authenticode PFX 的 Base64。
-- Secret `WINDOWS_CERTIFICATE_PASSWORD`：PFX 密码。
-- Variable `WINDOWS_TIMESTAMP_URL`：证书颁发机构提供的 RFC 3161 时间戳服务。
-
-Tauri 构建后，workflow 会在上传前验证应用 EXE、MSI 和 NSIS 的签名证书指纹及
-时间戳；便携 ZIP 只复制已验证签名的 EXE。
+本项目用于隔离测试环境。应用导出可能包含用户明确选择的 Listener TLS 可移植材料和 P12 密码，
+导入前会展示范围并执行严格校验；本机安装级 Root CA 私钥、运行时报文和 ExchangeObservation 不进入
+应用备份。项目开发期允许完整业务报文进入诊断日志以便排查，但密钥、私钥和凭据仍不得进入普通
+ViewModel、Debug 输出或文档。

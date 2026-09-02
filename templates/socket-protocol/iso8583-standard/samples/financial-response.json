@@ -1,0 +1,18 @@
+{
+  "description": "A 0210 financial response used twice in one sticky downstream TCP read",
+  "tcp_chunks_hex": [
+    "0039303231303220000000808000303030303030303030303030303031303030303831333134333035393132333435365445524d30303031333932"
+  ],
+  "complete_frame_hex": "0039303231303220000000808000303030303030303030303030303031303030303831333134333035393132333435365445524d30303031333932",
+  "expected_document": {
+    "message_type": "0210",
+    "processing_code": "000000",
+    "amount": 1000,
+    "transmission_time": "0813143059",
+    "stan": "123456",
+    "terminal_id": "TERM0001",
+    "currency": "392"
+  },
+  "expected_encode": "same_as_complete_frame",
+  "expected_display": "html"
+}

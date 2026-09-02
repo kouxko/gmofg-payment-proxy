@@ -1,0 +1,12 @@
+{
+  "application": { "passed": 249, "failed": 0 },
+  "mcp": { "passed": 31, "failed": 0 },
+  "strict_clippy": "PASS",
+  "rust_fmt": "PASS",
+  "architecture_scan": "PASS",
+  "source_size_scan": "PASS",
+  "git_diff_check": "PASS",
+  "adversarial_review": { "verdict": "APPROVE", "p0": 0, "p1": 0, "p2": 0 },
+  "fixture_snapshot_hash_mismatches": 0,
+  "patch_manifest": { "missing": 0, "extra": 0, "reverse_apply": "PASS" }
+}

@@ -1,9 +1,10 @@
 [package]
-name = "gmofg-payment-proxy"
-default-run = "gmofg-payment-proxy"
+name = "intercept-proxy"
+default-run = "intercept-proxy"
+autobins = false
 version.workspace = true
-description = "GMO-FG Payment mTLS interception proxy"
-authors = ["GMO-FG"]
+description = "Generic HTTP and HTTPS interception proxy"
+authors = ["Intercept Proxy contributors"]
 license = "Proprietary"
 edition.workspace = true
 rust-version.workspace = true
@@ -15,10 +16,11 @@ resolver = "2"
 [workspace.package]
 version = "1.0.0"
 edition = "2024"
-rust-version = "1.97"
+rust-version = "1.98"
 
 [workspace.dependencies]
 async-trait = "0.1.89"
+base64 = "0.22.1"
 bytes = "1.11"
 chrono = { version = "0.4.44", features = ["serde"] }
 encoding_rs = "0.8.35"
@@ -27,16 +29,23 @@ http = "1.4"
 http-body-util = "0.1.3"
 hyper = { version = "1.11", features = ["client", "http1", "server"] }
 hyper-util = { version = "0.1.20", features = ["tokio"] }
+openssl = { version = "=0.10.81", features = ["vendored"] }
 p12-keystore = "=0.3.1"
+pkcs8 = { version = "=0.11.0", features = ["encryption", "pem", "std"] }
 parking_lot = "0.12.5"
 rcgen = { version = "=0.14.8", default-features = false, features = ["crypto", "ring", "pem", "x509-parser"] }
 ring = "0.17.14"
+rmcp = { version = "=3.1.3", default-features = false, features = ["server", "transport-streamable-http-server"] }
 rustls = { version = "=0.23.42", default-features = false, features = ["ring", "tls12", "logging"] }
+rustls-native-certs = "=0.8.4"
+rustls-pemfile = "=2.2.0"
 rusqlite = { version = "0.39", features = ["bundled", "chrono", "uuid"] }
 secrecy = { version = "0.10.3", features = ["serde"] }
 security-framework = "=3.7.0"
 serde = { version = "1.0.228", features = ["derive"] }
 serde_json = "1.0.149"
+serde_path_to_error = "=0.1.20"
+semver = "=1.0.28"
 specta = { version = "=2.0.0-rc.25", features = ["chrono", "derive", "serde_json", "uuid"] }
 specta-typescript = "=0.0.12"
 tauri = "2.11.5"
@@ -45,13 +54,23 @@ tempfile = "3.25"
 thiserror = "2.0.18"
 time = "0.3.47"
 tokio = { version = "1.50", features = ["fs", "io-util", "macros", "net", "rt-multi-thread", "signal", "sync", "test-util", "time"] }
+tokio-openssl = "=0.6.5"
 tokio-rustls = { version = "=0.26.4", default-features = false, features = ["ring", "tls12", "logging"] }
 tokio-util = { version = "0.7.18", features = ["rt"] }
+tokio-tungstenite = { version = "0.30.0", default-features = false, features = ["handshake"] }
+tower-service = "0.3.3"
 tracing = "0.1.44"
+tracing-subscriber = { version = "0.3.23", default-features = false, features = ["fmt"] }
 uuid = { version = "1.22", features = ["serde", "v4"] }
+wasm-encoder = "=0.239.0"
+wasmparser = "=0.239.0"
+wasmtime = { version = "=48.0.1", features = ["async", "component-model"] }
+wasmtime-wasi = "=48.0.1"
+wasmtime-wasi-http = "=48.0.1"
 windows-sys = { version = "0.61.2", features = ["Win32_Foundation", "Win32_Security_Cryptography", "Win32_System_Memory"] }
 x509-parser = { version = "=0.18.1", features = ["verify"] }
 zeroize = { version = "1.8.2", features = ["zeroize_derive"] }
+zip = { version = "=8.6.0", default-features = false, features = ["deflate-flate2-zlib-rs"] }
 
 [workspace.lints.rust]
 unsafe_code = "deny"
@@ -69,22 +88,46 @@ missing_panics_doc = "allow"
 # See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
 
 [lib]
-name = "gmofg_payment_proxy"
+name = "intercept_proxy"
 crate-type = ["staticlib", "cdylib", "rlib"]
 
+[features]
+export-bindings = []
+macos-universal-vendored-openssl = ["intercept-proxy-runtime/macos-universal-vendored-openssl"]
+
+[[bin]]
+name = "intercept-proxy"
+path = "src/main.rs"
+
+[[bin]]
+name = "export-bindings"
+path = "src/bin/export-bindings.rs"
+required-features = ["export-bindings"]
+
 [build-dependencies]
+serde_json.workspace = true
 tauri-build = { version = "2.6.3", features = [] }
+wasm-encoder.workspace = true
 
 [dependencies]
-gmofg-proxy-application = { path = "crates/application" }
-gmofg-proxy-domain = { path = "crates/domain" }
-gmofg-proxy-host = { path = "crates/host" }
-gmofg-proxy-infrastructure = { path = "crates/infrastructure" }
-gmofg-proxy-product-api = { path = "crates/product-api" }
-gmofg-proxy-product-payment = { path = "crates/product-payment" }
-gmofg-proxy-runtime = { path = "crates/proxy" }
+async-trait.workspace = true
+base64.workspace = true
+bytes.workspace = true
+chrono.workspace = true
+http-body-util.workspace = true
+hyper.workspace = true
+hyper-util.workspace = true
+intercept-proxy-application = { path = "crates/application" }
+intercept-proxy-domain = { path = "crates/domain" }
+intercept-proxy-host = { path = "crates/host" }
+intercept-proxy-infrastructure = { path = "crates/infrastructure" }
+intercept-proxy-package-contract = { path = "crates/package-contract" }
+intercept-proxy-product-api = { path = "crates/product-api" }
+intercept-proxy-runtime = { path = "crates/proxy" }
 log = "0.4"
+rmcp.workspace = true
 serde.workspace = true
+serde_json.workspace = true
 specta.workspace = true
 specta-typescript.workspace = true
 tauri.workspace = true
@@ -92,7 +135,16 @@ tauri-plugin-log = "2"
 tauri-plugin-dialog = "2.7.2"
 tauri-specta.workspace = true
 tokio.workspace = true
+tokio-util.workspace = true
+tower-service.workspace = true
 tracing.workspace = true
+tracing-subscriber.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+tempfile.workspace = true
+tauri = { workspace = true, features = ["test"] }
+zip.workspace = true
 
 [lints]
 workspace = true

@@ -1,0 +1,83 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase1-green-contract-baseline",
+  "executed_at": "2026-08-29 23:44:04 +08:00",
+  "archived_at": "2026-08-29 23:52:52 +08:00",
+  "timezone": "Asia/Shanghai",
+  "result": "PASS",
+  "scope": "G042 / Phase 1 only",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "v26.7.0",
+    "pnpm": "11.13.1",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  },
+  "tested_state": {
+    "branch": "codex/task-20260829-002",
+    "head": "8aa787bffd99c6302c284b373e4f805e4d553a49",
+    "head_tree": "9dc6af46d03dff05512439738fe368a21a94a249",
+    "worktree": "dirty with TASK-20260829-002 Phase 1 artifacts and a pre-existing user docs/README.md modification",
+    "changed_during_test": false,
+    "generated_bindings_sha256_before_and_after": "15d730c6afae0f9011bd6539ea98f339342d4e4b22a4751bff595d893815891c"
+  },
+  "inputs": {
+    "active_fixture": "test-support/fixtures/task-20260829-002/phase-1/current-contract-inventory.json",
+    "archived_snapshot": "inputs/current-contract-inventory.json",
+    "fixture_version": 1,
+    "usage": "The Phase 1 validator reads the active fixture and verifies source fragments, owner phases, repository-contained paths, and the exact checkpoint sequence."
+  },
+  "expected": {
+    "bindings_tests": "5 passed, 0 failed",
+    "phase1_tests": "4 passed, 0 failed",
+    "bindings_generation": "checked-in equals first generation equals second generation; original bytes restored",
+    "checkpoint": "all ten ordered gates pass",
+    "frontend": "61 files and 531 tests pass",
+    "rust": "fmt, strict clippy, and workspace all-target/all-feature tests pass",
+    "diff_check": "pass",
+    "independent_verifier": "VERIFIED with P0=0, P1=0, P2=0"
+  },
+  "actual": {
+    "bindings_tests": { "passed": 5, "failed": 0 },
+    "phase1_tests": { "passed": 4, "failed": 0 },
+    "bindings_generation": "PASS",
+    "architecture": "PASS",
+    "source_size": "PASS",
+    "lint": "PASS",
+    "typecheck": "PASS",
+    "frontend": { "files_passed": 61, "tests_passed": 531, "failed": 0 },
+    "rust_fmt": "PASS",
+    "rust_clippy_all_targets_all_features_deny_warnings": "PASS",
+    "rust_workspace_all_targets_all_features_final_rerun": "PASS, 0 failed, 0 ignored",
+    "diff_check": "PASS"
+  },
+  "transient_observation": {
+    "classification": "existing ADB deadline test intermittent failure observed during the first independent full checkpoint run",
+    "first_command": "pnpm check:task-20260829-002:checkpoint",
+    "first_nine_gates": "PASS",
+    "test": "adapters::android_adb::tests::forward_control::cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial",
+    "location": "crates/infrastructure/src/adapters/android_adb/tests/forward_control.rs:114:5",
+    "panic": "device A response must hit the outer deadline",
+    "first_run_result": "647 passed; 1 failed; 0 ignored",
+    "targeted_replay": "3 consecutive exact runs; each 1 passed, 0 failed, 647 filtered",
+    "full_replay": "pnpm check:task-20260829-002:checkpoint exited 0; all ten gates passed",
+    "phase1_product_or_test_change": "none"
+  },
+  "independent_review": {
+    "status": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  },
+  "outputs": [
+    "outputs/verification-summary.json"
+  ],
+  "replay": "replay/commands.txt",
+  "not_applicable": {
+    "protocol_frames": "Phase 1 performs no protocol exchange.",
+    "screenshots": "No UI behavior changed.",
+    "real_device_or_external_service": "Outside the Phase 1 baseline scope.",
+    "remote_ci_push_release_deploy": "Not authorized and not run.",
+    "rollback_commit": "Parent-owned checkpoint action; this evidence archive does not commit."
+  }
+}

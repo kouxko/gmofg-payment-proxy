@@ -1,0 +1,14 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Companion 没有自定义业务界面；这个简单盾牌用于启动器与系统 VPN/通知列表。 -->
+<vector xmlns:android="http://schemas.android.com/apk/res/android"
+    android:width="48dp"
+    android:height="48dp"
+    android:viewportWidth="48"
+    android:viewportHeight="48">
+    <path
+        android:fillColor="#087F8C"
+        android:pathData="M24,3 L41,9 L41,21 C41,32 34,41 24,45 C14,41 7,32 7,21 L7,9 Z" />
+    <path
+        android:fillColor="#FFFFFF"
+        android:pathData="M22,13 L28,13 L28,22 L34,22 L24,34 L14,22 L22,22 Z" />
+</vector>

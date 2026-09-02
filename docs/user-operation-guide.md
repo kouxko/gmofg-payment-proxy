@@ -1,1203 +1,359 @@
-# GMO-FG Payment Proxy 操作手册
+# Intercept Proxy 用户操作说明
 
-## 1. 文档用途
+本文按实际桌面 App 的工作顺序说明 Workspace、入口、协议包、规则、抓包、诊断、证书和 Android
+网络接管。页面名称以当前中文界面为准。
 
-本文档面向使用 GMO-FG Payment Proxy 进行真实 Payment 终端联机测试、协议调查、规则验证和弱网故障注入的测试人员与开发人员。
+## 1. 基本概念
 
-工具把原有通信链路：
+### 1.1 Workspace
 
-```text
-Payment App <-> GMO-FG Server
-```
+Workspace 是一套可切换的测试配置，保存 Listener、统一规则定义、Android Profile 和证书引用。
+运行时报文、抓包 Exchange 和普通运行日志不属于 Workspace 配置。
 
-调整为：
+切换 Workspace 前应停止当前入口。Listener 启动后使用不可变快照；编辑配置不会偷偷改变正在处理
+的连接，需要明确保存并重新启动入口。
 
-```text
-Payment App <-> GMO-FG Payment Proxy <-> GMO-FG Server
-```
+### 1.2 Listener
 
-Proxy 负责：
+一个 Listener 只有一个本地端点和一种明确数据面：
 
-- 接收 Payment App 的交易与 DLL HTTPS 请求。
-- 验证 Payment App 客户端证书。
-- 使用独立的客户端身份连接真实 GMO-FG Server。
-- 查看请求和响应。
-- 按规则修改、延迟、暂停、Mock、断开或损坏报文。
-- 模拟限速、抖动、间歇可用和传输中途断开。
-- 保存当前进程内的抓包与会话数据。
+- HTTP：正向 absolute-form 请求，或固定 Server 转发。
+- Socket：RemoteServer 或 LocalServer；按协议转发或透明转发。
 
-前端页面只显示 Rust 返回的结果。规则匹配、编码、证书、分页、筛选、文件读写和网络行为全部由 Rust 执行。
+一个 App connection 创建一个 Exchange。协议模式按 App 请求、Server 回复的严格顺序推进；
+App 断开或 Server 读写失败时，该 Exchange 结束。
 
----
+### 1.3 规则
 
-## 2. 使用前必须准备的材料
+App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-### 2.1 电脑
+- HTTP 内容可以组合 Method、request target、Header、终端/证书条件与可选的协议 Document 条件，
+  并执行 HTTP 修改、故障、Mock 或 Document 动作。request target 始终是原始 `/path?query`，请求与
+  对应响应阶段读取同一份请求元数据，不包含 scheme、host 或 port。Header 名称使用单层 `/name`
+  手动输入、ASCII 大小写不敏感，重复 Header 任一值命中即成立。
+- Socket 内容只处理协议包 Decode 后的类型化 Document 条件与动作，不提供 HTTP 能力。
 
-- Windows 10/11 x64，或 macOS Apple Silicon。
-- 电脑与 Payment 终端处于可互通的局域网。
-- 电脑防火墙允许 Payment 访问 Proxy 的交易和 DLL 监听端口。
-- 电脑可以访问真实 GMO-FG Server。
-- 系统时间正确。系统时间错误会导致证书有效期校验失败。
+Method 只支持精确匹配；request target 与 Header 支持精确、包含、前缀、后缀和通配符。Document
+有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。Document
+条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
+Insert、Append 等动作始终使用精确路径，不接受通配符。旧 Path/JSONPath/Regex 匹配合同已删除，
+没有别名、兼容解析或第二执行路径。
 
-### 2.2 Payment 终端
+规则按固定阶段顺序执行；`priority` 只在同一阶段内排序。保存时由 Rust 使用当前 Listener、阶段、
+协议包和 Schema 能力校验整条规则，HTTP 与 Document 条件共同决定同一条 HTTP 规则是否命中。
+Listener 绑定以及 Document 的协议包和 Schema 绑定不能通过编辑改换；需要改绑时应复制或新建规则。
 
-- 已安装待测试的 Payment App。
-- 可以修改 Payment 访问的交易和 DLL 地址。
-- Launcher 已具备真实客户端 `client_real.p12` 或 `client.p12`，并能通过
-  `CooperationApi.getCreditClientCrt()` 提供给 Payment。
-- 测试版 Payment APK 的 `assets/server.crt` 已加入 Proxy 导出的公开 Root CA，
-  并已重新构建、安装。当前 Payment 没有从 Launcher 动态读取服务端信任 CA
-  的既有接口，不能只把导出的 CA 文件复制到终端目录。
+## 2. 建立测试 Workspace
 
-### 2.3 Proxy → Server 证书材料
+1. 打开“工作区”。
+2. 新建 Workspace，填写清晰名称和用途。
+3. 选中 Workspace 后进入“入口配置”。
+4. 配置 HTTP 或 Socket Listener。
+5. 保存后检查列表中的本地地址、端口、模式、Server 和安全摘要。
+6. 在执行真实交易前先确认测试端口没有被其他进程占用。
 
-- Launcher 提供给 Payment 的同一份 `client_real.p12` 或 `client.p12`。Proxy
-  使用它向 GMO-FG Server 证明客户端身份。
-- PKCS12 密码；当前真实 Launcher/Payment 流程允许空字符串密码。
-- Proxy 已内置当前 Payment APK 中固定的原始 `assets/server.crt`，默认直接使用。
-  只有测试环境证书变化时，才需要准备新的 GMO-FG Server CA Bundle 进行替换。
+开发测试脚本可以重复安装同名 E2E Workspace；安装过程应更新同一套 Listener、规则和软件包，
+不能制造重复记录。
 
-### 2.4 示例环境
+## 3. HTTP Listener
 
-以下值只用于解释操作方法，实际使用时必须替换为当前测试环境：
+### 3.1 正向 HTTP
 
-| 项目 | 示例 |
-| --- | --- |
-| Payment 设备序列号 | `2740072778` |
-| Payment 设备 IP | `10.0.34.94` |
-| Proxy 电脑局域网 IP | `10.0.34.50` |
-| 交易监听端口 | `16627` |
-| DLL 监听端口 | `16127` |
-| 上游交易 URL | `https://https.gmo-fg.net:16627` |
-| 上游 DLL URL | `https://https.gmo-fg.net:16127` |
+正向模式接收普通 absolute-form HTTP 请求，并按请求中的 HTTP 目标转发。当前仅支持普通 HTTP：
 
-注意：示例中的 `https.gmo-fg.net` 是主机名，因此完整 URL 写成 `https://https.gmo-fg.net:端口` 是正常格式。
+- CONNECT 返回 `501`；
+- HTTP Upgrade/WebSocket 返回 `501`；
+- 不创建 tunnel、MITM 或透明转发兜底。
 
----
+因此不能用“安装 Root CA + CONNECT”测试 HTTPS 抓包。若需要验证 HTTPS Server，应使用固定
+Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
-## 3. 首次配置总流程
+### 3.2 固定 Server
 
-首次使用必须按以下顺序操作：
+1. 选择固定 Server 模式。
+2. 填写唯一的 Server origin，例如 `http://127.0.0.1:19080` 或测试 HTTPS origin。
+3. 一个 Listener 只绑定一个 endpoint；Host、端口或证书策略变化时建立另一个 Listener。
+4. HTTP origin 只执行 TCP 探测；HTTPS origin 额外执行 TLS/hostname/CA 探测。
+5. 保存后启动 Listener，再从 App 向本地 Listener 发送请求。
 
-1. 打开“系统设置”。
-2. 配置绑定地址、服务端证书 SAN、监听端口和真实上游 URL。
-3. 点击“校验设置”。
-4. 修正所有字段错误后点击“保存设置”。
-5. 打开“证书管理”。
-6. 生成本地 CA 和 Proxy 服务端证书。
-7. 导出 Proxy 公开 Root CA，将它加入 Payment APK 的 `assets/server.crt`，
-   重新构建并安装测试版 Payment。
-8. 将 Launcher 实际提供给 Payment 的 `client_real.p12/client.p12` 导入 Proxy
-   的“PKCS12”。
-9. 默认直接使用 Proxy 内置的 Payment 原始 `server.crt`；仅当环境证书变化时选择性替换上游 CA。
-10. 点击“重新检查”，确保所有启动前置项通过。
-11. 修改 Payment 的交易和 DLL 地址，使其连接 Proxy 电脑。
-12. 回到“代理控制台”，点击“启动代理”。
-13. 先执行一次无故障 DLL 基线测试。
-14. 确认真实 Server 响应中解析到 `D48` 后，再开始规则或弱网测试。
+固定 Server 模式不会因为请求携带其他 authority 而改连另一个目标。
 
-不要先生成证书再填写 SAN。Proxy 服务端叶子证书的 SAN 必须包含 Payment 实际访问 Proxy 时使用的 IP 或 DNS。
+### 3.3 下游 TLS/mTLS
 
----
+这是 App 连接 Proxy 的安全边界。Proxy 作为 TLS Server：
 
-## 4. 系统设置
+1. 选择 Server Identity。
+2. 普通 TLS 不启用客户端认证。
+3. mTLS 选择 Client Trust，并设置 Optional 或 Required。
+4. Required 时，App 必须出示受信任客户端证书。
 
-### 4.1 网络与上游
+### 3.4 上游 TLS/mTLS
 
-打开左侧“设置”。
+这是 Proxy 连接 Server 的独立安全边界。Proxy 作为 TLS Client：
 
-#### 绑定地址
+1. 选择 Server Trust 或系统信任策略。
+2. 保持正确 hostname/SNI。
+3. 只有 Server 明确要求 mTLS 时才选择 Client Identity。
+4. 使用“测试连接/TLS”检查 DNS、TCP、CA、hostname 和客户端身份。
 
-- 填写 Proxy 监听的本地网卡地址。
-- `0.0.0.0` 表示监听本机所有网络接口。
-- 使用 `0.0.0.0` 监听时，Payment 仍然必须连接电脑真实的局域网 IP，例如 `10.0.34.50`，不能连接 `0.0.0.0`。
+私有上游未发送完整签发链时，可把 Intermediate CA 到 Root CA 按顺序放入同一个 PEM
+Bundle，再通过现有的单文件 Server Trust 入口导入。Proxy 会解析、保存并加载其中全部 CA；
+不提供多文件选择或自动合并。单证书 PEM、DER、CRT 和 CER 仍按原方式使用。
 
-#### 服务端证书 SAN
+下游认证成功不代表上游认证成功；两边必须分别验证。
 
-- 首次打开且没有已保存 SAN 时，Rust 会根据本机当前路由自动填入首选 IPv4。
-- 已保存的非空 SAN 永远不会被自动探测结果覆盖。
-- 多网卡、VPN、离线或路由不可用时，自动结果可能不是 Payment 实际访问的地址或可能保持为空；保存前必须核对。
-- 填写 Payment 实际连接 Proxy 使用的 IP 或 DNS。
-- 示例：`10.0.34.50`。
-- 多个值用逗号分隔。
-- 不要填写 `https://`、端口或路径。
-- 修改 SAN 后必须重新签发 Proxy 服务端证书。
+## 4. Socket Listener
 
-#### 交易端口和 DLL 端口
+### 4.1 RemoteServer
 
-- 交易端口默认 `16627`。
-- DLL 端口默认 `16127`。
-- 两个已启用通道不能使用同一端口。
-- 如果系统提示端口被占用，应关闭占用进程，或改用当前环境允许的空闲端口。
+RemoteServer 将 App 连接与固定远端 TCP/TLS endpoint 包装进同一个 Exchange：
 
-#### 上游交易 URL 和上游 DLL URL
+1. 填写本地监听地址和端口。
+2. 填写唯一 Server host/port。
+3. 选择“按协议转发”或“透明转发”。
+4. 选择 TCP、TCP→TLS、TLS→TCP 或 TLS→TLS 安全拓扑。
+5. 保存、启动，再发送测试报文。
 
-- 必须填写真实 GMO-FG Server 地址。
-- 不要填写 Proxy 自己的地址。
-- 使用 `https://主机:端口` 形式；可以带一个尾 `/`。
-- 不要填写路径、查询参数、fragment 或用户名密码。Proxy 会原样保留终端请求的
-  HTTP request-target，不会把配置 URL 的路径拼接进去。
-- 主机名必须与 GMO-FG Server 证书匹配。
+按协议转发要求选择协议包。Reader 每次从 Socket 读取数据后调用 Frame；NeedMore 时继续读，一个
+完整 Frame 后立即 Decode 并发往 Server，不等待第二个 Frame。
 
-#### Host 头重写
+### 4.2 LocalServer
 
-- 开启后，Rust 使用上游 URL 的主机生成 Host Header。
-- GMO-FG 上游通常应保持开启。
-- 不要通过规则手工修改由 Rust 管理的连接类 Header。
+LocalServer 是本地回环服务，不连接上游。它仍使用同一个 Exchange、Reader/Writer/Pipeline 模型：
 
-### 4.2 超时、Body 和容量
+- Direct/透明模式按字节 echo；
+- Scripted/协议模式读取完整报文并通过协议 Pipeline 返回；
+- 不生成虚假的上游连接成功证据。
 
-#### 连接、写入和读取超时
+LocalServer 不配置上游 host、上游 CA 或上游客户端身份。
 
-- 默认均为 70 秒。
-- 连接超时：Proxy 建立上游 TCP/TLS 连接的最长等待时间。
-- 写入超时：Proxy 向上游或 Payment 写入报文的最长等待时间。
-- 读取超时：Proxy 等待上游响应或读取请求的最长等待时间。
-- 弱网延迟、限速或间歇阻断可能消耗这些超时预算。
-- 如果要测试 60 秒以上的弱网行为，应先确认超时设置不会提前终止场景。
+### 4.3 透明转发
 
-#### 请求体大小限制
+透明 Socket 保持原始字节：
 
-- 默认 4 MiB。
-- 超过上限时 Rust 返回 `BODY_TOO_LARGE`。
-- 提高上限会增加单个会话的内存占用。
+- App 读到多少就向 Server 写多少；
+- Server 读到多少就向 App 写多少；
+- 不执行 Frame、Decode、Document Rules、Encode 或 Display；
+- 保持半关闭，不把一侧 EOF 误当成必须立即丢弃另一侧待发送数据。
 
-#### 会话容量
+协议包错误不能自动降级为透明转发。
 
-- 默认最多 500 个会话。
-- 默认逻辑内存上限 256 MiB。
-- 达到容量时优先淘汰最旧的已完成会话。
-- 待处理断点不会被淘汰。
-- 如果容量全部被待处理断点占用，新连接会被拒绝，并记录 `RESOURCE_EXHAUSTED`。
+## 5. 协议包
 
-### 4.3 校验、保存和应用
+“协议包”页面统一显示 HTTP Body 与 Socket 本地包；远端包在线状态也在此处体现。
 
-1. 修改字段。
-2. 点击“校验设置”。
-3. 按字段下方的 Rust 错误修正配置。
-4. 点击“保存设置”，把配置保存到数据库。
-5. 如果 Proxy 正在运行，网络、端口、上游或 TLS 相关修改不会自动改变当前运行实例。
-6. 点击“保存并重启代理”，让新设置成为运行时配置。
+### 5.1 本地单文件协议包
 
-“保存设置”和“当前已生效设置”不是同一个概念。应在右侧“配置摘要与校验”中确认：
+导入 `.wasm` 前应确认：
 
-- 当前生效值。
-- 已保存但待应用值。
-- 最近一次校验结果。
-- 是否需要重启。
+- 文件是 WebAssembly Component，不是 Core Wasm、ZIP 或脚本源码；
+- 唯一顶层 `intercept-proxy:manifest`、目标 WIT world 和上下行递归 Schema 齐全；
+- 包 ID + SemVer 是不可变身份，新内容使用新版本；
+- HTTP/Socket 的 Frame、Decode、Encode、Display exports 符合 package API 1。
 
-如果新配置启动失败，Rust 会报告回滚状态。此时必须到控制台确认旧配置是否恢复，不要只看保存成功提示。
+prepare 静态校验 Component、Manifest 和 Schema。commit 会先在主进程内完成 Wasmtime 编译与实例化，
+再原子持久化并发布 enabled runtime；任一步失败都不留下记录或缓存，也不会重试、切换远端调试包或
+透明转发。停用会回收实例，启用和重启从已保存的同一文件重新实例化。
 
----
+### 5.2 远端协议包
 
-## 5. 证书管理
+远端包连接设置页或配置会公布实际 WebSocket `/packages` 地址；监听范围由 `bind_address` 决定，
+不得假定 loopback。注册后必须实现：
 
-证书页分为两条完全独立的 TLS 链路：
+- `hooks.upstream.<frame|decode|encode>`
+- `hooks.downstream.<frame|decode|encode>`
+- `document.upstream.display`
+- `document.downstream.display`
 
-```text
-A. Payment App -> Proxy
-B. Proxy -> GMO-FG Server
-```
+外部包断线后精确版本变为 offline；绑定它的 Listener fail-closed，不切换其他版本或透明模式。
 
-前一段成功不代表后一段成功。
+### 5.3 Display
 
-### 5.0 证书文件对应关系
+Display 是协议包生成的 HTML 展示结果。App 会清洗并放入无能力 sandbox iframe：
 
-以下三类材料不能混用，也不能通过修改扩展名相互转换：
+- 递归 Document、规则过程和最终值按 typed evidence 展示；
+- 不执行 script、事件属性、URL 导航或表单；
+- Display 失败时 HTTP 回退 Body、Socket 回退 Hex；
+- Display 失败属于观测失败，不改变已经成功的网络交易。
 
-| 文件或材料 | 来源 | 配置位置 | 用途 |
-| --- | --- | --- | --- |
-| Launcher `client_real.p12/client.p12` | Launcher 参数/证书文件 | Proxy“导入/替换 PKCS12”；同时由 Launcher 通过 CooperationApi 提供给 Payment | Payment → Proxy 时 Payment 出示客户端身份；Proxy → GMO-FG Server 时 Proxy 出示同一客户端身份 |
-| Payment 原始 `assets/server.crt` | Proxy 安装包内置与 Payment APK 相同的固定文件 | 默认自动生效；证书页可“选择性替换上游 CA” | Proxy 验证 GMO-FG Server 的证书链和主机名 |
-| Proxy 导出的统一测试 Root CA 公开证书 | Proxy 安装包内置；证书页只导出公开 PEM `.crt` | 加入测试版 Payment 的 `assets/server.crt` 后重新构建、安装 | Payment 验证 Proxy 服务端叶子证书 |
-| Proxy 服务端叶子证书和私钥 | Proxy 根据 SAN 自动生成并安全保存 | 不导入 Payment，不导出私钥 | Proxy 在 Payment → Proxy TLS 中提供服务端身份 |
+## 6. 统一规则页面
 
-真实交易中的客户端 P12 调用链为：
+HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“阶段”区分。点击一行后在右侧固定编辑区
+加载并编辑规则；加载期间切换选择时，旧请求返回后不会覆盖当前编辑内容。
 
-```text
-Launcher client_real.p12/client.p12
-  -> SettingsProvider
-  -> CooperationApi.getCreditClientCrt()
-  -> Payment LauncherSettings.creditClientCrt()
-  -> PKCS12 KeyStore / KeyManager
-```
+### 6.1 新建方式
 
-Payment 中 `SSLSocketConfig.loadConfig("server.crt", "client.p12")` 的第二个
-`client.p12` 参数没有参与实际加载；客户端 P12 的真实来源始终是 Launcher。
-`server.crt` 则由 Payment APK assets 读取，并用于构建 `TrustManager`。
+- 先选择单个 Listener，再选择 Rust 返回的可用阶段；规则创建后不能通过更新切换 Listener。
+- HTTP 规则：在同一内容中编辑 HTTP 条件/动作，并在入口绑定协议包时按能力添加可选 Document。
+- Socket 规则：只编辑协议 Document 条件/动作，不显示 HTTP 字段或 HTTP 动作。
+- 从服务器响应创建：生成未保存、默认停用的 HTTP Mock 草稿，确认后再保存。
+- 从故障预设创建：模板生成统一 HTTP 规则草稿，并通过同一保存、列表和停用流程管理。
 
-### 5.1 初始化本机测试证书
+“新建规则”只负责选择 Listener 和阶段；随后在规则页右侧固定编辑区填写并保存。选择规则或新建草稿
+不会自动保存，规则编辑本身不使用弹窗。
 
-1. 确认系统设置中的 SAN 已保存。
-2. 打开“证书管理”。
-3. 点击“初始化本机测试证书”。
-4. Rust 使用安装包内置的统一测试 Root CA 签发材料，生成本机独立私钥和 Proxy 服务端叶子证书。
-5. 检查叶子证书 SAN 是否包含 Payment 实际访问的 Proxy IP/DNS。
+左侧只显示一个规则列表，不再按阶段分区。每张规则卡使用“上行”或“下行”标识实际阶段；上行对应
+Proxy → Server，下行对应 Proxy → App。
 
-### 5.2 导出并加入 Payment 的 server.crt
+### 6.2 阶段能力
 
-1. 点击“导出测试 Payment 编译用 Root CA”。该操作在本机证书尚未初始化时也可执行。
-2. 在系统原生保存对话框中选择位置。
-3. 保留 Payment 原始 `assets/server.crt` 作为测试构建基线；Proxy 已内置同一文件，
-   默认无需再次导入。
-4. 将 Proxy 导出的公开 Root CA 追加到测试版 Payment 的
-   `app/src/main/assets/server.crt` PEM Bundle。
-5. 重新构建并安装 Payment APK，或使用经过验证的自动化测试打包流程。
-6. 启动 Payment，确保 HTTPS 客户端重新创建并读取更新后的 `server.crt`。
-7. 确认 Payment 使用该 Root CA 验证 Proxy 服务端叶子证书和 SAN。
+编辑器选项由 Rust 返回，保存时领域层再次校验：
 
-当前真实 Payment 没有从 Launcher 动态读取服务端信任 CA 的接口。只把导出文件
-复制到设备、修改扩展名为 `.p12`，或者只在系统证书设置中安装，都不能证明
-Payment 的自定义 `TrustManager` 已使用该 CA。
-
-导出文件不包含 CA 私钥，可以用于测试版 Payment；仍应按测试证书管理规则保存。
-
-### 5.3 导入 Launcher 提供的客户端 PKCS12
-
-1. 点击“导入/替换 PKCS12”。
-2. 选择 Launcher 在该测试环境实际提供给 Payment 的
-   `client_real.p12` 或 `client.p12`，不要选择 Proxy 导出的 Root CA。
-3. 输入与 Launcher/Payment 相同的密码。真实现有流程通常为空字符串；空密码是
-   有效输入，不等同于取消。
-4. 等待 Rust 解析证书链、私钥、用途和有效期。
-5. 导入成功后执行“重新检查”。
-
-这份 PKCS12 正是 Launcher 提供给 Payment 的客户端身份。代理测试时 Proxy 必须
-使用同一身份连接 GMO-FG Server；它不是 Proxy 本地 CA，也不是上游 CA。
-
-PKCS12 包含私钥，只能在受控测试环境中通过授权方式取得和传输，不得写入日志、
-截图、普通配置文件或版本库。
-
-### 5.4 使用内置上游 CA 或选择性替换
-
-1. 默认无需操作：Proxy 使用安装包内置的 Payment 原始 `assets/server.crt`。
-2. 只有 GMO-FG 测试环境证书或官方 CA Bundle 发生变化时，点击“选择性替换上游 CA”。
-3. 选择新的 PEM Bundle 或 DER CA；Rust 会从 Bundle 中选择有效 CA 信任锚。
-4. 等待 Rust 校验证书用途，然后点击“重新检查”并重启 Proxy。
-
-内置或替换后的上游 CA 用于验证 GMO-FG Server；Proxy 导出的统一测试 Root CA
-只负责 Payment 信任 Proxy，不能替代上游 CA。
-
-### 5.5 重新签发服务端证书
-
-以下情况需要重新签发：
-
-- Proxy 电脑局域网 IP 改变。
-- Payment 改用另一个 DNS 访问 Proxy。
-- SAN 配置改变。
-- 叶子证书接近到期或已经失效。
-
-操作：
-
-1. 停止 Proxy。
-2. 在系统设置中修改 SAN并保存。
-3. 回到证书页点击“重新签发服务端证书”。
-4. 点击“重新检查”。
-5. 重启 Proxy。
-
-重新签发叶子证书继续使用同一个 Root CA 时，已经信任该 Root CA 的 Payment 通常无需重复导入。
-
-### 5.6 重新初始化本机服务端证书
-
-只有在本机叶子私钥或叶子证书损坏、需要重新创建时才使用。
-
-1. 停止 Proxy。
-2. 点击“重新初始化本机证书”。
-3. 阅读危险操作确认。
-4. 确认后生成新的本机叶子私钥和叶子证书。
-5. 统一测试 Root CA 保持不变，已内置该公开 Root CA 的 Payment 无需重新构建。
-
-统一测试 Root CA 的整体轮换不由本按钮执行，必须通过受控的 Proxy 与测试 Payment 发布流程完成。
-
-### 5.7 证书成功判据
-
-点击“重新检查”后，应逐项确认：
-
-- 本机保存的统一测试 Root CA 副本存在、与安装包内置 Root 一致且有效。
-- Proxy 服务端叶子证书存在且有效。
-- SAN 包含 Payment 使用的 Proxy 地址。
-- Payment 客户端证书验证配置已就绪。
-- 上游 PKCS12 是 Launcher 实际提供给 Payment 的客户端身份，并且有效。
-- 当前生效的上游 CA 来自内置 Payment 原始 `server.crt` 或用户选择的替换 Bundle，并且有效。
-- 证书用途正确。
-- 系统时间位于证书有效期内。
-
-不要只看页面顶部“证书已就绪”，应同时读取每个检查项的详情。
-
----
-
-## 6. Payment 终端地址配置
-
-Payment 原本访问真实 GMO-FG Server。启用 Proxy 后，应把目标改为 Proxy 电脑。
-
-示例：
-
-| 通道 | Payment 应访问 | Proxy 再转发到 |
+| 统一阶段 | 可以配置 | 不能配置 |
 | --- | --- | --- |
-| 交易 | `https://10.0.34.50:16627/` | `https://https.gmo-fg.net:16627/` |
-| DLL | `https://10.0.34.50:16127/` | `https://https.gmo-fg.net:16127/` |
+| Proxy → Server | 请求字段、上行延迟/限速、Mock、上游连接/读写故障，以及入口支持时的 Document | HTTP 响应状态、响应损坏、下行限速 |
+| Proxy → App | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连，以及入口支持时的 Document | Mock、上游超时、上行断连 |
 
-检查要点：
+额外约束：
 
-- Payment 使用的 IP 必须存在于 Proxy 服务端证书 SAN。
-- Payment 端口必须与 Proxy 监听端口一致。
-- Proxy 的上游 URL 必须仍是真实 GMO-FG Server。
-- Payment 与 Proxy 电脑之间必须网络可达。
-- 电脑防火墙必须允许对应端口入站。
+- 限速与间歇通断方向由阶段固定，界面不允许手工选错；
+- 每条规则必须设置一个条件和一个对应动作，不提供多条件 AND/OR 或动作列表；
+- 终止动作作为该规则唯一动作，命中后结束当前方向的后续规则处理；
+- Header 名称和 HTTP/Socket Document 路径直接使用 `/a/b` 输入，有 Schema 时可以下拉选择或手工
+  输入，无 Schema 时只手工输入；
+- 每条规则读取当前 working Document，命中的唯一 action 立即修改它并对后序规则可见，最终只
+  Encode 一次；
+- 终止动作命中后停止后续规则。
 
----
+“Proxy → Server 设置 response code”在概念上不成立，因此请求阶段不会显示自定义 HTTP 状态码；
+该动作只属于 Server response 经过 Proxy 返回 App 的响应阶段。
 
-## 7. 代理控制台
+### 6.3 Document 规则
 
-### 7.1 启动
+Document 规则可以选择当前 Listener、精确协议包版本与递归 Schema 路径，也可以通过 Rust capability
+显式创建首个规则本地路径。值类型包括 null、boolean、number、string、object 和 array，不做隐式转换。
+Schema array items 只表示元素模板，不会自动生成 index 0；只有显式创建索引后才显示具体 index。
 
-1. 打开“控制台”。
-2. 确认证书状态为就绪。
-3. 确认顶部显示正确的交易和 DLL 监听地址。
-4. 点击“启动代理”。
-5. 等待全局状态变为“运行中”。
-6. 确认交易和 DLL 通道分别显示“正在监听”。
+Document 规则只在两个写出阶段执行：
 
-两个启用通道作为一个运行实例启动。任一通道启动失败时，不应留下半启动状态。
+1. Proxy → Server
+2. Proxy → App
 
-### 7.2 停止
+每个阶段从 Decode 结果创建私有 working Document；各规则的 condition/action 按规则顺序读取/更新它，前序修改
+对后序规则可见。一次读取产生一个 Envelope，长连接中的新报文追加新事件，不覆盖之前数据。
 
-1. 确认当前没有必须继续处理的断点。
-2. 点击“停止代理”。
-3. 等待状态变为“已停止”。
+## 7. 实时抓包
 
-停止会：
+HTTP 和 Socket 同时显示在一个页面，不通过协议 Tab 隐藏另一类记录。
 
-- 停止接受新连接。
-- 取消上游任务。
-- 取消延迟和弱网计时器。
-- 关闭当前连接。
-- 把待处理断点变为 `ProxyStopped`。
+### 7.1 HTTP
 
-停止不会删除规则、设置或证书。
+HTTP 表格显示时间、终端 IP、通道、方向、方法、路径/请求类型、状态码、结果、耗时、规则和大小。
+页面停留时新请求应立即追加，不需要切换页面。
 
-### 7.3 重启
+在 Exchange 详情中，服务器返回的完整 HTTP 响应会显示“用此服务器响应创建 Mock 草稿”。该操作
+使用配对请求的完整 request-target，并复制状态码、可保留 Header 与 UTF-8 Body；草稿默认禁用且
+不会自动保存。压缩、二进制、非 UTF-8 或证据不完整的响应会被拒绝。打开规则编辑器后仍需人工
+检查并保存，保存前不会改变代理运行行为。
 
-修改以下内容后需要重启：
+### 7.2 Socket
 
-- 绑定地址。
-- 交易或 DLL 端口。
-- 上游 URL。
-- TLS 证书材料。
-- SAN 和 Proxy 服务端叶子证书。
-- 影响运行时网络行为的设置。
+Socket 表格一行对应一个 App connection/Exchange。详情按发生顺序显示：
 
-点击“重启代理”后，Rust 先完整停止旧实例，再创建新实例。
+1. Opened
+2. App → Proxy Received
+3. Proxy → Server Sent
+4. Server → Proxy Received
+5. Proxy → App Sent
+6. Failed（如有）
+7. Closed
 
-### 7.4 读取链路状态
+协议模式详情还显示 received Document、逐规则 typed operation summary、final working Document、
+Encode/result/process evidence 和 stable error code。`changes_truncated=true` 表示逐规则摘要达到观测预算；
+它不代表业务处理、最终 Document 或 Encode 被截断。没有执行的人机、真实设备或外部网络验证必须
+记录为 `NOT_RUN`，不能用单元测试 PASS 替代。
 
-始终分段判断：
+详情显示原始字节/Hex、递归 Document、固定 Display、规则过程和失败阶段，不显示无意义的字节
+上一页/下一页按钮。长连接中 D2 追加在 D1 后面。
 
-1. Payment → Proxy TCP 是否建立。
-2. Payment → Proxy TLS 是否成功。
-3. Proxy 是否解析到 HTTP/DLL 报文。
-4. Proxy → Server TCP 是否建立。
-5. Proxy → Server mTLS 是否成功。
-6. Server 是否返回完整响应。
-7. Shift-JIS 是否严格解码成功。
-8. 业务报文是否成功解析。
-9. 业务结果字段是否符合预期。
+“暂停列表滚动”只暂停视图滚动，不暂停网络、规则或记录；“清空当前显示/运行记录”只清理内存
+展示，不修改 Workspace 或数据库配置。
 
-HTTP 200 只说明 HTTP 状态，不等于业务成功。
+## 8. 故障
 
----
+延迟、抖动、限速、间歇通断属于可调度故障；Mock、拒绝、断开、丢弃和截断属于终止动作。故障
+预设最终生成普通规则，后续仍在统一规则页面编辑和审计。
 
-## 8. DLL 基线测试与 D48 验收
+## 9. 诊断日志与 MCP
 
-规则和弱网测试前后都必须执行无故障基线。
+诊断日志默认按发生时间从新到旧排列；时间相同的记录按事件 ID 从大到小稳定排列，因此刷新和分页
+不会把较旧记录插到较新记录上方。
 
-### 8.1 基线前准备
+排障建议顺序：
 
-1. 停用所有故障模拟。
-2. 停用所有会修改、暂停或终止 DLL 请求的规则。
-3. 确认 Proxy 正在监听 DLL 端口。
-4. 确认 Payment 连接 Proxy 的 DLL 地址。
-5. 清空或记录当前抓包显示起点。
+1. 确认 Workspace、Listener、模式和 runtime epoch。
+2. 检查抓包是否有 Opened。
+3. 对照同一 Exchange 的 Received/Sent。
+4. 若失败，先看 Failed stage 和稳定错误码。
+5. 再查询普通运行日志、外部包 generation/RPC request ID。
+6. 检查 evidence dropped/ignored/evicted 计数。
+7. 最后生成复现报告。
 
-### 8.2 执行
+内嵌 MCP 在端口 `17653` 监听全接口 IPv4，并在平台支持时监听全接口 IPv6。它使用明文 HTTP，
+不校验 Host/Origin、来源 IP、Authorization、API key、Cookie 或其他调用方身份。任何能够连接该端口
+的主机都可以读取公开数据并调用环境配置工具；网络观察者也可能看到提交的私钥、密码和确认令牌。
 
-1. 在真实 Payment 终端执行 DLL 连接测试。
-2. 在控制台确认 DLL 请求数增加。
-3. 在实时抓包中找到对应 DLL 会话。
-4. 打开会话详情。
-5. 确认请求经过 Proxy 转发到真实 Server。
-6. 确认 Proxy 收到完整响应。
-7. 确认响应通过严格 Shift-JIS 解码。
-8. 确认响应能按协议解析。
-9. 确认配置的业务返回码字段严格等于 `D48`。
+现有 34 个工具继续只读。完整环境配置使用五步工具合同：
 
-### 8.3 D48 的准确含义
-
-在当前实机验收中，`D48` 用作“请求确实到达真实 Server 并返回可解析业务响应”的信号。
-
-它不表示支付业务成功。其业务含义可能是主文件未登记。
-
-以下情况不能单独判定 D48 基线成功：
-
-- TLS 握手成功。
-- HTTP 状态为 200。
-- 控制台请求数增加。
-- 收到任意响应。
-- Payment 显示通用错误。
-- 会话已结束。
-- 响应文本中存在未定位字段的 `D48` 字符串。
-
-### 8.4 基线失败时
-
-- App → Proxy 失败：检查 Payment 地址、SAN、Payment 信任 CA、终端客户端证书和电脑防火墙。
-- Proxy → Server 失败：检查上游 URL、PKCS12、上游 CA、DNS、系统时间和网络。
-- 收到响应但没有 D48：检查业务返回码字段路径和协议解析结果。
-- 只有 HTTP 200：继续检查响应 Body，不要提前判定成功。
-
----
-
-## 9. 实时抓包
-
-### 9.1 查看流量
-
-1. 启动 Proxy。
-2. 打开“抓包”。
-3. 在 Payment 执行操作。
-4. 从表格查看时间、终端 IP、通道、方向、阶段、方法、路径/请求类型、结果、耗时、规则数量和报文大小。
-5. 点击某一行读取详情。
-
-### 9.2 筛选
-
-- “关键字或请求 ID”：查找请求 ID、路径或摘要关键字。
-- “终端 IP”：多设备并行时限定设备。
-- “通道”：交易、DLL 或全部。
-- “阶段”：请求、响应或终态。
-- “结果”：例如 success、timeout。
-- “规则 ID”：只看命中特定规则的流量。
-
-筛选、排序、分页和总数由 Rust 执行。
-
-### 9.3 暂停列表滚动
-
-“暂停列表滚动”只冻结 UI：
-
-- 网络仍继续转发。
-- 规则仍继续执行。
-- 会话仍继续记录。
-- 断点仍继续等待。
-
-恢复后 Rust 返回当前完整显示快照。
-
-### 9.4 清空当前显示
-
-“清空当前显示”只清理抓包页面当前视图和选择：
-
-- 不删除会话。
-- 不删除规则。
-- 不停止 Proxy。
-- 不清除 Rust 中其他业务状态。
-
-### 9.5 详情
-
-- 抓包列表会直接显示已经取得的响应 HTTP 状态码；请求阶段尚未收到响应时显示“—”。
-- “概览”：请求 ID、终端、通道、TLS、结果、时间和规则轨迹。
-- “请求”：完整请求 Header 和 Shift-JIS 解码 Body。
-- “响应”：HTTP 状态码、完整响应 Header 和 Shift-JIS 解码 Body。
-
-关闭详情后，前端释放完整 Payload 引用。
-
----
-
-## 10. 会话记录
-
-会话列表直接显示最终响应 HTTP 状态码；完整请求和响应 Header 仍在按需加载的详情中查看。
-
-### 10.1 查询
-
-可以按以下条件查询：
-
-- 关键字或请求 ID。
-- 终端 IP。
-- 交易/DLL 通道。
-- 结果。
-- 规则 ID。
-- 开始和结束时间。
-
-选择会话后查看：
-
-- 双向 TLS 摘要。
-- 上游主机。
-- 请求和响应。
-- 最终动作。
-- 分阶段耗时。
-- 规则执行轨迹。
-
-### 10.2 导出会话
-
-1. 选择会话。
-2. 点击“导出原始 JSON”。
-3. 阅读敏感数据提示。
-4. 确认后在系统原生保存对话框选择路径。
-5. 等待 Rust 返回导出结果。
-
-导出可能包含支付测试数据，应按敏感数据规则保存和传递。
-
-### 10.3 清空会话
-
-“清空已完成会话”只删除已完成会话：
-
-- Pending 断点及其会话不会删除。
-- 规则不会删除。
-- 设置不会删除。
-- 证书不会删除。
-
-应用重启后，内存中的会话 Payload 会清空，不写入 SQLite。
-
----
-
-## 11. 拦截规则
-
-### 11.1 规则执行顺序
-
-- 优先级数值越小，越早执行。
-- 优先级相同按创建顺序执行。
-- 修改、延迟、暂停可组合。
-- Mock、拒绝、断开、丢弃、截断和传输中途断开属于终止动作。
-- 终止动作必须是动作列表最后一项。
-- 命中终止动作后，不再执行后续规则。
-
-### 11.2 新建规则
-
-1. 打开“规则”。
-2. 点击“新增规则”。
-3. 在“基本信息”填写名称和说明。
-4. 选择交易或 DLL 通道。
-5. 选择阶段：
-   - TLS 握手。
-   - 请求阶段。
-   - 响应阶段。
-6. 设置优先级。
-7. 决定是否立即启用。
-8. 决定是否仅命中一次。
-9. 配置匹配条件。
-10. 配置执行动作。
-11. 点击“保存规则”。
-12. 修正 Rust 返回的字段错误。
-
-### 11.3 匹配条件
-
-可以使用：
-
-- 终端 IP。
-- 客户端证书指纹。
-- 路径或 DLL 请求类型。
-- JSON 字段路径。
-- 第 N 次命中。
-
-操作符包括：
-
-- 等于。
-- 包含。
-- 正则。
-
-多个条件按 AND 关系共同满足。
-
-第 N 次命中默认按“终端 IP + 客户端证书指纹”分别计数。以下操作会重置计数：
-
-- Proxy 重启。
-- 规则停用后重新启用。
-- 修改规则匹配条件。
-
-### 11.4 常用动作
-
-#### 修改 JSON 字段
-
-- 填写 JSON Path。
-- 填写合法 JSON 值。
-- Rust 修改后重新编码 Shift-JIS 并重建 Content-Length。
-
-#### 替换 Body 文本
-
-- 输入必须可无损编码为 Shift-JIS 的文本。
-- 不可表示字符会被拒绝，不会替换成问号后继续发送。
-
-#### 修改 Header
-
-- 填写 Header 名称和值。
-- 不要设置 Content-Length、Transfer-Encoding、Connection 等由 Rust 管理的 Header。
-
-#### 固定延迟
-
-- 单位为毫秒。
-- 延迟可与修改、暂停组合。
-- 总延迟受 600000 毫秒上限约束。
-
-#### 暂停并进入断点
-
-- 请求阶段：发送上游前暂停。
-- 响应阶段：返回 Payment 前暂停。
-- 断点不会自动放行。
-
-#### Mock
-
-- 请求不再访问真实 Server。
-- Rust 返回配置的 HTTP 状态、Header 和 Shift-JIS JSON Body。
-- Mock 结果不能证明真实上游链路正常。
-
-#### 错误 Content-Length、非法 JSON 和截断
-
-- 用于验证 Payment 对畸形响应的处理。
-- 必须在测试环境使用。
-- 应同时记录 Proxy 轨迹和 Payment 最终表现。
-
-### 11.5 保存、复制、导入和导出
-
-- 保存：Rust 校验整个草稿。
-- 复制：创建独立副本。
-- 删除：需要二次确认。
-- 导入：整个文件原子校验，任意规则非法则不部分写入。
-- 导出：不包含证书、密码或会话 Payload。
-
----
-
-## 12. 断点实验台
-
-### 12.1 产生断点
-
-1. 创建包含“暂停并进入断点”动作的规则。
-2. 选择请求或响应阶段。
-3. 启用规则。
-4. 在 Payment 发起匹配请求。
-5. 打开“断点”。
-6. 从左侧队列选择 Pending 项。
-
-### 12.2 阅读和编辑
-
-- 原始报文：Rust 保存的只读快照。
-- 有效报文：自动规则执行后的当前草稿。
-- 请求与响应内容通过对应 Tab 查看。
-- JSON 格式化由 Rust 执行。
-- 修改后必须先校验。
-
-### 12.3 处理方式
-
-请求阶段常用处理：
-
-- 原样放行。
-- 修改后放行。
-- Mock 响应。
-- 请求前延迟。
-- 不连接上游并断开。
-
-响应阶段常用处理：
-
-- 原样放行。
-- 修改后放行。
-- 响应延迟。
-- 自定义 HTTP 状态。
-- 非法 JSON。
-- 错误 Content-Length。
-- 截断响应。
-- 丢弃响应。
-
-### 12.4 注意事项
-
-- 断点不会自动超时放行。
-- Payment 主动断开后，断点变为 `ClientDisconnected`。
-- 停止 Proxy 后，断点变为 `ProxyStopped`。
-- 同一个断点只能成功处理一次。
-- 已解决、已断开或已停止的断点不能再次放行。
-
----
-
-## 13. 故障模拟
-
-故障模拟模板最终会创建普通规则，不存在第二套执行引擎。
-
-### 13.1 通用操作
-
-1. 打开“模拟”。
-2. 从模板列表选择场景。
-3. 确认发生阶段、影响端和风险等级。
-4. 选择交易或 DLL 通道。
-5. 填写模板参数。
-6. 根据需要填写终端 IP/ID。
-7. 根据需要填写路径或 DLL 请求类型。
-8. 设置第 N 次命中。
-9. 设置一次性生效。
-10. 设置规则优先级。
-11. 点击“启用模拟”。
-12. 在“当前生效的模拟”中确认规则存在。
-13. 在 Payment 执行测试。
-14. 在抓包/会话中核对命中规则和精确动作。
-15. 测试结束后点击“停用”。
-16. 再执行一次无故障 D48 恢复测试。
-
-“保存为规则”适合需要继续添加 JSON、证书、路径或组合条件的场景。
-
-### 13.2 常见模板语义
-
-| 模板 | 阶段 | Server 是否可能收到请求 | Payment 侧行为 |
-| --- | --- | --- | --- |
-| 拒绝 TLS 握手 | TLS | 否 | App → Proxy TLS 失败 |
-| 不连接上游并断开 | 请求 | 否 | 连接被关闭 |
-| 请求前延迟 | 请求 | 延迟结束后可能收到 | 等待或超时 |
-| 上游连接超时 | 请求 | 否 | 连接超时 |
-| 上游写入超时 | 请求 | 可能只收到部分或未完成请求 | 写入超时 |
-| 上游读取超时 | 请求 | 是 | 等待响应超时 |
-| 完整读取后丢弃响应 | 请求 | 是 | 无响应或连接断开 |
-| Mock Shift-JIS JSON | 请求 | 否 | 收到模拟响应 |
-| 响应延迟 | 响应 | 是 | 延迟后收到或先超时 |
-| 非法 JSON | 响应 | 是 | 收到不可解析业务 Body |
-| 错误 Content-Length | 响应 | 是 | 长度异常、超时或断开 |
-| 截断响应 | 响应 | 是 | 只收到前 N 字节 |
-
-“可能超时”“可能触发自动取消”不是固定承诺。Payment 的具体 T02/T03/T04、自动取消或重试行为必须在当前真实版本和真实设备上验证。
-
----
-
-## 14. 弱网模拟详细教程
-
-### 14.1 测试原则
-
-每个弱网场景必须采用三段式：
-
-```text
-无故障基线 -> 单一弱网场景 -> 停用后的恢复基线
-```
-
-不要一次启用多个未知影响的故障。先验证单一动作，再测试组合。
-
-每个场景至少记录：
-
-- 时间。
-- Payment 设备序列号和 IP。
-- Proxy 版本。
-- 通道。
-- 规则 ID 和 revision。
-- 匹配条件。
-- 弱网参数。
-- 请求 ID、会话 ID。
-- 规则命中轨迹。
-- Proxy 最终结果。
-- Payment 显示和日志结果。
-- Server 是否收到请求。
-- 场景结束后的 D48 恢复结果。
-
-### 14.2 上行限速
-
-用途：限制 Proxy 向 GMO-FG Server 发送请求 Body 的速度。
-
-操作：
-
-1. 选择“上行限速”模板。
-2. 选择交易或 DLL 通道。
-3. 设置 `bytes_per_second`。
-4. 设置 `chunk_bytes`。
-5. 配置目标终端和路径。
-6. 建议首次使用“一次性生效”。
-7. 启用模拟。
-8. 在 Payment 发起目标请求。
-9. 在会话耗时和规则轨迹中确认上行限速动作。
-10. 检查 Server 是否最终收到完整请求。
-
-参数范围：
-
-| 参数 | 范围 | 说明 |
-| --- | --- | --- |
-| 每秒字节数 | 1 到 104857600 B/s | 数值越小越慢 |
-| 分块大小 | 1 到 1048576 字节 | 默认建议 16384 |
-
-示例：Body 为 32 KiB，限速为 8 KiB/s，理论发送时间约 4 秒，不含 TLS、Server 处理和其他延迟。
-
-验收时不要只比较总耗时，应确认：
-
-- 规则确实命中。
-- 限速方向是上行。
-- Server 接收完成时间符合容差。
-- 没有被读取超时或 Payment 自身超时提前终止。
-
-### 14.3 下行限速
-
-用途：限制 Proxy 向 Payment 返回响应 Body 的速度。
-
-操作：
-
-1. 选择“下行限速”模板。
-2. 设置速率和分块大小。
-3. 选择响应阶段目标。
-4. 启用后在 Payment 发起请求。
-5. 观察 Server 正常返回后，Payment 接收响应所需时间。
-
-Server 已经处理请求不代表 Payment 一定收到完整响应。如果 Payment 自身先超时或断开，应分别记录 Server 结果和 Payment 结果。
-
-### 14.4 上行抖动
-
-用途：在请求发送前或每个请求分块前加入确定性随机延迟。
-
-参数：
-
-- 最小抖动毫秒。
-- 最大抖动毫秒。
-- 作用域：
-  - 发送前：整条消息只抖动一次。
-  - 每分块：每个分块分别产生抖动。
-
-规则：
-
-- 最小值不得大于最大值。
-- 最大值不得超过 600000 毫秒。
-- 同一执行种子产生可复现序列。
-- 不同会话应产生不同序列。
-
-操作：
-
-1. 先选择较小范围，例如 100–500 ms。
-2. 先用“发送前”验证单次抖动。
-3. 再用“每分块”验证持续不稳定链路。
-4. 结合请求 Body 大小和分块数量解释总耗时。
-
-### 14.5 下行抖动
-
-用途：让响应返回 Payment 的时间不稳定。
-
-操作与上行抖动相同，但阶段选择响应、方向选择下行。
-
-重点观察：
-
-- Server 已经完整返回的时间。
-- Proxy 开始下行发送的时间。
-- Payment 收到完整响应的时间。
-- Payment 是否在抖动期间主动超时或断开。
-
-### 14.6 上行间歇可用
-
-用途：让 Proxy → Server 的请求发送周期性“可发送/阻断”。
-
-参数：
-
-- 可用窗口毫秒。
-- 阻断窗口毫秒。
-
-两个窗口都必须位于 1 到 600000 毫秒。
-
-示例：
-
-```text
-可用 500 ms
-阻断 1500 ms
-```
-
-表示请求分块只能在 500 ms 可用窗口发送，然后暂停 1500 ms，再进入下一周期。
-
-操作：
-
-1. 选择“上行间歇可用”。
-2. 设置可用和阻断窗口。
-3. 选择具有足够 Body 的目标请求。
-4. 启用一次性模拟。
-5. 执行请求并检查 Server 端接收节奏。
-
-小 Body 可能在第一个可用窗口内一次发完，看不到明显阻断。测试时应选择足够大的请求或更短的可用窗口。
-
-### 14.7 下行间歇可用
-
-用途：让响应以周期性暂停和恢复的方式返回 Payment。
-
-重点观察：
-
-- 阻断窗口内没有新的 Body Frame。
-- 恢复后从正确字节位置继续。
-- 没有重复、跳过或修改原始字节。
-- Payment 是否能够等待恢复。
-
-### 14.8 上行传输中途断开
-
-用途：Proxy 向 Server 发送请求 Body 的前 N 字节后断开。
-
-参数 `after_bytes` 必须满足：
-
-```text
-1 <= after_bytes < 实际请求Body长度
-```
-
-操作：
-
-1. 先从无故障会话确认目标请求 Body 长度。
-2. 设置小于 Body 长度的断开位置。
-3. 启用一次性模拟。
-4. 在 Payment 发起请求。
-5. 确认 Server 只收到配置字节数或不完整请求。
-6. 确认 Proxy 记录上行中途断开终态。
-
-不要把 `after_bytes` 设置为等于或大于 Body 长度，否则不能形成中途断开。
-
-### 14.9 下行传输中途断开
-
-用途：Proxy 向 Payment 返回响应 Body 的前 N 字节后断开。
-
-操作：
-
-1. 从无故障会话确认响应 Body 长度。
-2. 设置 `after_bytes` 小于响应 Body 长度。
-3. 启用一次性模拟。
-4. 发起请求。
-5. 确认 Server 已返回完整响应。
-6. 确认 Payment 只收到前 N 字节。
-7. 检查 Payment 的解包、超时、重试或自动取消行为。
-
-“截断响应”和“下行中途断开”都能产生不完整响应，但审计语义不同：
-
-- 截断响应是响应故障模板定义的前缀发送行为。
-- 下行中途断开是传输调度器在指定字节偏移主动终止流。
-
-### 14.10 弱网组合场景
-
-确认单一动作通过后，可以组合：
-
-- 修改 Body + 上行限速。
-- 固定延迟 + 抖动。
-- 限速 + 间歇可用。
-- 修改 Header + 下行限速。
-- 抖动 + 最终中途断开。
-
-组合要求：
-
-- 终止动作必须最后。
-- 组合最大延迟预算不得超过 600000 ms。
-- 记录每个动作的执行顺序。
-- 对比真实无故障基线。
-- 不要用一次组合失败反推某个单独动作失败。
-
-### 14.11 停用与恢复验证
-
-每个弱网场景结束后：
-
-1. 在“当前生效的模拟”中停用对应项。
-2. 在规则页确认对应规则已停用，且没有重复模板。
-3. 确认没有 Pending 断点。
-4. 必要时重启 Proxy，取消仍在执行的 Timer 和连接。
-5. 再执行一次无故障 DLL 测试。
-6. 确认真实 Server 响应重新严格解析到 `D48`。
-
-没有恢复基线，不能证明弱网故障已清理干净。
-
----
-
-## 15. 推荐测试用例
-
-### 15.1 DLL 连通性
-
-预期：
-
-- Payment → Proxy mTLS 成功。
-- Proxy → Server mTLS 成功。
-- HTTP/DLL 解析成功。
-- Server 完整响应。
-- 严格解析到 D48。
-
-### 15.2 请求前断开
-
-预期：
-
-- 规则命中。
-- Server 没有收到请求。
-- Payment 出现连接类失败。
-- 停用后 D48 恢复。
-
-### 15.3 完整读取后丢弃响应
-
-预期：
-
-- Server 收到并处理请求。
-- Proxy 收到完整响应。
-- Payment 没有收到响应。
-- Payment 最终表现单独记录。
-- 停用后 D48 恢复。
-
-### 15.4 响应延迟
-
-预期：
-
-- Server 正常返回。
-- Proxy 按配置等待。
-- 未达到 Payment 超时时返回完整响应；超过超时时记录 Payment 先断开。
-
-### 15.5 下行限速
-
-预期：
-
-- Server 完整响应。
-- Proxy 分块下发。
-- 总耗时符合速率和响应长度的容差。
-- 字节内容不改变。
-
-### 15.6 下行中途断开
-
-预期：
-
-- Server 完整响应。
-- Payment 只收到配置的前 N 字节。
-- Proxy 记录明确的故障终态。
-- 停用后 D48 恢复。
-
----
-
-## 16. 测试证据记录模板
-
-建议每个场景保存以下内容：
-
-```text
-场景名称：
-测试时间：
-Proxy版本/提交：
-操作系统：
-Payment设备序列号：
-Payment设备IP：
-Proxy电脑IP：
-通道：交易 / DLL
-监听地址：
-上游地址：
-规则ID：
-规则revision：
-规则优先级：
-匹配条件：
-动作与参数：
-一次性：是 / 否
-第N次命中：
-请求ID：
-会话ID：
-Server是否收到请求：
-Proxy是否收到完整响应：
-HTTP状态：
-Shift-JIS解码：
-业务解析：
-业务结果字段和值：
-Payment界面结果：
-Payment日志结果：
-Proxy最终结果：
-规则轨迹：
-会话导出文件：
-故障清理结果：
-恢复基线D48：通过 / 失败
-备注：
-```
-
-必须把以下证据层分开：
-
-- UI 配置成功。
-- 规则创建成功。
-- 规则实际命中。
-- Proxy 网络行为符合定义。
-- Android Payment 最终表现。
-- Server 业务结果。
-- 故障清理和恢复。
-
-一条 D48 不能证明所有规则场景通过；每个场景都要绑定自己的规则 ID、请求/会话、设备结果和清理证据。
-
----
-
-## 17. 常见问题排查
-
-### 17.1 Proxy 无法启动
-
-- 检查证书是否全部就绪。
-- 检查端口是否占用。
-- 检查两个通道端口是否冲突。
-- 检查上游 URL 格式。
-- 检查安全存储是否能解密材料。
-- 修正后使用“重启代理”，不要只刷新页面。
-
-### 17.2 Payment 无法连接 Proxy
-
-- Payment 地址是否指向 Proxy 电脑 IP。
-- 端口是否正确。
-- SAN 是否包含该 IP/DNS。
-- Payment 的测试构建是否包含证书页导出的统一测试 Root CA。
-- Payment 是否提供正确客户端证书。
-- 电脑防火墙是否放行。
-- Payment 与电脑是否处于可路由网络。
-
-### 17.3 Proxy 无法连接 Server
-
-- 上游 URL 和端口是否正确。
-- DNS 是否可解析。
-- 电脑是否能访问 Server。
-- PKCS12 是否正确。
-- PKCS12 密码是否正确。
-- 上游 CA 是否正确。
-- Server 证书主机名是否匹配。
-- 系统时间是否正确。
-
-### 17.4 规则没有命中
-
-- 通道是否选择错误。
-- 阶段是否选择错误。
-- 终端 IP/证书条件是否匹配。
-- 路径或 DLL 请求类型是否匹配真实值。
-- JSON Path 是否存在。
-- 第 N 次命中计数是否达到。
-- 规则是否启用。
-- 是否被更高优先级终止规则遮蔽。
-- 是否存在重复模板。
-
-### 17.5 弱网效果不明显
-
-- Body 太小，在一个分块或一个可用窗口内已发送完成。
-- 限速值仍高于真实链路速度。
-- 抖动范围太小。
-- 间歇阻断窗口太短。
-- 配置方向错误。
-- 规则未命中。
-- Payment 或 Server 本身耗时波动掩盖故障效果。
-
-应使用无故障基线，并选择足够大的 Body 做限速和间歇测试。
-
-### 17.6 弱网总是提前超时
-
-- 检查连接、读取和写入超时。
-- 计算限速理论时长。
-- 计算固定延迟、最大抖动和阻断窗口。
-- 检查 Payment 自身超时是否短于 Proxy 设置。
-- 减小故障强度后逐步增加。
-
-### 17.7 停用故障后仍异常
-
-- 确认活动模拟已停用。
-- 到规则页确认对应规则已停用。
-- 检查是否存在复制或重复规则。
-- 检查是否仍有 Pending 断点。
-- 停止并重启 Proxy，清理运行中连接和计时器。
-- 执行无故障 D48 恢复测试。
-
----
-
-## 18. 数据与安全
-
-- 会话 Payload 只保存在内存中，应用重启后清空。
-- SQLite 保存规则、设置、证书元数据和受保护密文，不保存会话 Payload。
-- Windows 使用当前用户 DPAPI。
-- macOS 使用当前用户 Keychain。
-- 私钥、PKCS12 原始字节和密码不得进入前端。
-- 日志不得记录完整敏感 Payload、卡号、PIN、磁道、私钥或密码。
-- 原始会话导出必须显式确认。
-- 导出文件按测试敏感数据处理。
-- 故障模拟只应用于测试环境。
-
----
-
-## 19. 每次测试的推荐收尾
-
-1. 停用本次使用的所有故障模拟。
-2. 停用或删除临时规则。
-3. 处理或终结所有 Pending 断点。
-4. 执行无故障 D48 恢复测试。
-5. 导出需要保留的会话证据。
-6. 记录规则 ID、会话 ID、设备结果和恢复结果。
-7. 清空已完成会话。
-8. 点击“停止代理”。
-9. 确认交易和 DLL 通道均已停止。
-10. 妥善保存或删除敏感导出文件。
-
-测试结束时，仅看到 Proxy 已停止还不够；必须确认临时规则、活动故障和 Pending 断点已经清理。
+1. 调用 `mcp_environment_capabilities`，确认 IPv4/IPv6 capability、warning、预算和 schema。
+2. 调用 `environment_candidate_create` 提交明确的现有或新 Workspace 目标；等待全部验证层完成并检查
+   公开预览。create 返回前断开会取消候选并清理未提交私有材料。
+3. 使用 `environment_candidate_status` 复查候选仍为 `preview_ready`。配置、运行态或 baseline 变化会
+   使候选 stale，必须重新创建。
+4. 确认预览后，把一次性 confirmation token 传给 `environment_candidate_apply`。成功响应只表示
+   `apply_queued`；响应后断开不会取消 Application 已接管的任务。
+5. 持续查询 status，直到 `committed` 或明确失败终态。MCP 不会自动停止、启动或重启 Listener；
+   受影响 Listener 仍在运行或存在活动连接时 apply 拒绝。
+
+预览、status、终态、错误、日志和 diagnostics 不返回私钥、密码、confirmation token、保护后字节或
+原始请求体。MCP 仍不能重放交易，候选技术验证也不证明业务报文或交易成功。完整参数、注解、预算、
+结果和错误契约见 [MCP 工具参考](mcp/tool-reference.md)。复现报告本身不包含 ExchangeObservation 或
+HTTP 抓包，线路证据需要通过对应查询工具单独获取。
+
+## 10. 应用数据导入导出
+
+应用导出 ZIP 包含 Workspace、可移植 Settings、精确内置协议包源文件，以及用户选择的 Listener
+TLS 可移植材料。它不包含运行时报文、ExchangeObservation 或本机安装级 Root CA 私钥。
+
+导入步骤：
+
+1. 选择 ZIP。
+2. App 有界读取并校验路径、大小、压缩比、Manifest、Schema、JavaScript 包和证书材料。
+3. 查看替换预览。
+4. commit 前再次比较 Workspace/Settings revision、包与证书 generation。
+5. 原子替换成功后重启 App。
+
+本机已存在相同协议包不会因唯一键直接失败；完整应用导入以备份注册表为候选，事务内替换，失败
+则完整回滚。
+
+## 11. Android 应用网络接管
+
+1. 连接一台或多台 Android 设备并允许 ADB；桌面最多保留 8 台设备的运行 owner。
+2. 在目标设备卡片安装/更新 Companion，所有安装、授权和包查询都只作用于该 serial。
+3. 为目标设备选择需要接管的应用 allowlist；包名、UID 和 shared UID 校验读取同一设备清单。
+4. 选择该设备使用的 Profile，确认桌面 Listener 地址可被设备访问。
+5. 启动设备侧 VPN，并在对应 Android 权限弹窗中确认。不同设备可使用各自 Profile 并行运行。
+6. 在每台设备卡片分别检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态；离线 owner 会保留并等待同
+   serial 重连，不影响其他设备。
+7. 应用、停止和紧急恢复都绑定设备 serial 与当前 runtime epoch；完成后逐设备停止并清理其
+   forward/reverse/owner 状态。
+
+设备能连接桌面端口只证明网络可达；还要分别证明 TLS、代理转发、规则命中和业务回复。
+
+## 12. 完成一次测试的判定
+
+一次完整验证至少应分别记录：
+
+- Listener 已启动且端口正确；
+- App 请求进入同一 Exchange；
+- Proxy 实际向 Server 写入；
+- Server 回复被 Proxy 读取；
+- Proxy 实际写回 App；
+- 规则命中和实际 wire 内容符合预期；
+- TLS/mTLS 两侧身份分别通过；
+- 成功或失败记录实时出现在抓包页；
+- 没有被忽略的观测丢失；
+- 停止后端口可重新绑定。
+
+完整场景、固定端口、脚本和判定标准见
+[发布级验证矩阵](testing/release-validation-matrix.md)。

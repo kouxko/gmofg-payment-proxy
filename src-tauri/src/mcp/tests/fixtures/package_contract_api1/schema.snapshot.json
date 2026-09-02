@@ -1,0 +1,83 @@
+{
+  "schemaVersion": 1,
+  "jsonRpc": "2.0",
+  "manifest": {
+    "required": ["api", "kind", "package", "document"],
+    "additionalProperties": false,
+    "api": 1,
+    "kinds": ["http", "socket"],
+    "packageRequired": ["id", "version", "name", "description"],
+    "packageAdditionalProperties": false,
+    "packageIdPattern": "^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)*$",
+    "packageIdMaxBytes": 64,
+    "packageVersionPattern": "^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$",
+    "packageVersionMaxBytes": 128,
+    "packageVersionCoreNumericMax": "18446744073709551615",
+    "packageNameVisible": true,
+    "documentRequired": ["upstream", "downstream"],
+    "directionProperties": ["schema"],
+    "schemaTypes": ["string", "number", "boolean", "object", "array"],
+    "schemaTitleMaxChars": 128,
+    "socketRequiresBothSchemas": true
+  },
+  "registration": {
+    "required": ["jsonrpc", "method", "params"],
+    "additionalProperties": false,
+    "method": "package.register",
+    "idAllowed": false,
+    "paramsKind": "manifest"
+  },
+  "requests": [
+    { "method": "hooks.upstream.frame", "params": { "required": ["buffer"], "properties": { "buffer": "canonicalBase64" }, "additionalProperties": false }, "resultKind": "frameResult" },
+    { "method": "hooks.downstream.frame", "params": { "required": ["buffer"], "properties": { "buffer": "canonicalBase64" }, "additionalProperties": false }, "resultKind": "frameResult" },
+    { "method": "hooks.upstream.decode", "params": { "required": ["input"], "properties": { "input": "string" }, "additionalProperties": false }, "resultKind": "document" },
+    { "method": "hooks.downstream.decode", "params": { "required": ["input"], "properties": { "input": "string" }, "additionalProperties": false }, "resultKind": "document" },
+    { "method": "hooks.upstream.encode", "params": { "required": ["originalInput", "document"], "properties": { "originalInput": "string", "document": "document" }, "additionalProperties": false }, "resultKind": "string" },
+    { "method": "hooks.downstream.encode", "params": { "required": ["originalInput", "document"], "properties": { "originalInput": "string", "document": "document" }, "additionalProperties": false }, "resultKind": "string" },
+    { "method": "document.upstream.display", "params": { "required": ["document"], "properties": { "document": "document" }, "additionalProperties": false }, "resultKind": "string" },
+    { "method": "document.downstream.display", "params": { "required": ["document"], "properties": { "document": "document" }, "additionalProperties": false }, "resultKind": "string" }
+  ],
+  "requestEnvelope": {
+    "required": ["jsonrpc", "id", "method", "params"],
+    "additionalProperties": false,
+    "idKind": "string"
+  },
+  "successEnvelope": {
+    "required": ["jsonrpc", "id", "result"],
+    "additionalProperties": false,
+    "idKind": "string"
+  },
+  "failureEnvelope": {
+    "required": ["jsonrpc", "id", "error"],
+    "additionalProperties": false,
+    "idKind": "string",
+    "errorRequired": ["code", "message", "data"],
+    "errorAdditionalProperties": false,
+    "errorCodeKind": "integer",
+    "messageKind": "string",
+    "dataRequired": ["code"],
+    "dataAdditionalProperties": false
+  },
+  "frameResult": {
+    "discriminator": "status",
+    "variants": [
+      { "status": "need_more", "required": ["status"], "optional": ["requiredBytes"], "requiredBytesMinimum": 0 },
+      { "status": "complete", "required": ["status", "consumedBytes"], "optional": [], "consumedBytesMinimum": 1 },
+      { "status": "reject", "required": ["status", "reason"], "optional": [] }
+    ],
+    "additionalProperties": false
+  },
+  "stableCodes": [
+    "PROXY_ALREADY_RUNNING", "PROXY_NOT_RUNNING", "OPERATION_IN_PROGRESS", "PORT_IN_USE",
+    "CONFIG_INVALID", "REVISION_CONFLICT", "CERTIFICATE_NOT_READY", "CERTIFICATE_INVALID",
+    "PKCS12_PASSWORD_INVALID", "DPAPI_PROTECT_FAILED", "DPAPI_UNPROTECT_FAILED", "TLS_HANDSHAKE_FAILED",
+    "UPSTREAM_CONNECT_TIMEOUT", "UPSTREAM_WRITE_TIMEOUT", "UPSTREAM_READ_TIMEOUT", "BODY_TOO_LARGE",
+    "HEADER_LIMIT_EXCEEDED", "BODY_DECODE_FAILED", "BODY_ENCODE_FAILED", "JSON_INVALID", "RULE_INVALID",
+    "RULE_EXECUTION_CANCELLED", "RULE_CONFLICT_WARNING", "PROTOCOL_PACKAGE_INVALID", "DOCUMENT_SCHEMA_INVALID",
+    "DOCUMENT_NUMBER_INVALID", "DOCUMENT_UNSAFE_INTEGER", "DOCUMENT_POINTER_INVALID", "DOCUMENT_PATH_MISSING",
+    "DOCUMENT_PATH_TYPE_MISMATCH", "DOCUMENT_FIELD_UNDECLARED", "DOCUMENT_FIELD_UNASSIGNED",
+    "DOCUMENT_FIELD_TYPE_MISMATCH", "RESOURCE_EXHAUSTED", "EVENT_CURSOR_EXPIRED",
+    "EXPORT_FAILED", "IMPORT_FAILED", "DATABASE_SCHEMA_INVALID", "INVALID_STATE_TRANSITION", "INTERNAL_ERROR"
+  ],
+  "canonicalGoldenSha256": "0b90566267d6b1373f184306e8b5cb3ee1a454366e1b1617096d15eda91cc2e4"
+}

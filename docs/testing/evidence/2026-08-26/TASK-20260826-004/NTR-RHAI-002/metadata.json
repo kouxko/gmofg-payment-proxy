@@ -1,0 +1,32 @@
+{
+  "task_id": "TASK-20260826-004",
+  "case_id": "NTR-RHAI-002",
+  "executed_at": "2026-08-26 16:33:09 +08:00",
+  "result": "NOT_RUN",
+  "derived_from": {
+    "task_id": "TASK-20260826-003",
+    "case_id": "NUVEI-PKG-003",
+    "evidence": "docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-003/"
+  },
+  "subject": "real Nuvei Socket Listener with nuvei-tango-json-rhai@1.0.0",
+  "environment": {
+    "runner_ip": "10.0.34.61",
+    "remote_external_package_endpoint": "ws://10.0.28.85:8765/packages",
+    "remote_external_package_tcp_reachable": true,
+    "adb_devices": 0,
+    "local_listener_present": false
+  },
+  "result_detail": {
+    "zip_imported_in_real_app": false,
+    "package_enabled_in_real_app": false,
+    "listener_started_with_package": false,
+    "real_exchanges_executed": 0,
+    "historical_result_reused_as_current": false
+  },
+  "replay": "steps/replay.md",
+  "not_applicable": {
+    "payload_archive": "no real exchange was executed",
+    "cleanup": "no runtime state was changed",
+    "ci": "not authorized"
+  }
+}

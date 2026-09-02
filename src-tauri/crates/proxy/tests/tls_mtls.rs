@@ -5,29 +5,22 @@
 
 use std::{
     net::{IpAddr, Ipv4Addr, SocketAddr},
-    sync::{
-        Arc,
-        atomic::{AtomicBool, Ordering},
-    },
+    sync::Arc,
     time::{Duration, SystemTime},
 };
 
 use async_trait::async_trait;
-use gmofg_proxy_runtime::{
-    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, HandshakePolicy,
-    MessageLimits, ProxyConfig, ProxyError, ProxySupervisor, Result, SystemClock, TlsPeerIdentity,
-    TokioListenerBinder, UpstreamConnector,
+use intercept_proxy_runtime::{
+    ChannelConfig, ChannelId, ConnectionAdmission, ConnectionContext, FaultAction, MessageLimits,
+    ProxyConfig, ProxySupervisor, Result, SystemClock, TokioListenerBinder, UpstreamConnector,
+    http::{ConnectionService, ForwardRequest, NoopPipelinePorts, PipelinePorts},
     tls::{ClientTlsAdapter, ServerTlsAdapter},
-    transport::{
-        AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionService, ForwardRequest,
-        NoopPipelinePorts,
-    },
+    transport::{AcceptedConnection, BoxIo, ConnectionAcceptor},
 };
 use rcgen::{
     BasicConstraints, CertificateParams, DistinguishedName, DnType, ExtendedKeyUsagePurpose, IsCa,
     Issuer, KeyPair, KeyUsagePurpose, PKCS_ECDSA_P256_SHA256, SanType,
 };
-use ring::digest::{SHA256, digest};
 use rustls::{
     ClientConfig, RootCertStore,
     pki_types::{CertificateDer, PrivateKeyDer, PrivatePkcs8KeyDer, ServerName},
@@ -126,11 +119,13 @@ struct UnusedUpstream;
 impl UpstreamConnector for UnusedUpstream {
     async fn send(
         &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
-        _informational: Option<&gmofg_proxy_runtime::transport::InformationalResponseSink>,
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
-    ) -> Result<gmofg_proxy_runtime::transport::UpstreamExchange> {
+    ) -> Result<intercept_proxy_runtime::http::UpstreamExchange> {
         unreachable!("silent TLS clients never reach the upstream connector")
     }
 }
@@ -155,10 +150,22 @@ async fn valid_mtls_negotiates_tls12_and_exposes_peer_identity() {
         server_tls.accept(Box::new(tcp) as BoxIo, &context()).await
     });
     let tcp = TcpStream::connect(address).await.unwrap();
-    client_tls
-        .connect("localhost", Box::new(tcp))
+    let connected = client_tls
+        .connect_with_evidence("localhost", Box::new(tcp))
         .await
         .unwrap();
+    assert_eq!(connected.evidence.tls_version, "TLS 1.2");
+    assert!(connected.evidence.cipher_suite.starts_with("TLS_"));
+    assert!(
+        connected
+            .evidence
+            .peer
+            .subject_summary
+            .contains("proxy.local")
+    );
+    assert!(connected.evidence.hostname_verification_enabled);
+    assert!(connected.evidence.client_identity_configured);
+    assert!(connected.evidence.client_identity_submitted);
     let accepted = server_task.await.unwrap().unwrap();
     assert!(
         accepted
@@ -250,72 +257,46 @@ async fn missing_client_certificate_and_tls13_only_client_are_rejected() {
     }
 }
 
-#[derive(Debug)]
-struct RejectPolicy {
-    called: Arc<AtomicBool>,
-}
-
-impl HandshakePolicy for RejectPolicy {
-    fn reject_tls_handshake(&self, _: &ConnectionContext, _: &TlsPeerIdentity) -> Result<bool> {
-        self.called.store(true, Ordering::SeqCst);
-        Ok(true)
-    }
-}
-
 #[tokio::test]
-async fn fingerprint_and_policy_reject_before_http_handler_can_open() {
+async fn fingerprint_rejects_before_http_handler_can_open() {
     let server = identity("proxy.local", "localhost", false);
     let client = identity("alpha-client", "alpha-client", true);
-    for (pin, reject_policy) in [
-        (Some(vec![0; 32]), false),
-        (Some(digest(&SHA256, &client.cert).as_ref().to_vec()), true),
-    ] {
-        let policy_called = Arc::new(AtomicBool::new(false));
-        let handler_opened = Arc::new(AtomicBool::new(false));
-        let policy: Arc<dyn HandshakePolicy> = if reject_policy {
-            Arc::new(RejectPolicy {
-                called: Arc::clone(&policy_called),
-            })
-        } else {
-            Arc::new(NoopPipelinePorts)
-        };
-        let server_tls = ServerTlsAdapter::build(
-            vec![server.cert.clone(), server.ca.clone()],
-            server.key.clone(),
-            client.ca.clone(),
-            pin,
-            policy,
-        )
-        .unwrap();
-        let client_tls = ClientTlsAdapter::build(
-            vec![client.cert.clone(), client.ca.clone()],
-            client.key.clone(),
-            server.ca.clone(),
-        )
-        .unwrap();
-        let (listener, address) = listener().await;
-        let opened = Arc::clone(&handler_opened);
-        let server_task = tokio::spawn(async move {
-            let (tcp, _) = listener.accept().await.unwrap();
-            let result = server_tls.accept(Box::new(tcp) as BoxIo, &context()).await;
-            if result.is_ok() {
-                opened.store(true, Ordering::SeqCst);
-            }
-            result
-        });
-        let tcp = TcpStream::connect(address).await.unwrap();
-        let client_result = tokio::time::timeout(
-            Duration::from_secs(2),
-            client_tls.connect("localhost", Box::new(tcp)),
-        )
-        .await
-        .unwrap();
-        assert!(client_result.is_err());
-        let error: ProxyError = server_task.await.unwrap().unwrap_err();
-        assert_eq!(error.code, "TLS_HANDSHAKE_FAILED");
-        assert!(!handler_opened.load(Ordering::SeqCst));
-        assert_eq!(policy_called.load(Ordering::SeqCst), reject_policy);
-    }
+    let handler_opened = Arc::new(std::sync::atomic::AtomicBool::new(false));
+    let server_tls = ServerTlsAdapter::build(
+        vec![server.cert.clone(), server.ca.clone()],
+        server.key.clone(),
+        client.ca.clone(),
+        Some(vec![0; 32]),
+        Arc::new(NoopPipelinePorts),
+    )
+    .unwrap();
+    let client_tls = ClientTlsAdapter::build(
+        vec![client.cert.clone(), client.ca.clone()],
+        client.key.clone(),
+        server.ca.clone(),
+    )
+    .unwrap();
+    let (listener, address) = listener().await;
+    let opened = Arc::clone(&handler_opened);
+    let server_task = tokio::spawn(async move {
+        let (tcp, _) = listener.accept().await.unwrap();
+        let result = server_tls.accept(Box::new(tcp) as BoxIo, &context()).await;
+        if result.is_ok() {
+            opened.store(true, std::sync::atomic::Ordering::SeqCst);
+        }
+        result
+    });
+    let tcp = TcpStream::connect(address).await.unwrap();
+    let client_result = tokio::time::timeout(
+        Duration::from_secs(2),
+        client_tls.connect("localhost", Box::new(tcp)),
+    )
+    .await
+    .unwrap();
+    assert!(client_result.is_err());
+    let error = server_task.await.unwrap().unwrap_err();
+    assert_eq!(error.code, "TLS_HANDSHAKE_FAILED");
+    assert!(!handler_opened.load(std::sync::atomic::Ordering::SeqCst));
 }
 
 #[tokio::test]
@@ -338,6 +319,11 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         acceptor: Arc::new(acceptor),
         upstream: Arc::new(UnusedUpstream),
         ports: Arc::new(NoopPipelinePorts),
+        capabilities: Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+            "tls-test-workspace",
+            "tls-test-listener",
+        )),
+        endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(4).unwrap(),
         limits: MessageLimits::default(),
@@ -375,7 +361,7 @@ async fn stop_cancels_a_silent_inbound_tls_handshake() {
         .await
         .expect("stop cancels the silent TLS handshake")
         .unwrap();
-    assert_eq!(stopped.state, gmofg_proxy_runtime::ProxyState::Stopped);
+    assert_eq!(stopped.state, intercept_proxy_runtime::ProxyState::Stopped);
 }
 
 #[tokio::test]
@@ -404,6 +390,11 @@ async fn silent_inbound_tls_handshake_times_out_and_releases_its_permit() {
         acceptor: Arc::new(acceptor),
         upstream: Arc::new(UnusedUpstream),
         ports: Arc::new(NoopPipelinePorts),
+        capabilities: Arc::new(intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
+            "tls-test-workspace",
+            "tls-timeout-listener",
+        )),
+        endpoint: "unused.test:443".into(),
         clock: Arc::new(SystemClock),
         admission: ConnectionAdmission::new(1).unwrap(),
         limits: MessageLimits::default(),

@@ -1,0 +1,32 @@
+{
+  "phase8_checker_mutations": { "passed": 21, "failed": 0 },
+  "phase8_runtime_tests": { "passed": 9, "failed": 0 },
+  "phase8_review_tests": { "passed": 3, "failed": 0 },
+  "phase7_archive_regression": { "passed": 6, "failed": 0 },
+  "package_contract": { "passed": 13, "failed": 0 },
+  "protocol_scripting": { "passed": 160, "failed": 0 },
+  "infrastructure_lib": { "passed": 585, "failed": 0 },
+  "bindings": "PASS fresh and deterministic",
+  "architecture": "PASS",
+  "source_size": "PASS; sidecar 491, runtime test 433, review test 142 lines",
+  "eslint": "PASS",
+  "typecheck": "PASS",
+  "rustfmt": "PASS",
+  "package_runtime_strict_clippy": "PASS",
+  "diff_check": "PASS",
+  "frontend_full": { "files": 63, "passed": 543, "failed": 0 },
+  "full_checkpoint": "PASS exit 0; unique session 47419",
+  "not_run": [
+    "Phase9+ product work",
+    "remote CI, push, Release, Windows/macOS bundle and E2E"
+  ],
+  "review": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED / APPROVED / CHECKPOINT READY",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "blockers": [],
+    "checkpoint_ready": true
+  }
+}

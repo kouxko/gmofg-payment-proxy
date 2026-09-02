@@ -1,0 +1,15 @@
+{
+  "session_id": 1649,
+  "command": "pnpm check:task-20260829-002:checkpoint",
+  "exit_code": 0,
+  "raw_stdout_artifact_available": false,
+  "raw_stderr_artifact_available": false,
+  "reason": "The completed unified execution session was captured by the agent tool channel but no filesystem transcript was retained. This record does not reconstruct or fabricate stdout/stderr.",
+  "captured_terminal_results": {
+    "frontend": "64 files / 545 tests passed",
+    "rust_workspace": "all targets / all features passed",
+    "bindings": "fresh and deterministic",
+    "static_gates": "passed"
+  },
+  "rerun": "NOT_RUN: review repair explicitly forbids repeating the full workspace checkpoint"
+}

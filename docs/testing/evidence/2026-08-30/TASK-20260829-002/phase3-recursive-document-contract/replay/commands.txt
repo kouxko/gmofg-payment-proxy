@@ -1,0 +1,27 @@
+# From repository root. No command pushes, triggers CI, creates a Release, or packages an app.
+
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --all-targets --all-features
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-protocol-scripting --all-targets --all-features
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --all-targets --all-features
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib --all-features
+cargo test --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml
+
+pnpm bindings
+pnpm check:bindings
+pnpm typecheck
+pnpm test:task-20260829-002:phase3
+pnpm vitest run src/features/listeners/socket-protocol-package-dialog.test.tsx
+
+cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+pnpm check:task-20260829-002:checkpoint
+
+rg -n '\bDocumentField(Type)?\b|\bDocumentSchemaId\b|DocumentValue::(Int|Blob)|\bDocumentSchema::new|DocumentValueWireInvalid|EXISTING_RULE_ID_SCHEMA_VERSION_MISMATCH' src-tauri --glob '*.rs'
+rg -n 'schema_version' src-tauri/crates/domain/src/protocol_document_rule src-tauri/crates/application/src/facade/protocol_rules src-tauri/crates/application/src/facade/unified_rule_editor src-tauri/src/commands/protocol_rules.rs src/generated/rust-types.ts
+rg -n '"fields"\s*:\s*\[|"schema"\s*:\s*\{\s*"id"|type\s*=\s*"(int|blob|bool)"|\[\[fields\]\]' src-tauri examples templates --glob '*.rs' --glob '*.json' --glob '*.toml' --glob '*.rhai'
+rg -n 'document\.(has|get|set)\("(?!/)' src-tauri examples templates --glob '*.rs' --glob '*.rhai' --pcre2
+rg -n 'ClearDocument|clear_document|字段值槽|Schema 身份和结构' src-tauri src/generated/rust-types.ts --glob '*.rs' --glob '*.ts' --glob '*.json'
+
+shasum -a 256 examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip
+shasum -a 256 docs/testing/evidence/2026-08-30/TASK-20260829-002/phase3-recursive-document-contract/resources/nuvei-tango-json-rhai-1.0.0.zip
+shasum -a 256 docs/testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/resources/nuvei-tango-json-rhai-1.0.0.zip
+git diff --check

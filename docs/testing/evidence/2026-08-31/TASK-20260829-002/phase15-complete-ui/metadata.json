@@ -1,0 +1,158 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase15-complete-ui",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase14-final-schema100",
+    "evidence_path": "docs/testing/evidence/2026-08-31/TASK-20260829-002/phase14-final-schema100"
+  },
+  "executed_at": "2026-08-31 12:54:01 +08:00",
+  "timezone": "Asia/Shanghai",
+  "baseline_head": "938eb591d8d2701b32d491cac4558e1cfdb1cda9",
+  "baseline_tree": "121a2121ceedf3e3e15c89806c60dfebc6430bf6",
+  "result": "VERIFIED_APPROVED_CODE_CHECKPOINT_READY_GLOBAL_CHECKPOINT_INCOMPLETE_FULL_CHECKPOINT_ARTIFACT_PARTIAL",
+  "review": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "code_checkpoint_ready": true
+  },
+  "checkpoint": {
+    "global_checkpoint_complete": false,
+    "current_full_checkpoint_rerun": false,
+    "historical_full_checkpoint_session": 16797,
+    "historical_full_checkpoint_exit": 0,
+    "historical_full_checkpoint_predates_repairs": true,
+    "full_checkpoint_artifact_complete": false,
+    "raw_stdout_stderr": "UNAVAILABLE_NOT_FABRICATED"
+  },
+  "red": {
+    "vitest_exit": 1,
+    "vitest": "21/25 passed; 4 expected failures",
+    "checker_exit": 1,
+    "checker_reason": "phase15 checker module absent"
+  },
+  "green": {
+    "phase15_node": "3/3",
+    "phase15_vitest": "4 files / 29 tests",
+    "frontend": "65 files / 550 tests",
+    "historical_full_checkpoint_session": 16797,
+    "historical_full_checkpoint_exit": 0,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "architecture": "PASS",
+    "source_size": "PASS",
+    "rust_fmt": "PASS",
+    "rust_clippy": "PASS",
+    "rust_workspace": "PASS",
+    "review_repair_targeted": "5 files / 42 tests",
+    "review_repair_checker": "3/3",
+    "review_repair_static": "PASS",
+    "affected_cargo_check": "PASS: intercept-proxy, infrastructure, application, exchange",
+    "affected_cargo_targeted": "PASS: schema-free capabilities 1/1; typed factory 1/1; process parser 1/1",
+    "affected_cargo_clippy": "PASS: 4 packages, all targets, all features, -D warnings",
+    "full_checkpoint_rerun": "NOT_RERUN"
+  },
+  "review_repair_red": {
+    "vitest_exit": 1,
+    "vitest": "25/30 passed; 5 expected failures covering 4 review findings"
+  },
+  "second_repair_red": {
+    "application_cargo_exit": 101,
+    "application_cargo_reason": "missing Rust-owned local_document_type_capabilities contract",
+    "generated_bindings": "5/6 passed; typed cross-layer bindings absent",
+    "capture_vitest": "6/7 passed; processed event was not represented"
+  },
+  "third_repair_red": {
+    "exchange_cargo_exit": 101,
+    "exchange_cargo_reason": "bounded process accumulator and typed operation/truncation contract absent",
+    "rules_vitest": "1 failed / 18 skipped; existing null rule-local field omitted"
+  },
+  "third_repair_green": {
+    "large_process_budget": "PASS: 1024 rules + 4MiB Document; fixed serialized accounting and typed truncation",
+    "affected_vitest": "5 files / 42 tests",
+    "tauri_parser": "1/1 PASS",
+    "typecheck_lint_bindings": "PASS",
+    "affected_cargo_check_clippy": "PASS",
+    "static": "PASS"
+  },
+  "fourth_repair_red": {
+    "rules_vitest": "1 failed / 5 skipped; frontend stage compatibility rejected Rust-factory rule-local insert and append"
+  },
+  "fourth_repair_green": {
+    "model_exact": "1/1 PASS",
+    "ui_factory_save_persistence": "1/1 PASS",
+    "affected_vitest": "5 files / 44 tests",
+    "checker": "3/3 PASS",
+    "typecheck_lint_static": "PASS"
+  },
+  "fifth_repair_red": {
+    "domain_serde": "1 failed; Clear round-trip dropped value_type",
+    "application_factory": "1 failed; Clear factory serialized no value_type",
+    "generated_bindings": "5/6 passed; typed Clear value_type absent",
+    "ui_clear_only": "1 failed / 20 skipped; Save disabled"
+  },
+  "fifth_repair_green": {
+    "domain_serde": "1/1 PASS",
+    "application_factory": "1/1 PASS",
+    "generated_bindings": "6/6 PASS; fresh and deterministic",
+    "ui_clear_only": "1/1 PASS",
+    "affected_domain": "130/130 PASS",
+    "affected_vitest": "5 files / 45 tests",
+    "cargo_check_clippy": "PASS: domain, application, infrastructure, intercept-proxy",
+    "checker": "3/3 PASS",
+    "typecheck_lint_static": "PASS",
+    "tauri_filtered_attempt": "NOT_USED: 0 tests; orphan test file is not a valid evidence owner"
+  },
+  "sixth_repair_red": {
+    "http_listener": "1 failed; RULE_INVALID condition: legacy Document runtime rejected recursive OR during production snapshot prepare"
+  },
+  "sixth_repair_green": {
+    "http_actor_recursive_or_insert_append_and_rollback": "1/1 PASS",
+    "socket_joint_recursive_or_insert_append": "1/1 PASS",
+    "domain_affected": "10/10 PASS",
+    "application_transaction": "6/6 PASS",
+    "phase15_frontend": "4 files / 35 tests PASS",
+    "checker": "4/4 PASS including legacy runtime re-entry mutations",
+    "generated_bindings": "PASS: fresh deterministic; operation kinds include insert and append",
+    "typecheck_lint_static": "PASS",
+    "affected_clippy": "PASS: domain, exchange, application, runtime, infrastructure; all targets; -D warnings",
+    "full_checkpoint_rerun": "NOT_RERUN"
+  },
+  "seventh_repair_red": {
+    "socket_production_relay": "1 failed; first NthHit(2) miss did not advance the actor-owned counter",
+    "http_production_actor": "1 failed; second request remained unmatched because joint evaluation used hard-coded attempt 1"
+  },
+  "seventh_repair_green": {
+    "http_actor_nth_one_shot": "1/1 PASS",
+    "socket_nth_encode_rollback_retry": "1/1 PASS",
+    "domain_actor_owned_gate": "1/1 PASS",
+    "checker": "5/5 PASS including hard-coded joint attempt mutation",
+    "fmt_architecture_source_size_diff": "PASS",
+    "affected_clippy": "PASS: domain, runtime, infrastructure; all targets; -D warnings",
+    "full_checkpoint_rerun": "NOT_RERUN"
+  },
+  "eighth_repair_red": {
+    "mixed_external_http": "1 failed; ordinary false document=None rule executed because missing unified program returned matched=true"
+  },
+  "eighth_repair_green": {
+    "mixed_external_http_false_true_nth": "1/1 PASS; false hit=0, true hit=2, ordinary NthHit(2) hit=1",
+    "unified_http_nth_one_shot": "1/1 PASS",
+    "socket_nth_encode_rollback_retry": "1/1 PASS",
+    "domain_actor_owned_gate": "1/1 PASS",
+    "checker": "5/5 PASS including UnifiedOwned/NotOwned ownership mutations",
+    "fmt_architecture_source_size_diff": "PASS",
+    "affected_clippy": "PASS: domain, runtime, infrastructure; all targets; -D warnings",
+    "full_checkpoint_rerun": "NOT_RERUN"
+  },
+  "hashes_path": "outputs/source-hashes.txt",
+  "not_run": [
+    "macOS real App manual interaction, screenshots, and VoiceOver",
+    "system permission dialogs",
+    "Windows runner and installers",
+    "push, remote CI, Release, deployment",
+    "Phase16 documentation and Phase17 reset deletion"
+  ]
+}

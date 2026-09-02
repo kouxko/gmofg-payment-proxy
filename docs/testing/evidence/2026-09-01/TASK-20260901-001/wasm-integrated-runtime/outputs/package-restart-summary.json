@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "packages": [
+    {
+      "id": "au-eftex",
+      "version": "1.1.0",
+      "enabled": true,
+      "online": true,
+      "validation": "valid"
+    },
+    {
+      "id": "iso8583-ascii-standard",
+      "version": "1.0.0",
+      "enabled": true,
+      "online": true,
+      "validation": "valid"
+    }
+  ]
+}

@@ -1,0 +1,30 @@
+{
+  "api": 1,
+  "kind": "socket",
+  "package": {
+    "id": "iso8583-ascii-standard",
+    "version": "1.0.0",
+    "name": "ISO 8583:1987 ASCII Profile",
+    "description": "Length-prefixed ISO 8583 ASCII starter package"
+  },
+  "document": {
+    "upstream": {
+      "schema": {
+        "type": "object",
+        "title": "ISO 8583 message",
+        "properties": {
+          "message_type": { "type": "string", "title": "MTI" }
+        }
+      }
+    },
+    "downstream": {
+      "schema": {
+        "type": "object",
+        "title": "ISO 8583 message",
+        "properties": {
+          "message_type": { "type": "string", "title": "MTI" }
+        }
+      }
+    }
+  }
+}

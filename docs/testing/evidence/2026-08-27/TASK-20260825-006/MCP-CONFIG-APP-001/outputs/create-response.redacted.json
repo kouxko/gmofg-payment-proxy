@@ -1,0 +1,233 @@
+{
+  "jsonrpc": "2.0",
+  "id": 1,
+  "result": {
+    "resultType": "complete",
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"baseline_public\":{\"revision\":null,\"selected\":false,\"workspace_id\":null},\"candidate_id\":\"fdb6fa87-e326-4e65-8e7e-944f568cad4a\",\"confirmation_token\":\"<consumed-one-time-token>\",\"errors\":[],\"expires_on\":\"app_exit_or_invalidation\",\"preview\":{\"alias_graph\":{\"certificate_aliases\":[],\"secret_aliases\":[]},\"materials_public\":{\"certificates\":[],\"secrets\":[]},\"protocol_document_values\":[{\"type\":\"string\",\"value\":\"abc\"},{\"type\":\"int\",\"value\":7},{\"type\":\"bool\",\"value\":true},{\"type\":\"blob\",\"value\":[0,255]}],\"resources\":{\"android_profile_ids\":[\"android-lab\"],\"http_rules\":[{\"candidate_index\":0,\"candidate_local_id\":\"8880209c-e62b-4fb4-91d6-5708e956b657\",\"created_order\":1,\"listener_alias\":\"http-entry\"},{\"candidate_index\":1,\"candidate_local_id\":\"bbdce30a-64f3-4f40-89bc-4a7988d08e86\",\"created_order\":2,\"listener_alias\":\"http-entry\"},{\"candidate_index\":2,\"candidate_local_id\":\"9fc4f554-94d4-4ced-9f63-26935696c3bd\",\"created_order\":3,\"listener_alias\":\"http-entry\"},{\"candidate_index\":3,\"candidate_local_id\":\"b68bb7e7-dfcd-4b48-9817-3fd6ff990de5\",\"created_order\":4,\"listener_alias\":\"http-entry\"},{\"candidate_index\":4,\"candidate_local_id\":\"ee429021-9a6d-4fcf-ae58-6f424c30cf0e\",\"created_order\":5,\"listener_alias\":\"http-entry\"},{\"candidate_index\":5,\"candidate_local_id\":\"e7d347c0-8148-4a65-a954-c3af77959d1e\",\"created_order\":6,\"listener_alias\":\"http-entry\"},{\"candidate_index\":6,\"candidate_local_id\":\"0e3742eb-26fd-4b61-8e2e-6fcf1a48f32f\",\"created_order\":7,\"listener_alias\":\"http-entry\"},{\"candidate_index\":7,\"candidate_local_id\":\"1bc7ca94-4f87-4ce1-88bd-e316d4cee519\",\"created_order\":8,\"listener_alias\":\"http-entry\"},{\"candidate_index\":8,\"candidate_local_id\":\"b799a028-2c15-44a2-a9c7-ff038c20fb20\",\"created_order\":9,\"listener_alias\":\"http-entry\"},{\"candidate_index\":9,\"candidate_local_id\":\"ab8dc1b8-82f3-4f7d-96e5-2abd53b3733a\",\"created_order\":10,\"listener_alias\":\"http-entry\"},{\"candidate_index\":10,\"candidate_local_id\":\"10b4edb3-799d-483c-90fd-a2d951cbb24e\",\"created_order\":11,\"listener_alias\":\"http-entry\"},{\"candidate_index\":11,\"candidate_local_id\":\"0ee631f4-dd77-4d26-aa40-f7bad0090991\",\"created_order\":12,\"listener_alias\":\"http-entry\"},{\"candidate_index\":12,\"candidate_local_id\":\"158d81dd-faa2-46cb-a99c-fe2c56252f2a\",\"created_order\":13,\"listener_alias\":\"http-entry\"},{\"candidate_index\":13,\"candidate_local_id\":\"b80ccdb5-004a-4184-80d4-8e1bc8dd2a5c\",\"created_order\":14,\"listener_alias\":\"http-entry\"}],\"listeners\":[{\"alias\":\"http-entry\",\"candidate_local_id\":\"bf1b4b93-6d15-4171-988c-4524a329a081\"},{\"alias\":\"socket-entry\",\"candidate_local_id\":\"3e05a513-f372-47f3-9737-df6b5dc5914b\"}],\"protocol_rules\":[{\"candidate_index\":0,\"candidate_local_id\":\"fb432adc-94df-4cb9-9168-fa25dfd2dd9d\",\"created_order\":1,\"listener_alias\":\"socket-entry\"}]},\"target\":{\"mode\":\"new\",\"name\":\"G032 Packaged Full Resources\"},\"terminal_action_fields\":{\"DisconnectDuringDownstreamWrite\":[\"after_bytes\"],\"DisconnectDuringUpstreamWrite\":[\"after_bytes\"],\"TruncateResponse\":[\"bytes\"]}},\"status\":\"preview_ready\",\"target_key\":\"new:47303332205061636b616765642046756c6c205265736f7572636573\",\"validation_layers\":[{\"code\":null,\"duration_ms\":0,\"layer\":\"schema\",\"reason\":null,\"status\":\"passed\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"domain\",\"reason\":null,\"status\":\"passed\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"material\",\"reason\":null,\"status\":\"passed\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"package_projection\",\"reason\":null,\"status\":\"passed\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"dns_tcp_port\",\"reason\":null,\"status\":\"passed\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"tls_mtls\",\"reason\":null,\"status\":\"not_applicable\"},{\"code\":null,\"duration_ms\":0,\"layer\":\"preview_baseline\",\"reason\":null,\"status\":\"passed\"}]}"
+      }
+    ],
+    "structuredContent": {
+      "baseline_public": {
+        "revision": null,
+        "selected": false,
+        "workspace_id": null
+      },
+      "candidate_id": "fdb6fa87-e326-4e65-8e7e-944f568cad4a",
+      "confirmation_token": "<consumed-one-time-token>",
+      "errors": [],
+      "expires_on": "app_exit_or_invalidation",
+      "preview": {
+        "alias_graph": {
+          "certificate_aliases": [],
+          "secret_aliases": []
+        },
+        "materials_public": {
+          "certificates": [],
+          "secrets": []
+        },
+        "protocol_document_values": [
+          {
+            "type": "string",
+            "value": "abc"
+          },
+          {
+            "type": "int",
+            "value": 7
+          },
+          {
+            "type": "bool",
+            "value": true
+          },
+          {
+            "type": "blob",
+            "value": [
+              0,
+              255
+            ]
+          }
+        ],
+        "resources": {
+          "android_profile_ids": [
+            "android-lab"
+          ],
+          "http_rules": [
+            {
+              "candidate_index": 0,
+              "candidate_local_id": "8880209c-e62b-4fb4-91d6-5708e956b657",
+              "created_order": 1,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 1,
+              "candidate_local_id": "bbdce30a-64f3-4f40-89bc-4a7988d08e86",
+              "created_order": 2,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 2,
+              "candidate_local_id": "9fc4f554-94d4-4ced-9f63-26935696c3bd",
+              "created_order": 3,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 3,
+              "candidate_local_id": "b68bb7e7-dfcd-4b48-9817-3fd6ff990de5",
+              "created_order": 4,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 4,
+              "candidate_local_id": "ee429021-9a6d-4fcf-ae58-6f424c30cf0e",
+              "created_order": 5,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 5,
+              "candidate_local_id": "e7d347c0-8148-4a65-a954-c3af77959d1e",
+              "created_order": 6,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 6,
+              "candidate_local_id": "0e3742eb-26fd-4b61-8e2e-6fcf1a48f32f",
+              "created_order": 7,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 7,
+              "candidate_local_id": "1bc7ca94-4f87-4ce1-88bd-e316d4cee519",
+              "created_order": 8,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 8,
+              "candidate_local_id": "b799a028-2c15-44a2-a9c7-ff038c20fb20",
+              "created_order": 9,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 9,
+              "candidate_local_id": "ab8dc1b8-82f3-4f7d-96e5-2abd53b3733a",
+              "created_order": 10,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 10,
+              "candidate_local_id": "10b4edb3-799d-483c-90fd-a2d951cbb24e",
+              "created_order": 11,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 11,
+              "candidate_local_id": "0ee631f4-dd77-4d26-aa40-f7bad0090991",
+              "created_order": 12,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 12,
+              "candidate_local_id": "158d81dd-faa2-46cb-a99c-fe2c56252f2a",
+              "created_order": 13,
+              "listener_alias": "http-entry"
+            },
+            {
+              "candidate_index": 13,
+              "candidate_local_id": "b80ccdb5-004a-4184-80d4-8e1bc8dd2a5c",
+              "created_order": 14,
+              "listener_alias": "http-entry"
+            }
+          ],
+          "listeners": [
+            {
+              "alias": "http-entry",
+              "candidate_local_id": "bf1b4b93-6d15-4171-988c-4524a329a081"
+            },
+            {
+              "alias": "socket-entry",
+              "candidate_local_id": "3e05a513-f372-47f3-9737-df6b5dc5914b"
+            }
+          ],
+          "protocol_rules": [
+            {
+              "candidate_index": 0,
+              "candidate_local_id": "fb432adc-94df-4cb9-9168-fa25dfd2dd9d",
+              "created_order": 1,
+              "listener_alias": "socket-entry"
+            }
+          ]
+        },
+        "target": {
+          "mode": "new",
+          "name": "G032 Packaged Full Resources"
+        },
+        "terminal_action_fields": {
+          "DisconnectDuringDownstreamWrite": [
+            "after_bytes"
+          ],
+          "DisconnectDuringUpstreamWrite": [
+            "after_bytes"
+          ],
+          "TruncateResponse": [
+            "bytes"
+          ]
+        }
+      },
+      "status": "preview_ready",
+      "target_key": "new:47303332205061636b616765642046756c6c205265736f7572636573",
+      "validation_layers": [
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "schema",
+          "reason": null,
+          "status": "passed"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "domain",
+          "reason": null,
+          "status": "passed"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "material",
+          "reason": null,
+          "status": "passed"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "package_projection",
+          "reason": null,
+          "status": "passed"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "dns_tcp_port",
+          "reason": null,
+          "status": "passed"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "tls_mtls",
+          "reason": null,
+          "status": "not_applicable"
+        },
+        {
+          "code": null,
+          "duration_ms": 0,
+          "layer": "preview_baseline",
+          "reason": null,
+          "status": "passed"
+        }
+      ]
+    },
+    "isError": false
+  }
+}

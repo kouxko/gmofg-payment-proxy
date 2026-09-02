@@ -1,0 +1,14 @@
+{
+  "length_prefix": "u32 big-endian body bytes",
+  "control_header": "4 opaque synthetic bytes",
+  "sequence": "8 ASCII digits",
+  "payload": {
+    "SyntheticMessage": {
+      "status": "TEST",
+      "PAN": "synthetic-pan",
+      "Track2": "synthetic-track-data",
+      "MAC": "synthetic-mac"
+    }
+  },
+  "network_send": false
+}

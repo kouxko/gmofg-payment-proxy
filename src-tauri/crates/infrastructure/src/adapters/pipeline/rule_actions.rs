@@ -5,7 +5,7 @@
 //!
 //! This module is intentionally stateless. Keeping mutation/encoding and fault
 //! mapping separate from the pipeline coordinator makes the product boundary
-//! visible and lets the coordinator focus on session and breakpoint lifecycle.
+//! visible and lets the coordinator focus on session lifecycle.
 
 use std::{
     hash::{DefaultHasher, Hash, Hasher},
@@ -13,14 +13,14 @@ use std::{
 };
 
 use bytes::Bytes;
-use gmofg_proxy_application::RuleSummaryViewModel;
-use gmofg_proxy_domain::{
-    DropResponseMode, JitterScope as DomainJitterScope, JsonPath,
-    MessageStage as DomainMessageStage, RuleAction, TerminalAction, TerminalIdentity,
+use intercept_proxy_application::RuleSummaryViewModel;
+use intercept_proxy_domain::{
+    DropResponseMode, HttpAction, JitterScope as DomainJitterScope, JsonPath,
+    MessageStage as DomainMessageStage, TerminalAction, TerminalIdentity,
     TrafficDirection as DomainTrafficDirection,
 };
-use gmofg_proxy_product_api::BodyCodec;
-use gmofg_proxy_runtime::{
+use intercept_proxy_product_api::BodyCodec;
+use intercept_proxy_runtime::{
     ConnectionContext, ErrorCode, FaultAction, JitterScope, Message, ProxyError, RawHeader,
     Result as ProxyResult, TrafficDirection,
 };
@@ -38,17 +38,16 @@ macro_rules! runtime_status {
     };
 }
 
-pub(super) fn apply_rule_actions(
+pub(crate) fn apply_rule_actions(
     body_codec: &dyn BodyCodec,
     message: &mut Message,
-    actions: &[RuleAction],
+    actions: &[HttpAction],
     seed: u64,
-) -> ProxyResult<(Vec<FaultAction>, bool)> {
+) -> ProxyResult<Vec<FaultAction>> {
     let mut faults = Vec::new();
-    let mut pause = false;
     for action in actions {
         match action {
-            RuleAction::SetJsonField { path, value } => {
+            HttpAction::SetJsonField { path, value } => {
                 let mut json = decode_json(body_codec, &message.body)?;
                 JsonPath::parse(path)
                     .and_then(|path| path.set(&mut json, value.clone()))
@@ -61,23 +60,24 @@ pub(super) fn apply_rule_actions(
                 let text = serde_json::to_string(&json).map_err(|error| ProxyError {
                     code: "BODY_ENCODE_FAILED",
                     message: format!("failed to serialize structured body: {error}"),
+                    external_package_call: None,
                 })?;
                 message.replace_body(Bytes::from(encode_body(body_codec, &text)?));
             }
-            RuleAction::ReplaceBodyText(text) => {
+            HttpAction::ReplaceBodyText(text) => {
                 message.replace_body(Bytes::from(encode_body(body_codec, text)?));
             }
-            RuleAction::SetHeader { name, value } => {
+            HttpAction::SetHeader { name, value } => {
                 message.remove_header(name);
                 message.headers.push(RawHeader::new(
                     name.as_bytes().to_vec(),
                     value.as_bytes().to_vec(),
                 ));
             }
-            RuleAction::Delay { milliseconds } => {
+            HttpAction::Delay { milliseconds } => {
                 faults.push(FaultAction::Delay(Duration::from_millis(*milliseconds)));
             }
-            RuleAction::Jitter {
+            HttpAction::Jitter {
                 minimum_milliseconds,
                 maximum_milliseconds,
                 scope,
@@ -90,7 +90,7 @@ pub(super) fn apply_rule_actions(
                 },
                 seed,
             }),
-            RuleAction::Throttle {
+            HttpAction::Throttle {
                 bytes_per_second,
                 chunk_bytes,
                 direction,
@@ -101,7 +101,7 @@ pub(super) fn apply_rule_actions(
                 })?,
                 direction: traffic_direction(*direction),
             }),
-            RuleAction::Intermittent {
+            HttpAction::Intermittent {
                 available_milliseconds,
                 blocked_milliseconds,
                 direction,
@@ -110,17 +110,16 @@ pub(super) fn apply_rule_actions(
                 blocked: Duration::from_millis(*blocked_milliseconds),
                 direction: traffic_direction(*direction),
             }),
-            RuleAction::Pause => pause = true,
-            RuleAction::CustomHttpStatus { status } => {
+            HttpAction::CustomHttpStatus { status } => {
                 faults.push(FaultAction::CustomStatus(runtime_status!(*status)?));
             }
-            RuleAction::Terminal(terminal) => faults.push(map_terminal_action(terminal)?),
+            HttpAction::Terminal(terminal) => faults.push(map_terminal_action(terminal)?),
         }
     }
     if message.body_modified {
         message.set_content_length(message.body.len());
     }
-    Ok((faults, pause))
+    Ok(faults)
 }
 
 pub(super) fn weak_network_seed(
@@ -159,7 +158,6 @@ const fn traffic_direction(direction: DomainTrafficDirection) -> TrafficDirectio
 
 pub(super) fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultAction> {
     Ok(match action {
-        TerminalAction::RejectTlsHandshake => FaultAction::RejectTls,
         TerminalAction::DisconnectBeforeUpstream => FaultAction::DisconnectBeforeUpstream,
         TerminalAction::UpstreamConnectTimeout { milliseconds } => {
             FaultAction::UpstreamConnectTimeout(Duration::from_millis(*milliseconds))

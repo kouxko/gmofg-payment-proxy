@@ -1,0 +1,54 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase4-package-contract",
+  "executed_at": "2026-08-30 04:41:22 +08:00",
+  "completed_at": "2026-08-30 08:49:12 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase3-recursive-document-contract",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase3-recursive-document-contract/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase 4 changes and unrelated user docs/README.md",
+    "changed_during_final_checkpoint": false,
+    "firewall": "permitted by user for exact non-loopback verification",
+    "exact_test_binary": "/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy-b171a3f7a5c9b203",
+    "exact_test_binary_sha256": "c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa"
+  },
+  "resources": {
+    "snapshot": "resources/contract-fixtures.json",
+    "active_fixture_root": "test-support/fixtures/task-20260829-002/phase-4/package-contract/",
+    "mcp_snapshot": "src-tauri/src/mcp/tests/fixtures/package_contract_api1/schema.snapshot.json",
+    "mcp_golden": "src-tauri/src/mcp/tests/fixtures/package_contract_api1/golden.json",
+    "validation_corpus_sha256": "440e2c1a101036ce34c5a972e9f704b9b149ff4da1e5a7676035388f9f84fa2c",
+    "mcp_snapshot_sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe",
+    "generated_sha256": "897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e",
+    "inventory_sha256": "166d43cce0b23000c59c414a7fc7e35bc94451cfe46c99865480e74ba8ea72a7"
+  },
+  "results": {
+    "tdd_red": "EXPECTED FAIL E0432 exit 101",
+    "review": "VERIFIED / APPROVED; P0=0, P1=0, P2=0",
+    "rust_contract_tests": { "passed": 13, "failed": 0, "targets": 5 },
+    "phase4_checker": { "passed": 21, "failed": 0 },
+    "typescript_guard": { "passed": 7, "failed": 0 },
+    "domain_affected_tests": { "passed": 108, "failed": 0 },
+    "frontend_full": { "files": 63, "passed": 541, "failed": 0 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_lint_typecheck_fmt_workspace_clippy_diff": "PASS",
+    "historical_global_checkpoint": "FAILED at existing non-loopback MCP HTTP environment test after 132/133 top-level Rust tests; retained as history",
+    "historical_targeted_environment_recheck": "FAILED same 10 second response deadline before firewall permission; retained as history",
+    "short_name_exact_probe": "NOT EVIDENCE; --exact discovered 0 tests",
+    "targeted_environment_recheck": "PASS 1/1 using full module test name, --all-features and --test-threads=1",
+    "global_checkpoint": "PASS exit 0; frontend 63 files/541 tests; top-level Rust 133/133; workspace all-target/all-feature exit 0",
+    "evidence_byte_copy_groups": { "passed": 7, "failed": 0 }
+  },
+  "not_run": [
+    "WebSocket package-initiated lifecycle switch belongs to later phase",
+    "Sidecar and Boa execution belong to later phase",
+    "remote CI, Release, push and real package connection were not authorized"
+  ],
+  "checkpoint_ready": true
+}

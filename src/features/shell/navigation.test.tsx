@@ -3,6 +3,8 @@
 /** 验证桌面外壳导航、移动 Drawer 和选中态不会触发整页刷新。 */
 
 import "@testing-library/jest-dom/vitest";
+import { existsSync, readFileSync } from "node:fs";
+import { resolve } from "node:path";
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
@@ -21,8 +23,9 @@ const workspaceNavigationMocks = vi.hoisted(() => ({
 }));
 
 vi.mock("./workspace-navigation", () => ({
+  useWorkspaceQueryInvalidation: vi.fn(),
   useWorkspaceNavigation: () => ({
-    pathname: "/console",
+    pathname: "/workspaces",
     searchParams: new URLSearchParams(),
     navigate: workspaceNavigationMocks.navigate,
   }),
@@ -30,24 +33,58 @@ vi.mock("./workspace-navigation", () => ({
 
 vi.mock("./bootstrap-context", () => ({
   BootstrapProvider: ({ children }: { children: React.ReactNode }) => children,
+  useAppEventRefresh: vi.fn(),
   useBootstrap: () => ({
     bootstrap: undefined,
-    proxy: undefined,
     isLoading: false,
     error: undefined,
     refresh: vi.fn(),
   }),
 }));
 
+vi.mock("@/lib/ipc/use-ipc-query", () => ({
+  useIpcQuery: (queryKey: string) =>
+    queryKey === "shell-workspaces"
+      ? {
+          data: [
+            {
+              id: "workspace-1",
+              name: "测试工作区",
+              selected: true,
+              listener_count: 1,
+              enabled_listener_count: 0,
+              revision: 1,
+            },
+          ],
+          isLoading: false,
+          refresh: vi.fn(),
+        }
+      : {
+          data: {
+            workspace_id: "workspace-1",
+            workspace_name: "测试工作区",
+            state_text: "全部入口已停止",
+            ui_tone: "neutral",
+            total_count: 1,
+            active_count: 0,
+            faulted_count: 0,
+            rows: [],
+          },
+          isLoading: false,
+          refresh: vi.fn(),
+        },
+}));
+
 describe("UI-001 fixed navigation order", () => {
   it("matches the frozen requirement document", () => {
     expect(navigation.map((item) => item.href)).toEqual([
-      "/console",
+      "/workspaces",
+      "/listeners",
+      "/protocol-packages",
+      "/android-network",
+      "/diagnostics",
       "/capture",
-      "/sessions",
-      "/breakpoints",
       "/rules",
-      "/faults",
       "/certificates",
       "/settings",
     ]);
@@ -67,9 +104,10 @@ describe("side navigation alignment", () => {
   it("uses the same centered icon and label contract for links and About", () => {
     expect(sideNavigationIconClassName).toContain("self-center");
     expect(sideNavigationIconClassName).toContain("shrink-0");
-    expect(sideNavigationLabelClassName).toContain("w-14");
-    expect(sideNavigationLabelClassName).toContain("shrink-0");
-    expect(sideNavigationLabelClassName).toContain("whitespace-nowrap");
+    expect(sideNavigationLabelClassName).toContain("w-full");
+    expect(sideNavigationLabelClassName).toContain("min-w-0");
+    expect(sideNavigationLabelClassName).toContain("whitespace-normal");
+    expect(sideNavigationLabelClassName).not.toContain("whitespace-nowrap");
     expect(sideNavigationLabelClassName).toContain("text-center");
   });
 });
@@ -78,6 +116,21 @@ describe("shell content boundary", () => {
   it("keeps the full-width Rust error alert inside the right page edge", () => {
     expect(shellErrorRegionClassName).toContain("px-5");
     expect(shellErrorRegionClassName).not.toContain("m-");
+  });
+});
+
+describe("breakpoint product removal", () => {
+  it("does not ship a breakpoint feature or global overlay", () => {
+    const repositoryRoot = resolve(process.cwd());
+    const appShellSource = readFileSync(
+      resolve(repositoryRoot, "src/features/shell/app-shell.tsx"),
+      "utf8",
+    );
+
+    expect(
+      existsSync(resolve(repositoryRoot, "src/features/breakpoints")),
+    ).toBe(false);
+    expect(appShellSource).not.toMatch(/BreakpointModal|features\/breakpoints/);
   });
 });
 
@@ -97,6 +150,24 @@ describe("desktop client navigation", () => {
     expect(
       screen.queryByRole("link", { name: "实时抓包" }),
     ).not.toBeInTheDocument();
+  });
+
+  it("opens protocol packages through the same in-memory navigation", async () => {
+    workspaceNavigationMocks.navigate.mockClear();
+    const user = userEvent.setup();
+    const documentUrl = window.location.href;
+    render(
+      <AppShell>
+        <div>当前页面</div>
+      </AppShell>,
+    );
+
+    await user.click(screen.getByRole("button", { name: "Socket 协议包" }));
+
+    expect(workspaceNavigationMocks.navigate).toHaveBeenCalledWith(
+      "/protocol-packages",
+    );
+    expect(window.location.href).toBe(documentUrl);
   });
 
   it("uses the same client router for the toolbar settings action", async () => {
@@ -124,11 +195,11 @@ describe("desktop client navigation", () => {
     );
 
     await user.click(
-      screen.getByRole("button", { name: "打开代理控制台使用说明" }),
+      screen.getByRole("button", { name: "打开Workspace 管理使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "代理控制台使用说明" }),
+      screen.getByRole("dialog", { name: "Workspace 管理使用说明" }),
     ).toBeVisible();
     expect(workspaceNavigationMocks.navigate).not.toHaveBeenCalled();
     expect(window.location.href).toBe(documentUrl);

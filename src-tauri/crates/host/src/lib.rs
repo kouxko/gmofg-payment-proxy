@@ -4,7 +4,6 @@
 //! 只提供文件选择等平台服务；用例、持久化、证书、规则和网络实现统一在这里组装。
 
 use std::{
-    collections::BTreeMap,
     io,
     path::{Path, PathBuf},
     sync::{
@@ -13,29 +12,23 @@ use std::{
     },
 };
 
-use gmofg_proxy_application::{
-    AppError, AppResult, Application, ApplicationDependencies, BreakpointCoordinator,
-    BreakpointValidator, CapacityLedger, EventHub, ProxyStatusViewModel, ProxySupervisorPort,
-    SettingsRepositoryPort,
+use intercept_proxy_application::{
+    AppError, AppResult, Application, CapacityLedger, EnvironmentConfigurationApplicationServices,
+    EventHub, OperationResultViewModel,
 };
-#[cfg(not(target_os = "macos"))]
-use gmofg_proxy_infrastructure::DpapiProtector;
-#[cfg(target_os = "macos")]
-use gmofg_proxy_infrastructure::MacKeychainProtector;
-use gmofg_proxy_infrastructure::{
-    ApplicationProxyAdapter, InfrastructureError, InfrastructureServiceBundle, NativeFileDialog,
-    RuntimePipelineAdapter, RuntimePipelineProductHooks, SecretProtector, SqliteStore,
+use intercept_proxy_infrastructure::{
+    ApplicationBackupImportPreparer, ExternalPackageServer, InfrastructureError,
+    InfrastructureServiceBundle, NativeFileDialog, SecretProtector,
 };
-use gmofg_proxy_product_api::{
-    ProductError, ProductProfile, ProductStorageNamespace, validate_product_profile,
-};
-use gmofg_proxy_runtime::{
-    ProxySupervisor, RustlsRuntimeServiceFactory, SystemClock, TokioListenerBinder,
-};
+use intercept_proxy_product_api::{ProductError, ProductProfile, validate_product_profile};
 use parking_lot::Mutex;
 use thiserror::Error;
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
+
+use platform::{create_data_directory, platform_secret_protector};
+
+mod platform;
 
 #[derive(Debug, Error)]
 pub enum HostBuildError {
@@ -56,6 +49,7 @@ pub enum HostBuildError {
 /// 刻意由最外层适配器提供的平台服务。
 ///
 /// 文件对话框可以来自 Tauri、无界面测试脚本或未来终端提示，而无需修改任何应用用例。
+#[derive(Clone)]
 pub struct HostPlatformServices {
     secret_protector_override: Option<Arc<dyn SecretProtector>>,
     pub file_dialog: Arc<dyn NativeFileDialog>,
@@ -109,13 +103,14 @@ impl HostPlatformServices {
 /// 使用数据目录和平台边界实现装配完整 Rust 应用。
 ///
 /// Tauri 或 `WebView` 类型不允许跨过该边界。
-#[derive(Debug)]
+#[derive(Clone, Debug)]
 pub struct ApplicationHostBuilder {
     data_dir: PathBuf,
+    android_companion_apk: Option<PathBuf>,
+    builtin_protocol_package: Option<Arc<[u8]>>,
     platform: HostPlatformServices,
     product: Arc<dyn ProductProfile>,
-    proxy_override: Option<Arc<dyn ProxySupervisorPort>>,
-    breakpoint_coordinator: Option<Arc<BreakpointCoordinator>>,
+    environment_configuration_services: Option<EnvironmentConfigurationApplicationServices>,
 }
 
 impl ApplicationHostBuilder {
@@ -127,28 +122,42 @@ impl ApplicationHostBuilder {
     ) -> Self {
         Self {
             data_dir: data_dir.into(),
+            android_companion_apk: None,
+            builtin_protocol_package: None,
             platform,
             product,
-            proxy_override: None,
-            breakpoint_coordinator: None,
+            environment_configuration_services: None,
         }
     }
 
-    /// 只替换网络监督器，同时保留真实应用、仓储、规则、证书和设置适配器。
+    /// 提供桌面安装包内 Android Companion APK 的绝对路径。
     ///
-    /// 用于确定性的纯 Rust 集成测试和其他进程 Host；生产调用者使用默认 runtime。
+    /// Tauri、未来 CLI 或其他外壳各自负责解析自己的资源目录；Host 只把明确路径交给
+    /// Android 适配器，不再让基础设施层猜测平台安装目录。
     #[must_use]
-    pub fn with_proxy_supervisor(mut self, proxy: Arc<dyn ProxySupervisorPort>) -> Self {
-        self.proxy_override = Some(proxy);
+    pub fn with_android_companion_apk(mut self, path: impl Into<PathBuf>) -> Self {
+        self.android_companion_apk = Some(path.into());
         self
     }
 
-    /// 注入 application 与 runtime 管线共用的断点协调器。
-    ///
-    /// 测试可保留同一个 `Arc` 来创建处理中断点，无需在 Host 构建后暴露应用内部字段。
+    /// 提供由桌面构建系统生成并嵌入的官方协议包 ZIP。
     #[must_use]
-    pub fn with_breakpoint_coordinator(mut self, breakpoints: Arc<BreakpointCoordinator>) -> Self {
-        self.breakpoint_coordinator = Some(breakpoints);
+    pub fn with_builtin_protocol_package(mut self, archive: Arc<[u8]>) -> Self {
+        self.builtin_protocol_package = Some(archive);
+        self
+    }
+
+    /// Replaces the complete Application environment-configuration port group.
+    ///
+    /// The Host still assembles the real Application and all other production adapters. This
+    /// seam supports deterministic embedding and lifecycle tests without exposing candidate
+    /// registry internals or selecting cfg-specific behavior.
+    #[must_use]
+    pub fn with_environment_configuration_services(
+        mut self,
+        services: EnvironmentConfigurationApplicationServices,
+    ) -> Self {
+        self.environment_configuration_services = Some(services);
         self
     }
 
@@ -157,106 +166,87 @@ impl ApplicationHostBuilder {
         // 不应在磁盘留下任何新状态。
         validate_product_profile(self.product.as_ref())?;
         create_data_directory(&self.data_dir)?;
-        let store = Arc::new(SqliteStore::open(
-            &self
-                .data_dir
-                .join(self.product.storage().database_file_name),
-        )?);
+        let database_path = self
+            .data_dir
+            .join(self.product.storage().database_file_name);
+
+        self.build_once(&database_path).await
+    }
+
+    async fn build_once(self, database_path: &Path) -> Result<ApplicationHost, HostBuildError> {
+        let persistence =
+            intercept_proxy_infrastructure::open_sqlite_persistence(database_path.to_path_buf())
+                .await?;
         let secret_protector = self
             .platform
             .secret_protector_override
             .unwrap_or_else(|| platform_secret_protector(self.product.storage()));
         let capacity = Arc::new(CapacityLedger::default());
+        let file_dialog = Arc::clone(&self.platform.file_dialog);
         let services = InfrastructureServiceBundle::new(
-            store,
+            persistence,
             secret_protector,
-            self.platform.file_dialog,
+            &file_dialog,
             Arc::clone(&self.product),
-            Arc::clone(&capacity),
+            &capacity,
+            self.builtin_protocol_package,
         );
-        let settings = services.settings.get().await?;
-        // 会话仓储必须在接收任何 runtime 数据前使用持久化配置的容量限制，不能短暂按
-        // 默认值运行后再缩小，否则启动阶段可能已经超额接纳。
-        services.sessions.set_limits(
-            settings.stored.max_sessions,
-            settings.stored.max_memory_bytes,
-        )?;
+        services.initialize_installation_state().await?;
 
-        let breakpoints = self
-            .breakpoint_coordinator
-            .unwrap_or_else(|| Arc::new(BreakpointCoordinator::default()));
-        let events = Arc::new(EventHub::with_capacity_ledger(
-            EventHub::DEFAULT_CAPACITY,
-            Arc::clone(&services.capacity),
-        ));
-        let channel_labels = self
-            .product
-            .channels()
-            .iter()
-            .map(|channel| (channel.id.to_owned(), channel.display_name.to_owned()))
-            .collect::<BTreeMap<_, _>>();
-        let pipeline = Arc::new(RuntimePipelineAdapter::new(
-            RuntimePipelineProductHooks {
-                body_codec: self.product.body_codec(),
-                request_classifier: self.product.request_classifier(),
-                channel_labels,
-            },
-            services.rules.clone(),
-            services.sessions.clone(),
-            breakpoints.clone(),
-            events.clone(),
-            services.capture.clone(),
-        ));
-        let service_factory = Arc::new(RustlsRuntimeServiceFactory::new(
-            services.certificates.clone(),
-            pipeline.clone(),
-            Arc::new(SystemClock),
-        ));
-        let supervisor = Arc::new(ProxySupervisor::with_factory(
-            Arc::new(TokioListenerBinder),
-            service_factory,
-        ));
-        let proxy: Arc<dyn ProxySupervisorPort> = self.proxy_override.unwrap_or_else(|| {
-            // 只有测试/嵌入方显式提供 override 时才跳过真实网络监督器；其余应用端口仍
-            // 使用相同真实实现，保证无 UI 测试能覆盖完整业务装配。
-            Arc::new(ApplicationProxyAdapter::new(
-                supervisor,
-                settings.stored,
-                pipeline,
-                self.product.labels(),
-            ))
+        let events = host_event_hub(&capacity);
+        services.configure_runtime(self.product.as_ref(), events.clone());
+        let external_package_server = Arc::new(services.start_external_package_server().await?);
+        let application = Arc::new(match self.environment_configuration_services {
+            Some(environment) => {
+                services
+                    .into_application_with_environment_configuration_services(
+                        self.product.name().to_owned(),
+                        self.android_companion_apk,
+                        events.clone(),
+                        environment,
+                    )
+                    .await?
+            }
+            None => {
+                services
+                    .into_application(
+                        self.product.name().to_owned(),
+                        self.android_companion_apk,
+                        events.clone(),
+                    )
+                    .await?
+            }
         });
-        let application = Arc::new(Application::new(
-            self.product.name().to_owned(),
-            ApplicationDependencies {
-                proxy,
-                capture: services.capture,
-                sessions: services.sessions,
-                breakpoints,
-                breakpoint_validation: Arc::new(BreakpointValidator::new(
-                    self.product.body_codec(),
-                )),
-                rules: services.rules,
-                faults: services.faults,
-                certificates: services.certificates,
-                settings: services.settings,
-                file_export: services.file_export,
-                events: events.clone(),
-            },
-        ));
-        let background_cancellation = CancellationToken::new();
-        // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
-        // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
-        let event_task = events.spawn_capture_flush_task(background_cancellation.child_token());
+        let (background_cancellation, event_task) = spawn_capture_flush_task(&events);
 
         Ok(ApplicationHost {
             application,
+            capacity,
+            events,
+            file_dialog,
+            application_backup_importer: Arc::new(ApplicationBackupImportPreparer::new()),
             background_cancellation,
             event_task: Mutex::new(Some(event_task)),
+            external_package_server,
             shutdown_started: AtomicBool::new(false),
             shutdown_completed: AtomicBool::new(false),
         })
     }
+}
+
+fn spawn_capture_flush_task(events: &Arc<EventHub>) -> (CancellationToken, JoinHandle<()>) {
+    // 抓包事件按时间合批，需要一个与 UI 无关的后台刷新任务。取消令牌和 JoinHandle
+    // 都归 Host 所有，确保不同展示适配器有相同的关闭行为。
+    let cancellation = CancellationToken::new();
+    let task = Arc::clone(events).spawn_capture_flush_task(cancellation.child_token());
+    (cancellation, task)
+}
+
+fn host_event_hub(capacity: &Arc<CapacityLedger>) -> Arc<EventHub> {
+    Arc::new(EventHub::with_capacity_ledger(
+        EventHub::DEFAULT_CAPACITY,
+        Arc::clone(capacity),
+    ))
 }
 
 /// 持有与 UI 无关的应用门面及其后台任务生命周期。
@@ -266,8 +256,13 @@ impl ApplicationHostBuilder {
 #[derive(Debug)]
 pub struct ApplicationHost {
     application: Arc<Application>,
+    capacity: Arc<CapacityLedger>,
+    events: Arc<EventHub>,
+    file_dialog: Arc<dyn NativeFileDialog>,
+    application_backup_importer: Arc<ApplicationBackupImportPreparer>,
     background_cancellation: CancellationToken,
     event_task: Mutex<Option<JoinHandle<()>>>,
+    external_package_server: Arc<ExternalPackageServer>,
     shutdown_started: AtomicBool,
     shutdown_completed: AtomicBool,
 }
@@ -276,6 +271,28 @@ impl ApplicationHost {
     #[must_use]
     pub fn application(&self) -> Arc<Application> {
         Arc::clone(&self.application)
+    }
+
+    /// 返回 Settings 已校验并动态维护的共享运行时容量账本。
+    #[must_use]
+    pub fn capacity(&self) -> Arc<CapacityLedger> {
+        Arc::clone(&self.capacity)
+    }
+
+    /// 返回展示适配器共享的有序事件中心；数据面只负责发布，不等待 `WebView` 消费。
+    #[must_use]
+    pub fn events(&self) -> Arc<EventHub> {
+        Arc::clone(&self.events)
+    }
+
+    #[must_use]
+    pub fn file_dialog(&self) -> Arc<dyn NativeFileDialog> {
+        Arc::clone(&self.file_dialog)
+    }
+
+    #[must_use]
+    pub fn application_backup_importer(&self) -> Arc<ApplicationBackupImportPreparer> {
+        Arc::clone(&self.application_backup_importer)
     }
 
     /// 争抢唯一的优雅关闭执行权。
@@ -292,7 +309,11 @@ impl ApplicationHost {
     }
 
     /// 停止网络、完成应用关闭状态，并等待所有与 UI 无关的后台任务退出。
-    pub async fn shutdown(&self) -> AppResult<ProxyStatusViewModel> {
+    pub async fn shutdown(&self) -> AppResult<OperationResultViewModel> {
+        self.application
+            .environment_candidate_shutdown_and_drain()
+            .await;
+        self.external_package_server.shutdown_local_packages();
         let result = self.application.app_shutdown().await;
         self.stop_background_tasks().await;
         self.shutdown_completed.store(true, Ordering::Release);
@@ -301,10 +322,12 @@ impl ApplicationHost {
 
     pub fn cancel_background_tasks(&self) {
         self.background_cancellation.cancel();
+        self.external_package_server.cancel();
     }
 
     async fn stop_background_tasks(&self) {
         self.cancel_background_tasks();
+        self.external_package_server.shutdown().await;
         let task = self.event_task.lock().take();
         if let Some(task) = task
             && let Err(error) = task.await
@@ -324,104 +347,6 @@ impl Drop for ApplicationHost {
     }
 }
 
-fn create_data_directory(path: &Path) -> Result<(), HostBuildError> {
-    std::fs::create_dir_all(path).map_err(|source| HostBuildError::CreateDataDirectory {
-        path: path.to_path_buf(),
-        source,
-    })
-}
-
-fn platform_secret_protector(storage: ProductStorageNamespace) -> Arc<dyn SecretProtector> {
-    #[cfg(windows)]
-    {
-        let _ = storage;
-        Arc::new(DpapiProtector)
-    }
-    #[cfg(target_os = "macos")]
-    {
-        Arc::new(MacKeychainProtector::for_namespace(storage))
-    }
-    #[cfg(not(any(windows, target_os = "macos")))]
-    {
-        let _ = storage;
-        Arc::new(DpapiProtector)
-    }
-}
-
 #[cfg(test)]
-mod tests {
-    use std::path::PathBuf;
-
-    use gmofg_proxy_application::{AppResult, ProxyState};
-    use gmofg_proxy_infrastructure::{
-        InfrastructureError, NativeFileDialog, SecretProtector, adapters::FileSelection,
-    };
-    use gmofg_proxy_product_payment::PaymentProductProfile;
-
-    use super::*;
-
-    #[derive(Debug)]
-    struct NoFileDialog;
-
-    impl NativeFileDialog for NoFileDialog {
-        fn choose_open_file(&self, _purpose: &str) -> AppResult<Option<PathBuf>> {
-            Ok(None)
-        }
-
-        fn choose_save_file(&self, _purpose: &str) -> AppResult<Option<FileSelection>> {
-            Ok(None)
-        }
-    }
-
-    #[derive(Debug)]
-    struct TestSecretProtector;
-
-    impl SecretProtector for TestSecretProtector {
-        fn protect(&self, plaintext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
-            Ok(plaintext.iter().map(|byte| byte ^ 0xa5).collect())
-        }
-
-        fn unprotect(&self, ciphertext: &[u8]) -> Result<Vec<u8>, InfrastructureError> {
-            self.protect(ciphertext)
-        }
-    }
-
-    #[tokio::test]
-    async fn builds_and_invokes_application_without_tauri() {
-        let temp = tempfile::tempdir().expect("temporary host directory");
-        let host = ApplicationHostBuilder::new(
-            temp.path(),
-            HostPlatformServices::new(Arc::new(TestSecretProtector), Arc::new(NoFileDialog)),
-            Arc::new(PaymentProductProfile::isolated_test_tool()),
-        )
-        .build()
-        .await
-        .expect("build UI-neutral host");
-
-        assert!(host.begin_shutdown(), "first caller owns graceful shutdown");
-        assert!(
-            !host.begin_shutdown(),
-            "repeated callers must reuse the existing shutdown task"
-        );
-        assert!(!host.shutdown_completed());
-
-        let application = host.application();
-        let status = application
-            .proxy_get_status()
-            .await
-            .expect("query proxy status");
-        assert_eq!(status.state, ProxyState::Stopped);
-
-        let settings = application.settings_get().await.expect("query settings");
-        assert_eq!(settings.stored.max_sessions, 500);
-
-        let draft = application
-            .rule_new_draft()
-            .await
-            .expect("create rule draft");
-        assert_eq!(draft.name, "新建规则");
-
-        host.shutdown().await.expect("shutdown UI-neutral host");
-        assert!(host.shutdown_completed());
-    }
-}
+#[path = "tests.rs"]
+mod tests;

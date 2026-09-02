@@ -7,6 +7,8 @@
  */
 :root {
   color-scheme: light;
+  --telemetry-background: #ffffff;
+  --telemetry-surface: #ffffff;
   --telemetry-ink: #16212b;
   --telemetry-muted: #5f6b76;
   --telemetry-line: #d9e0e6;
@@ -18,13 +20,34 @@
   --telemetry-danger: #d92d35;
 }
 
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* HeroUI v3 默认字段边框为透明；深色表面必须显式提供可辨识边界。 */
+  --field-border-width: 1px;
+  --field-background: #181b1f;
+  --field-border: #4b5560;
+  --field-border-hover: #68727d;
+  --field-border-focus: var(--telemetry-accent);
+  --telemetry-background: #111315;
+  --telemetry-surface: #1c1f22;
+  --telemetry-ink: #f2f5f7;
+  --telemetry-muted: #aeb8c1;
+  --telemetry-line: #343a40;
+  --telemetry-soft: #252a2f;
+  --telemetry-accent: #5ccbd3;
+  --telemetry-accent-soft: #17383c;
+  --telemetry-good: #65c77a;
+  --telemetry-warning: #ffb454;
+  --telemetry-danger: #ff7379;
+}
+
 * {
   box-sizing: border-box;
 }
 
 html,
 body {
-  background: #ffffff;
+  background: var(--telemetry-background);
   color: var(--telemetry-ink);
   font-family:
     "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;

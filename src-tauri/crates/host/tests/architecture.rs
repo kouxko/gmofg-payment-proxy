@@ -1,19 +1,27 @@
 //! 依赖方向的“防回退”测试。
 //!
-//! 这些测试扫描 Cargo 元数据和源码，防止 Tauri、Payment 产品词汇或产品编码重新渗入
-//! 通用核心。它们证明的是静态架构边界，不证明运行时网络行为。
+//! 这些测试扫描 Cargo 元数据和源码，防止 Tauri 或已删除的旧产品契约重新渗入通用核心，
+//! 同时固定动态 Workspace 编解码器的依赖方向。它们不证明运行时网络行为。
 
-use std::path::{Path, PathBuf};
-use std::process::Command;
+use std::path::Path;
 
-const CORE_CRATES: [(&str, &str); 7] = [
-    ("domain", "gmofg-proxy-domain"),
-    ("application", "gmofg-proxy-application"),
-    ("proxy", "gmofg-proxy-runtime"),
-    ("product-api", "gmofg-proxy-product-api"),
-    ("product-payment", "gmofg-proxy-product-payment"),
-    ("infrastructure", "gmofg-proxy-infrastructure"),
-    ("host", "gmofg-proxy-host"),
+#[path = "architecture/support.rs"]
+mod support;
+
+use support::{
+    assert_no_tauri_dependency, crates_dir, is_test_source, remove_cfg_test_items,
+    resolved_dependencies, rust_sources,
+};
+
+const CORE_CRATES: [(&str, &str); 8] = [
+    ("domain", "intercept-proxy-domain"),
+    ("application", "intercept-proxy-application"),
+    ("exchange", "intercept-proxy-exchange"),
+    ("android-engine", "intercept-proxy-android-engine"),
+    ("proxy", "intercept-proxy-runtime"),
+    ("product-api", "intercept-proxy-product-api"),
+    ("infrastructure", "intercept-proxy-infrastructure"),
+    ("host", "intercept-proxy-host"),
 ];
 
 #[test]
@@ -36,82 +44,227 @@ fn reusable_rust_crates_do_not_depend_on_tauri() {
 
 #[test]
 fn runtime_crate_does_not_depend_on_application_layer() {
-    let packages = resolved_dependencies("gmofg-proxy-runtime");
+    let packages = resolved_dependencies("intercept-proxy-runtime");
     assert!(
         !packages
             .iter()
-            .any(|package| package == "gmofg-proxy-application"),
+            .any(|package| package == "intercept-proxy-application"),
         "proxy runtime must not depend upward on application: {packages:?}"
     );
 }
 
 #[test]
-fn generic_core_does_not_depend_on_concrete_payment_product() {
+fn generic_core_does_not_depend_on_removed_legacy_product_fixture() {
     for crate_name in [
-        "gmofg-proxy-domain",
-        "gmofg-proxy-application",
-        "gmofg-proxy-runtime",
-        "gmofg-proxy-product-api",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-host",
+        "intercept-proxy-domain",
+        "intercept-proxy-application",
+        "intercept-proxy-exchange",
+        "intercept-proxy-android-engine",
+        "intercept-proxy-runtime",
+        "intercept-proxy-product-api",
+        "intercept-proxy-infrastructure",
+        "intercept-proxy-host",
     ] {
         let packages = resolved_dependencies(crate_name);
         assert!(
             !packages
                 .iter()
-                .any(|package| package == "gmofg-proxy-product-payment"),
-            "{crate_name} must not depend on the concrete Payment product: {packages:?}"
+                .any(|package| package == "intercept-proxy-legacy-test-fixture"),
+            "{crate_name} must not depend on the removed legacy product fixture: {packages:?}"
         );
     }
 }
 
 #[test]
-fn generic_core_does_not_resolve_product_body_codecs() {
+fn dynamic_workspace_body_codecs_stay_in_infrastructure() {
     for crate_name in [
-        "gmofg-proxy-domain",
-        "gmofg-proxy-application",
-        "gmofg-proxy-runtime",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-host",
+        "intercept-proxy-domain",
+        "intercept-proxy-application",
+        "intercept-proxy-runtime",
     ] {
         let packages = resolved_dependencies(crate_name);
         assert!(
             !packages.iter().any(|package| package == "encoding_rs"),
-            "{crate_name} must receive body encoding through product-api, not resolve encoding_rs: {packages:?}"
+            "{crate_name} must remain independent of concrete text encodings: {packages:?}"
         );
     }
+    let infrastructure = resolved_dependencies("intercept-proxy-infrastructure");
+    assert!(
+        infrastructure
+            .iter()
+            .any(|package| package == "encoding_rs"),
+        "infrastructure must implement the Workspace-selectable Shift-JIS codec: {infrastructure:?}"
+    );
 }
 
 #[test]
-fn payment_product_library_does_not_pull_runtime_or_probe_dependencies() {
-    let packages = resolved_dependencies("gmofg-proxy-product-payment");
-    let forbidden = [
-        "async-trait",
-        "gmofg-proxy-infrastructure",
-        "gmofg-proxy-runtime",
-        "p12-keystore",
-        "ring",
-        "tokio",
-        "tokio-util",
-        "zeroize",
+fn infrastructure_bundle_is_consumed_only_by_the_host_composition_root() {
+    let host_source = crates_dir().join("host/src");
+    let allowed = host_source.join("lib.rs");
+
+    for source in rust_sources(&host_source) {
+        if source == allowed || is_test_source(&source) {
+            continue;
+        }
+        let text = std::fs::read_to_string(&source)
+            .unwrap_or_else(|error| panic!("read {}: {error}", source.display()));
+        let production = remove_cfg_test_items(&text);
+        assert!(
+            !production.contains("InfrastructureServiceBundle"),
+            "{} must accept only the capabilities it uses, not the whole infrastructure bundle",
+            source.display()
+        );
+    }
+
+    let root = std::fs::read_to_string(&allowed)
+        .unwrap_or_else(|error| panic!("read {}: {error}", allowed.display()));
+    let production = remove_cfg_test_items(&root);
+    assert_eq!(
+        production.matches("&InfrastructureServiceBundle").count(),
+        0,
+        "composition helpers must accept explicit capabilities instead of borrowing the whole bundle"
+    );
+    assert!(
+        !production.contains("Arc<InfrastructureServiceBundle")
+            && !production.contains("InfrastructureServiceBundle>"),
+        "the host must own the infrastructure bundle directly only in its composition root"
+    );
+}
+
+#[test]
+fn infrastructure_root_does_not_export_implementation_only_adapters() {
+    let infrastructure_root = crates_dir().join("infrastructure/src/lib.rs");
+    let source = std::fs::read_to_string(&infrastructure_root)
+        .unwrap_or_else(|error| panic!("read {}: {error}", infrastructure_root.display()));
+    let adapter_exports = source
+        .split_once("pub use adapters::{")
+        .and_then(|(_, suffix)| suffix.split_once("};"))
+        .map(|(exports, _)| exports)
+        .expect("infrastructure adapter root export block");
+    let implementation_only = [
+        "AcceptedExternalPackageConnection",
+        "BoundSocketDocument",
+        "ExternalPackageConnectionId",
+        "ExternalPackageFatalProtocolError",
+        "DocumentProgramFactory",
+        "ProtocolPackageStorageError",
+        "ProtocolPackageStorageErrorCode",
+        "ProtocolPackageSummary",
+        "RuntimeRuleRepository",
+        "accept_packages_websocket",
+        "external_package_registration_fingerprint",
+        "CaptureRepositoryAdapter",
+        "ExternalPackageConnectionConfig",
+        "ExternalPackageListenerRuntime",
+        "ExternalPackageRegistryAdapter",
+        "ExternalPackageServerConfig",
+        "HeaderBodyCodecResolver",
+        "ProtocolPackageRepositoryAdapter",
+        "RuleRepositoryAdapter",
+        "RuntimePipelineAdapter",
+        "RuntimePipelineProductHooks",
+        "SettingsRepositoryAdapter",
+        "WorkspaceBodyCodecResolver",
     ];
 
-    for package in forbidden {
+    for symbol in implementation_only {
         assert!(
-            !packages.iter().any(|resolved| resolved == package),
-            "the default Payment product library must stay limited to product policy and codecs; \
-             {package} belongs to the opt-in real-device probe: {packages:?}"
+            !adapter_exports.contains(symbol),
+            "infrastructure root must not re-export implementation-only symbol {symbol}"
         );
     }
 }
 
 #[test]
-fn generic_production_sources_do_not_contain_payment_contracts() {
+fn infrastructure_adapters_module_is_private_and_not_used_cross_crate() {
+    let infrastructure_root = crates_dir().join("infrastructure/src/lib.rs");
+    let source = std::fs::read_to_string(&infrastructure_root)
+        .unwrap_or_else(|error| panic!("read {}: {error}", infrastructure_root.display()));
+    assert!(source.contains("mod adapters;"));
+    assert!(!source.contains("pub mod adapters;"));
+
+    for (directory, _) in CORE_CRATES {
+        if directory == "infrastructure" {
+            continue;
+        }
+        for source in rust_sources(&crates_dir().join(directory)) {
+            if source == crates_dir().join("host/tests/architecture.rs") {
+                continue;
+            }
+            let text = std::fs::read_to_string(&source)
+                .unwrap_or_else(|error| panic!("read {}: {error}", source.display()));
+            assert!(
+                !text.contains("intercept_proxy_infrastructure::adapters::")
+                    && !text.contains("adapters::FileSelection"),
+                "{} must use intentional infrastructure root contracts, not its adapters module",
+                source.display()
+            );
+        }
+    }
+    for source in rust_sources(&crates_dir().parent().expect("workspace root").join("src")) {
+        let text = std::fs::read_to_string(&source)
+            .unwrap_or_else(|error| panic!("read {}: {error}", source.display()));
+        assert!(
+            !text.contains("intercept_proxy_infrastructure::adapters::")
+                && !text.contains("adapters::FileSelection"),
+            "{} must use intentional infrastructure root contracts, not its adapters module",
+            source.display()
+        );
+    }
+}
+
+#[test]
+fn infrastructure_bundle_fields_are_private_and_host_avoids_adapter_concretes() {
+    let bundle =
+        std::fs::read_to_string(crates_dir().join("infrastructure/src/adapters/bundle.rs"))
+            .expect("read infrastructure bundle");
+    let fields = bundle
+        .split_once("pub struct InfrastructureServiceBundle {")
+        .and_then(|(_, suffix)| suffix.split_once("}\n\nimpl InfrastructureServiceBundle"))
+        .map(|(fields, _)| fields)
+        .expect("bundle fields");
+    assert!(
+        !fields
+            .lines()
+            .any(|line| line.trim_start().starts_with("pub ")),
+        "infrastructure bundle must expose intent methods rather than public adapter fields"
+    );
+
+    let host = std::fs::read_to_string(crates_dir().join("host/src/lib.rs"))
+        .expect("read host composition root");
+    for concrete in [
+        "AndroidAdbAdapter",
+        "CaptureRepositoryAdapter",
+        "ExternalPackageRegistryAdapter",
+        "HeaderBodyCodecResolver",
+        "ProtocolPackageRepositoryAdapter",
+        "RuleRepositoryAdapter",
+        "RuntimePipelineAdapter",
+        "RuntimePipelineProductHooks",
+        "SettingsRepositoryAdapter",
+        "WorkspaceBodyCodecResolver",
+    ] {
+        assert!(
+            !host.contains(concrete),
+            "Host must request infrastructure intent instead of importing {concrete}"
+        );
+    }
+}
+
+#[test]
+fn removed_legacy_product_fixture_is_not_a_workspace_member() {
+    let manifest = std::fs::read_to_string(crates_dir().parent().unwrap().join("Cargo.toml"))
+        .expect("read workspace manifest");
+    assert!(!manifest.contains("product-payment"));
+    assert!(!crates_dir().join("product-payment").exists());
+}
+
+#[test]
+fn generic_production_sources_do_not_contain_removed_product_contracts() {
     let forbidden = [
         "GMO-FG",
         "Payment App",
-        "SHIFT_JIS",
-        "shift_jis",
+        "D48",
         "ChannelKind::Transaction",
         "ChannelKind::Dll",
         "enum ChannelKind",
@@ -126,9 +279,21 @@ fn generic_production_sources_do_not_contain_payment_contracts() {
         "gmofg-payment-proxy/keychain",
     ];
 
-    for directory in ["domain", "application", "proxy", "infrastructure", "host"] {
+    for directory in [
+        "domain",
+        "application",
+        "android-engine",
+        "proxy",
+        "infrastructure",
+        "host",
+    ] {
         let source_dir = crates_dir().join(directory).join("src");
         for source in rust_sources(&source_dir) {
+            // `tests/` 与 `*_tests.rs` 只会由父模块的 `#[cfg(test)]` 声明引入。
+            // 外部模块文件本身看不到父文件上的属性，因此不能仅靠文本剥离识别它们。
+            if is_test_source(&source) {
+                continue;
+            }
             let text = std::fs::read_to_string(&source)
                 .unwrap_or_else(|error| panic!("read {}: {error}", source.display()));
             let production = remove_cfg_test_items(&text);
@@ -171,235 +336,32 @@ const AFTER_MODULE: &str = "production-after-module";
     assert!(production.contains("production-after-module"));
 }
 
-fn crates_dir() -> PathBuf {
-    Path::new(env!("CARGO_MANIFEST_DIR"))
-        .parent()
-        .expect("host crate has crates parent")
-        .to_path_buf()
+#[test]
+fn product_contract_scan_recognizes_split_test_modules() {
+    assert!(is_test_source(Path::new("src/facade/listeners_tests.rs")));
+    assert!(is_test_source(Path::new(
+        "src/adapters/android_adb/tests.rs"
+    )));
+    assert!(is_test_source(Path::new(
+        "src/adapters/android_adb/tests/reverse.rs"
+    )));
+    assert!(!is_test_source(Path::new("src/facade/listeners.rs")));
 }
 
-fn rust_sources(root: &Path) -> Vec<PathBuf> {
-    let mut pending = vec![root.to_path_buf()];
-    let mut sources = Vec::new();
-    while let Some(directory) = pending.pop() {
-        let entries = std::fs::read_dir(&directory)
-            .unwrap_or_else(|error| panic!("read directory {}: {error}", directory.display()));
-        for entry in entries {
-            let path = entry.expect("valid directory entry").path();
-            if path.is_dir() {
-                pending.push(path);
-            } else if path.extension().is_some_and(|extension| extension == "rs") {
-                sources.push(path);
-            }
-        }
-    }
-    sources.sort();
-    sources
+#[test]
+fn product_contract_scan_removes_cfg_test_struct_fields() {
+    let source = r"
+struct ProductionState {
+    value: u64,
+    #[cfg(test)]
+    test_gate: Option<String>,
 }
 
-/// Removes items guarded by an exact `#[cfg(test)]` attribute while retaining
-/// every production item before and after them.
-///
-/// A previous prefix-only scan stopped at the first test-only import or
-/// constant, which allowed the rest of a production file to bypass the
-/// product-contract guard. This small lexer handles Rust comments, ordinary
-/// strings, raw strings, character literals, and balanced delimiters so the
-/// architecture test cannot be bypassed by item placement.
-fn remove_cfg_test_items(source: &str) -> String {
-    const ATTRIBUTE: &str = "#[cfg(test)]";
+fn production_value() -> u64 { 7 }
+";
 
-    let mut production = String::with_capacity(source.len());
-    let mut cursor = 0;
-    while let Some(relative_start) = source[cursor..].find(ATTRIBUTE) {
-        let attribute_start = cursor + relative_start;
-        production.push_str(&source[cursor..attribute_start]);
-        let item_start = attribute_start + ATTRIBUTE.len();
-        let item_end = cfg_test_item_end(source, item_start).unwrap_or_else(|| {
-            panic!("unable to find end of cfg(test) item near byte {attribute_start}")
-        });
-        cursor = item_end;
-    }
-    production.push_str(&source[cursor..]);
-    production
-}
-
-fn cfg_test_item_end(source: &str, after_attribute: usize) -> Option<usize> {
-    let bytes = source.as_bytes();
-    let mut index = after_attribute;
-    let mut braces = 0_u32;
-    let mut parentheses = 0_u32;
-    let mut brackets = 0_u32;
-    let mut saw_block = false;
-
-    while index < bytes.len() {
-        match bytes[index] {
-            b'/' if bytes.get(index + 1) == Some(&b'/') => {
-                index = skip_line_comment(bytes, index + 2);
-            }
-            b'/' if bytes.get(index + 1) == Some(&b'*') => {
-                index = skip_block_comment(bytes, index + 2)?;
-            }
-            b'"' => {
-                index = skip_quoted(bytes, index + 1, b'"')?;
-            }
-            b'\'' if is_character_literal(bytes, index) => {
-                index = skip_quoted(bytes, index + 1, b'\'')?;
-            }
-            b'r' if raw_string_hashes(bytes, index).is_some() => {
-                let hashes = raw_string_hashes(bytes, index)?;
-                index = skip_raw_string(bytes, index, hashes)?;
-            }
-            b'{' => {
-                braces = braces.saturating_add(1);
-                saw_block = true;
-                index += 1;
-            }
-            b'}' => {
-                braces = braces.checked_sub(1)?;
-                index += 1;
-                if saw_block && braces == 0 && parentheses == 0 && brackets == 0 {
-                    return Some(index);
-                }
-            }
-            b'(' => {
-                parentheses = parentheses.saturating_add(1);
-                index += 1;
-            }
-            b')' => {
-                parentheses = parentheses.checked_sub(1)?;
-                index += 1;
-            }
-            b'[' => {
-                brackets = brackets.saturating_add(1);
-                index += 1;
-            }
-            b']' => {
-                brackets = brackets.checked_sub(1)?;
-                index += 1;
-            }
-            b';' if braces == 0 && parentheses == 0 && brackets == 0 => {
-                return Some(index + 1);
-            }
-            _ => index += 1,
-        }
-    }
-    None
-}
-
-fn skip_line_comment(bytes: &[u8], mut index: usize) -> usize {
-    while index < bytes.len() && bytes[index] != b'\n' {
-        index += 1;
-    }
-    index
-}
-
-fn skip_block_comment(bytes: &[u8], mut index: usize) -> Option<usize> {
-    let mut depth = 1_u32;
-    while index < bytes.len() {
-        if bytes[index..].starts_with(b"/*") {
-            depth = depth.saturating_add(1);
-            index += 2;
-        } else if bytes[index..].starts_with(b"*/") {
-            depth = depth.checked_sub(1)?;
-            index += 2;
-            if depth == 0 {
-                return Some(index);
-            }
-        } else {
-            index += 1;
-        }
-    }
-    None
-}
-
-fn skip_quoted(bytes: &[u8], mut index: usize, quote: u8) -> Option<usize> {
-    while index < bytes.len() {
-        match bytes[index] {
-            b'\\' => index = index.saturating_add(2),
-            byte if byte == quote => return Some(index + 1),
-            _ => index += 1,
-        }
-    }
-    None
-}
-
-fn is_character_literal(bytes: &[u8], index: usize) -> bool {
-    matches!(
-        (
-            bytes.get(index + 1),
-            bytes.get(index + 2),
-            bytes.get(index + 3),
-        ),
-        (Some(b'\\'), Some(_), Some(b'\'')) | (Some(_), Some(b'\''), _)
-    )
-}
-
-fn raw_string_hashes(bytes: &[u8], index: usize) -> Option<usize> {
-    let mut cursor = index + 1;
-    while bytes.get(cursor) == Some(&b'#') {
-        cursor += 1;
-    }
-    (bytes.get(cursor) == Some(&b'"')).then_some(cursor - index - 1)
-}
-
-fn skip_raw_string(bytes: &[u8], index: usize, hashes: usize) -> Option<usize> {
-    let content_start = index + 2 + hashes;
-    let mut cursor = content_start;
-    while cursor < bytes.len() {
-        if bytes[cursor] == b'"'
-            && bytes
-                .get(cursor + 1..cursor + 1 + hashes)
-                .is_some_and(|suffix| suffix.iter().all(|byte| *byte == b'#'))
-        {
-            return Some(cursor + 1 + hashes);
-        }
-        cursor += 1;
-    }
-    None
-}
-
-fn assert_no_tauri_dependency(manifest_path: &Path, manifest: &str) {
-    let dependency = manifest.lines().map(str::trim).find(|line| {
-        line.starts_with("tauri =") || line.starts_with("tauri-") || line.starts_with("tauri_")
-    });
-    assert!(
-        dependency.is_none(),
-        "{} must stay UI-neutral, found dependency: {}",
-        manifest_path.display(),
-        dependency.unwrap_or_default()
-    );
-}
-
-fn resolved_dependencies(crate_name: &str) -> Vec<String> {
-    let workspace_manifest = crates_dir()
-        .parent()
-        .expect("crates directory has workspace parent")
-        .join("Cargo.toml");
-    let output = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()))
-        .args([
-            "tree",
-            "--manifest-path",
-            workspace_manifest
-                .to_str()
-                .expect("workspace manifest is valid UTF-8"),
-            "--package",
-            crate_name,
-            "--edges",
-            "normal,build",
-            "--prefix",
-            "none",
-        ])
-        .output()
-        .unwrap_or_else(|error| panic!("run cargo tree for {crate_name}: {error}"));
-    assert!(
-        output.status.success(),
-        "cargo tree failed for {crate_name}: {}",
-        String::from_utf8_lossy(&output.stderr)
-    );
-    String::from_utf8(output.stdout)
-        .expect("cargo tree output is UTF-8")
-        .lines()
-        .filter_map(|line| line.split_ascii_whitespace().next())
-        .map(ToOwned::to_owned)
-        .collect()
+    let production = remove_cfg_test_items(source);
+    assert!(production.contains("value: u64"));
+    assert!(production.contains("production_value"));
+    assert!(!production.contains("test_gate"));
 }

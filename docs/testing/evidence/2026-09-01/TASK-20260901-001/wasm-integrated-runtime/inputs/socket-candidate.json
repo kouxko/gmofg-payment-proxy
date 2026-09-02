@@ -1,0 +1,96 @@
+{
+  "schema_version": 1,
+  "target": {
+    "mode": "existing",
+    "workspace_id": "d7c07776-6a6d-4834-9609-39b3584699be",
+    "expected_revision": 10
+  },
+  "workspace": {
+    "listeners": [
+      {
+        "alias": "phase21-socket",
+        "name": "Phase21 Socket schema matrix",
+        "enabled": true,
+        "bind_address": "127.0.0.1",
+        "port": 8081,
+        "connect_timeout_ms": 5000,
+        "read_timeout_ms": 10000,
+        "write_timeout_ms": 10000,
+        "data_plane": {
+          "kind": "socket",
+          "settings": {
+            "topology": {
+              "mode": "relay",
+              "settings": {
+                "upstream": {
+                  "host": "127.0.0.1",
+                  "port": 18084
+                },
+                "security": {
+                  "mode": "transparent"
+                }
+              }
+            },
+            "maximum_connections": 8,
+            "runtime_limits": {
+              "read_chunk_bytes": 16384,
+              "diagnostic_event_capacity": 256,
+              "diagnostic_memory_bytes": 1048576
+            },
+            "processing": {
+              "mode": "scripted",
+              "settings": {
+                "package": {
+                  "id": "iso8583-ascii-standard",
+                  "version": "1.0.0"
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "name": "MTI 0200 to 0100",
+        "enabled": true,
+        "priority": 10,
+        "listener_alias": "phase21-socket",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "socket",
+          "value": {
+            "package": {
+              "id": "iso8583-ascii-standard",
+              "version": "1.0.0"
+            },
+            "condition": {
+              "source": "document",
+              "path": "/message_type",
+              "predicate": {
+                "type": "string",
+                "value": {
+                  "operator": "equal",
+                  "value": "0200"
+                }
+              }
+            },
+            "action": {
+              "source": "document",
+              "value": {
+                "type": "set",
+                "path": "/message_type",
+                "value": "0100"
+              }
+            }
+          }
+        }
+      }
+    ],
+    "android_network_profiles": []
+  },
+  "materials": {
+    "certificates": [],
+    "secrets": []
+  }
+}

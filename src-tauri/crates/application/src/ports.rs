@@ -5,24 +5,187 @@
 
 use async_trait::async_trait;
 
-use crate::{
-    ActiveFaultViewModel, AppResult, BreakpointDecision, BreakpointDetailViewModel,
-    BreakpointDraft, BreakpointValidationViewModel, CaptureDetailViewModel, CapturePageViewModel,
-    CaptureQuery, CertificateOverviewViewModel, CertificateValidationViewModel,
-    FaultConfigurationDraft, FaultTemplateViewModel, OperationResultViewModel,
-    ProxyStatusViewModel, RuleDraft, RuleId, RuleSummaryViewModel, RuleValidationViewModel,
-    RuleViewModel, RuntimeEpoch, SessionDetailViewModel, SessionId, SessionPageViewModel,
-    SessionQuery, SettingsDraft, SettingsValidationViewModel, SettingsViewModel,
+mod android;
+pub use android::AndroidControlPort;
+
+mod external_packages;
+pub use external_packages::ExternalPackageApplicationPort;
+
+mod protocol_packages;
+pub use protocol_packages::{
+    BuiltinProtocolPackagePort, ProtocolPackageApplicationServices, ProtocolPackageImportPort,
+    ProtocolPackageUsageQueryPort,
 };
 
-#[async_trait]
-/// 启停和查询代理运行时的端口。
+use crate::{
+    ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, CaptureDetailViewModel,
+    CapturePageViewModel, CaptureQuery, CertificateItemViewModel, CertificateOverviewViewModel,
+    CertificateReference, CertificateValidationViewModel, ExchangeObservationPage,
+    ExchangeObservationQuery, ExchangeObservationRecord, FaultConfigurationDraft,
+    FaultTemplateViewModel, ListenerCertificateImportViewModel, ListenerId,
+    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
+    ProxyListener, ProxyWorkspace, RuleDefinition, RuleDefinitionSaveInput, RuntimeEpoch,
+    SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
+    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceCollectionViewModel,
+    WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+};
+/// Read-only access to the bounded in-process Exchange observation timeline.
 ///
-/// application 只发送已经校验的配置，不知道监听器、Tokio 任务或 TLS 的具体实现。
-pub trait ProxySupervisorPort: Send + Sync + std::fmt::Debug {
-    async fn status(&self) -> AppResult<ProxyStatusViewModel>;
-    async fn start(&self, effective_settings: SettingsDraft) -> AppResult<ProxyStatusViewModel>;
-    async fn stop(&self) -> AppResult<ProxyStatusViewModel>;
+/// Storage, retention, producer counters, and UI mutation ownership remain in an outer adapter;
+/// presentation adapters query the same store only through this Application dependency port.
+pub trait ExchangeObservationQueryPort: Send + Sync + std::fmt::Debug {
+    fn query(&self, query: &ExchangeObservationQuery) -> ExchangeObservationPage;
+
+    fn get(&self, exchange_id: &str) -> Option<ExchangeObservationRecord>;
+}
+
+#[async_trait]
+/// Listener TLS 材料的原生导入边界。
+///
+/// 实现负责文件选择、格式校验与系统级保护；应用层和展示层只获得可安全写入
+/// Workspace 的引用。`None` 表示用户取消选择。
+pub trait ListenerCertificateImportPort: Send + Sync + std::fmt::Debug {
+    async fn import_downstream_server_identity(
+        &self,
+        label: String,
+        password: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    async fn import_downstream_client_trust(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    async fn import_upstream_client_identity(
+        &self,
+        label: String,
+        password: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    async fn import_upstream_server_trust(
+        &self,
+        label: String,
+    ) -> AppResult<Option<ListenerCertificateImportViewModel>>;
+
+    /// 读取安全引用并只返回证书的公开元数据，不返回路径、密码、私钥或证书原始字节。
+    async fn inspect(&self, reference: CertificateReference)
+    -> AppResult<CertificateItemViewModel>;
+
+    /// 将托管证书材料读取为单文件配置中的可移植载荷。
+    ///
+    /// 该方法只由用户主动导出配置时调用。运行时 Workspace 仍只保存安全引用，不会把
+    /// 原始证书、私钥或密码写入 SQLite、事件或普通 DTO。
+    async fn export_portable(
+        &self,
+        reference: CertificateReference,
+    ) -> AppResult<PortableCertificateMaterial>;
+
+    /// Fully parses and validates portable material without persisting secrets or references.
+    async fn preflight_portable(&self, material: &PortableCertificateMaterial) -> AppResult<()>;
+
+    /// Opaque digest of managed Listener certificate state for preview staleness checks.
+    async fn application_backup_baseline(&self) -> AppResult<[u8; 32]>;
+
+    /// 校验可移植载荷并写入当前机器的受保护存储，返回新的本机托管引用。
+    async fn restore_portable(
+        &self,
+        material: PortableCertificateMaterial,
+    ) -> AppResult<CertificateReference>;
+
+    /// 删除尚未被任何 Workspace 引用的受保护证书材料。
+    ///
+    /// 应用层必须先完成全局引用检查；基础设施层仍需拒绝非托管引用并校验材料类型，
+    /// 防止把该接口扩展成任意文件或任意密钥删除能力。
+    async fn discard(&self, reference: CertificateReference) -> AppResult<()>;
+}
+
+#[async_trait]
+/// 系统密钥保护下的秘密写入边界。
+///
+/// 展示层只提交本次输入的用户名和密码，并只拿回不可逆的安全引用。明文不会进入
+/// Workspace、SQLite、事件、日志或返回 DTO；未来 CLI/TUI 复用同一用例即可。
+pub trait ProtectedSecretPort: Send + Sync + std::fmt::Debug {
+    async fn store_basic_auth(
+        &self,
+        username: String,
+        password: String,
+    ) -> AppResult<SecretReference>;
+}
+
+#[async_trait]
+/// Workspace 的应用层持久化边界。
+///
+/// 仓储只处理领域模型及其本机安全引用。单文件证书载荷由应用门面通过证书端口恢复后，
+/// 再把重写过引用的 Workspace 交给仓储持久化。
+pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
+    /// 一次读取返回同一代 Workspace 的摘要和详情，避免调用者产生 N+1 查询或混合代快照。
+    async fn snapshot(&self) -> AppResult<WorkspaceCollectionViewModel>;
+    async fn list(&self) -> AppResult<Vec<WorkspaceSummaryViewModel>>;
+    async fn get(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
+    async fn create(&self, name: String) -> AppResult<ProxyWorkspace>;
+    async fn copy(&self, workspace_id: WorkspaceId) -> AppResult<ProxyWorkspace>;
+    async fn select(&self, workspace_id: WorkspaceId) -> AppResult<WorkspaceSummaryViewModel>;
+    async fn validate(&self, workspace: ProxyWorkspace) -> AppResult<WorkspaceValidationViewModel>;
+    async fn save(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace>;
+    /// 保存已由应用层完成证书恢复的可移植 Workspace，并重映射全部领域 ID。
+    async fn import_workspace(&self, workspace: ProxyWorkspace) -> AppResult<ProxyWorkspace>;
+    async fn delete(
+        &self,
+        workspace_id: WorkspaceId,
+        expected_revision: u64,
+    ) -> AppResult<OperationResultViewModel>;
+}
+
+#[async_trait]
+/// 完整应用配置的原子持久化边界。
+///
+/// 实现必须在同一事务中替换全部 Workspace、当前选择和全局 Settings。调用前文档已由
+/// application 全量校验；实现失败时不得留下任何部分写入。
+pub trait ApplicationConfigurationStorePort: Send + Sync + std::fmt::Debug {
+    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()>;
+
+    /// 原子清除全部用户配置、规则和受保护秘密，再写入干净默认文档。
+    ///
+    /// 默认实现仅替换可移植配置，无状态测试替身可直接复用；生产 `SQLite`
+    /// 适配器必须覆盖并清理其他持久化表。
+    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        self.replace_all(document).await
+    }
+}
+
+#[async_trait]
+/// 每个动态 Listener 的网络生命周期边界。
+pub trait ListenerRuntimePort: Send + Sync + std::fmt::Debug {
+    async fn statuses(&self) -> AppResult<Vec<ListenerStatusViewModel>>;
+    /// 以 application 已校验的不可变 Workspace 快照启动入口。Infrastructure 可以在
+    /// Scripted 启动边界从持久化规范文件 fresh 编译精确包；计划生成后不得再反查 `SQLite`
+    /// 或依赖 UI 当前选择状态。Direct 分支也不得访问协议包注册表。
+    async fn start(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerStatusViewModel>;
+    async fn stop(&self, listener_id: ListenerId) -> AppResult<ListenerStatusViewModel>;
+    /// 在 Listener 事务边界内持久化统一规则 CAS，并发布同一 revision 的运行快照。
+    async fn replace_rule_definitions(
+        &self,
+        workspaces: &dyn WorkspaceRepositoryPort,
+        workspace: ProxyWorkspace,
+        listener_id: ListenerId,
+    ) -> AppResult<ProxyWorkspace>;
+    /// 使用固定 Server 的 scheme 执行 DNS/TCP 或 DNS/TCP/TLS 连接测试。
+    async fn test_upstream_connection(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerUpstreamConnectionTestViewModel>;
+    /// 使用该入口持久化的上游地址、CA、主机名校验和可选客户端身份执行真实握手。
+    async fn test_upstream_tls(
+        &self,
+        workspace: ProxyWorkspace,
+        listener: ProxyListener,
+    ) -> AppResult<ListenerUpstreamTlsTestViewModel>;
 }
 
 #[async_trait]
@@ -38,43 +201,14 @@ pub trait CaptureRepositoryPort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 规则持久化端口。
-///
-/// 实现必须保留 revision 并发校验，不能因为换成 TUI/CLI 就绕过规则校验。
-pub trait RuleRepositoryPort: Send + Sync + std::fmt::Debug {
-    async fn list(&self) -> AppResult<Vec<RuleSummaryViewModel>>;
-    async fn get(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
-    async fn new_draft(&self) -> AppResult<RuleDraft>;
-    async fn create_from_session(&self, session_id: SessionId) -> AppResult<RuleDraft>;
-    async fn validate(&self, draft: &RuleDraft) -> AppResult<RuleValidationViewModel>;
-    async fn save(&self, draft: RuleDraft) -> AppResult<RuleViewModel>;
-    async fn copy(&self, rule_id: RuleId) -> AppResult<RuleViewModel>;
-    async fn delete(
-        &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-    ) -> AppResult<OperationResultViewModel>;
-    async fn toggle(
-        &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-        enabled: bool,
-    ) -> AppResult<RuleViewModel>;
-    async fn import(&self) -> AppResult<OperationResultViewModel>;
-    async fn export(&self) -> AppResult<OperationResultViewModel>;
-}
-
-#[async_trait]
 /// 将“故障模板”转换为普通规则并管理其生命周期的端口。
 pub trait FaultServicePort: Send + Sync + std::fmt::Debug {
     async fn templates(&self) -> AppResult<Vec<FaultTemplateViewModel>>;
-    async fn configure(&self, draft: FaultConfigurationDraft) -> AppResult<ActiveFaultViewModel>;
-    async fn active(&self) -> AppResult<Vec<ActiveFaultViewModel>>;
-    async fn stop(
+    async fn rule_draft(
         &self,
-        rule_id: RuleId,
-        expected_revision: u64,
-    ) -> AppResult<ActiveFaultViewModel>;
+        draft: FaultConfigurationDraft,
+    ) -> AppResult<RuleDefinitionSaveInput>;
+    fn active_view(&self, rule: &RuleDefinition) -> Option<ActiveFaultViewModel>;
 }
 
 #[async_trait]
@@ -82,6 +216,19 @@ pub trait FaultServicePort: Send + Sync + std::fmt::Debug {
 ///
 /// application 只处理用例顺序和错误，不接触私钥字节或平台密钥库。
 pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
+    /// 只读取非敏感元数据，用于应用启动状态栏和列表渲染。
+    ///
+    /// 这个调用不得解密私钥，也不得触发系统钥匙串授权；需要验证证书与私钥是否匹配时
+    /// 必须显式调用 [`Self::overview`] 或 [`Self::validate`]。
+    async fn status(&self) -> AppResult<CertificateOverviewViewModel>;
+    /// 将持久化证书同步为产品策略要求的安装级信任链。
+    ///
+    /// 产品策略未提供固定 Root 时，首次同步为当前安装实例生成独立 Root 和叶子证书；
+    /// 材料已经完整时必须保持幂等且不增加修订号。已撤销材料由基础设施层拒绝使用。
+    async fn synchronize_installation_ca(
+        &self,
+        fallback_sans: Vec<String>,
+    ) -> AppResult<CertificateOverviewViewModel>;
     async fn overview(&self) -> AppResult<CertificateOverviewViewModel>;
     async fn generate_ca(&self, sans: Vec<String>) -> AppResult<CertificateOverviewViewModel>;
     async fn export_ca(&self) -> AppResult<OperationResultViewModel>;
@@ -97,49 +244,18 @@ pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
 }
 
 #[async_trait]
-/// 保存配置与维护“已保存/已生效”双快照的端口。
+/// 保存和校验全局配置的端口。
 pub trait SettingsRepositoryPort: Send + Sync + std::fmt::Debug {
     async fn defaults(&self) -> AppResult<SettingsDraft>;
     async fn get(&self) -> AppResult<SettingsViewModel>;
     async fn validate(&self, draft: &SettingsDraft) -> AppResult<SettingsValidationViewModel>;
     async fn save(&self, draft: SettingsDraft) -> AppResult<SettingsViewModel>;
-    async fn restore(&self, settings: SettingsViewModel) -> AppResult<SettingsViewModel>;
-    async fn apply_effective(&self, settings: SettingsDraft) -> AppResult<SettingsViewModel>;
-    async fn clear_effective(&self) -> AppResult<SettingsViewModel>;
 }
 
 #[async_trait]
-/// 会话导出端口。选择路径和写文件属于平台能力，因此从核心用例中倒置出去。
-pub trait FileExportPort: Send + Sync + std::fmt::Debug {
-    async fn export_session(
-        &self,
-        session: SessionDetailViewModel,
-        sensitive_data_confirmed: bool,
-    ) -> AppResult<OperationResultViewModel>;
-}
-
-#[async_trait]
-/// 会话查询端口，负责 Rust 侧筛选、排序和分页。
+/// 会话查询端口，负责 Rust 侧筛选和排序。
 pub trait SessionQueryPort: Send + Sync + std::fmt::Debug {
-    async fn query(&self, query: SessionQuery) -> AppResult<SessionPageViewModel>;
+    async fn query(&self, query: SessionQuery) -> AppResult<SessionListViewModel>;
     async fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
     async fn clear_completed(&self) -> AppResult<usize>;
-}
-
-/// 断点编辑校验端口。
-///
-/// 任何展示层都只能提交意图，而不能自行重建报文。
-pub trait BreakpointValidationPort: Send + Sync + std::fmt::Debug {
-    fn format_json(&self, draft: BreakpointDraft) -> AppResult<BreakpointDraft>;
-    fn restore_original(&self, detail: &BreakpointDetailViewModel) -> AppResult<BreakpointDraft>;
-    fn validate(
-        &self,
-        detail: &BreakpointDetailViewModel,
-        draft: &BreakpointDraft,
-    ) -> AppResult<BreakpointValidationViewModel>;
-    fn validate_decision(
-        &self,
-        detail: &BreakpointDetailViewModel,
-        decision: &BreakpointDecision,
-    ) -> AppResult<BreakpointValidationViewModel>;
 }

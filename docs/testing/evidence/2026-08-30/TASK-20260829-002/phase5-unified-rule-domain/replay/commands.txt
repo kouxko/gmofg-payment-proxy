@@ -1,0 +1,16 @@
+node --test scripts/check-task-20260829-002-phase5-contract.test.mjs
+node scripts/check-task-20260829-002-phase5-contract.mjs
+pnpm test:task-20260829-002:phase5
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --all-targets --all-features -q
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets --all-features -q
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --all-targets --all-features -q
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --all-targets --all-features -q
+pnpm check:bindings
+pnpm scan:architecture
+pnpm scan:source-size
+pnpm lint
+pnpm typecheck
+pnpm check:rust:fmt
+pnpm check:rust:clippy
+pnpm check:task-20260829-002:checkpoint
+git diff --check

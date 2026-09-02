@@ -1,0 +1,28 @@
+type = "object"
+title = "Nuvei Tango JSON Read-Only Document"
+
+[properties.frame_length]
+type = "number"
+title = "Frame body length"
+
+[properties.control_header]
+type = "array"
+title = "Opaque control header"
+items = { type = "number" }
+
+[properties.sequence]
+type = "string"
+title = "Sequence"
+
+[properties.message_type]
+type = "string"
+title = "Message type"
+
+[properties.json_preview]
+type = "string"
+title = "JSON preview"
+
+[properties.encoding_context]
+type = "array"
+title = "Read-only direction context"
+items = { type = "number" }

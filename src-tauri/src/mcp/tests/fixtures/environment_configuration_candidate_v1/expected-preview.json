@@ -1,0 +1,251 @@
+{
+  "target_key": "new:53746f7265204c6162",
+  "target": {
+    "mode": "new",
+    "name": "Store Lab"
+  },
+  "baseline_public": {
+    "workspace_id": null,
+    "revision": null,
+    "selected": false
+  },
+  "validation_layers": [
+    {
+      "layer": "schema",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "domain",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "material",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "package_projection",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "dns_tcp_port",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "tls_mtls",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "preview_baseline",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    }
+  ],
+  "resources": {
+    "listeners": [
+      {
+        "alias": "http-entry",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000101"
+      },
+      {
+        "alias": "socket-entry",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000102"
+      },
+      {
+        "alias": "socket-responder",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000103"
+      }
+    ],
+    "android_profile_ids": [
+      "android-lab"
+    ],
+    "rules": [
+      {
+        "candidate_index": 0,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000120",
+        "created_order": 10,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 1,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000121",
+        "created_order": 11,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 2,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000122",
+        "created_order": 12,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 3,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000123",
+        "created_order": 13,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 4,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000124",
+        "created_order": 14,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 5,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000125",
+        "created_order": 15,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 6,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000126",
+        "created_order": 16,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 7,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000127",
+        "created_order": 17,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 8,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000128",
+        "created_order": 18,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 9,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000129",
+        "created_order": 19,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 10,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012a",
+        "created_order": 20,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 11,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012b",
+        "created_order": 21,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 12,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000012c",
+        "created_order": 22,
+        "listener_alias": "http-entry"
+      },
+      {
+        "candidate_index": 13,
+        "candidate_local_id": "00000000-0000-0000-0000-00000000013d",
+        "created_order": 33,
+        "listener_alias": "socket-entry"
+      }
+    ]
+  },
+  "alias_graph": {
+    "certificate_aliases": [
+      "downstream-trust",
+      "http-listener-identity",
+      "http-upstream-client",
+      "socket-listener-identity",
+      "socket-upstream-client",
+      "upstream-trust"
+    ],
+    "secret_aliases": [
+      "proxy-admin"
+    ]
+  },
+  "materials_public": {
+    "certificates": [
+      {
+        "alias": "http-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "label": "HTTP listener identity"
+      },
+      {
+        "alias": "socket-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "label": "Socket listener identity"
+      },
+      {
+        "alias": "downstream-trust",
+        "role": "downstream_client_trust",
+        "encoding": "pem",
+        "label": "Downstream trust"
+      },
+      {
+        "alias": "upstream-trust",
+        "role": "upstream_server_trust",
+        "encoding": "pem",
+        "label": "Upstream trust"
+      },
+      {
+        "alias": "http-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "label": "HTTP upstream client"
+      },
+      {
+        "alias": "socket-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "label": "Socket upstream client"
+      }
+    ],
+    "secrets": [
+      {
+        "alias": "proxy-admin",
+        "role": "proxy_basic_auth",
+        "label": "Proxy operator"
+      }
+    ]
+  },
+  "protocol_document_values": [
+    "abc",
+    7.5,
+    true,
+    null,
+    {
+      "nested": "value"
+    },
+    [
+      0.0
+    ]
+  ],
+  "terminal_action_fields": {
+    "TruncateResponse": [
+      "bytes"
+    ],
+    "DisconnectDuringUpstreamWrite": [
+      "after_bytes"
+    ],
+    "DisconnectDuringDownstreamWrite": [
+      "after_bytes"
+    ]
+  }
+}

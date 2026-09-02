@@ -1,0 +1,66 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260829-002",
+  "phase": 4,
+  "crate": "intercept-proxy-package-contract",
+  "required_test_targets": {
+    "manifest_contract": [
+      "http_manifest_accepts_empty_or_schema_directions_and_round_trips_exact_shape",
+      "socket_manifest_requires_both_schemas",
+      "manifest_rejects_unknown_fields_wrong_api_and_invalid_schema_definition",
+      "manifest_package_id_matches_shared_domain_validation_corpus"
+    ],
+    "rpc_contract": [
+      "package_register_is_an_id_less_one_way_notification",
+      "fixed_hook_requests_use_string_ids_exact_methods_and_camel_case_params",
+      "rpc_success_and_failure_envelopes_are_strict_and_mutually_exclusive"
+    ],
+    "frame_result_contract": [
+      "frame_result_accepts_all_three_closed_variants",
+      "frame_result_rejects_zero_complete_cross_fields_and_unknown_fields",
+      "complete_result_is_validated_at_construction_and_against_buffer_length"
+    ],
+    "stable_code_contract": [
+      "rpc_error_data_exposes_domain_stable_code_without_message_parsing"
+    ],
+    "golden_parity": [
+      "independent_json_fixtures_round_trip_through_the_rust_source_contract",
+      "canonical_golden_round_trips_every_request_result_and_error_shape"
+    ]
+  },
+  "generated_sha256": "413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123",
+  "mcp_snapshot_sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe",
+  "generated_required_fragments": [
+    "export type PackageManifest =",
+    "export type PackageRegisterNotification =",
+    "export type PackageRpcRequest =",
+    "export type PackageRpcSuccess<R> =",
+    "export type FrameResult =",
+    "export type PackageMetadata = {\n\tid: ProtocolPackageId,\n\tversion: ProtocolPackageVersion,",
+    "requiredBytes",
+    "consumedBytes",
+    "originalInput"
+  ],
+  "generated_forbidden_types": [
+    "ExternalPackageRegistration",
+    "ExternalFrameResult",
+    "ExternalFrameRequest",
+    "ExternalDecodeRequest",
+    "ExternalDecodeResponse",
+    "ExternalEncodeRequest",
+    "ExternalEncodeResponse",
+    "ExternalDisplayRequest",
+    "ExternalDisplayResponse"
+  ],
+  "phase7_manifest_owner_allowlist": [],
+  "phase7_legacy_wire_allowlist": [],
+  "evidence_byte_copies": [
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/http-manifest.json", "sha256": "19848d4e11f6aee5d0fc5ae68bc4fffeaef2d6049c2aaf7852eddfc3a9296a3f" },
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/socket-manifest.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/socket-manifest.json", "sha256": "0f18d983bccf26846121d4a999b4c201b06932bf39c16c5f00e01de9f5c8d0cd" },
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/register-notification.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/register-notification.json", "sha256": "fc6259887d8915229960f619eacb4303b4488dbbc93204903ba08dd1a7d9e500" },
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/rpc-examples.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/rpc-examples.json", "sha256": "4ef68cf6a84d4ffd0377d34bb7803d86680a2c40bfe0d30e7a4ef9d3e9547ca0" },
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/golden.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/golden.json", "sha256": "0b90566267d6b1373f184306e8b5cb3ee1a454366e1b1617096d15eda91cc2e4" },
+    { "source": "test-support/fixtures/task-20260829-002/phase-4/package-contract/validation-corpus.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/validation-corpus.json", "sha256": "440e2c1a101036ce34c5a972e9f704b9b149ff4da1e5a7676035388f9f84fa2c" },
+    { "source": "src-tauri/src/mcp/tests/fixtures/package_contract_api1/schema.snapshot.json", "evidence": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/resources/mcp-schema.snapshot.json", "sha256": "59bd1df449b243b6ea085afc2d675fe08aa52682c6d668ac96ef884a5f10a8fe" }
+  ]
+}

@@ -13,6 +13,7 @@ pub const DEFAULT_MAX_BODY_BYTES: u64 = 4 * 1024 * 1024;
 pub const DEFAULT_MAX_SESSIONS: u32 = 500;
 pub const DEFAULT_MAX_MEMORY_BYTES: u64 = 256 * 1024 * 1024;
 pub const DEFAULT_UI_EVENT_CAPACITY: u32 = 4_096;
+pub const MAX_UI_EVENT_CAPACITY: u32 = 65_536;
 
 #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 /// 当前产品允许选择的 TLS 协议版本。
@@ -120,9 +121,6 @@ impl Settings {
         if bind_ip.is_err() {
             error = error.with_field_error("bind_address", "绑定地址必须是有效 IP 地址");
         }
-        if !self.channels.iter().any(|channel| channel.enabled) {
-            error = error.with_field_error("channels", "至少启用一个通道");
-        }
         let mut channel_ids = std::collections::BTreeSet::new();
         let mut ports = std::collections::BTreeMap::new();
         for channel in &self.channels {
@@ -160,6 +158,12 @@ impl Settings {
             || self.capacity.ui_event_capacity == 0
         {
             error = error.with_field_error("capacity", "容量限制必须大于 0");
+        }
+        if self.capacity.ui_event_capacity > MAX_UI_EVENT_CAPACITY {
+            error = error.with_field_error(
+                "capacity.ui_event_capacity",
+                format!("UI 事件容量不能超过 {MAX_UI_EVENT_CAPACITY}"),
+            );
         }
         if let Ok(bind_ip) = bind_ip
             && !bind_ip.is_unspecified()
@@ -319,6 +323,22 @@ mod tests {
         assert_eq!(defaults.timeouts.connect_ms, 70_000);
         assert_eq!(defaults.capacity.max_sessions, 500);
         assert_eq!(defaults.capacity.max_memory_bytes, 256 * 1024 * 1024);
+        assert_eq!(defaults.capacity.ui_event_capacity, 4_096);
+        assert!(defaults.capacity.ui_event_capacity <= MAX_UI_EVENT_CAPACITY);
+    }
+
+    #[test]
+    fn rejects_ui_event_capacity_that_could_preallocate_an_unbounded_channel() {
+        let mut settings = valid_settings();
+        settings.capacity.ui_event_capacity = MAX_UI_EVENT_CAPACITY + 1;
+
+        let error = settings.validate().expect_err("capacity must be bounded");
+
+        assert!(
+            error
+                .field_errors
+                .contains_key("capacity.ui_event_capacity")
+        );
     }
 
     // STATE-005, SETTINGS-012, TEST-SETTINGS

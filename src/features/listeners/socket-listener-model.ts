@@ -1,0 +1,295 @@
+import type {
+  ListenerProtocolPackageCatalogViewModel,
+  ListenerProtocolPackageOptionViewModel,
+  ProtocolPackageRef,
+  ScriptedSocketProcessing,
+  SocketDownstreamSecurity,
+  SocketDownstreamTlsSettings,
+  SocketPayloadProcessing,
+  SocketRelaySecurity,
+  SocketRelaySettings,
+  SocketUpstreamTlsSettings,
+} from "@/generated/rust-types";
+import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
+import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
+import { isProtocolPackageSource } from "@/features/protocol-packages/protocol-package-source";
+import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
+
+export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
+
+export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingMode {
+  if (settings.topology.mode === "local_responder") {
+    return "local_response";
+  }
+  return settings.processing.mode === "scripted" ? "protocol_relay" : "raw_relay";
+}
+
+export function setSocketWorkingMode(
+  settings: SocketRelaySettings,
+  mode: SocketWorkingMode,
+  recommendedPackage?: ProtocolPackageRef | null,
+): SocketRelaySettings {
+  if (socketWorkingMode(settings) === mode) return settings;
+  if (mode === "raw_relay") return setProcessingMode(settings, "direct");
+  if (mode === "protocol_relay") {
+    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted", recommendedPackage);
+  }
+  if (mode === "local_response") {
+    return setSocketTopology(
+      setProcessingMode(settings, "scripted", recommendedPackage),
+      "local_responder",
+    );
+  }
+  return settings;
+}
+
+export function exactPackageKey(value: ProtocolPackageRef): string {
+  return `${value.id}\u0000${value.version}`;
+}
+
+export function defaultDownstreamTls(): SocketDownstreamTlsSettings {
+  return { server_identity: "", client_authentication: { mode: "disabled" } };
+}
+
+function emptyScripted(packageRef?: ProtocolPackageRef): ScriptedSocketProcessing {
+  return {
+    package: packageRef ?? { id: "", version: "" },
+  };
+}
+
+export function appSecurity(settings: SocketRelaySettings): SocketDownstreamSecurity {
+  if (settings.topology.mode === "local_responder") {
+    return settings.topology.settings.downstream_security;
+  }
+  const tls = socketDownstreamTls(settings.topology.settings.security);
+  return tls ? { mode: "tls", downstream_tls: tls } : { mode: "tcp" };
+}
+
+function relaySecurity(
+  appTls: SocketDownstreamTlsSettings | undefined,
+  upstreamTls: SocketUpstreamTlsSettings | undefined,
+): SocketRelaySecurity {
+  if (appTls && upstreamTls) return { mode: "tls_to_tls", downstream_tls: appTls, upstream_tls: upstreamTls };
+  if (appTls) return { mode: "tls_to_tcp", downstream_tls: appTls };
+  if (upstreamTls) return { mode: "tcp_to_tls", upstream_tls: upstreamTls };
+  return { mode: "transparent" };
+}
+
+export function setAppTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
+  if (mode !== "tcp" && mode !== "tls") return settings;
+  const existing = appSecurity(settings);
+  const appTls = mode === "tls"
+    ? existing.mode === "tls" ? existing.downstream_tls : defaultDownstreamTls()
+    : undefined;
+  if (settings.topology.mode === "local_responder") {
+    return {
+      ...settings,
+      topology: { mode: "local_responder", settings: {
+        downstream_security: appTls ? { mode: "tls", downstream_tls: appTls } : { mode: "tcp" },
+      } },
+    };
+  }
+  const relay = settings.topology.settings;
+  return { ...settings, topology: { mode: "relay", settings: {
+    ...relay,
+    security: relaySecurity(appTls, socketUpstreamTls(relay.security)),
+  } } };
+}
+
+export function setAppTls(settings: SocketRelaySettings, tls: SocketDownstreamTlsSettings): SocketRelaySettings {
+  if (settings.topology.mode === "local_responder") {
+    return { ...settings, topology: { mode: "local_responder", settings: {
+      downstream_security: { mode: "tls", downstream_tls: tls },
+    } } };
+  }
+  const relay = settings.topology.settings;
+  return { ...settings, topology: { mode: "relay", settings: {
+    ...relay,
+    security: relaySecurity(tls, socketUpstreamTls(relay.security)),
+  } } };
+}
+
+export function setServerTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
+  if (mode !== "tcp" && mode !== "tls") return settings;
+  if (settings.topology.mode !== "relay") return settings;
+  const relay = settings.topology.settings;
+  const upstreamTls = mode === "tls"
+    ? socketUpstreamTls(relay.security) ?? { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null }
+    : undefined;
+  const downstream = socketDownstreamTls(relay.security);
+  return { ...settings, topology: { mode: "relay", settings: {
+    ...relay,
+    security: relaySecurity(downstream, upstreamTls),
+  } } };
+}
+
+export function setServerTls(settings: SocketRelaySettings, tls: SocketUpstreamTlsSettings): SocketRelaySettings {
+  if (settings.topology.mode !== "relay") return settings;
+  const relay = settings.topology.settings;
+  return { ...settings, topology: { mode: "relay", settings: {
+    ...relay,
+    security: relaySecurity(socketDownstreamTls(relay.security), tls),
+  } } };
+}
+
+export function setSocketTopology(
+  settings: SocketRelaySettings,
+  mode: "relay" | "local_responder",
+  recommendedPackage?: ProtocolPackageRef | null,
+): SocketRelaySettings {
+  if (mode !== "relay" && mode !== "local_responder") return settings;
+  if (settings.topology.mode === mode) return settings;
+  if (mode === "local_responder") {
+    const security = appSecurity(settings);
+    const current = settings.processing.mode === "scripted"
+      ? settings.processing.settings
+      : emptyScripted(recommendedPackage ?? undefined);
+    return {
+      ...settings,
+      topology: { mode: "local_responder", settings: { downstream_security: security } },
+      processing: { mode: "scripted", settings: current },
+    };
+  }
+  const security = appSecurity(settings);
+  return {
+    ...settings,
+    topology: { mode: "relay", settings: {
+      upstream: { host: "", port: 0 },
+      security: relaySecurity(security.mode === "tls" ? security.downstream_tls : undefined, undefined),
+    } },
+  };
+}
+
+export function setProcessingMode(
+  settings: SocketRelaySettings,
+  mode: "direct" | "scripted",
+  recommendedPackage?: ProtocolPackageRef | null,
+): SocketRelaySettings {
+  if (mode !== "direct" && mode !== "scripted") return settings;
+  if (mode === "direct") {
+    const relaySettings = settings.topology.mode === "relay"
+      ? settings
+      : setSocketTopology(settings, "relay");
+    return { ...relaySettings, processing: { mode: "direct" } };
+  }
+  if (settings.processing.mode === "scripted") return settings;
+  return {
+    ...settings,
+    processing: { mode: "scripted", settings: emptyScripted(recommendedPackage ?? undefined) },
+  };
+}
+
+export function bindPackage(
+  processing: SocketPayloadProcessing,
+  option: ListenerProtocolPackageOptionViewModel,
+  local: boolean,
+): SocketPayloadProcessing {
+  void processing;
+  void local;
+  return { mode: "scripted", settings: { package: option.package } };
+}
+
+export function matchingOption(
+  catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+  packageRef: ProtocolPackageRef,
+): ListenerProtocolPackageOptionViewModel | undefined {
+  const key = exactPackageKey(packageRef);
+  return socketCatalogOptions(catalog).find((item) => exactPackageKey(item.package) === key);
+}
+
+export function socketCatalogOptions(
+  catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+): ListenerProtocolPackageOptionViewModel[] {
+  return catalog?.options.filter((item) => item.kind === "socket") ?? [];
+}
+
+export function httpCatalogOptions(
+  catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+): ListenerProtocolPackageOptionViewModel[] {
+  return catalog?.options.filter((item) => item.kind === "http") ?? [];
+}
+
+/**
+ * IPC 即使有生成类型，运行时仍可能来自旧 Host、损坏缓存或错误测试适配器。
+ * Listener 选择器必须整批拒绝畸形目录，不能把缺失能力误当成 false 后继续保存。
+ */
+export function isListenerProtocolPackageCatalog(
+  value: unknown,
+): value is ListenerProtocolPackageCatalogViewModel {
+  if (!isRecord(value)
+    || !hasOnly(value, ["options", "installed_version_count", "unavailable_version_count", "recommended_package"])
+    || !Array.isArray(value.options)
+    || !isCount(value.installed_version_count)
+    || !isCount(value.unavailable_version_count)
+    || (value.recommended_package !== null && !isPackageRef(value.recommended_package))
+    || value.options.length + value.unavailable_version_count !== value.installed_version_count) {
+    return false;
+  }
+  const identities = new Set<string>();
+  for (const option of value.options) {
+    if (!isCatalogOption(option)) return false;
+    const identity = exactPackageKey(option.package);
+    if (identities.has(identity)) return false;
+    identities.add(identity);
+  }
+  const recommended = value.recommended_package as ProtocolPackageRef | null;
+  if (recommended !== null
+    && (exactPackageKey(recommended) !== exactPackageKey(BUILT_IN_ISO_8583_PACKAGE)
+      || !value.options.some((option) => option.kind === "socket"
+        && exactPackageKey(option.package) === exactPackageKey(recommended)))) return false;
+  return true;
+}
+
+function isCatalogOption(value: unknown): value is ListenerProtocolPackageOptionViewModel {
+  if (!isRecord(value)
+    || !hasOnly(value, ["package", "name", "package_source", "kind", "capabilities", "upstream_schema", "downstream_schema"])
+    || !isPackageRef(value.package)
+    || typeof value.name !== "string"
+    || value.name.length === 0
+    || !isProtocolPackageSource(value.package_source)
+    || (value.kind !== "http" && value.kind !== "socket")
+    || !isCapabilities(value.capabilities, value.kind)
+    || !isProtocolPackageSchema(value.upstream_schema)
+    || !isProtocolPackageSchema(value.downstream_schema)) {
+    return false;
+  }
+  return true;
+}
+
+function isPackageRef(value: unknown): value is ProtocolPackageRef {
+  return isRecord(value)
+    && hasOnly(value, ["id", "version"])
+    && typeof value.id === "string"
+    && value.id.length > 0
+    && typeof value.version === "string"
+    && value.version.length > 0;
+}
+
+function isCapabilities(value: unknown, kind: "http" | "socket"): boolean {
+  if (!isRecord(value) || !hasOnly(value, ["upstream", "downstream", "display"])) return false;
+  return isDirectionCapabilities(value.upstream, kind)
+    && isDirectionCapabilities(value.downstream, kind)
+    && value.display === true;
+}
+
+function isDirectionCapabilities(value: unknown, kind: "http" | "socket"): boolean {
+  return isRecord(value)
+    && hasOnly(value, ["frame", "decode", "encode"])
+    // 当前 Manifest 只允许 Socket 双向声明 Frame、HTTP 双向不声明 Frame。
+    && value.frame === (kind === "socket")
+    && value.decode === true
+    && value.encode === true;
+}
+
+function isCount(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function hasOnly(value: Record<string, unknown>, keys: string[]): boolean {
+  const actual = Object.keys(value);
+  return actual.length === keys.length && keys.every((key) => actual.includes(key));
+}
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return typeof value === "object" && value !== null && !Array.isArray(value);
+}

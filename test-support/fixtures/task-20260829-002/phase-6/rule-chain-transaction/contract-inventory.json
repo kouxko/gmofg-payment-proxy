@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase6-rule-chain-transaction",
+  "version": 2,
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase5-unified-rule-domain",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/"
+  },
+  "discoverable_tests": {
+    "domain": [
+      "draft_rejects_forged_runtime_statistics",
+      "lifecycle_delta_is_tentative_until_explicitly_applied",
+      "one_shot_disables_and_advances_revision_only_when_delta_is_applied",
+      "save_draft_cannot_supply_runtime_statistics_and_create_initializes_them",
+      "update_preserves_runtime_statistics_and_copy_resets_them"
+    ],
+    "infrastructure": [
+      "production_http_actor_owns_one_shot_commit",
+      "socket_encode_failure_rolls_back_lifecycle_before_successful_commit",
+      "aborting_http_caller_after_commit_started_does_not_cancel_actor_state_machine"
+    ]
+  },
+  "contracts": [
+    "lifecycle state has one common owner shared by HTTP and Socket rule definitions",
+    "each rule has exactly one condition and one corresponding action",
+    "the runtime actor privately owns working message, document, trace, control, and deltas",
+    "condition, action, encode, cancellation, validation, and revision failures publish no partial output",
+    "revision conflicts are attempted once and never replay the transaction",
+    "terminal control remains pending until lifecycle commit succeeds",
+    "caller abort after actor-owned commit starts does not cancel or replay actor state"
+  ]
+}

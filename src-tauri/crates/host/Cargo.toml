@@ -1,14 +1,14 @@
 [package]
-name = "gmofg-proxy-host"
+name = "intercept-proxy-host"
 version.workspace = true
 edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
-gmofg-proxy-application = { path = "../application" }
-gmofg-proxy-infrastructure = { path = "../infrastructure" }
-gmofg-proxy-product-api = { path = "../product-api" }
-gmofg-proxy-runtime = { path = "../proxy" }
+intercept-proxy-application = { path = "../application" }
+intercept-proxy-infrastructure = { path = "../infrastructure" }
+intercept-proxy-product-api = { path = "../product-api" }
+intercept-proxy-runtime = { path = "../proxy" }
 parking_lot.workspace = true
 thiserror.workspace = true
 tokio.workspace = true
@@ -18,9 +18,12 @@ tracing.workspace = true
 [dev-dependencies]
 async-trait.workspace = true
 chrono.workspace = true
+rusqlite.workspace = true
+serde_json.workspace = true
 tempfile.workspace = true
 uuid.workspace = true
-gmofg-proxy-product-payment = { path = "../product-payment" }
+wasm-encoder.workspace = true
+zip.workspace = true
 
 [lints]
 workspace = true

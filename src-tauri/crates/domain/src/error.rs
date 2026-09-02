@@ -9,83 +9,83 @@ use specta::Type;
 use std::collections::BTreeMap;
 use thiserror::Error;
 
-#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(rename_all = "SCREAMING_SNAKE_CASE")]
-pub enum ErrorCode {
-    ProxyAlreadyRunning,
-    ProxyNotRunning,
-    OperationInProgress,
-    PortInUse,
-    ConfigInvalid,
-    RevisionConflict,
-    CertificateNotReady,
-    CertificateInvalid,
-    Pkcs12PasswordInvalid,
-    DpapiProtectFailed,
-    DpapiUnprotectFailed,
-    TlsHandshakeFailed,
-    UpstreamConnectTimeout,
-    UpstreamWriteTimeout,
-    UpstreamReadTimeout,
-    BodyTooLarge,
-    HeaderLimitExceeded,
-    BodyDecodeFailed,
-    BodyEncodeFailed,
-    JsonInvalid,
-    RuleInvalid,
-    RuleConflictWarning,
-    BreakpointNotFound,
-    BreakpointAlreadyResolved,
-    BreakpointClientDisconnected,
-    BreakpointProxyStopped,
-    ResourceExhausted,
-    EventCursorExpired,
-    ExportFailed,
-    ImportFailed,
-    DatabaseMigrationFailed,
-    InvalidStateTransition,
-    InternalError,
+macro_rules! define_error_codes {
+    ($( $(#[$metadata:meta])* $variant:ident => $wire:literal, )+) => {
+        #[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+        pub enum ErrorCode {
+            $(
+                $(#[$metadata])*
+                #[serde(rename = $wire)]
+                $variant,
+            )+
+        }
+
+        impl ErrorCode {
+            /// Every stable wire code, for generated unknown-boundary validators.
+            pub const ALL: &'static [Self] = &[$(Self::$variant,)+];
+
+            #[must_use]
+            pub const fn as_str(self) -> &'static str {
+                match self {
+                    $(Self::$variant => $wire,)+
+                }
+            }
+        }
+    };
 }
 
-impl ErrorCode {
-    #[must_use]
-    pub const fn as_str(self) -> &'static str {
-        match self {
-            Self::ProxyAlreadyRunning => "PROXY_ALREADY_RUNNING",
-            Self::ProxyNotRunning => "PROXY_NOT_RUNNING",
-            Self::OperationInProgress => "OPERATION_IN_PROGRESS",
-            Self::PortInUse => "PORT_IN_USE",
-            Self::ConfigInvalid => "CONFIG_INVALID",
-            Self::RevisionConflict => "REVISION_CONFLICT",
-            Self::CertificateNotReady => "CERTIFICATE_NOT_READY",
-            Self::CertificateInvalid => "CERTIFICATE_INVALID",
-            Self::Pkcs12PasswordInvalid => "PKCS12_PASSWORD_INVALID",
-            Self::DpapiProtectFailed => "DPAPI_PROTECT_FAILED",
-            Self::DpapiUnprotectFailed => "DPAPI_UNPROTECT_FAILED",
-            Self::TlsHandshakeFailed => "TLS_HANDSHAKE_FAILED",
-            Self::UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
-            Self::UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
-            Self::UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
-            Self::BodyTooLarge => "BODY_TOO_LARGE",
-            Self::HeaderLimitExceeded => "HEADER_LIMIT_EXCEEDED",
-            Self::BodyDecodeFailed => "BODY_DECODE_FAILED",
-            Self::BodyEncodeFailed => "BODY_ENCODE_FAILED",
-            Self::JsonInvalid => "JSON_INVALID",
-            Self::RuleInvalid => "RULE_INVALID",
-            Self::RuleConflictWarning => "RULE_CONFLICT_WARNING",
-            Self::BreakpointNotFound => "BREAKPOINT_NOT_FOUND",
-            Self::BreakpointAlreadyResolved => "BREAKPOINT_ALREADY_RESOLVED",
-            Self::BreakpointClientDisconnected => "BREAKPOINT_CLIENT_DISCONNECTED",
-            Self::BreakpointProxyStopped => "BREAKPOINT_PROXY_STOPPED",
-            Self::ResourceExhausted => "RESOURCE_EXHAUSTED",
-            Self::EventCursorExpired => "EVENT_CURSOR_EXPIRED",
-            Self::ExportFailed => "EXPORT_FAILED",
-            Self::ImportFailed => "IMPORT_FAILED",
-            Self::DatabaseMigrationFailed => "DATABASE_MIGRATION_FAILED",
-            Self::InvalidStateTransition => "INVALID_STATE_TRANSITION",
-            Self::InternalError => "INTERNAL_ERROR",
-        }
-    }
+define_error_codes! {
+    ProxyAlreadyRunning => "PROXY_ALREADY_RUNNING",
+    ProxyNotRunning => "PROXY_NOT_RUNNING",
+    OperationInProgress => "OPERATION_IN_PROGRESS",
+    PortInUse => "PORT_IN_USE",
+    ConfigInvalid => "CONFIG_INVALID",
+    RevisionConflict => "REVISION_CONFLICT",
+    CertificateNotReady => "CERTIFICATE_NOT_READY",
+    CertificateInvalid => "CERTIFICATE_INVALID",
+    Pkcs12PasswordInvalid => "PKCS12_PASSWORD_INVALID",
+    DpapiProtectFailed => "DPAPI_PROTECT_FAILED",
+    DpapiUnprotectFailed => "DPAPI_UNPROTECT_FAILED",
+    TlsHandshakeFailed => "TLS_HANDSHAKE_FAILED",
+    UpstreamConnectTimeout => "UPSTREAM_CONNECT_TIMEOUT",
+    UpstreamWriteTimeout => "UPSTREAM_WRITE_TIMEOUT",
+    UpstreamReadTimeout => "UPSTREAM_READ_TIMEOUT",
+    BodyTooLarge => "BODY_TOO_LARGE",
+    HeaderLimitExceeded => "HEADER_LIMIT_EXCEEDED",
+    BodyDecodeFailed => "BODY_DECODE_FAILED",
+    BodyEncodeFailed => "BODY_ENCODE_FAILED",
+    JsonInvalid => "JSON_INVALID",
+    RuleInvalid => "RULE_INVALID",
+    /// 协议 Document 规则执行被调用方显式取消。
+    RuleExecutionCancelled => "RULE_EXECUTION_CANCELLED",
+    RuleConflictWarning => "RULE_CONFLICT_WARNING",
+    /// 协议包 ID 或 `SemVer` 不符合稳定身份约束。
+    ProtocolPackageInvalid => "PROTOCOL_PACKAGE_INVALID",
+    /// Document Schema 的身份、字段声明或聚合结构无效。
+    DocumentSchemaInvalid => "DOCUMENT_SCHEMA_INVALID",
+    /// A number is not finite.
+    DocumentNumberInvalid => "DOCUMENT_NUMBER_INVALID",
+    /// An integer JSON literal exceeds JavaScript's exact integer range.
+    DocumentUnsafeInteger => "DOCUMENT_UNSAFE_INTEGER",
+    /// JSON Pointer syntax is invalid.
+    DocumentPointerInvalid => "DOCUMENT_POINTER_INVALID",
+    /// A requested Document path or array index does not exist.
+    DocumentPathMissing => "DOCUMENT_PATH_MISSING",
+    /// A Document path traverses or targets the wrong JSON type.
+    DocumentPathTypeMismatch => "DOCUMENT_PATH_TYPE_MISMATCH",
+    /// 脚本或调用方访问了 Schema 未声明的字段。
+    DocumentFieldUndeclared => "DOCUMENT_FIELD_UNDECLARED",
+    /// 字段已声明，但当前 Frame 尚未给它赋值。
+    DocumentFieldUnassigned => "DOCUMENT_FIELD_UNASSIGNED",
+    /// 写入值的类型与 Schema 声明不一致。
+    DocumentFieldTypeMismatch => "DOCUMENT_FIELD_TYPE_MISMATCH",
+    ResourceExhausted => "RESOURCE_EXHAUSTED",
+    EventCursorExpired => "EVENT_CURSOR_EXPIRED",
+    ExportFailed => "EXPORT_FAILED",
+    ImportFailed => "IMPORT_FAILED",
+    DatabaseSchemaInvalid => "DATABASE_SCHEMA_INVALID",
+    InvalidStateTransition => "INVALID_STATE_TRANSITION",
+    InternalError => "INTERNAL_ERROR",
 }
 
 impl std::fmt::Display for ErrorCode {
@@ -154,61 +154,18 @@ mod tests {
             serde_json::to_string(&ErrorCode::BodyTooLarge).unwrap(),
             "\"BODY_TOO_LARGE\""
         );
-        let required = [
-            (ErrorCode::ProxyAlreadyRunning, "PROXY_ALREADY_RUNNING"),
-            (ErrorCode::ProxyNotRunning, "PROXY_NOT_RUNNING"),
-            (ErrorCode::OperationInProgress, "OPERATION_IN_PROGRESS"),
-            (ErrorCode::PortInUse, "PORT_IN_USE"),
-            (ErrorCode::ConfigInvalid, "CONFIG_INVALID"),
-            (ErrorCode::RevisionConflict, "REVISION_CONFLICT"),
-            (ErrorCode::CertificateNotReady, "CERTIFICATE_NOT_READY"),
-            (ErrorCode::CertificateInvalid, "CERTIFICATE_INVALID"),
-            (ErrorCode::Pkcs12PasswordInvalid, "PKCS12_PASSWORD_INVALID"),
-            (ErrorCode::DpapiProtectFailed, "DPAPI_PROTECT_FAILED"),
-            (ErrorCode::DpapiUnprotectFailed, "DPAPI_UNPROTECT_FAILED"),
-            (ErrorCode::TlsHandshakeFailed, "TLS_HANDSHAKE_FAILED"),
-            (
-                ErrorCode::UpstreamConnectTimeout,
-                "UPSTREAM_CONNECT_TIMEOUT",
-            ),
-            (ErrorCode::UpstreamWriteTimeout, "UPSTREAM_WRITE_TIMEOUT"),
-            (ErrorCode::UpstreamReadTimeout, "UPSTREAM_READ_TIMEOUT"),
-            (ErrorCode::BodyTooLarge, "BODY_TOO_LARGE"),
-            (ErrorCode::HeaderLimitExceeded, "HEADER_LIMIT_EXCEEDED"),
-            (ErrorCode::BodyDecodeFailed, "BODY_DECODE_FAILED"),
-            (ErrorCode::BodyEncodeFailed, "BODY_ENCODE_FAILED"),
-            (ErrorCode::JsonInvalid, "JSON_INVALID"),
-            (ErrorCode::RuleInvalid, "RULE_INVALID"),
-            (ErrorCode::RuleConflictWarning, "RULE_CONFLICT_WARNING"),
-            (ErrorCode::BreakpointNotFound, "BREAKPOINT_NOT_FOUND"),
-            (
-                ErrorCode::BreakpointAlreadyResolved,
-                "BREAKPOINT_ALREADY_RESOLVED",
-            ),
-            (
-                ErrorCode::BreakpointClientDisconnected,
-                "BREAKPOINT_CLIENT_DISCONNECTED",
-            ),
-            (
-                ErrorCode::BreakpointProxyStopped,
-                "BREAKPOINT_PROXY_STOPPED",
-            ),
-            (ErrorCode::ResourceExhausted, "RESOURCE_EXHAUSTED"),
-            (ErrorCode::EventCursorExpired, "EVENT_CURSOR_EXPIRED"),
-            (ErrorCode::ExportFailed, "EXPORT_FAILED"),
-            (ErrorCode::ImportFailed, "IMPORT_FAILED"),
-            (
-                ErrorCode::DatabaseMigrationFailed,
-                "DATABASE_MIGRATION_FAILED",
-            ),
-            (ErrorCode::InternalError, "INTERNAL_ERROR"),
-        ];
-        for (code, expected) in required {
-            assert_eq!(code.as_str(), expected);
+        let mut wire_values = std::collections::BTreeSet::new();
+        for code in ErrorCode::ALL {
+            let expected = code.as_str();
+            assert!(
+                wire_values.insert(expected),
+                "duplicate stable code {expected}"
+            );
             assert_eq!(
-                serde_json::to_string(&code).unwrap(),
+                serde_json::to_string(code).unwrap(),
                 format!("\"{expected}\"")
             );
         }
+        assert_eq!(wire_values.len(), ErrorCode::ALL.len());
     }
 }

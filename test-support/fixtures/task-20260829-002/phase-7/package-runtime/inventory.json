@@ -1,0 +1,25 @@
+{
+  "schemaVersion": 1,
+  "contract_owner": "intercept-proxy-package-contract",
+  "archive_reader": "intercept-proxy-package-runtime",
+  "discoverable_tests": {
+    "archive": [
+      "archive_entry_file_total_ratio_and_depth_limits_fail_closed",
+      "declared_and_actual_entry_sizes_must_match",
+      "directory_wrappers_typescript_and_non_js_payloads_are_rejected",
+      "manifest_json_uses_the_shared_strict_contract",
+      "missing_fixed_root_file_is_protocol_package_invalid",
+      "root_manifest_protocol_display_and_relative_js_modules_are_accepted"
+    ],
+    "transport": [
+      "cancelling_pre_registration_connect_drops_the_silent_peer",
+      "fixed_decode_request_and_typed_result_use_shared_contract",
+      "frame_result_is_validated_against_the_sent_buffer",
+      "many_sequential_rpc_ids_do_not_accumulate_and_duplicate_reply_fails_closed",
+      "null_document_is_a_present_success_result",
+      "package_initiates_idless_registration_and_proxy_sends_no_reply",
+      "raw_logical_frame_limit_is_independent_from_encoded_wire_budget"
+    ]
+  },
+  "legacy_internal_allowlist": []
+}

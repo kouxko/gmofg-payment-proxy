@@ -1,0 +1,66 @@
+# App 端接入与排障建议
+
+这份说明帮助 AI 把 Intercept Proxy 的诊断证据转换成 App 端可执行的修改建议。
+建议必须区分“已经观察到的事实”和“尚未验证的假设”，并给出最小修改、替代方案和验证方法。
+
+## 先判断 App 使用哪种接入方式
+
+- **普通 HTTP 代理**：App 或系统明确配置代理地址。检查代理配置、绕过列表、DNS 和 HTTP 客户端行为。
+- **透明转发**：App 不配置代理，由设备网络接管把连接导向代理。检查设备方案、原始目标、路由和当前运行所有者。
+- **Socket 自定义协议**：App 连接 TCP/TLS 入口并发送协议报文。检查报文边界、协议包、方向字段结构和重建结果。
+- **HTTPS 解密**：需要 App 信任代理签发证书。检查系统/应用信任策略、主机名验证和证书固定。
+
+## App 端常见修改方向
+
+### Android 网络安全
+
+- Android 7 及以上目标版本通常不会默认信任用户安装的 CA。测试版本可通过
+  `networkSecurityConfig` 明确允许测试 CA；生产版本不要无条件信任用户 CA。
+- 如果 App 使用证书固定（pinning），代理证书即使受系统信任也可能被拒绝。应为测试构建提供可审计的关闭或测试 pin，不能在生产构建静默禁用校验。
+- `Trust anchor not found` 优先检查信任根；主机名错误优先检查访问域名与证书 SAN；两者不是同一问题。
+
+### HTTP 客户端
+
+- 明确请求是否经过系统代理、自定义代理或透明路由；不要同时启用两种互相冲突的方式。
+- 修改 JSON、表单或文本 Body 后，客户端/服务端必须重新计算 `Content-Length`；分块传输则保持正确的 chunk framing。
+- 遇到重试或重复请求时，检查 App 的超时、重试策略和业务幂等性，不能只提高代理超时掩盖问题。
+
+### Socket/TLS 客户端
+
+- 明确一条完整报文如何分帧：固定长度、长度头、分隔符或其他边界。半包/粘包必须在协议层处理。
+- TLS 连接要分别验证 TCP 建连、TLS 握手、证书信任和业务报文；下层成功不等于业务成功。
+- App 与服务端使用的协议版本、字符集、长度单位和字段编码必须与所选协议包一致。
+
+### 协议包与规则证据
+
+- HTTP Body Protocol 与 Scripted Socket 都通过精确 `id + version` 的协议包执行；本地包是
+  单文件 Component，由 Proxy 主进程直接加载。远端源码调试进程才通过 `/packages` 注册；两者使用
+  同一份协议语义，但远端 JSON-RPC 编码不是本地调用合同。
+- 统一 Document 规则只在 `Proxy -> Server` 和 `Proxy -> App` 两个写出边界运行。App 侧看到连接成功
+  不能证明 Decode、Rules 或 Encode 成功，应按同一 Exchange 时间线核对各阶段。
+- `processed.changes` 是 typed action 摘要；`changes_truncated=true` 只表示有界过程证据不完整。
+  应继续比较 `final_document`、`encoded.context`、`sent.context` 和 App/Server 实际收到的内容。
+- 外部包错误用 `external_package_call.stable_code`、stage、method、request ID 定位；不要让 App 逻辑依赖
+  可变化的远端错误文案，也不要把 Display 回退误判成业务转发失败。
+
+## AI 应如何给建议
+
+1. 先用 `reproduction_report` 读取精确 Workspace/Listener 的配置、运行状态、转发方式、端点、规则、协议包和复现步骤。
+2. 报告不包含 Exchange observation 或 HTTP 抓包；分别用 `exchange_observation_query/get`、`http_capture_query/get` 补充线路证据。
+3. 用 `application_log_query` 按时间、级别、模块、Listener/connection/package ID 或关键字分页读取持久运行日志；关键记录再用 `application_log_get` 获取。
+4. 明确失败发生在 App→代理、代理处理、代理→上游或返回路径。
+5. 给出一个最小修改方案，并补充 1 至 2 个合理替代方案。
+6. 每个方案说明影响范围、风险、回退方法和可观察的验证结果。
+7. 如果证据不足，列出 `has_more`、淘汰范围、采集错误及需要补充的日志/抓包字段，不把猜测写成结论。
+
+没有执行的真实设备、远端、系统权限、人工 App 或 VoiceOver 验证必须写为 `NOT_RUN`，说明缺失条件和
+复测入口。`BLOCKED` 只用于已经被明确外部条件阻塞的必测层；实现违反合同应写 `FAILED`，不能用单元
+测试 PASS 覆盖这些状态。
+
+34 个 MCP 查询工具只提供读取和建议能力；五个环境配置工具可以在分层验证、完整预览和一次性
+confirmation token 后修改一个明确目标 Workspace。它们不会修改 App 源码、应用级 Settings、任意
+本机文件或其他 Workspace，也不会自动启停 Listener。MCP 监听全接口明文 HTTP 且无认证，不能用作
+安全远程管理入口；私钥和密码不进入公开输出，confirmation token 只在 create 成功响应中交付，
+提交输入仍可能被网络观察者读取。
+
+桌面用户可在“日志”页选择精确入口并通过原生保存对话框导出同源 Markdown 报告。

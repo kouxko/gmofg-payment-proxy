@@ -10,8 +10,8 @@ use chrono::{DateTime, Utc};
 use serde::{Deserialize, Serialize};
 use specta::Type;
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-/// 第 N 次命中和审计使用的终端身份。
+#[derive(Clone, Debug, Deserialize, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
+/// 规则审计使用的终端身份。
 ///
 /// 同一 IP 但证书指纹不同的客户端视为不同终端。
 pub struct TerminalIdentity {

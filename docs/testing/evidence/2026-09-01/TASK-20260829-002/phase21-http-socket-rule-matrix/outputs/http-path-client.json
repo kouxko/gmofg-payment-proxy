@@ -1,0 +1,39 @@
+{
+  "name": "path",
+  "method": "GET",
+  "target": "/orders/123?mode=test",
+  "status": 200,
+  "response": {
+    "remote": "127.0.0.1:62245",
+    "method": "GET",
+    "target": "/orders/123?mode=test",
+    "headers": {
+      "accept-encoding": [
+        "identity"
+      ],
+      "content-type": [
+        "application/json"
+      ],
+      "x-path-hit": [
+        "yes"
+      ],
+      "host": [
+        "127.0.0.1:18083"
+      ],
+      "connection": [
+        "close"
+      ],
+      "content-length": [
+        "45"
+      ]
+    },
+    "body_hex": "7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d",
+    "body_text": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+    "document": {
+      "customer": {
+        "age": 17,
+        "name": "original"
+      }
+    }
+  }
+}

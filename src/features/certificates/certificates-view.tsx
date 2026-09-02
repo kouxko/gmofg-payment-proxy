@@ -1,33 +1,15 @@
 "use client";
 
 /**
- * 两段 mTLS 证书材料管理页面。
+ * 本机调试 Root CA 与代理服务端证书管理页面。
  *
  * 所有证书读取、生成、验证、文件对话框和密钥保护都由 Rust 执行。前端绝不接触
- * 私钥字节，也不保存 PKCS12 密码；密码仅存在于当前弹窗状态，成功或关闭即清除。
+ * 私钥字节。某条监听启用固定 Server 后使用的 Server CA 与可选 mTLS 客户端身份，统一在
+ * “代理入口”页面按监听导入、选择并测试，避免全局证书误用于其他 Server。
  */
 
 import { useState } from "react";
-import {
-  Alert,
-  AlertDialog,
-  Button,
-  Card,
-  Chip,
-  Input,
-  Label,
-  Modal,
-  Spinner,
-  Table,
-  TextField,
-  toast,
-} from "@heroui/react";
-import {
-  ArrowDownToLine,
-  FileArrowUp,
-  Shield,
-  TrashBin,
-} from "@gravity-ui/icons";
+import { Alert, Button, toast } from "@heroui/react";
 import type {
   CertificateOverviewViewModel,
   FieldValidationViewModel,
@@ -35,10 +17,18 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { formatTimestamp, toneColor } from "@/lib/format";
+import { toneColor } from "@/lib/format";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import {
+  CertificateOverviewSection,
+  type CertificatePendingAction,
+} from "./certificate-overview-section";
+import { CertificateResetSection } from "./certificate-reset-section";
+import { CertificateValidationSection } from "./certificate-validation-section";
 
 export function CertificatesView() {
+  const { navigate } = useWorkspaceNavigation();
   const overview =
     useIpcQuery<CertificateOverviewViewModel>("certificate-overview", () =>
       callCommand(commands.certificateOverview()),
@@ -54,29 +44,22 @@ export function CertificatesView() {
     ["settings_changed", "snapshot_required"],
     settings.refresh,
   );
-  const [password, setPassword] = useState("");
-  const [pkcs12Open, setPkcs12Open] = useState(false);
-  const [pkcs12Pending, setPkcs12Pending] = useState(false);
-  const [pkcs12Error, setPkcs12Error] = useState<string>();
-  const [pendingAction, setPendingAction] = useState<
-    "generate" | "reissue" | "import_upstream" | "export" | "validate"
-  >();
+  const [pendingAction, setPendingAction] =
+    useState<CertificatePendingAction>();
   const [resetCaOpen, setResetCaOpen] = useState(false);
   const [resetCaPending, setResetCaPending] = useState(false);
-  const [validation, setValidation] =
-    useState<FieldValidationViewModel>();
+  const [validation, setValidation] = useState<FieldValidationViewModel>();
   const leafSans = settings.data?.stored.leaf_sans;
-  const writePending =
-    pendingAction != null || pkcs12Pending || resetCaPending;
+  const writePending = pendingAction != null || resetCaPending;
+  const localItems = (overview.data?.items ?? []).filter(
+    (item) => item.kind === "local_root_ca" || item.kind === "proxy_leaf",
+  );
 
   async function refreshAfter(
-    action: Exclude<
-      NonNullable<typeof pendingAction>,
-      "export" | "validate"
-    >,
+    action: "generate" | "reissue",
     load: () => Promise<CertificateOverviewViewModel>,
   ) {
-    // 生成/重签/导入成功后统一重取 overview，页面不手工拼接证书状态。
+    // 生成/重签成功后统一重取 overview，页面不手工拼接证书状态。
     if (writePending) return;
     setPendingAction(action);
     try {
@@ -87,26 +70,6 @@ export function CertificatesView() {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
       setPendingAction(undefined);
-    }
-  }
-
-  async function importPkcs12() {
-    if (writePending) return;
-    setPkcs12Pending(true);
-    setPkcs12Error(undefined);
-    try {
-      const result = await callCommand(
-        commands.certificateImportPkcs12(password),
-      );
-      toast(result.status_text, { variant: toneColor(result.ui_tone) });
-      await overview.refresh();
-      // 密码没有持久化需求，导入成功后立即从 React state 清除。
-      setPassword("");
-      setPkcs12Open(false);
-    } catch (reason) {
-      setPkcs12Error(errorMessage(reason));
-    } finally {
-      setPkcs12Pending(false);
     }
   }
 
@@ -135,9 +98,7 @@ export function CertificatesView() {
     if (writePending) return;
     setPendingAction("validate");
     try {
-      setValidation(
-        await callCommand(commands.certificateValidate()),
-      );
+      setValidation(await callCommand(commands.certificateValidate()));
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
@@ -150,10 +111,7 @@ export function CertificatesView() {
     setResetCaPending(true);
     try {
       const result = await callCommand(
-        commands.certificateResetCa(
-          overview.data?.revision ?? 0,
-          true,
-        ),
+        commands.certificateResetCa(overview.data?.revision ?? 0, true),
       );
       toast(result.status_text, { variant: toneColor(result.ui_tone) });
       await overview.refresh();
@@ -167,39 +125,8 @@ export function CertificatesView() {
 
   return (
     <section className="space-y-4 p-5">
-      <h1 className="text-2xl font-semibold">证书管理</h1>
-      <Alert status="warning">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Title>本机证书材料由当前系统用户密钥保护</Alert.Title>
-          <Alert.Description>
-            Windows 使用 DPAPI，macOS 使用 Keychain 保护本机叶子私钥和导入的
-            PKCS12 身份；密码不持久化、不记录日志，并在提交成功或关闭弹窗后清除。
-          </Alert.Description>
-        </Alert.Content>
-      </Alert>
-      <Alert status="danger">
-        <Alert.Indicator />
-        <Alert.Content>
-          <Alert.Title>统一测试 Root CA 仅限隔离测试环境</Alert.Title>
-          <Alert.Description>
-            当前简化测试模式随安装包提供统一签发能力，凭据可能被提取；不得用于生产、预生产或真实商户信任体系。Root
-            CA 首次集成与轮换由受控的测试客户端构建/发布流程完成。
-          </Alert.Description>
-        </Alert.Content>
-      </Alert>
-      {!leafSans && (
-        <Alert status="danger">
-          <Alert.Indicator />
-          <Alert.Content>
-            <Alert.Title>设置快照不可用</Alert.Title>
-            <Alert.Description>
-              已禁用证书初始化和叶子证书重签，避免使用空 SAN
-              继续执行。请先恢复 Rust 核心连接。
-            </Alert.Description>
-          </Alert.Content>
-        </Alert>
-      )}
+      <h1 className="sr-only">证书管理</h1>
+      <CertificateSafetyAlerts leafSansAvailable={leafSans != null} />
       {overview.error && (
         <Alert status="danger">
           <Alert.Indicator />
@@ -217,360 +144,95 @@ export function CertificatesView() {
         </Alert>
       )}
 
-      <div className="space-y-4">
-        <Card>
-          <Card.Header>
-            <Card.Title>A. 统一测试 CA 与 App → Proxy 服务端身份</Card.Title>
-          </Card.Header>
-          <Card.Content className="space-y-4">
-            <div
-              data-testid="certificate-overview-grid"
-              className="grid grid-cols-2 gap-x-6 gap-y-4 max-[960px]:grid-cols-1"
-            >
-              {(overview.data?.items ?? []).map((item) => (
-                <div
-                  key={item.kind}
-                  className="min-w-0 space-y-2 border-b border-[var(--telemetry-line)] pb-4"
-                >
-                  <div className="flex flex-wrap items-center gap-2 font-semibold">
-                    <span className="min-w-0 break-words">{item.usage}</span>
-                    <Chip
-                      size="sm"
-                      color={toneColor(item.ui_tone)}
-                      variant="soft"
-                    >
-                      {item.status_text}
-                    </Chip>
-                  </div>
-                  <dl className="grid min-w-0 grid-cols-[112px_minmax(0,1fr)] gap-x-3 gap-y-2 text-sm max-[560px]:grid-cols-1 max-[560px]:gap-y-1">
-                    <dt>主题</dt>
-                    <dd className="min-w-0 break-words">{item.subject}</dd>
-                    <dt>SAN</dt>
-                    <dd className="min-w-0 break-words">
-                      {item.sans.join("、") || "—"}
-                    </dd>
-                    <dt>有效期</dt>
-                    <dd className="min-w-0 break-words">
-                      {formatTimestamp(item.valid_from)} ～{" "}
-                      {formatTimestamp(item.valid_until)}
-                    </dd>
-                    <dt>SHA-256 指纹</dt>
-                    <dd className="min-w-0 break-all font-mono text-xs">
-                      {item.sha256_fingerprint}
-                    </dd>
-                  </dl>
-                </div>
-              ))}
-            </div>
-            <div className="flex flex-wrap gap-3">
-              {overview.data?.can_initialize && (
-                <Button
-                  variant="primary"
-                  isDisabled={
-                    !overview.data?.can_change || !leafSans || writePending
-                  }
-                  onPress={() =>
-                    void refreshAfter(
-                      "generate",
-                      async () =>
-                        callCommand(
-                          commands.certificateGenerateCa(
-                            await currentLeafSans(),
-                          ),
-                        ),
-                    )
-                  }
-                >
-                  {pendingAction === "generate"
-                    ? "正在生成…"
-                    : "初始化本机测试证书"}
-                </Button>
-              )}
-              <Button
-                variant="outline"
-                isDisabled={writePending}
-                onPress={() => void exportCa()}
-              >
-                <ArrowDownToLine className="size-4" />
-                {pendingAction === "export"
-                  ? "正在导出…"
-                  : "导出测试客户端编译用 Root CA"}
-              </Button>
-              <Button
-                variant="outline"
-                isDisabled={
-                  !overview.data?.can_change || !leafSans || writePending
-                }
-                onPress={() =>
-                  void refreshAfter(
-                    "reissue",
-                    async () =>
-                      callCommand(
-                        commands.certificateReissueLeaf(
-                          overview.data!.revision,
-                          await currentLeafSans(),
-                        ),
-                      ),
-                  )
-                }
-              >
-                {pendingAction === "reissue"
-                  ? "正在重签…"
-                  : "重新签发服务端证书"}
-              </Button>
-            </div>
-          </Card.Content>
-        </Card>
+      <CertificateOverviewSection
+        overview={overview.data}
+        localItems={localItems}
+        leafSansAvailable={leafSans != null}
+        writePending={writePending}
+        pendingAction={pendingAction}
+        onGenerate={() =>
+          void refreshAfter("generate", async () =>
+            callCommand(
+              commands.certificateGenerateCa(await currentLeafSans()),
+            ),
+          )
+        }
+        onExport={() => void exportCa()}
+        onReissue={() =>
+          void refreshAfter("reissue", async () =>
+            callCommand(
+              commands.certificateReissueLeaf(
+                overview.data!.revision,
+                await currentLeafSans(),
+              ),
+            ),
+          )
+        }
+        onOpenListeners={() => navigate("/listeners")}
+      />
+      <CertificateValidationSection
+        localItems={localItems}
+        isLoading={overview.isLoading}
+        error={overview.error}
+        validation={validation}
+        writePending={writePending}
+        validating={pendingAction === "validate"}
+        onValidate={() => void validate()}
+      />
+      <CertificateResetSection
+        isOpen={resetCaOpen}
+        resetPending={resetCaPending}
+        canReset={overview.data?.can_change ?? false}
+        writePending={writePending}
+        onOpenChange={(open) => {
+          if (!open && resetCaPending) return;
+          setResetCaOpen(open);
+        }}
+        onReset={() => void resetCa()}
+      />
+    </section>
+  );
+}
 
-        <Card>
-          <Card.Header>
-            <Card.Title>B. Proxy → 上游服务器客户端身份</Card.Title>
-          </Card.Header>
-          <Card.Content
-            data-testid="certificate-upstream-actions"
-            className="grid grid-cols-[minmax(0,1fr)_auto] items-center gap-4 max-[860px]:grid-cols-1"
-          >
-            <p className="text-sm text-[var(--telemetry-muted)]">
-              导入产品原有客户端 P12 作为上游客户端身份。产品原始上游 CA
-              已内置并默认作为上游服务器信任锚；环境证书变化时可以选择文件替换。
-              上游信任与下游 Proxy 测试 CA 无关。
-            </p>
-            <div className="flex flex-wrap justify-end gap-3 max-[860px]:justify-start">
-              <Modal
-                isOpen={pkcs12Open}
-                onOpenChange={(open) => {
-                  if (!open && pkcs12Pending) return;
-                  setPkcs12Open(open);
-                  if (!open) {
-                    setPassword("");
-                    setPkcs12Error(undefined);
-                  }
-                }}
-              >
-                <Button
-                  variant="outline"
-                  isDisabled={!overview.data?.can_change || writePending}
-                >
-                  <FileArrowUp className="size-4" />
-                  导入 / 替换 PKCS12
-                </Button>
-                <Modal.Backdrop isDismissable={!pkcs12Pending}>
-                  <Modal.Container size="sm">
-                    <Modal.Dialog>
-                      <Modal.Header>
-                        <Modal.Heading>导入共享 PKCS12</Modal.Heading>
-                      </Modal.Header>
-                      <Modal.Body>
-                        <TextField>
-                          <Label>PKCS12 密码</Label>
-                          <Input
-                            type="password"
-                            value={password}
-                            onChange={(event) => setPassword(event.target.value)}
-                          />
-                        </TextField>
-                        <p className="mt-2 text-sm text-[var(--telemetry-muted)]">
-                          文件选择和原始字节读取由 Rust 原生侧完成。
-                        </p>
-                        {pkcs12Error && (
-                          <Alert status="danger" className="mt-3">
-                            <Alert.Indicator />
-                            <Alert.Content>
-                              <Alert.Title>PKCS12 导入失败</Alert.Title>
-                              <Alert.Description>
-                                {pkcs12Error}
-                              </Alert.Description>
-                            </Alert.Content>
-                          </Alert>
-                        )}
-                      </Modal.Body>
-                      <Modal.Footer>
-                        <Button
-                          slot="close"
-                          variant="outline"
-                          isDisabled={pkcs12Pending}
-                        >
-                          取消
-                        </Button>
-                        <Button
-                          variant="primary"
-                          isDisabled={pkcs12Pending}
-                          onPress={() => void importPkcs12()}
-                        >
-                          {pkcs12Pending ? "正在导入…" : "选择文件并导入"}
-                        </Button>
-                      </Modal.Footer>
-                    </Modal.Dialog>
-                  </Modal.Container>
-                </Modal.Backdrop>
-              </Modal>
-              <Button
-                variant="outline"
-                isDisabled={!overview.data?.can_change || writePending}
-                onPress={() =>
-                  void refreshAfter(
-                    "import_upstream",
-                    () => callCommand(commands.certificateImportUpstreamCa()),
-                  )
-                }
-              >
-                <FileArrowUp className="size-4" />
-                {pendingAction === "import_upstream"
-                  ? "正在导入…"
-                  : "选择性替换上游 CA"}
-              </Button>
-            </div>
-          </Card.Content>
-        </Card>
-      </div>
-
-      <div className="grid grid-cols-[1fr_1.2fr] items-start gap-4 max-[1180px]:grid-cols-1">
-        <Card>
-          <Card.Header>
-            <Card.Title>证书检查结果</Card.Title>
-            <Button
-              className="ml-auto"
-              size="sm"
-              variant="outline"
-              isDisabled={writePending}
-              onPress={() => void validate()}
-            >
-              {pendingAction === "validate" ? "正在检查…" : "重新检查"}
-            </Button>
-          </Card.Header>
-          <Card.Content>
-            {overview.isLoading ? (
-              <div className="grid min-h-32 place-items-center">
-                <Spinner aria-label="正在读取证书检查结果" />
-              </div>
-            ) : overview.error ? (
-              <Alert status="danger">
-                <Alert.Content>
-                  <Alert.Title>证书检查结果暂不可用</Alert.Title>
-                  <Alert.Description>{overview.error}</Alert.Description>
-                </Alert.Content>
-              </Alert>
-            ) : (overview.data?.items.length ?? 0) === 0 ? (
-              <Alert status="default">
-                <Alert.Content>
-                  <Alert.Title>暂无证书检查结果</Alert.Title>
-                  <Alert.Description>
-                    初始化本机测试证书或导入上游材料后，此处显示证书状态与校验详情。
-                  </Alert.Description>
-                </Alert.Content>
-              </Alert>
-            ) : (
-              <Table>
-                <Table.ScrollContainer>
-                  <Table.Content aria-label="证书检查结果">
-                    <Table.Header>
-                      <Table.Column isRowHeader>检查项</Table.Column>
-                      <Table.Column>状态</Table.Column>
-                      <Table.Column>详情</Table.Column>
-                    </Table.Header>
-                    <Table.Body>
-                      {(overview.data?.items ?? []).map((item) => (
-                        <Table.Row key={item.kind} id={item.kind}>
-                          <Table.Cell>{item.usage}</Table.Cell>
-                          <Table.Cell>{item.status_text}</Table.Cell>
-                          <Table.Cell>{item.subject}</Table.Cell>
-                        </Table.Row>
-                      ))}
-                    </Table.Body>
-                  </Table.Content>
-                </Table.ScrollContainer>
-              </Table>
-            )}
-            {validation && (
-              <Alert
-                status={validation.valid ? "success" : "danger"}
-                className="mt-3"
-              >
-                {validation.valid
-                  ? validation.warnings.join("；") || "全部证书检查通过。"
-                  : Object.values(validation.field_errors).flat().join("；")}
-              </Alert>
-            )}
-          </Card.Content>
-        </Card>
-        <Card>
-          <Card.Header>
-            <Card.Title>证书信任关系说明</Card.Title>
-          </Card.Header>
-          <Card.Content className="space-y-3 text-sm">
-            {[
-              "客户端应用 → Proxy（服务端证书）：测试版客户端在构建时已内置统一测试 Root CA。",
-              "Proxy（服务端）→ 客户端应用（客户端证书）：Proxy 验证终端客户端证书。",
-              "上游服务器 → Proxy（共享客户端证书）：上游验证 Proxy 身份。",
-              "Proxy（客户端）→ 上游服务器：Proxy 使用上游 CA 验证服务器。",
-            ].map((text, index) => (
-              <div key={text} className="flex gap-3">
-                <Chip size="sm" variant="soft">
-                  {index + 1}
-                </Chip>
-                <span>{text}</span>
-              </div>
-            ))}
-          </Card.Content>
-        </Card>
-      </div>
-
-      <Alert status="danger">
-        <Alert.Indicator>
-          <Shield className="size-5" />
-        </Alert.Indicator>
+function CertificateSafetyAlerts({
+  leafSansAvailable,
+}: {
+  leafSansAvailable: boolean;
+}) {
+  return (
+    <>
+      <Alert status="warning">
+        <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>重新初始化本机服务端证书（危险操作）</Alert.Title>
+          <Alert.Title>本机证书材料由当前系统用户密钥保护</Alert.Title>
           <Alert.Description>
-            将使用同一统一测试 Root CA 重新生成本机私钥和叶子证书；测试客户端
-            无需重新导入证书。仅 Proxy 已停止时可执行。
+            Windows 使用 DPAPI，macOS 使用 Keychain 保护本机叶子私钥和导入的
+            PKCS12 身份；密码不持久化、不记录日志，并在提交成功或关闭弹窗后清除。
           </Alert.Description>
         </Alert.Content>
-        <AlertDialog
-          isOpen={resetCaOpen}
-          onOpenChange={(open) => {
-            if (!open && resetCaPending) return;
-            setResetCaOpen(open);
-          }}
-        >
-          <Button
-            variant="danger"
-            isDisabled={!overview.data?.can_change || writePending}
-          >
-            <TrashBin className="size-4" />
-            重新初始化本机证书
-          </Button>
-          <AlertDialog.Backdrop>
-            <AlertDialog.Container>
-              <AlertDialog.Dialog>
-                <AlertDialog.Header>
-                  <AlertDialog.Heading>确认重新初始化本机证书？</AlertDialog.Heading>
-                </AlertDialog.Header>
-                <AlertDialog.Body>
-                  本机服务端私钥和叶子证书将被替换；统一测试 Root CA
-                  保持不变，测试客户端无需重新编译或导入。
-                </AlertDialog.Body>
-                <AlertDialog.Footer>
-                  <Button
-                    slot="close"
-                    variant="outline"
-                    isDisabled={resetCaPending}
-                  >
-                    取消
-                  </Button>
-                  <Button
-                    variant="danger"
-                    isDisabled={resetCaPending}
-                    onPress={() => void resetCa()}
-                  >
-                    {resetCaPending ? "正在重置…" : "确认重置"}
-                  </Button>
-                </AlertDialog.Footer>
-              </AlertDialog.Dialog>
-            </AlertDialog.Container>
-          </AlertDialog.Backdrop>
-        </AlertDialog>
       </Alert>
-    </section>
+      <Alert status="danger">
+        <Alert.Indicator />
+        <Alert.Content>
+          <Alert.Title>固定测试 Root CA 仅限受控调试环境</Alert.Title>
+          <Alert.Description>
+            Windows 与 macOS 使用同一张固定测试 Root CA，便于测试客户端只内置信任一次。
+            该签发材料随测试工具分发，不具备生产密钥的安全边界，禁止用于生产、预生产或真实商户信任体系。
+          </Alert.Description>
+        </Alert.Content>
+      </Alert>
+      {!leafSansAvailable && (
+        <Alert status="danger">
+          <Alert.Indicator />
+          <Alert.Content>
+            <Alert.Title>设置快照不可用</Alert.Title>
+            <Alert.Description>
+              已禁用证书初始化和叶子证书重签，避免使用空 SAN
+              继续执行。请先恢复应用核心连接。
+            </Alert.Description>
+          </Alert.Content>
+        </Alert>
+      )}
+    </>
   );
 }

@@ -1,7 +1,6 @@
 //! 内存会话仓储及容量淘汰策略。
 //!
-//! Payload 按需求只保存在内存。达到数量或字节上限时优先淘汰最旧的已完成会话；仍被
-//! 断点占用的会话不能为了腾空间而丢失。
+//! Payload 按需求只保存在内存。达到数量或字节上限时优先淘汰最旧的已完成会话。
 
 use std::{cmp::Ordering, collections::HashMap, sync::Arc};
 
@@ -9,9 +8,9 @@ use async_trait::async_trait;
 use parking_lot::RwLock;
 
 use crate::{
-    AppError, AppResult, CapacityLedger, PageRequest, SessionDetailViewModel, SessionId,
-    SessionPageViewModel, SessionQuery, SessionQueryPort, SessionRecord, SessionSort,
-    SessionSummaryViewModel, SortDirection,
+    AppError, AppResult, CapacityLedger, SessionDetailViewModel, SessionId, SessionListViewModel,
+    SessionQuery, SessionQueryPort, SessionRecord, SessionSort, SessionSummaryViewModel,
+    SortDirection,
 };
 
 /// 会话存储的最小业务接口。
@@ -21,7 +20,7 @@ use crate::{
 pub trait SessionStore: Send + Sync + std::fmt::Debug {
     fn upsert(&self, record: SessionRecord) -> AppResult<Vec<SessionId>>;
     fn get(&self, session_id: SessionId) -> AppResult<SessionDetailViewModel>;
-    fn query(&self, query: &SessionQuery) -> SessionPageViewModel;
+    fn query(&self, query: &SessionQuery) -> SessionListViewModel;
     fn clear_completed(&self) -> usize;
     fn logical_bytes(&self) -> u64;
     fn len(&self) -> usize;
@@ -161,8 +160,7 @@ impl SessionStore for InMemorySessionStore {
             })
     }
 
-    fn query(&self, query: &SessionQuery) -> SessionPageViewModel {
-        let normalized_page = query.page.normalized();
+    fn query(&self, query: &SessionQuery) -> SessionListViewModel {
         let keyword = normalize_filter(query.keyword.as_deref());
         let terminal_ip = normalize_filter(query.terminal_ip.as_deref());
         let result = normalize_filter(query.result.as_deref());
@@ -219,24 +217,9 @@ impl SessionStore for InMemorySessionStore {
         });
 
         let total = items.len();
-        let start = (normalized_page.page.saturating_sub(1) as usize)
-            .saturating_mul(normalized_page.page_size as usize);
-        let items = items
-            .into_iter()
-            .skip(start)
-            .take(normalized_page.page_size as usize)
-            .collect();
-        let total_pages = total
-            .div_ceil(normalized_page.page_size as usize)
-            .try_into()
-            .unwrap_or(u32::MAX);
-
-        SessionPageViewModel {
+        SessionListViewModel {
             items,
             total,
-            page: normalized_page.page,
-            page_size: normalized_page.page_size,
-            total_pages,
             empty_message: if total == 0 {
                 "没有符合条件的会话。".into()
             } else {
@@ -248,9 +231,9 @@ impl SessionStore for InMemorySessionStore {
     fn clear_completed(&self) -> usize {
         let mut state = self.state.write();
         let before = state.records.len();
-        state.records.retain(|_, record| {
-            record.detail.summary.completed_at.is_none() || record.is_pending()
-        });
+        state
+            .records
+            .retain(|_, record| record.detail.summary.completed_at.is_none());
         state.record_bytes = state
             .records
             .values()
@@ -275,7 +258,7 @@ impl SessionStore for InMemorySessionStore {
 
 #[async_trait]
 impl SessionQueryPort for InMemorySessionStore {
-    async fn query(&self, query: SessionQuery) -> AppResult<SessionPageViewModel> {
+    async fn query(&self, query: SessionQuery) -> AppResult<SessionListViewModel> {
         Ok(SessionStore::query(self, &query))
     }
 
@@ -317,9 +300,7 @@ fn eviction_plan(
         .records
         .values()
         .filter(|record| {
-            record.detail.summary.completed_at.is_some()
-                && !record.is_pending()
-                && Some(record.id()) != protected
+            record.detail.summary.completed_at.is_some() && Some(record.id()) != protected
         })
         .collect::<Vec<_>>();
     candidates.sort_by(|left, right| eviction_order(left, right));
@@ -337,7 +318,7 @@ fn eviction_plan(
                 "RESOURCE_EXHAUSTED",
                 "会话或内存容量已耗尽，且没有可淘汰的已完成会话。",
             )
-            .retryable("请先处理待处理断点或清空已完成会话。"));
+            .retryable("请先清空已完成会话。"));
         };
         candidate_index += 1;
         record_count = record_count.saturating_sub(1);
@@ -367,6 +348,3 @@ fn compare_sessions(
         SessionSort::ResponseSize => left.response_size_bytes.cmp(&right.response_size_bytes),
     }
 }
-
-#[allow(dead_code)]
-fn _page_request_is_public_contract(_: PageRequest) {}

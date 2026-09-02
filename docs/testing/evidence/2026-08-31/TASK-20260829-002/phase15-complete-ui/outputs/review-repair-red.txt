@@ -1,0 +1,29 @@
+Command: pnpm vitest run src/features/rules/rule-tree-editors.test.tsx src/features/rules/rules-view.test.tsx src/features/capture/exchange-observation-detail.test.tsx
+Exit: 1
+Test Files: 3 failed (3)
+Tests: 5 failed | 25 passed (30)
+Failures:
+- schema array items were displayed as concrete Array index 0
+- schema and user-created concrete array index were not separated
+- received Document and process evidence were not displayed
+- schema-free first local metadata leaf could not be created
+- stale select request reopened a closed editor
+
+Second cross-layer repair RED:
+- `cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application schema_free_capabilities_cover_every_document_value_type`: exit 101, unresolved Rust-owned `local_document_type_capabilities`
+- `node --test scripts/check-generated-bindings.test.mjs`: 5/6 PASS, typed capability/process bindings absent
+- capture detail Vitest: 6/7 PASS, processed event was not represented by the typed view contract
+
+Third repair RED:
+- Cargo exact: exit 101; bounded `RuleProcessingAccumulator`, typed operation kind and shared observation budget contract absent
+- Vitest exact: 1 failed / 18 skipped; existing `null` rule-local field was omitted instead of consuming `context.local_document_types`
+
+Fourth repair RED:
+- `pnpm vitest run src/features/rules/rule-definition-model.test.ts -t 'accepts Rust-factory Insert and Append on an undeclared rule-local path'`: exit 1; 1 failed / 5 skipped
+- observed reason: `目标阶段不能编辑 Document 动作字段 /items。`; expected `null`, proving stage compatibility still used frontend-owned set/clear mapping instead of Rust `local_document_types[].actions`
+
+Fifth repair RED:
+- Domain strict serde: exit 101, 1 failed; input Clear `value_type:boolean` reserialized without `value_type`
+- Application typed factory: exit 101, 1 failed; serialized Clear `value_type` was null
+- generated binding test: exit 1, 5/6 PASS and 1 FAIL; Clear union lacked `value_type`
+- UI exact Clear-only: exit 1, 1 failed / 20 skipped; first schema-free Clear action left Save disabled

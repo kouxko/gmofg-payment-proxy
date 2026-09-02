@@ -1,0 +1,12 @@
+Command:
+cargo test --offline --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-runtime --test phase8_sidecar_review
+
+Result: RED, 2 passed / 1 failed
+
+test dynamic_import_uses_boa_loader_and_evaluates_the_lazy_module_once ... FAILED
+
+assertion `left == right` failed
+  left: Document(Object({}))
+ right: Document(Object({"evaluations": Number(DocumentNumber(1.0)), "value": Number(DocumentNumber(7.0))}))
+
+test result: FAILED. 2 passed; 1 failed; 0 ignored; 0 measured; 0 filtered out

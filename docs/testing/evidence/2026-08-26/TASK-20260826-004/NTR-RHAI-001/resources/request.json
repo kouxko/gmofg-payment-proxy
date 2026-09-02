@@ -1,0 +1,1 @@
+{"AccptrAuthstnReq":{"Hdr":{"MsgFct":"FAUQ"},"Card":{"PlainCardData":{"PAN":"synthetic-pan","Track2":"synthetic-track-data"}},"TxDtls":{"Amount":123,"Approved":true,"Note":"<synthetic>"},"SecurityTrailer":{"MAC":"synthetic-mac","KeyId":"synthetic-key"}}}

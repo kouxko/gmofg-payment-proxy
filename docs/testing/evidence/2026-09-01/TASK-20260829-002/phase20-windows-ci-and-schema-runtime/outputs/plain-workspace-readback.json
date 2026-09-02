@@ -1,0 +1,96 @@
+{
+  "android_network_profiles": [],
+  "certificate_references": [],
+  "id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9",
+  "listeners": [
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "http",
+        "settings": {
+          "authentication": {
+            "mode": "none"
+          },
+          "body_processing": {
+            "mode": "plain"
+          },
+          "downstream_tls": {
+            "client_authentication": {
+              "mode": "disabled"
+            },
+            "dynamic_sni_allowlist": [],
+            "enabled": false,
+            "server_identity": null
+          },
+          "fixed_server": {
+            "upstream_tls": {
+              "client_identity": null,
+              "server_trust": null,
+              "verify_hostname": true
+            },
+            "upstream_url": "http://127.0.0.1:18083"
+          },
+          "mitm": {
+            "authority_allowlist": [],
+            "enabled": false,
+            "maximum_cached_leaf_certificates": 256,
+            "root_ca": null
+          },
+          "request_body_codec": "auto",
+          "response_body_codec": "auto"
+        }
+      },
+      "enabled": true,
+      "id": "19402382-35bd-4e88-b310-decceaf093b7",
+      "name": "Plain HTTP",
+      "port": 8080,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    }
+  ],
+  "name": "默认 Workspace",
+  "revision": 4,
+  "rule_created_order_high_water": 1,
+  "rule_definitions": [
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "actions": [
+            {
+              "source": "record_match"
+            }
+          ],
+          "conditions": [
+            {
+              "path": "/customer/age",
+              "predicate": {
+                "type": "number",
+                "value": {
+                  "operator": "equal",
+                  "value": 18.0
+                }
+              },
+              "source": "document"
+            }
+          ],
+          "description": ""
+        }
+      },
+      "created_order": 1,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 1,
+        "last_hit_at": "2026-09-01T08:41:30.082670Z"
+      },
+      "listener_id": "19402382-35bd-4e88-b310-decceaf093b7",
+      "name": "Body age 18",
+      "one_shot": false,
+      "priority": 100,
+      "revision": 1,
+      "rule_id": "3a0f9822-e590-4f9d-9ff6-7e6fefe389d6",
+      "stage": "proxy_to_upstream"
+    }
+  ]
+}

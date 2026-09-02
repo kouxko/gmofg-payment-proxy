@@ -1,4 +1,4 @@
-import { readFileSync, readdirSync, statSync } from "node:fs";
+import { existsSync, readFileSync, readdirSync, statSync } from "node:fs";
 import { join, relative } from "node:path";
 import { fileURLToPath } from "node:url";
 
@@ -18,6 +18,185 @@ function sourceFiles(directory) {
     // generated/rust-types.ts 由 Rust/Specta 生成，内容应由 bindings 差异检查负责；
     // 在这里扫描会把合法的产品 DTO 字面量误判为前端手写业务逻辑。
     .filter((path) => !path.endsWith("generated/rust-types.ts"));
+}
+
+// 测试夹具与测试套件都不会进入 WebView bundle。夹具使用明确的 `.test-support`
+// 后缀，避免伪装成会被 Vitest 收集的 `.test` 文件或为单个文件增加绕过白名单。
+function isTestArtifact(path) {
+  return /\.(?:test|spec|test-support)\.(?:ts|tsx)$/.test(path);
+}
+
+// 页面按职责拆分后，一个功能契约可能由 facade、列表面板和详情面板共同消费。
+// 架构门禁应检查整个 feature，而不是迫使所有契约重新堆回单个超长组件。
+function featureModuleSource(featureName) {
+  const directory = join(sourceRoot, "features", featureName);
+  return readdirSync(directory)
+    .filter(
+      (name) =>
+        /\.(?:ts|tsx)$/.test(name) &&
+        !isTestArtifact(name),
+    )
+    .map((name) => readFileSync(join(directory, name), "utf8"))
+    .join("\n");
+}
+
+function protocolRuleBoundaryCodes(source) {
+  const codes = [];
+  if (!source.includes("commands.ruleEditorContext")) {
+    codes.push("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING");
+  }
+  if (/\b(?:listenerStages|newProtocolRuleDraft)\b|commands\.protocolRuleCapabilities/.test(source)) {
+    codes.push("PROTOCOL_RULE_LEGACY_BUSINESS_HELPER");
+  }
+  const definitions = new Map();
+  for (const match of source.matchAll(
+    /\b(?:const|let)\s+([A-Za-z_$][A-Za-z0-9_$]*)(?:\s*:\s*[^=;\n]+)?\s*=\s*(\[[^\]]*\])/g,
+  )) {
+    definitions.set(match[1], match[2]);
+  }
+  const ownershipStatements = [...new Set([
+    ...source.split(";"),
+    ...source.split(/\r?\n/),
+  ].filter((statement) => /\btopology\b/.test(statement)))];
+  for (const statement of ownershipStatements) {
+    const referencedDefinitions = [...definitions]
+      .filter(([identifier]) => new RegExp(`\\b${identifier}\\b`).test(statement))
+      .map(([, definition]) => definition)
+      .join(" ");
+    const ownedSource = `${statement} ${referencedDefinitions}`;
+    const stages = ownedSource.match(
+      /["'](?:app_to_proxy|proxy_to_upstream|upstream_to_proxy|proxy_to_app)["']/g,
+    ) ?? [];
+    if (new Set(stages).size >= 2) {
+      codes.push("PROTOCOL_RULE_TOPOLOGY_MATRIX");
+    }
+    if (/["'](?:record_match|clear_document|set_field|clear_field)["']/.test(ownedSource)) {
+      codes.push("PROTOCOL_RULE_DEFAULT_ACTION_MATRIX");
+    }
+  }
+  return [...new Set(codes)].sort();
+}
+
+function generatedProtocolRuleBindingCodes(source) {
+  const codes = [];
+  const hasTypedSignature = /ruleEditorContext:\s*\(listenerId:\s*ListenerId\)/.test(source);
+  const hasCamelCaseInvoke = /__TAURI_INVOKE\("rule_editor_context",\s*\{\s*listenerId\s*\}\)/.test(source);
+  if (!hasTypedSignature || !hasCamelCaseInvoke) {
+    codes.push("PROTOCOL_RULE_GENERATED_IPC_MISSING");
+  }
+  if (!source.includes("export type RuleEditorContext = {")
+    || !source.includes("new_rule_draft: RuleNewDefinitionDraft")) {
+    codes.push("PROTOCOL_RULE_EDITOR_DTO_MISSING");
+  }
+  return codes;
+}
+
+function tauriProtocolRuleRegistrationCodes(source) {
+  return source.includes("rule_editor_context,")
+    ? []
+    : ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"];
+}
+
+const protocolRuleBoundaryFixtures = [
+  [
+    "Rust editor context is the only topology source",
+    "const context = commands.ruleEditorContext(listenerId); const stages = context.stages;",
+    [],
+  ],
+  [
+    "frontend listener topology stage matrix is rejected",
+    "const relayOrLocalChoices = listener.data_plane.settings.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.ruleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "frontend topology-specific default action matrix is rejected",
+    "const initialBehavior = listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }]; commands.ruleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
+  ],
+  [
+    "typed const topology stage matrix is rejected",
+    "const choices: RuleStage[] = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']; commands.ruleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "return ternary default action matrix is rejected",
+    "commands.ruleEditorContext(listener.id); function draft(listener: Listener) { return listener.topology.mode === 'local_responder' ? [{ type: 'record_match' }] : [{ type: 'clear_document' }] }",
+    ["PROTOCOL_RULE_DEFAULT_ACTION_MATRIX"],
+  ],
+  [
+    "ASI topology stage matrix is rejected",
+    "commands.ruleEditorContext(listener.id)\nconst choices = listener.topology.mode === 'local_responder' ? ['app_to_proxy'] : ['app_to_proxy', 'proxy_to_upstream']",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "indirect topology stage arrays are rejected",
+    "const local = ['app_to_proxy']; const relay = ['app_to_proxy', 'proxy_to_upstream']; const choices = listener.topology.mode === 'local_responder' ? local : relay; commands.ruleEditorContext(listener.id);",
+    ["PROTOCOL_RULE_TOPOLOGY_MATRIX"],
+  ],
+  [
+    "legacy per-stage capability command is rejected",
+    "commands.ruleEditorContext(listener.id); commands.protocolRuleCapabilities(listener.id, stage);",
+    ["PROTOCOL_RULE_LEGACY_BUSINESS_HELPER"],
+  ],
+  [
+    "missing Rust editor context is rejected",
+    "const stages = server.stages;",
+    ["PROTOCOL_RULE_EDITOR_CONTEXT_MISSING"],
+  ],
+];
+
+const generatedProtocolRuleBindingFixtures = [
+  [
+    "generated binding keeps camelCase argument translation and editor DTO",
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleNewDefinitionDraft };',
+    [],
+  ],
+  [
+    "generated binding cannot regress to a snake_case caller argument",
+    'ruleEditorContext: (listener_id: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listener_id }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleNewDefinitionDraft };',
+    ["PROTOCOL_RULE_GENERATED_IPC_MISSING"],
+  ],
+  [
+    "generated editor context rejects the old save-input draft DTO",
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId }); export type RuleEditorContext = { listener_id: ListenerId; stages: RuleEditorStage[] }; export type HttpRuleEditorStage = { new_rule_draft: RuleDefinitionSaveInput };',
+    ["PROTOCOL_RULE_EDITOR_DTO_MISSING"],
+  ],
+  [
+    "generated editor context must retain the Rust draft DTO",
+    'ruleEditorContext: (listenerId: ListenerId) => __TAURI_INVOKE("rule_editor_context", { listenerId });',
+    ["PROTOCOL_RULE_EDITOR_DTO_MISSING"],
+  ],
+];
+
+for (const [name, source, expected] of protocolRuleBoundaryFixtures) {
+  const actual = protocolRuleBoundaryCodes(source).sort();
+  if (JSON.stringify(actual) !== JSON.stringify([...expected].sort())) {
+    process.stderr.write(
+      `Frontend boundary fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+for (const [name, source, expected] of generatedProtocolRuleBindingFixtures) {
+  const actual = generatedProtocolRuleBindingCodes(source).sort();
+  if (JSON.stringify(actual) !== JSON.stringify([...expected].sort())) {
+    process.stderr.write(
+      `Frontend generated-binding fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
+}
+for (const [name, source, expected] of [
+  ["Tauri command is registered", "rule_editor_context,", []],
+  ["missing Tauri command registration is rejected", "protocol_rule_list,", ["PROTOCOL_RULE_TAURI_REGISTRATION_MISSING"]],
+]) {
+  const actual = tauriProtocolRuleRegistrationCodes(source);
+  if (JSON.stringify(actual) !== JSON.stringify(expected)) {
+    process.stderr.write(
+      `Frontend Tauri-registration fixture ${name}: expected [${expected}], got [${actual}]\n`,
+    );
+    process.exitCode = 1;
+  }
 }
 
 // 第一层是跨文件通用禁令。正则只识别明确的危险模式，命中后要求开发者把逻辑下沉到 Rust
@@ -45,13 +224,42 @@ const forbidden = [
   ],
 ];
 
+const themeStorageFiles = new Set([
+  "src/features/theme/theme-provider.tsx",
+  "src/features/theme/theme-provider.test.tsx",
+]);
+const iconCloseTriggerFiles = new Set([
+  "src/features/capture/exchange-observation-detail.tsx",
+  "src/features/listeners/socket-protocol-package-dialog.tsx",
+  "src/features/protocol-packages/protocol-package-dialog.tsx",
+  "src/features/rules/rules-view.tsx",
+  "src/features/rules/rule-creation-dialog.tsx",
+]);
+
 const failures = [];
 for (const file of sourceFiles(sourceRoot)) {
   const content = readFileSync(file, "utf8");
-  const isTestFile = /\.(?:test|spec)\.(?:ts|tsx)$/.test(file);
+  const relativePath = relative(root, file);
+  const isTestFile = isTestArtifact(file);
   for (const [pattern, message] of forbidden) {
+    // 架构测试需要读取源码来验证 HeroUI 组合方式；Node.js API 禁令只约束会进入
+    // WebView 的生产展示代码，不能反过来禁止测试工具检查这些代码。
+    if (isTestFile && message === "展示层不得引入 Node.js 系统 API") continue;
+    // 主题偏好不是业务数据；只允许主题状态模块及其契约测试触碰 localStorage。
+    if (
+      themeStorageFiles.has(relativePath) &&
+      message === "前端不得持久化业务数据"
+    ) {
+      continue;
+    }
+    if (
+      iconCloseTriggerFiles.has(relativePath) &&
+      message.startsWith("CloseTrigger 仅用于右上角关闭图标")
+    ) {
+      continue;
+    }
     if (pattern.test(content)) {
-      failures.push(`${relative(root, file)}: ${message}`);
+      failures.push(`${relativePath}: ${message}`);
     }
   }
   if (
@@ -93,22 +301,55 @@ for (const file of sourceFiles(sourceRoot)) {
   }
 }
 
-// 第二层检查具体页面与 Rust 契约的对应关系。这些规则比通用正则更精确，用于防止以后重构
-// 页面时把规则默认值、断点动作、通道目录或 HTTP 报文解释偷偷搬回 TypeScript。
-const captureSource = readFileSync(
-  join(sourceRoot, "features/capture/capture-view.tsx"),
+for (const [path, label] of [
+  ["src/features/capture/exchange-observation-detail.tsx", "关闭 Exchange 详情"],
+]) {
+  const source = readFileSync(join(root, path), "utf8");
+  const contract = new RegExp(
+    `<Modal\\.CloseTrigger(?=[^>]*aria-label="${label}")[^>]*>\\s*<Xmark[^>]*\\/>\\s*</Modal\\.CloseTrigger>`,
+  );
+  if (!contract.test(source)) {
+    failures.push(`${path}: 详情弹窗必须使用右上角纯图标 CloseTrigger`);
+  }
+}
+
+const themeProviderSource = readFileSync(
+  join(sourceRoot, "features", "theme", "theme-provider.tsx"),
   "utf8",
 );
+if (
+  !themeProviderSource.includes(
+    'export const THEME_STORAGE_KEY = "intercept-proxy-theme";',
+  ) ||
+  [...themeProviderSource.matchAll(/localStorage\.(?:getItem|setItem|removeItem)\(([^,)]*)/g)].some(
+    ([, keyExpression]) => keyExpression.trim() !== "THEME_STORAGE_KEY",
+  )
+) {
+  failures.push(
+    "src/features/theme/theme-provider.tsx: localStorage 只能使用固定主题偏好 key",
+  );
+}
+
+// 第二层检查具体页面与 Rust 契约的对应关系。这些规则比通用正则更精确，用于防止以后重构
+// 页面时把规则默认值、断点动作、通道目录或 HTTP 报文解释偷偷搬回 TypeScript。
+const captureSource = featureModuleSource("capture");
 if (/commands\.ruleSave/.test(captureSource)) {
   failures.push(
     "src/features/capture/capture-view.tsx: CAPTURE-009 禁止在跳转前保存规则",
   );
 }
 
-const ruleEditorSource = readFileSync(
-  join(sourceRoot, "features/rules/rule-editor.tsx"),
-  "utf8",
-);
+// 规则编辑器按职责拆分为 facade、模型、条件与动作模块。架构门禁必须检查整个模块组，
+// 不能把“单文件包含所有 Rust Command”误当成边界要求，否则会反向鼓励超长组件。
+const ruleEditorDirectory = join(sourceRoot, "features/rules");
+const ruleEditorSource = readdirSync(ruleEditorDirectory)
+  .filter((name) =>
+    /^(?:rule-definition-editor|rule-single-pair-editor)\.tsx?$/.test(
+      name,
+    ),
+  )
+  .map((name) => readFileSync(join(ruleEditorDirectory, name), "utf8"))
+  .join("\n");
 if (
   /\bcreateAction\b|\bcreateCondition\b|\bparseBytes\b/.test(ruleEditorSource)
 ) {
@@ -117,12 +358,8 @@ if (
   );
 }
 for (const command of [
-  "commands.ruleConditionDraft",
-  "commands.ruleActionDraft",
-  "commands.ruleMatchFieldDraft",
-  "commands.ruleMatchOperatorDraft",
-  "commands.ruleParseByteInput",
-  "commands.ruleParseHeaderInput",
+  "commands.ruleDefinitionHttpConditionDraft",
+  "commands.ruleDefinitionActionDraft",
 ]) {
   if (!ruleEditorSource.includes(command)) {
     failures.push(
@@ -148,51 +385,67 @@ if (
   );
 }
 if (
-  !ruleEditorSource.includes("useAsyncRequestSlots") ||
-  !ruleEditorSource.includes("function ConditionRow") ||
-  !ruleEditorSource.includes("current.type === \"mock_response\"") ||
-  !ruleEditorSource.includes("current.actions.map")
+  !ruleEditorSource.includes("async function materialize()") ||
+  !ruleEditorSource.includes("withSinglePair(props.input, condition, action)") ||
+  !ruleEditorSource.includes("newSaveInput(props.creation, condition, action)") ||
+  !ruleEditorSource.includes("props.onSave(materialized)")
 ) {
   failures.push(
-    "src/features/rules/rule-editor.tsx: Rust 异步草稿必须统一使用保存门禁和代次隔离，解析结果必须函数式合并到最新动作",
+    "src/features/rules/rule-single-pair-editor.tsx: 条件与动作必须只在最终保存时由 Rust 工厂生成，并一次写入唯一规则配对",
   );
 }
 
-const breakpointSource = readFileSync(
-  join(sourceRoot, "features/breakpoints/breakpoints-view.tsx"),
-  "utf8",
-);
-if (/decisionRequires(?:JsonFormatting|Validation)/.test(breakpointSource)) {
+const protocolRuleSource = featureModuleSource("rules");
+const protocolRuleBoundaryFailures = protocolRuleBoundaryCodes(protocolRuleSource);
+if (protocolRuleBoundaryFailures.includes("PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
   failures.push(
-    "src/features/breakpoints/breakpoints-view.tsx: 断点决策预处理策略必须由 Rust 提供",
+    "src/features/rules: 统一规则编辑器必须从 Rust ruleEditorContext 取得全部阶段、能力和新规则草稿",
   );
 }
-if (
-  !breakpointSource.includes("available_actions") ||
-  /<ListBox\.Item\s+id=["'](?:forward_|mock_response|delay|disconnect_|custom_http_status|invalid_json|wrong_content_length|truncate|drop_response)/.test(
-    breakpointSource,
-  )
-) {
+if (protocolRuleBoundaryFailures.some((code) => code !== "PROTOCOL_RULE_EDITOR_CONTEXT_MISSING")) {
   failures.push(
-    "src/features/breakpoints/breakpoints-view.tsx: 断点可执行动作和默认参数必须由 Rust ViewModel 提供",
+    "src/features/rules: 禁止在前端推导协议规则阶段或新规则默认值，也不得按前端选择的 stage 查询旧能力接口",
   );
 }
 
-const faultSource = readFileSync(
-  join(sourceRoot, "features/faults/faults-view.tsx"),
+const generatedBindingsSource = readFileSync(
+  join(sourceRoot, "generated", "rust-types.ts"),
   "utf8",
 );
+if (generatedProtocolRuleBindingCodes(generatedBindingsSource).length > 0) {
+  failures.push(
+    "src/generated/rust-types.ts: 缺少 rule_editor_context 的 camelCase 参数绑定或完整编辑上下文 DTO",
+  );
+}
+
+const tauriCommandsSource = readFileSync(
+  join(root, "src-tauri", "src", "commands", "mod.rs"),
+  "utf8",
+);
+if (tauriProtocolRuleRegistrationCodes(tauriCommandsSource).length > 0) {
+  failures.push(
+    "src-tauri/src/commands/mod.rs: rule_editor_context 必须注册到 Tauri handler",
+  );
+}
+
+if (existsSync(join(sourceRoot, "features", "breakpoints"))) {
+  failures.push("src/features/breakpoints: removed breakpoint product feature must stay absent");
+}
+
+const faultSource = featureModuleSource("faults");
 if (/\.name\.includes\(/.test(faultSource)) {
   failures.push(
     "src/features/faults/faults-view.tsx: 禁止根据中文名称推断故障业务语义",
   );
 }
 if (
-  /useState\(\s*(?:1|100|false)\s*\)/.test(faultSource) ||
+  /const\s*\[\s*(?:priority|oneShot|channel)\s*,[^\]]+\]\s*=\s*useState\(\s*(?:100|false|["']transaction["'])\s*\)/.test(
+    faultSource,
+  ) ||
   /channel:\s*["']transaction["']/.test(faultSource)
 ) {
   failures.push(
-    "src/features/faults/faults-view.tsx: 故障通道、命中次数、优先级和一次性默认值必须来自 Rust 模板",
+    "src/features/faults/faults-view.tsx: 故障通道、优先级和一次性默认值必须来自 Rust 模板",
   );
 }
 if (
@@ -205,14 +458,10 @@ if (
 }
 
 const productChannelUiContracts = [
-  ["features/capture/capture-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/sessions/sessions-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/breakpoints/breakpoints-view.tsx", ["channel_text"]],
-  ["features/rules/rules-view.tsx", ["channel_catalog", "channel_text"]],
-  ["features/faults/faults-view.tsx", ["channel_catalog"]],
+  ["faults", "features/faults/faults-view.tsx", ["channel_catalog"]],
 ];
-for (const [relativePath, requiredContracts] of productChannelUiContracts) {
-  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
+for (const [featureName, relativePath, requiredContracts] of productChannelUiContracts) {
+  const source = featureModuleSource(featureName);
   if (/["'](?:transaction|dll)["']/.test(source)) {
     failures.push(
       `src/${relativePath}: 产品通道 ID 和展示名称必须来自 Rust DTO/catalog，禁止写死 transaction/dll`,
@@ -227,47 +476,85 @@ for (const [relativePath, requiredContracts] of productChannelUiContracts) {
   }
 }
 
-const httpInspectionUiContracts = [
-  [
-    "features/capture/capture-view.tsx",
-    ["http_status", ".headers", "HTTP 状态码"],
-  ],
-  [
-    "features/sessions/sessions-view.tsx",
-    ["http_status", ".headers", "HTTP 状态码"],
-  ],
-];
-for (const [relativePath, requiredContracts] of httpInspectionUiContracts) {
-  const source = readFileSync(join(sourceRoot, relativePath), "utf8");
-  for (const contract of requiredContracts) {
-    if (!source.includes(contract)) {
-      failures.push(
-        `src/${relativePath}: 缺少 Rust HTTP 报文检查契约 ${contract}`,
-      );
-    }
-  }
-}
-
 const settingsSource = readFileSync(
   join(sourceRoot, "features/settings/settings-view.tsx"),
   "utf8",
 );
 if (
-  /\.split\(\s*\/\[,，\]\//.test(settingsSource) ||
-  !settingsSource.includes("leafSansRaw")
+  /leaf_sans\s*\.\s*(?:split|join)\s*\(|leafSansRaw/.test(settingsSource) ||
+  !settingsSource.includes("commands.settingsValidate(candidate)")
 ) {
   failures.push(
-    "src/features/settings/settings-view.tsx: SAN 原始文本必须交由 Rust 原子规范化",
+    "src/features/settings/settings-view.tsx: 系统设置必须把完整 Draft 直接交给 Rust，禁止在前端拼装或解析 SAN",
   );
 }
 
-const captureSourceForResume = readFileSync(
-  join(sourceRoot, "features/capture/capture-view.tsx"),
-  "utf8",
-);
-if (/after_event_id:\s*pauseCursor/.test(captureSourceForResume)) {
+// Exchange observation 有独立 Rust DTO 和查询面，不能重新借用 HTTP Message 控件。
+// Display HTML 永远是不可信输入：应用 DOM 不直接注入，只允许进入无能力 iframe，
+// 并由 iframe 内层 deny-by-default CSP 再封一层外链和应用 API 边界。
+const exchangeObservationFiles = readdirSync(join(sourceRoot, "features", "capture"))
+  .filter(
+    (name) =>
+      /^exchange-observation-.*\.(?:ts|tsx)$/.test(name) &&
+      !/\.(?:test|spec)\.(?:ts|tsx)$/.test(name),
+  );
+const exchangeObservationSource = exchangeObservationFiles
+  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
+  .join("\n");
+for (const contract of [
+  "commands.exchangeObservationQuery",
+  "commands.exchangeObservationGet",
+  "commands.exchangeObservationClear(targetWorkspaceId, true)",
+]) {
+  if (!exchangeObservationSource.includes(contract)) {
+    failures.push(
+      `src/features/capture/exchange-observation-*: 缺少 Exchange observation 契约 ${contract}`,
+    );
+  }
+}
+const protocolSafeDisplayPath = "src/features/shared/protocol-safe-display.tsx";
+const protocolSafeDisplaySource = readFileSync(join(root, protocolSafeDisplayPath), "utf8");
+const sharedFeatureDirectory = join(sourceRoot, "features", "shared");
+for (const name of readdirSync(sharedFeatureDirectory)) {
+  if (!/\.(?:ts|tsx)$/.test(name) || isTestArtifact(name)) continue;
+  const source = readFileSync(join(sharedFeatureDirectory, name), "utf8");
+  if (/from\s+["'](?:@\/features\/(?!shared\/)|\.\.\/)/.test(source)) {
+    failures.push(
+      `src/features/shared/${name}: shared 组件不得反向依赖具体 feature`,
+    );
+  }
+}
+for (const contract of [
+  'sandbox=""',
+  'referrerPolicy="no-referrer"',
+  "default-src 'none'",
+  "connect-src 'none'",
+  "frame-src 'none'",
+]) {
+  if (!protocolSafeDisplaySource.includes(contract)) {
+    failures.push(
+      `${protocolSafeDisplayPath}: 缺少安全 Display 契约 ${contract}`,
+    );
+  }
+}
+if (/dangerouslySetInnerHTML/.test(protocolSafeDisplaySource)) {
   failures.push(
-    "src/features/capture/capture-view.tsx: 恢复滚动必须请求完整 Rust 显示快照，不能永久切换到增量游标",
+    `${protocolSafeDisplayPath}: 不可信 Display 禁止注入应用 DOM，必须使用无能力 sandbox iframe`,
+  );
+}
+if (/allow-(?:scripts|same-origin|forms|popups|top-navigation|downloads)/.test(protocolSafeDisplaySource)) {
+  failures.push(
+    `${protocolSafeDisplayPath}: Display sandbox 禁止获得脚本、同源、表单、弹窗、顶层导航或下载能力`,
+  );
+}
+const exchangeObservationUiFiles = exchangeObservationFiles
+  .filter((name) => name !== "exchange-observation-test-fixture.ts");
+const exchangeObservationUiSource = exchangeObservationUiFiles
+  .map((name) => readFileSync(join(sourceRoot, "features", "capture", name), "utf8"))
+  .join("\n");
+if (/\.headers\b|\.http_status\b|\.target\b|JSONPath|HTTP 状态码|Cookie/.test(exchangeObservationUiSource)) {
+  failures.push(
+    "src/features/capture/exchange-observation-*: 禁止消费 HTTP Header/Cookie/Status/Target/JSONPath",
   );
 }
 

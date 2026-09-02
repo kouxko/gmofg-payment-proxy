@@ -10,9 +10,14 @@
 !.yarn/releases
 !.yarn/versions
 
+# Python interpreter and packaging output
+__pycache__/
+*.py[cod]
+
 # testing
 /coverage
 /.playwright-cli/
+*.profraw
 
 # next.js
 /.next/
@@ -23,9 +28,27 @@
 /dist
 /output
 
+# Generated desktop resources and local Rust test targets
+/src-tauri/resources/android-companion.apk
+/src-tauri/binaries/intercept-proxy-package-sidecar-*
+/src-tauri/target-listener-fix/
+
+# Local agent/runtime state and generated scratch assets
+/.omx/
+/tmp/
+/=
+/examples/protocol-packages/nuvei_tango_rhai/tests/target/
+/.task-manager.lock/
+/.task-manager.abandoned.*/
+
+# Local diagnostics and launch helpers
+/scripts/run-latest-app.sh
+/src-tauri/crates/host/examples/live_listener_diagnostic.rs
+
 # misc
 .DS_Store
 *.pem
+!docs/testing/evidence/**/resources/*.pem
 
 # debug
 npm-debug.log*

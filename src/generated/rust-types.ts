@@ -5,41 +5,149 @@ import { invoke as __TAURI_INVOKE, Channel } from "@tauri-apps/api/core";
 /** Commands */
 export const commands = {
 	appBootstrap: () => typedError<AppBootstrapViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_bootstrap")),
+	/**
+	 *  建立“先回放、后实时”的有序 UI 事件通道。
+	 *  application 在同一临界区内确定回放边界并注册实时队列，因此同步发送 replay 时新事件
+	 *  只会排入 live，不会插到回放中间。回放全部成功后才启动异步转发任务，保证前端看到的
+	 *  `event_id` 单调递增。Channel 关闭、实时队列终止或任务自然结束时，尾部清理都会读取终止
+	 *  原因并注销订阅，释放队列记账；显式取消命令只是同一清理路径的主动入口。
+	 */
 	appSubscribeEvents: (afterEventId: number, onEvent: Channel<UiEventEnvelope>) => typedError<SubscriptionAckViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_subscribe_events", { afterEventId, onEvent })),
 	appUnsubscribeEvents: (subscriptionId: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("app_unsubscribe_events", { subscriptionId })),
-	proxyGetStatus: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_get_status")),
-	proxyStart: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_start")),
-	proxyStop: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_stop")),
-	proxyRestart: () => typedError<ProxyStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("proxy_restart")),
+	mcpInfo: () => __TAURI_INVOKE<McpInfoViewModel>("mcp_info"),
+	diagnosticLogQuery: (query: DiagnosticLogQuery) => typedError<DiagnosticLogPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_log_query", { query })),
+	/**  生成与 MCP `reproduction_report` 同源的报告，并通过系统保存对话框原子写入 Markdown。 */
+	diagnosticReproductionReportExport: (query: DiagnosticReportQuery) => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("diagnostic_reproduction_report_export", { query })),
+	androidAdbGet: () => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_get")),
+	androidAdbSelect: (serial: string) => typedError<AndroidAdbViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_adb_select", { serial })),
+	androidDeviceList: () => typedError<AndroidDeviceViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_device_list")),
+	androidPackageList: (serial: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_list", { serial })),
+	androidPackageRefresh: (serial: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_refresh", { serial })),
+	androidPackageQuery: (serial: string, query: string) => typedError<AndroidPackageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("android_package_query", { serial, query })),
+	androidPackageGet: (serial: string, packageName: string) => typedError<AndroidPackageViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_package_get", { serial, packageName })),
+	androidCompanionInstall: (serial: string) => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_install", { serial })),
+	androidCompanionUpdate: (serial: string) => typedError<AndroidCompanionInstallViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_companion_update", { serial })),
+	androidVpnOpenConsent: (serial: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("android_vpn_open_consent", { serial })),
+	deviceNetworkProfileList: () => typedError<AndroidNetworkProfileSummary[], AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_list")),
+	deviceNetworkProfileNew: () => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_new")),
+	deviceNetworkProfileGet: (profileId: string) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_get", { profileId })),
+	deviceNetworkProfileApplyIntent: (serial: string, profile: AndroidNetworkProfile, intent: AndroidProfileEditIntent) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_apply_intent", { serial, profile, intent })),
+	deviceNetworkProfileSave: (serial: string, profile: AndroidNetworkProfile) => typedError<AndroidNetworkProfile, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_save", { serial, profile })),
+	deviceNetworkProfileDelete: (profileId: string) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_profile_delete", { profileId })),
+	deviceNetworkStart: (serial: string, profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_start", { serial, profileId, dangerousConfirmed })),
+	deviceNetworkApply: (serial: string, expectedEpoch: string, profileId: string, dangerousConfirmed: boolean) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_apply", { serial, expectedEpoch, profileId, dangerousConfirmed })),
+	deviceNetworkStop: (serial: string, expectedEpoch: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_stop", { serial, expectedEpoch })),
+	deviceNetworkEmergencyRestore: (serial: string, expectedEpoch: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_emergency_restore", { serial, expectedEpoch })),
+	deviceNetworkStatus: (serial: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status", { serial })),
+	deviceNetworkEndpoints: (serial: string, profileId: string | null) => typedError<AndroidNetworkEndpointSnapshotViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_endpoints", { serial, profileId })),
+	deviceNetworkRuntimeOwners: () => typedError<AndroidRuntimeOwnerViewModel[], AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owners")),
+	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
+	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
+	workspaceSecretStoreBasic: (username: string, password: string) => typedError<SecretReference, AppErrorViewModel>(__TAURI_INVOKE("workspace_secret_store_basic", { username, password })),
+	workspaceCreate: (name: string) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_create", { name })),
+	workspaceCopy: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_copy", { workspaceId })),
+	workspaceSelect: (workspaceId: WorkspaceId) => typedError<WorkspaceSummaryViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_select", { workspaceId })),
+	workspaceValidate: (workspace: ProxyWorkspace) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_validate", { workspace })),
+	workspaceSave: (workspace: ProxyWorkspace) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_save", { workspace })),
+	workspaceDelete: (workspaceId: WorkspaceId, expectedRevision: number) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("workspace_delete", { workspaceId, expectedRevision })),
+	applicationBackupExport: () => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("application_backup_export")),
+	applicationBackupImportPrepare: () => typedError<{
+	token: ApplicationBackupImportToken,
+	expires_in_seconds: number,
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	protocol_packages: ApplicationBackupPackagePreview[],
+	replacement_scope: ApplicationBackupReplacementScope,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_prepare")),
+	applicationBackupImportCommit: (token: ApplicationBackupImportToken) => typedError<ApplicationBackupImportCommitOutcome, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_commit", { token })),
+	applicationBackupImportDiscard: (token: ApplicationBackupImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_backup_import_discard", { token })),
+	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
+	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
+	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
+	listenerGet: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_get", { workspaceId, listenerId })),
+	listenerValidate: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_validate", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerDelete: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_delete", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerStatuses: () => typedError<ListenerStatusViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_statuses")),
+	listenerOverview: (workspaceId: WorkspaceId) => typedError<ListenerOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_overview", { workspaceId })),
+	listenerStart: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_start", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerStop: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listenerId: ListenerId) => typedError<ListenerStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_stop", { workspaceId, expectedWorkspaceRevision, listenerId })),
+	listenerTestUpstreamConnection: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamConnectionTestViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_connection", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	listenerTestUpstreamTls: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ListenerUpstreamTlsTestViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_test_upstream_tls", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
+	protocolPackageList: () => typedError<ProtocolPackageGroupViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_list")),
+	externalPackageServiceStatus: () => typedError<ExternalPackageServiceStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("external_package_service_status")),
+	listenerProtocolPackageCatalog: () => typedError<ListenerProtocolPackageCatalogViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("listener_protocol_package_catalog")),
+	protocolPackageDetail: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageDetailViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_detail", { packageRef })),
+	protocolPackageImport: () => typedError<{
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import")),
+	protocolPackageImportCommit: (token: ProtocolPackageImportToken) => typedError<ProtocolPackageImportViewModel_Serialize, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_commit", { token })),
+	protocolPackageImportDiscard: (token: ProtocolPackageImportToken) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_import_discard", { token })),
+	protocolPackageExportBuiltin: () => typedError<{
+	bytes_written: number,
+	replaced_existing: boolean,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_export_builtin")),
+	protocolPackageEnable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_enable", { packageRef })),
+	protocolPackageDisable: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_disable", { packageRef })),
+	protocolPackageRestart: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageVersionViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_restart", { packageRef })),
+	protocolPackageDelete: (packageRef: ProtocolPackageIdentityInput) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("protocol_package_delete", { packageRef })),
+	protocolPackageUsage: (packageRef: ProtocolPackageIdentityInput) => typedError<ProtocolPackageUsageViewModel[], AppErrorViewModel>(__TAURI_INVOKE("protocol_package_usage", { packageRef })),
+	listenerImportDownstreamServerIdentity: (label: string, password: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_server_identity", { label, password })),
+	listenerImportDownstreamClientTrust: (label: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_downstream_client_trust", { label })),
+	listenerImportUpstreamClientIdentity: (label: string, password: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_upstream_client_identity", { label, password })),
+	listenerImportUpstreamServerTrust: (label: string) => typedError<{
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+} | null, AppErrorViewModel>(__TAURI_INVOKE("listener_import_upstream_server_trust", { label })),
+	listenerCertificateOverview: (workspaceId: WorkspaceId) => typedError<ListenerCertificateDetailViewModel[], AppErrorViewModel>(__TAURI_INVOKE("listener_certificate_overview", { workspaceId })),
+	listenerCertificateDiscard: (reference: CertificateReference) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_certificate_discard", { reference })),
 	captureQuery: (query: CaptureQuery) => typedError<CapturePageViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_query", { query })),
 	captureGetDetail: (sessionId: string, runtimeEpoch: string) => typedError<CaptureDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("capture_get_detail", { sessionId, runtimeEpoch })),
 	captureClearView: (currentCursor: number) => typedError<number, AppErrorViewModel>(__TAURI_INVOKE("capture_clear_view", { currentCursor })),
-	sessionQuery: (query: SessionQuery) => typedError<SessionPageViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_query", { query })),
-	sessionGet: (sessionId: string) => typedError<SessionDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_get", { sessionId })),
-	sessionExport: (sessionId: string, sensitiveDataConfirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_export", { sessionId, sensitiveDataConfirmed })),
-	sessionClear: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("session_clear", { confirmed })),
-	breakpointQuery: (runtimeEpoch: string | null) => typedError<BreakpointSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("breakpoint_query", { runtimeEpoch })),
-	breakpointGet: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDetailViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_get", { breakpointId, runtimeEpoch })),
-	breakpointFormatJson: (draft: BreakpointDraft) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_format_json", { draft })),
-	breakpointRestoreOriginal: (breakpointId: string, runtimeEpoch: string) => typedError<BreakpointDraft, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_restore_original", { breakpointId, runtimeEpoch })),
-	breakpointValidate: (draft: BreakpointDraft, runtimeEpoch: string) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_validate", { draft, runtimeEpoch })),
-	breakpointResolve: (runtimeEpoch: string, decision: BreakpointDecision) => typedError<BreakpointSummaryViewModel, AppErrorViewModel>(__TAURI_INVOKE("breakpoint_resolve", { runtimeEpoch, decision })),
-	ruleList: () => typedError<RuleSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("rule_list")),
-	ruleGet: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_get", { ruleId })),
-	ruleNewDraft: () => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_new_draft")),
-	ruleConditionDraft: (kind: RuleConditionKind) => typedError<RuleCondition, AppErrorViewModel>(__TAURI_INVOKE("rule_condition_draft", { kind })),
-	ruleActionDraft: (kind: RuleActionKind) => typedError<RuleAction, AppErrorViewModel>(__TAURI_INVOKE("rule_action_draft", { kind })),
-	ruleMatchFieldDraft: (kind: RuleMatchFieldKind) => typedError<RuleMatchField, AppErrorViewModel>(__TAURI_INVOKE("rule_match_field_draft", { kind })),
-	ruleMatchOperatorDraft: (kind: RuleMatchOperatorKind) => typedError<RuleMatchOperator, AppErrorViewModel>(__TAURI_INVOKE("rule_match_operator_draft", { kind })),
-	ruleParseByteInput: (raw: string) => typedError<RuleByteInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_byte_input", { raw })),
-	ruleParseHeaderInput: (raw: string) => typedError<RuleHeaderInputViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_header_input", { raw })),
-	ruleCreateFromSession: (sessionId: string) => typedError<RuleDraft, AppErrorViewModel>(__TAURI_INVOKE("rule_create_from_session", { sessionId })),
-	ruleSave: (draft: RuleDraft) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_save", { draft })),
-	ruleCopy: (ruleId: string) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_copy", { ruleId })),
-	ruleDelete: (ruleId: string, expectedRevision: number, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_delete", { ruleId, expectedRevision, confirmed })),
-	ruleToggle: (ruleId: string, expectedRevision: number, enabled: boolean) => typedError<RuleViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_toggle", { ruleId, expectedRevision, enabled })),
-	ruleImport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_import")),
-	ruleExport: () => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_export")),
+	/**  查询 tracing UI Layer 与 MCP 共享的连接级 Exchange 时间线。 */
+	exchangeObservationQuery: (query: ExchangeObservationQuery) => typedError<ExchangeObservationPage, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_query", { query })),
+	exchangeObservationGet: (exchangeId: string) => typedError<ExchangeObservationRecord, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_get", { exchangeId })),
+	exchangeObservationClear: (workspaceId: WorkspaceId, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("exchange_observation_clear", { workspaceId, confirmed })),
+	ruleDefinitionList: () => typedError<RuleDefinition_Serialize[], AppErrorViewModel>(__TAURI_INVOKE("rule_definition_list")),
+	ruleEditorContext: (listenerId: ListenerId) => typedError<RuleEditorContext, AppErrorViewModel>(__TAURI_INVOKE("rule_editor_context", { listenerId })),
+	ruleDefinitionGet: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_get", { ruleId })),
+	ruleDefinitionCopy: (ruleId: RuleId) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_copy", { ruleId })),
+	ruleDefinitionHttpConditionDraft: (fieldKind: RuleMatchFieldKind, selector: string | null, operatorKind: RuleMatchOperatorKind, value: string, stage: RuleStage) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_http_condition_draft", { fieldKind, selector, operatorKind, value, stage })),
+	ruleDefinitionActionDraft: (input: RuleHttpActionDraftInput, stage: RuleStage) => typedError<HttpAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_action_draft", { input, stage })),
+	ruleDefinitionDocumentConditionDraft: (path: string, valueType: RuleLocalDocumentValueType, predicate: RuleLocalDocumentPredicateKind, raw: string) => typedError<Condition, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_condition_draft", { path, valueType, predicate, raw })),
+	ruleDefinitionDocumentActionDraft: (path: string, valueType: RuleLocalDocumentValueType, action: RuleLocalDocumentActionKind, raw: string | null, index: number | null) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_action_draft", { path, valueType, action, raw, index })),
+	ruleDefinitionDocumentCommonActionDraft: (action: RuleCommonActionCapability) => typedError<UnifiedAction, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_document_common_action_draft", { action })),
+	ruleDefinitionCreateFromExchangeObservation: (exchangeId: string, responseEventIndex: number) => typedError<RuleDefinitionSaveInput, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_create_from_exchange_observation", { exchangeId, responseEventIndex })),
+	ruleParseDocumentValue: (fieldType: ProtocolPackageSchemaFieldTypeViewModel, raw: string) => typedError<DocumentValue, AppErrorViewModel>(__TAURI_INVOKE("rule_parse_document_value", { fieldType, raw })),
+	ruleDefinitionSave: (input: RuleDefinitionSaveInput) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_save", { input })),
+	ruleDefinitionToggle: (ruleId: RuleId, expectedRevision: Revision, enabled: boolean) => typedError<RuleDefinition_Serialize, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_toggle", { ruleId, expectedRevision, enabled })),
+	ruleDefinitionDelete: (ruleId: RuleId, expectedRevision: Revision, confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("rule_definition_delete", { ruleId, expectedRevision, confirmed })),
 	faultTemplateList: () => typedError<FaultTemplateViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_template_list")),
 	faultConfigure: (draft: FaultConfigurationDraft) => typedError<ActiveFaultViewModel, AppErrorViewModel>(__TAURI_INVOKE("fault_configure", { draft })),
 	faultActiveList: () => typedError<ActiveFaultViewModel[], AppErrorViewModel>(__TAURI_INVOKE("fault_active_list")),
@@ -53,10 +161,10 @@ export const commands = {
 	certificateValidate: () => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("certificate_validate")),
 	certificateResetCa: (expectedRevision: number, confirmed: boolean) => typedError<CertificateOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("certificate_reset_ca", { expectedRevision, confirmed })),
 	settingsGet: () => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_get")),
-	settingsValidate: (draft: SettingsDraft, leafSansRaw: string) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_validate", { draft, leafSansRaw })),
-	settingsSave: (draft: SettingsDraft, leafSansRaw: string) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save", { draft, leafSansRaw })),
-	settingsSaveAndRestart: (draft: SettingsDraft, leafSansRaw: string) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save_and_restart", { draft, leafSansRaw })),
+	settingsValidate: (draft: SettingsDraft) => typedError<FieldValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_validate", { draft })),
+	settingsSave: (draft: SettingsDraft) => typedError<SettingsViewModel, AppErrorViewModel>(__TAURI_INVOKE("settings_save", { draft })),
 	settingsResetDefaults: (confirmed: boolean) => typedError<SettingsDraft, AppErrorViewModel>(__TAURI_INVOKE("settings_reset_defaults", { confirmed })),
+	applicationDataReset: (confirmed: boolean) => typedError<OperationResultViewModel, AppErrorViewModel>(__TAURI_INVOKE("application_data_reset", { confirmed })),
 };
 
 /* Types */
@@ -72,16 +180,205 @@ export type ActiveFaultViewModel = {
 	revision: number,
 };
 
+export type AndroidAdbViewModel = {
+	available: boolean,
+	executable: string | null,
+	version: string | null,
+	selected_serial: string | null,
+};
+
+export type AndroidCompanionInstallViewModel = {
+	serial: string,
+	package_name: string,
+	installed: boolean,
+	version_name: string | null,
+	version_code: string | null,
+};
+
+export type AndroidConfiguredEndpointViewModel = {
+	profile_id: string,
+	original_destination: string,
+	original_ports: number[],
+	listener_id: string,
+	listener_name: string,
+	listener_bind_address: string,
+	listener_port: number,
+};
+
+export type AndroidControlTransport = "local_abstract_socket" | "rescue_activity" | "adb_force_stop" | "unavailable";
+
+/**  弱网只作用于指定远端地址/端口时使用的过滤条件。 */
+export type AndroidDestinationTarget = {
+	cidr: string,
+	ports: number[],
+};
+
+export type AndroidDeviceState = "device" | "offline" | "unauthorized" | "other";
+
+export type AndroidDeviceViewModel = {
+	serial: string,
+	state: AndroidDeviceState,
+	product: string | null,
+	model: string | null,
+	device: string | null,
+	transport_id: string | null,
+	selected: boolean,
+};
+
+export type AndroidNetworkEndpointSnapshotViewModel = {
+	configured_profile_id: string | null,
+	configured: AndroidConfiguredEndpointViewModel[],
+	runtime_owner: AndroidRuntimeOwnerViewModel | null,
+	runtime: AndroidRuntimeEndpointViewModel[],
+};
+
+/**  可随 Workspace 导入导出的 Android 设备网络方案。 */
+export type AndroidNetworkProfile = {
+	id: string,
+	name: string,
+	target_applications: AndroidTargetApplication[],
+	/**  空列表表示目标应用的全部远端地址都进入弱网引擎。 */
+	destination_targets: AndroidDestinationTarget[],
+	/**  空列表表示不将流量透明转交桌面代理，只执行设备端弱网。 */
+	proxy_routes: AndroidProxyRoute[],
+	confirmed_shared_uids: number[],
+	auto_resume_after_reboot: boolean,
+	stop_vpn_on_control_loss?: boolean,
+	weak_network: WeakNetworkProfile,
+};
+
+export type AndroidNetworkProfileSummary = {
+	id: string,
+	name: string,
+	target_count: number,
+	auto_resume_after_reboot: boolean,
+	stop_vpn_on_control_loss: boolean,
+};
+
+export type AndroidNetworkState = "unknown" | "start_requested" | "running" | "stop_requested" | "stopped" | "faulted";
+
+export type AndroidNetworkStatusViewModel = {
+	serial: string,
+	runtime_epoch: string | null,
+	state: AndroidNetworkState,
+	/**  Rust 根据状态机生成的稳定中文文案，展示层不得重复维护状态映射。 */
+	state_text: string,
+	/**  Rust 生成的视觉语义；HeroUI 只负责把语义映射到组件颜色。 */
+	ui_tone: UiTone,
+	/**  True only when the Companion protocol or a process-level emergency restore proved state. */
+	verified: boolean,
+	transport: AndroidControlTransport,
+	active_profile_id: string | null,
+	/**  Companion 当前实际运行的 Profile 内容指纹；用于识别 Service 重启后的陈旧状态。 */
+	active_profile_fingerprint: string | null,
+	/**  Companion 当前实际装载的透明代理路由指纹。 */
+	active_route_fingerprint: string | null,
+	/**  Companion 当前实际装载的透明代理路由数量。 */
+	active_route_count: number,
+	companion_process_running: boolean | null,
+	message: string,
+	unsupported_fields: string[],
+	stats: unknown | null,
+};
+
+export type AndroidPackageViewModel = {
+	package_name: string,
+	uid: number,
+	/**  Set only when more than one installed package has the same Linux UID. */
+	shared_uid: number | null,
+};
+
+/**
+ *  Android 弱网页面的编辑意图。
+ *  TypeScript 只描述用户做了什么；共享 UID 扩选和嵌套故障项默认值均由
+ *  Rust 生成，避免展示层手写第二套领域规则。
+ */
+export type AndroidProfileEditIntent = { kind: "toggle_package"; package_name: string; selected: boolean } | { kind: "set_burst_loss_enabled"; enabled: boolean } | { kind: "add_blackout_window" } | { kind: "add_tcp_flag_drop" };
+
+/**
+ *  将指定原始目标透明转交给 Workspace 中的一条桌面代理监听。
+ *  这里只保存用户输入的目标和稳定 Listener 引用。桌面 IP、ADB reverse 端口、SOCKS
+ *  地址和设备端 transport 均是启动时解析的运行态，禁止进入 Workspace 文档。
+ */
+export type AndroidProxyRoute = {
+	destination: string,
+	ports: number[],
+	listener_id: ListenerId,
+};
+
+export type AndroidRuntimeEndpointHealth = "healthy" | "waiting_reconnect" | "faulted";
+
+export type AndroidRuntimeEndpointViewModel = {
+	serial: string,
+	epoch: string,
+	mode: AndroidRuntimeOwnerMode,
+	original_destination: string,
+	original_ports: number[],
+	resolved_original_ips: string[],
+	listener_id: string,
+	listener_name: string,
+	desktop_listener_port: number,
+	proxy_host: string,
+	proxy_port: number,
+	resolved_at: string,
+	health: AndroidRuntimeEndpointHealth,
+};
+
+/**
+ *  Android 网络运行态的实际设备所有者。
+ *  它与 UI 当前选择的设备完全独立；停止、状态查询和恢复只能以这里记录的 serial 为目标。
+ */
+export type AndroidRuntimeOwnerMode = "device_only" | "lan" | "adb_reverse";
+
+export type AndroidRuntimeOwnerSource = "start" | "apply" | "recovery";
+
+export type AndroidRuntimeOwnerState = "active" | "uncertain" | "waiting_reconnect" | "cleanup_required" | "stop_failed" | "faulted";
+
+export type AndroidRuntimeOwnerTransitionReason = "activation_confirmed" | "activation_uncertain" | "reverse_preparation" | "reverse_cleanup_required" | "device_disconnected" | "device_reconnected" | "stop_failed" | "recovered_from_storage" | "lan_endpoint_reapplied" | "lan_endpoint_faulted";
+
+export type AndroidRuntimeOwnerViewModel = {
+	serial: string,
+	epoch: string,
+	mode: AndroidRuntimeOwnerMode,
+	profile_id: string,
+	state: AndroidRuntimeOwnerState,
+	source: AndroidRuntimeOwnerSource,
+	transition_reason: AndroidRuntimeOwnerTransitionReason,
+	updated_at: string,
+};
+
+/**
+ *  Android 设备网络方案锁定的目标应用快照。
+ *  包名用于建立 `VpnService` allowlist，UID 用于 shared UID 整组校验；不检查 APK 签名。
+ */
+export type AndroidTargetApplication = {
+	package_name: string,
+	uid: number,
+	display_name: string | null,
+};
+
 /**  应用启动时一次返回的首屏快照，避免界面自行拼接不一致状态。 */
 export type AppBootstrapViewModel = {
 	product_name: string,
-	proxy: ProxyStatusViewModel,
 	channel_catalog: ChannelPresentationViewModel[],
 	recent_capture: CapturePageViewModel,
-	pending_breakpoints: BreakpointSummaryViewModel[],
 	certificate: CertificateOverviewViewModel,
 	settings: SettingsViewModel,
 	event_cursor: number,
+};
+
+/**
+ *  可安全跨 IPC 展示的导入定位信息。
+ *  所有字符串都必须在进入 Application 前完成校验：`file` 只能是包内相对路径，
+ *  `field` 只能是收敛后的声明字段路径，`entry` 只能是合法脚本函数标识。这里刻意没有
+ *  source、原始第三方错误文本或本机路径字段，避免诊断能力演变成源码泄漏通道。
+ */
+export type AppErrorDiagnosticViewModel = {
+	file: string | null,
+	field: string | null,
+	line: number | null,
+	column: number | null,
+	entry: string | null,
 };
 
 export type AppErrorViewModel = {
@@ -92,69 +389,77 @@ export type AppErrorViewModel = {
 	suggested_action: string | null,
 	entity_id: string | null,
 	runtime_epoch: string | null,
+	diagnostic: AppErrorDiagnosticViewModel | null,
 };
 
-export type BreakpointActionOptionViewModel = {
-	kind: BreakpointDecisionKind,
-	label: string,
+/**  Safe result of writing a caller-selected backup target. */
+export type ApplicationBackupExportOutcome = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
+export type ApplicationBackupImportCommitOutcome = {
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	requires_restart: boolean,
+};
+
+export type ApplicationBackupImportPreview = {
+	token: ApplicationBackupImportToken,
+	expires_in_seconds: number,
+	workspace_count: number,
+	protocol_package_count: number,
+	enabled_protocol_package_count: number,
+	portable_material_count: number,
+	protocol_packages: ApplicationBackupPackagePreview[],
+	replacement_scope: ApplicationBackupReplacementScope,
+};
+
+export type ApplicationBackupImportToken = string;
+
+export type ApplicationBackupPackagePreview = {
+	package: ProtocolPackageRef,
 	enabled: boolean,
-	disabled_reason: DisabledReason | null,
-	default_delay_ms: number | null,
-	default_http_status: number | null,
-	default_content_length_delta: number | null,
-	default_truncate_at: number | null,
 };
 
-/**  用户提交的断点决定。所有可选参数最终仍由 Rust 按 `kind` 校验。 */
-export type BreakpointDecision = {
-	breakpoint_id: string,
-	expected_revision: number,
-	kind: BreakpointDecisionKind,
-	message: MessageContentViewModel | null,
-	delay_ms: number | null,
-	http_status: number | null,
-	content_length_delta: number | null,
-	truncate_at: number | null,
+export type ApplicationBackupReplacementScope = {
+	replaces_all_workspaces: boolean,
+	replaces_selected_workspace: boolean,
+	replaces_portable_settings: boolean,
+	replaces_protocol_package_registry: boolean,
 };
 
-export type BreakpointDecisionKind = "forward_original" | "forward_modified" | "mock_response" | "delay" | "disconnect_before_upstream" | "custom_http_status" | "invalid_json" | "wrong_content_length" | "truncate" | "drop_response";
-
-/**  断点详情：原始报文用于恢复，有效报文用于当前编辑和最终转发。 */
-export type BreakpointDetailViewModel = {
-	summary: BreakpointSummaryViewModel,
-	original: MessageContentViewModel,
-	effective: MessageContentViewModel,
-	can_resolve: boolean,
-	resolve_disabled_reason: DisabledReason | null,
-	available_actions: BreakpointActionOptionViewModel[],
+/**  TCP/UDP Payload 位翻转配置。 */
+export type BitCorruptionProfile = {
+	probability_basis_points: number,
+	bits_per_packet: number,
 };
 
-export type BreakpointDraft = {
-	breakpoint_id: string,
-	expected_revision: number,
-	message: MessageContentViewModel,
+/**  一段相对于弱网引擎启动时刻的断网窗口。 */
+export type BlackoutWindow = {
+	start_after_millis: number,
+	duration_millis: number,
 };
 
-export type BreakpointState = "pending" | "resolved" | "client_disconnected" | "proxy_stopped";
+export type BodyCodecKind = "auto" | "raw" | "utf8" | "shift_jis";
 
-export type BreakpointSummaryViewModel = {
-	breakpoint_id: string,
-	session_id: string,
-	runtime_epoch: string,
-	stage: MessageStage,
-	title: string,
-	terminal_ip: string,
-	channel: ChannelId,
-	channel_text: string,
-	method: string,
-	target: string,
-	waiting_since: string,
-	certificate_fingerprint_suffix: string,
-	state: BreakpointState,
-	state_text: string,
-	ui_tone: UiTone,
-	revision: number,
+/**  Boolean equality predicate. */
+export type BooleanPredicate =
+/**  Exact boolean equality. */
+{ equal: boolean };
+
+/**  Gilbert-Elliott 两状态突发丢包模型，概率统一使用 0..=10000 基点。 */
+export type BurstLossProfile = {
+	enter_bad_state_basis_points: number,
+	leave_bad_state_basis_points: number,
+	good_state_loss_basis_points: number,
+	bad_state_loss_basis_points: number,
 };
+
+/**  Canonical padded standard Base64 bytes. */
+export type CanonicalBase64 = string;
 
 export type CaptureDetailViewModel = {
 	session_id: string,
@@ -221,9 +526,6 @@ export type CaptureRowViewModel = {
 	duration_ms: number | null,
 	matched_rule_ids: string[],
 	size_bytes: number,
-	breakpoint_id: string | null,
-	can_go_to_breakpoint: boolean,
-	breakpoint_disabled_reason: DisabledReason | null,
 };
 
 export type CaptureSort = "occurred_at" | "terminal_ip" | "duration" | "size";
@@ -251,6 +553,18 @@ export type CertificateOverviewViewModel = {
 	disabled_reason: DisabledReason | null,
 };
 
+/**  证书材料的非敏感引用。实际证书链和私钥由 infrastructure 解析。 */
+export type CertificateReference = {
+	id: CertificateReferenceId,
+	label: string,
+	kind: CertificateReferenceKind,
+	reference: string,
+};
+
+export type CertificateReferenceId = string;
+
+export type CertificateReferenceKind = "mitm_root_ca" | "reverse_server_identity" | "downstream_client_trust" | "upstream_client_identity" | "upstream_server_trust";
+
 /**  产品通道的受校验稳定 ID。 */
 export type ChannelId = string;
 
@@ -268,38 +582,397 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-export type ChannelState = "disabled" | "stopped" | "starting" | "listening" | "stopping" | "faulted";
+/**  The rule's one typed condition. */
+export type Condition =
+/**  A typed RFC 6901 Document predicate. */
+{ source: "document";
+/**  Document path. */
+path: JsonPointer;
+/**  Strict predicate. */
+predicate: DocumentPredicate } |
+/**  A typed Document predicate whose condition-only path may contain `*` segments. */
+{ source: "document_pattern";
+/**  Condition-only match path. */
+path: DocumentMatchPath;
+/**  Strict predicate applied with ANY semantics to expanded values. */
+predicate: DocumentPredicate } |
+/**  Existing typed HTTP/runtime condition. */
+{ source: "http";
+/**  Typed HTTP field. */
+field: MatchField;
+/**  Typed HTTP comparison. */
+operator: MatchOperator };
 
-export type ChannelStatusViewModel = {
-	id: ChannelId,
-	display_name: string,
-	state: ChannelState,
-	state_text: string,
-	ui_tone: UiTone,
-	listen_address: string,
-	mtls_enabled: boolean,
-	connected_clients: number,
-	request_count: number,
-	error_count: number,
-	enabled: boolean,
-	upstream_url: string,
-	upstream_state_text: string,
-	upstream_ui_tone: UiTone,
+/**  Positive number of bytes consumed by one complete frame. */
+export type ConsumedBytes = number;
+
+/**  Parameters for a decode hook. */
+export type DecodeParams = {
+	/**  HTTP Unicode text or Socket canonical Base64, interpreted by the package kind adapter. */
+	input: string,
 };
 
-export type ConnectionHealthState = "unavailable" | "waiting" | "healthy" | "degraded" | "faulted";
+/**
+ *  生产者提交的有界控制面诊断。完整报文由 capture/Exchange observation 负责；密码、私钥和
+ *  PKCS12 字节只属于专用凭据边界。
+ */
+export type DiagnosticLogEntryViewModel = {
+	level: DiagnosticLogLevel,
+	stage: DiagnosticLogStage,
+	summary: string,
+	detail: string | null,
+	device_serial: string | null,
+	listener_id: string | null,
+	profile_id: string | null,
+	socket_context: SocketDiagnosticContextViewModel | null,
+};
 
-export type ConnectionHealthViewModel = {
-	state: ConnectionHealthState,
-	state_text: string,
-	detail: string,
+export type DiagnosticLogLevel = "info" | "warning" | "error";
+
+export type DiagnosticLogPageViewModel = {
+	rows: DiagnosticLogRowViewModel[],
+	current_cursor: number,
+	/**  `EventHub` 当前仍保留的最早全局事件；诊断行是该有界历史的类型化投影。 */
+	oldest_retained_event_id: number | null,
+	/**  `after_event_id` 早于保留窗口时为 true，调用方必须重新读取完整诊断快照。 */
+	snapshot_required: boolean,
+	retained_count: number,
+	truncated: boolean,
+	empty_message: string,
+};
+
+export type DiagnosticLogQuery = {
+	keyword: string | null,
+	after_event_id: number | null,
+	limit: number,
+};
+
+export type DiagnosticLogRowViewModel = {
+	event_id: number,
+	occurred_at: string,
+	level: DiagnosticLogLevel,
+	level_text: string,
+	stage: DiagnosticLogStage,
+	stage_text: string,
+	summary: string,
+	detail: string | null,
+	device_serial: string | null,
+	listener_id: string | null,
+	profile_id: string | null,
+	socket_context: SocketDiagnosticContextViewModel | null,
 	ui_tone: UiTone,
+};
+
+/**  跨桌面、ADB、Companion 与代理链路共用的诊断阶段。 */
+export type DiagnosticLogStage = "system" | "adb_forward_control" | "adb_reverse_business" | "desktop_dns" | "companion" | "vpn" | "tun" | "app_selection" | "route_activation" | "listener" | "downstream_tls" | "upstream_tls" | "http" | "socket" | "stop_fallback" | "cleanup";
+
+export type DiagnosticReportExportOutcome = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
+/**  生成故障复现报告所需的精确范围。 */
+export type DiagnosticReportQuery = {
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId,
 };
 
 /**  Rust 判断某操作不可用时给出的稳定原因。 */
 export type DisabledReason = {
 	code: string,
 	message: string,
+};
+
+/**  Parameters for a display hook. */
+export type DisplayParams = {
+	/**  Natural recursive JSON Document. */
+	document: Document,
+};
+
+/**  Identity-free, owned recursive JSON document. */
+export type Document = DocumentValue;
+
+/**
+ *  Condition-only RFC 6901 path whose `*` token selects exactly one object/array level.
+ *
+ *  Mutation APIs deliberately continue to accept only [`JsonPointer`].
+ */
+export type DocumentMatchPath = string;
+
+/**  Strict Document mutation primitives shared by HTTP and Socket rules. */
+export type DocumentMutation =
+/**  Strict Set using [`Document::set`]. */
+{ type: "set"; path: JsonPointer; value: DocumentValue } |
+/**  Strict Clear using [`Document::clear_path`]. */
+{ type: "clear"; path: JsonPointer; value_type: DocumentValueType } |
+/**  Strict array Insert using [`Document::insert`]. */
+{ type: "insert"; path: JsonPointer; index: number; value: DocumentValue } |
+/**  Strict array Append using [`Document::append`]. */
+{ type: "append"; path: JsonPointer; value: DocumentValue };
+
+/**  JavaScript `Number` compatible finite numeric value. */
+export type DocumentNumber = number;
+
+/**  Closed, typed Document predicate set. No implicit JSON value conversions are performed. */
+export type DocumentPredicate =
+/**  String predicate. */
+{ type: "string"; value: StringPredicate } |
+/**  Number predicate. */
+{ type: "number"; value: NumberPredicate } |
+/**  Boolean predicate. */
+{ type: "boolean"; value: BooleanPredicate } |
+/**  Exact JSON null equality. */
+{ type: "null_equal" };
+
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode = DocumentSchemaNode_Serialize | DocumentSchemaNode_Deserialize;
+
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode_Deserialize =
+/**  String value metadata. */
+({ type: "string";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Number value metadata. */
+({ type: "number";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Boolean value metadata. */
+({ type: "boolean";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Object metadata keyed by JSON property name. */
+({ type: "object";
+/**  Optional UI title. */
+title?: string | null;
+/**  Per-property schema metadata. */
+properties: { [key in string]: DocumentSchemaNode_Deserialize } }) & { items?: never } |
+/**  Array metadata. Every array must declare its item schema. */
+({ type: "array";
+/**  Optional UI title. */
+title?: string | null;
+/**  Required item schema. */
+items: DocumentSchemaNode_Deserialize }) & { properties?: never };
+
+/**  Recursive, identity-free metadata describing a Document shape. */
+export type DocumentSchemaNode_Serialize =
+/**  String value metadata. */
+({ type: "string";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Number value metadata. */
+({ type: "number";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Boolean value metadata. */
+({ type: "boolean";
+/**  Optional UI title. */
+title?: string | null }) & { items?: never; properties?: never } |
+/**  Object metadata keyed by JSON property name. */
+({ type: "object";
+/**  Optional UI title. */
+title?: string | null;
+/**  Per-property schema metadata. */
+properties: { [key in string]: DocumentSchemaNode_Serialize } }) & { items?: never } |
+/**  Array metadata. Every array must declare its item schema. */
+({ type: "array";
+/**  Optional UI title. */
+title?: string | null;
+/**  Required item schema. */
+items: DocumentSchemaNode_Serialize }) & { properties?: never };
+
+/**  Recursive JSON value owned by a [`Document`]. */
+export type DocumentValue =
+/**  JSON string. */
+string |
+/**  Finite JavaScript number. */
+DocumentNumber |
+/**  JSON boolean. */
+boolean |
+/**  JSON null. */
+null |
+/**  JSON object. Key order is not semantic. */
+{ [key in string]: DocumentValue } |
+/**  JSON array. */
+DocumentValue[];
+
+/**  Schema-visible kind of a document value. */
+export type DocumentValueType =
+/**  String. */
+"string" |
+/**  Number. */
+"number" |
+/**  Boolean. */
+"boolean" |
+/**  Null. */
+"null" |
+/**  Object. */
+"object" |
+/**  Array. */
+"array";
+
+export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
+
+export type DownstreamTlsSettings = {
+	enabled: boolean,
+	server_identity: CertificateReferenceId | null,
+	dynamic_sni_allowlist: string[],
+	client_authentication: DownstreamClientAuthentication,
+};
+
+export type DropResponseMode = "ReadCompleteResponse" | "CloseAfterRequestWrite";
+
+/**  Parameters for an encode hook. */
+export type EncodeParams = {
+	/**  Original HTTP text or Socket Base64 input. */
+	originalInput: string,
+	/**  Natural recursive JSON Document. */
+	document: Document,
+};
+
+export type ErrorCode = "PROXY_ALREADY_RUNNING" | "PROXY_NOT_RUNNING" | "OPERATION_IN_PROGRESS" | "PORT_IN_USE" | "CONFIG_INVALID" | "REVISION_CONFLICT" | "CERTIFICATE_NOT_READY" | "CERTIFICATE_INVALID" | "PKCS12_PASSWORD_INVALID" | "DPAPI_PROTECT_FAILED" | "DPAPI_UNPROTECT_FAILED" | "TLS_HANDSHAKE_FAILED" | "UPSTREAM_CONNECT_TIMEOUT" | "UPSTREAM_WRITE_TIMEOUT" | "UPSTREAM_READ_TIMEOUT" | "BODY_TOO_LARGE" | "HEADER_LIMIT_EXCEEDED" | "BODY_DECODE_FAILED" | "BODY_ENCODE_FAILED" | "JSON_INVALID" | "RULE_INVALID" |
+/**  协议 Document 规则执行被调用方显式取消。 */
+"RULE_EXECUTION_CANCELLED" | "RULE_CONFLICT_WARNING" |
+/**  协议包 ID 或 `SemVer` 不符合稳定身份约束。 */
+"PROTOCOL_PACKAGE_INVALID" |
+/**  Document Schema 的身份、字段声明或聚合结构无效。 */
+"DOCUMENT_SCHEMA_INVALID" |
+/**  A number is not finite. */
+"DOCUMENT_NUMBER_INVALID" |
+/**  An integer JSON literal exceeds JavaScript's exact integer range. */
+"DOCUMENT_UNSAFE_INTEGER" |
+/**  JSON Pointer syntax is invalid. */
+"DOCUMENT_POINTER_INVALID" |
+/**  A requested Document path or array index does not exist. */
+"DOCUMENT_PATH_MISSING" |
+/**  A Document path traverses or targets the wrong JSON type. */
+"DOCUMENT_PATH_TYPE_MISMATCH" |
+/**  脚本或调用方访问了 Schema 未声明的字段。 */
+"DOCUMENT_FIELD_UNDECLARED" |
+/**  字段已声明，但当前 Frame 尚未给它赋值。 */
+"DOCUMENT_FIELD_UNASSIGNED" |
+/**  写入值的类型与 Schema 声明不一致。 */
+"DOCUMENT_FIELD_TYPE_MISMATCH" | "RESOURCE_EXHAUSTED" | "EVENT_CURSOR_EXPIRED" | "EXPORT_FAILED" | "IMPORT_FAILED" | "DATABASE_SCHEMA_INVALID" | "INVALID_STATE_TRANSITION" | "INTERNAL_ERROR";
+
+/**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
+export type ExchangeContext = { protocol: "http"; header: string; body: string;
+/**  `false` means the text is only a lossy display projection and cannot seed a rule. */
+body_is_utf8: boolean } | { protocol: "socket"; bytes: number[] };
+
+export type ExchangeObservationEvent = { event: "opened"; observed_at: string } | { event: "received"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext;
+/**  协议 Pipeline 提供 Document；透明 Socket chunk 没有 Document。 */
+document: unknown | null;
+/**  协议 Reader 固定 Display；透明 Socket 不调用 Display。 */
+display: string | null } | { event: "processed"; observed_at: string; direction: ProtocolDirection; changes: RuleDocumentChangeViewModel[]; changes_truncated: boolean; final_document: unknown } | { event: "encoded"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "sent"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext } | { event: "failed"; observed_at: string; direction: ProtocolDirection | null; stage: string; context: ExchangeContext | null; error: string; external_package_call: ExternalPackageCallDiagnosticViewModel | null } | { event: "closed"; observed_at: string; outcome: string; error: string | null };
+
+export type ExchangeObservationPage = {
+	rows: ExchangeObservationRecord[],
+	page: number,
+	page_size: number,
+	total: number,
+	/**  当前查询 Workspace 已被整体淘汰、因此无法再返回详情的连接记录数量。 */
+	evicted_records: number,
+	/**  应用进程全局在 tracing producer 队列入口丢弃的事件数。 */
+	dropped_events: number,
+	/**
+	 *  应用进程全局由 consumer/store 忽略的事件数：字段解析失败、缺少 opened、
+	 *  身份不匹配或内存容量拒绝。无法可信归属的事件不会被猜测到某个 Workspace。
+	 */
+	ignored_events: number,
+};
+
+export type ExchangeObservationQuery = {
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId | null,
+	page: PageRequest,
+};
+
+export type ExchangeObservationRecord = {
+	exchange_id: string,
+	workspace_id: WorkspaceId,
+	listener_id: ListenerId,
+	runtime_epoch: string,
+	peer_address: string,
+	protocol: ExchangeProtocol,
+	events: ExchangeObservationEvent[],
+	/**  `true` 表示该连接或更早连接的观测数据因容量不足发生过淘汰。 */
+	evidence_evicted: boolean,
+};
+
+export type ExchangeProtocol = "http" | "socket";
+
+/**
+ *  外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+ *  在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
+ */
+export type ExternalPackageCallDiagnosticViewModel = {
+	package: ProtocolPackageRef,
+	direction: ProtocolDirection,
+	stage: ExternalPackageCallStage,
+	method: string,
+	request_id: string | null,
+	remote_code: number | null,
+	stable_code: string | null,
+	remote_message: string | null,
+	/**  只允许 `null/bool/number/string(bytes=N)/array(items=N)/object(fields=N)` 形状摘要。 */
+	remote_data_summary: string | null,
+};
+
+export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display";
+
+/**  外部协议包详情的严格连接投影。 */
+export type ExternalPackageDetailViewModel = {
+	remote_address: string | null,
+	connection_id: string | null,
+	first_connected_at: string,
+	last_connected_at: string,
+	registration_fingerprint_sha256: string,
+	upstream_methods: ExternalPackageDirectionMethodsViewModel,
+	downstream_methods: ExternalPackageDirectionMethodsViewModel,
+	recent_error: ExternalPackageRecentErrorViewModel | null,
+};
+
+/**  一个方向实际调用的完整 JSON-RPC 方法名。 */
+export type ExternalPackageDirectionMethodsViewModel = {
+	frame: string,
+	decode: string,
+	encode: string,
+	display: string,
+};
+
+/**  最近一次连接级错误的安全摘要；不包含第三方 payload 或未脱敏 `data`。 */
+export type ExternalPackageRecentErrorViewModel = {
+	code: string,
+	message: string,
+	occurred_at: string,
+};
+
+/**
+ *  外部软件包 WebSocket 服务的启动配置。
+ *
+ *  监听地址和端口只在进程启动时读取；保存后由设置页明确提示重启。
+ */
+export type ExternalPackageServiceSettingsDraft = {
+	bind_address: string,
+	port: number,
+};
+
+/**  外部软件包 WebSocket 服务的启动状态。 */
+export type ExternalPackageServiceStateViewModel =
+/**  服务已绑定预期地址并接受 `/packages` 连接。 */
+{ state: "listening" } |
+/**  启动绑定失败；内置协议包仍可继续使用。 */
+{ state: "failed"; error: string };
+
+/**  设置页展示的外部软件包服务运行快照。 */
+export type ExternalPackageServiceStatusViewModel = {
+	/**  本次进程启动时实际采用的 WebSocket 地址，不随尚未重启的设置草稿变化。 */
+	websocket_url: string,
+	fixed_path: string,
+	online_connection_count: number,
+	state: ExternalPackageServiceStateViewModel,
+	/**  第一版不提供认证；显式字段避免 UI 仅靠说明文字表达安全边界。 */
+	authentication_enabled: boolean,
 };
 
 export type FaultConfigurationDraft = {
@@ -309,8 +982,6 @@ export type FaultConfigurationDraft = {
 	channel: ChannelId | null,
 	terminal: string | null,
 	target: string | null,
-	nth_hit: number | null,
-	one_shot: boolean,
 	priority: number,
 	parameters: { [key in string]: FaultParameterValue },
 };
@@ -338,8 +1009,6 @@ export type FaultTemplateViewModel = {
 	behavior_text: string,
 	affected_party_text: string,
 	default_channel: ChannelId,
-	default_nth_hit: number,
-	default_one_shot: boolean,
 	default_priority: number,
 	default_parameters: { [key in string]: FaultParameterValue },
 	parameter_schema: FaultParameterFieldViewModel[],
@@ -347,29 +1016,492 @@ export type FaultTemplateViewModel = {
 	ui_tone: UiTone,
 };
 
-/**  可复用于规则、设置、证书和断点的字段校验结果。 */
+/**  可复用于规则、设置和证书的字段校验结果。 */
 export type FieldValidationViewModel = {
 	valid: boolean,
 	field_errors: { [key in string]: string[] },
 	warnings: string[],
 };
 
+export type FixedServerSettings = {
+	upstream_url: string,
+	upstream_tls: UpstreamTlsSettings,
+};
+
+export type ForwardProxyAuthentication = { mode: "none" } | { mode: "basic"; credential: SecretReference };
+
+/**  Parameters for a frame hook. */
+export type FrameParams = {
+	/**  Current accumulated Socket buffer. */
+	buffer: CanonicalBase64,
+};
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult = FrameResult_Serialize | FrameResult_Deserialize;
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult_Deserialize =
+/**  The current buffer does not yet contain one complete frame. */
+({ status: "need_more";
+/**  Optional byte count needed before trying the frame hook again. */
+requiredBytes?: number | null }) & { consumedBytes?: never; reason?: never } |
+/**  The buffer prefix is one complete frame. */
+({ status: "complete";
+/**  Positive byte count consumed from the buffer prefix. */
+consumedBytes: ConsumedBytes }) & { reason?: never; requiredBytes?: never } |
+/**  The package rejects the current buffer as an invalid frame. */
+({ status: "reject";
+/**  Package-supplied rejection reason. */
+reason: string }) & { consumedBytes?: never; requiredBytes?: never };
+
+/**  Closed result of one fixed frame hook. */
+export type FrameResult_Serialize =
+/**  The current buffer does not yet contain one complete frame. */
+({ status: "need_more";
+/**  Optional byte count needed before trying the frame hook again. */
+requiredBytes?: number | null }) & { consumedBytes?: never; reason?: never } |
+/**  The buffer prefix is one complete frame. */
+({ status: "complete";
+/**  Positive byte count consumed from the buffer prefix. */
+consumedBytes: ConsumedBytes }) & { reason?: never; requiredBytes?: never } |
+/**  The package rejects the current buffer as an invalid frame. */
+({ status: "reject";
+/**  Package-supplied rejection reason. */
+reason: string }) & { consumedBytes?: never; requiredBytes?: never };
+
+export type HttpAction = ({ SetJsonField: {
+	path: string,
+	value: unknown,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; Terminal?: never; Throttle?: never } | ({ ReplaceBodyText: string }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ SetHeader: {
+	name: string,
+	value: string,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Delay: {
+	milliseconds: number,
+} }) & { CustomHttpStatus?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Jitter: {
+	minimum_milliseconds: number,
+	maximum_milliseconds: number,
+	scope: JitterScope,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Throttle: {
+	bytes_per_second: number,
+	chunk_bytes: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never } | ({ Intermittent: {
+	available_milliseconds: number,
+	blocked_milliseconds: number,
+	direction: TrafficDirection,
+} }) & { CustomHttpStatus?: never; Delay?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ CustomHttpStatus: {
+	status: number,
+} }) & { Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Terminal?: never; Throttle?: never } | ({ Terminal: TerminalAction }) & { CustomHttpStatus?: never; Delay?: never; Intermittent?: never; Jitter?: never; ReplaceBodyText?: never; SetHeader?: never; SetJsonField?: never; Throttle?: never };
+
+/**
+ *  HTTP Body 的处理方式。
+ *
+ *  `Plain` 保持现有 HTTP 语义；`Protocol` 使用精确协议包版本把 UTF-8 Body 解码为
+ *  Document，并在 Document 实际变化时重新编码。未命中规则时不会重写 Body。
+ */
+export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package: ProtocolPackageRef };
+
+export type HttpListenerSettings = {
+	authentication: ForwardProxyAuthentication,
+	mitm: MitmSettings,
+	downstream_tls: DownstreamTlsSettings,
+	request_body_codec: BodyCodecKind,
+	response_body_codec: BodyCodecKind,
+	body_processing: HttpBodyProcessing,
+	fixed_server: FixedServerSettings | null,
+};
+
+/**  HTTP 文本 Body 经协议包 Decode、两段规则和 Display 后冻结的证据。 */
+export type HttpProtocolBodyViewModel = {
+	package: ProtocolPackageRef,
+	/**  协议处理前收到的精确 HTTP Body 字节。 */
+	origin_body: number[],
+	/**  由 Rust 在 UTF-8 门禁后生成，前端不得再次自行解码字节。 */
+	origin_text: string,
+	/**  协议处理成功后实际写入线路的精确 HTTP Body 字节。 */
+	written_body: number[],
+	/**  由 Rust 在 Encode 输出 UTF-8 门禁后生成。 */
+	written_text: string,
+	document: Document,
+	stages: HttpRuleStageViewModel[],
+	display: HttpProtocolDisplayViewModel,
+};
+
+/**  Display 无法生成 HTML 时供 UI 稳定展示的原因。 */
+export type HttpProtocolDisplayFallbackReason = "entry_point_failed" | "resource_limit_exceeded";
+
+/**  协议包对当前 HTTP Body 的展示结果。HTML 始终是不可信内容，前端只能放入受限沙箱。 */
+export type HttpProtocolDisplayViewModel = { kind: "untrusted_html"; html: string } | { kind: "hex_fallback"; reason: HttpProtocolDisplayFallbackReason };
+
+/**  HTTP 协议处理失败的稳定分类；不依赖错误文案解析。 */
+export type HttpProtocolFailureKind = "input_not_utf8" | "decode_failed" | "rule_failed" | "encode_failed" | "output_not_utf8" | "worker_failed";
+
+/**  HTTP 协议处理在返回错误前冻结的脱敏证据。 */
+export type HttpProtocolFailureViewModel = {
+	package: ProtocolPackageRef,
+	direction: ProtocolDirection,
+	stage: RuleStage | null,
+	kind: HttpProtocolFailureKind,
+	code: string,
+	detail: string,
+	origin_body: number[],
+};
+
+export type HttpRuleContent = {
+	description: string,
+	condition: Condition,
+	action: UnifiedAction,
+};
+
+export type HttpRuleEditorStageViewModel = {
+	stage: RuleStage,
+	http: RuleStageCapabilityViewModel | null,
+	package: ProtocolPackageRef | null,
+	document_fields: RuleDocumentSchemaFieldCapability[],
+	document_common_actions: RuleCommonActionCapability[],
+	new_rule_draft: RuleNewDefinitionDraft,
+};
+
+/**  当前 HTTP 方向内一段独立规则程序的真实命中结果。 */
+export type HttpRuleStageViewModel = {
+	stage: RuleStage,
+	matched_rule_ids: string[],
+	document: Document,
+	display: HttpProtocolDisplayViewModel,
+};
+
+export type JitterScope = "BeforeMessage" | "PerChunk";
+
+/**  Parsed RFC 6901 JSON Pointer. The document root is the empty string. */
+export type JsonPointer = string;
+
+/**  Fixed JSON-RPC version. */
+export type JsonRpcVersion =
+/**  JSON-RPC 2.0. */
+"2.0";
+
+/**
+ *  代理监听页面使用的证书引用详情。
+ *  Workspace 只保存安全引用；证书的主题、SAN、有效期和指纹必须由 Rust 重新解析。
+ *  单个引用失效时保留该行并返回 `error_message`，避免一份坏证书阻塞其他证书展示。
+ */
+export type ListenerCertificateDetailViewModel = {
+	reference_id: CertificateReferenceId,
+	label: string,
+	certificate: CertificateItemViewModel | null,
+	error_message: string | null,
+};
+
+/**
+ *  原生导入成功后的安全引用与已解析详情。
+ *  导入文件内容、私钥和密码都不会进入 IPC；前端只获得可持久化引用及公开证书元数据。
+ */
+export type ListenerCertificateImportViewModel = {
+	reference: CertificateReference,
+	detail: ListenerCertificateDetailViewModel,
+};
+
+export type ListenerDataPlane = { kind: "http"; settings: HttpListenerSettings } | { kind: "socket"; settings: SocketRelaySettings };
+
+export type ListenerDataPlaneKind = "http" | "socket";
+
+export type ListenerId = string;
+
+/**
+ *  运行监控中的单个入口行。
+ *  配置与运行状态由 Rust 合并，前端不推断“缺少状态即停止”。
+ */
+export type ListenerMonitorRowViewModel = {
+	listener_id: ListenerId,
+	name: string,
+	kind_text: string,
+	listen_address: string,
+	request_destination: string,
+	state: ListenerRuntimeState,
+	state_text: string,
+	ui_tone: UiTone,
+	fault_reason: string | null,
+	/**  Rust runtime 是否允许当前 Listener 执行启动。 */
+	can_start: boolean,
+	/**
+	 *  Rust runtime 是否允许当前 Listener 执行停止。
+	 *  `Faulted` 仍可能为 `true`，用于释放 runtime ownership。
+	 */
+	can_stop: boolean,
+	active_connections: number,
+	client_to_server_bytes: number,
+	server_to_client_bytes: number,
+};
+
+/**  当前 Workspace 的入口运行概览，供顶部状态栏与运行监控复用。 */
+export type ListenerOverviewViewModel = {
+	workspace_id: WorkspaceId,
+	workspace_name: string,
+	state_text: string,
+	ui_tone: UiTone,
+	total_count: number,
+	active_count: number,
+	faulted_count: number,
+	rows: ListenerMonitorRowViewModel[],
+};
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel = ListenerProtocolPackageCatalogViewModel_Serialize | ListenerProtocolPackageCatalogViewModel_Deserialize;
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel_Deserialize = {
+	options: ListenerProtocolPackageOptionViewModel_Deserialize[],
+	/**  新建按协议转发/本地应答可采用的官方精确版本。 */
+	recommended_package: ProtocolPackageRef | null,
+	installed_version_count: number,
+	unavailable_version_count: number,
+};
+
+/**
+ *  Listener 协议包选择器的一次权威目录快照。
+ *
+ *  `options` 只包含当前可选版本；停用、历史校验无效、无法由当前 Host 描述或返回错包
+ *  描述的版本统一计入 `unavailable_version_count`，不向 `WebView` 泄漏编译器内部错误。
+ */
+export type ListenerProtocolPackageCatalogViewModel_Serialize = {
+	options: ListenerProtocolPackageOptionViewModel_Serialize[],
+	/**  新建按协议转发/本地应答可采用的官方精确版本。 */
+	recommended_package: ProtocolPackageRef | null,
+	installed_version_count: number,
+	unavailable_version_count: number,
+};
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel = ListenerProtocolPackageOptionViewModel_Serialize | ListenerProtocolPackageOptionViewModel_Deserialize;
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel_Deserialize = {
+	package: ProtocolPackageRef,
+	name: string,
+	/**  选择器明确投影已移除的旧来源或当前外部进程，不从其他字段反推来源。 */
+	package_source: ProtocolPackageSourceViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+};
+
+/**
+ *  Listener 编辑器可以绑定的一个精确协议包版本。
+ *
+ *  该模型只由 Rust 在读取启用状态、最近校验结果并重新取得当前编译描述后构造。前端不得
+ *  根据 Host API 数字猜测兼容性，也不需要逐版本发起详情查询。
+ */
+export type ListenerProtocolPackageOptionViewModel_Serialize = {
+	package: ProtocolPackageRef,
+	name: string,
+	/**  选择器明确投影已移除的旧来源或当前外部进程，不从其他字段反推来源。 */
+	package_source: ProtocolPackageSourceViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+};
+
+export type ListenerRuntimeState = "stopped" | "starting" | "running" | "stopping" | "faulted";
+
+/**  单个 Workspace Listener 的运行快照。所有文案与状态均由 Rust 提供。 */
+export type ListenerStatusViewModel = {
+	listener_id: ListenerId,
+	runtime_epoch: string | null,
+	state: ListenerRuntimeState,
+	state_text: string,
+	ui_tone: UiTone,
+	listen_address: string,
+	fault_reason: string | null,
+	can_start: boolean,
+	can_stop: boolean,
+	active_connections: number,
+	client_to_server_bytes: number,
+	server_to_client_bytes: number,
+	retained_diagnostic_evictions: number,
+};
+
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel = ListenerUpstreamConnectionTestViewModel_Serialize | ListenerUpstreamConnectionTestViewModel_Deserialize;
+
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel_Deserialize = {
+	listener_id: ListenerId,
+	data_plane: ListenerDataPlaneKind,
+	upstream_origin: string,
+	resolved_address: string,
+	scheme: string,
+	transport: string,
+	tls: ListenerUpstreamTlsEvidenceViewModel | null,
+	socket_transport_mode: SocketTransportMode | null,
+	tls_server_name_candidates?: string[],
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
+/**  对固定 Server 执行真实连接探测。HTTP 返回 TCP 证据；HTTPS 额外返回 TLS 证据。 */
+export type ListenerUpstreamConnectionTestViewModel_Serialize = {
+	listener_id: ListenerId,
+	data_plane: ListenerDataPlaneKind,
+	upstream_origin: string,
+	resolved_address: string,
+	scheme: string,
+	transport: string,
+	tls: ListenerUpstreamTlsEvidenceViewModel | null,
+	socket_transport_mode: SocketTransportMode | null,
+	tls_server_name_candidates?: string[],
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
+export type ListenerUpstreamTlsEvidenceViewModel = {
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+};
+
+/**
+ *  对单条已启用 HTTPS 固定 Server 的代理监听执行真实 TCP + TLS 握手后的只读结果。
+ *  该模型只包含公开的对端证书元数据，不返回证书字节、客户端私钥或安全引用内容。
+ *  `client_identity_configured` 只表示本次握手加载了客户端身份；Server 是否强制要求
+ *  客户端证书，由握手成功或失败共同判断，前端不能自行推断。
+ */
+export type ListenerUpstreamTlsTestViewModel = {
+	listener_id: ListenerId,
+	upstream_origin: string,
+	resolved_address: string,
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+	elapsed_millis: number,
+	message: string,
+	ui_tone: UiTone,
+};
+
+export type MatchField = "TerminalIp" | "CertificateFingerprint" |
+/**  Exact HTTP method token. */
+"Method" |
+/**  Request origin-form target: path plus optional query. */
+"RequestTarget" |
+/**  One case-insensitive HTTP header name written as a single-segment pointer. */
+{ Header: string };
+
+export type MatchOperator = ({ Equals: string }) & { Contains?: never; EndsWith?: never; StartsWith?: never; Wildcard?: never } | ({ Contains: string }) & { EndsWith?: never; Equals?: never; StartsWith?: never; Wildcard?: never } | ({ StartsWith: string }) & { Contains?: never; EndsWith?: never; Equals?: never; Wildcard?: never } | ({ EndsWith: string }) & { Contains?: never; Equals?: never; StartsWith?: never; Wildcard?: never } | ({ Wildcard: string }) & { Contains?: never; EndsWith?: never; Equals?: never; StartsWith?: never };
+
+export type McpInfoViewModel = {
+	available: boolean,
+	endpoint: string,
+	protocol_version: string,
+	transport: string,
+	access_scope: string,
+	authentication: string,
+	plaintext_http: boolean,
+	ipv4: McpIpCapabilityViewModel,
+	ipv6: McpIpCapabilityViewModel,
+	warning_codes: string[],
+	tool_count: number,
+	resource_count: number,
+};
+
+export type McpIpCapabilityViewModel = {
+	available: boolean,
+	bind_address: string,
+	port: number,
+	warning_codes: string[],
+};
+
+export type MessageContentKind = "json" | "xml" | "text" | "binary" | "unknown";
+
 /**  可供界面查看/编辑，同时可无损重建网络报文的内容模型。 */
 export type MessageContentViewModel = {
 	http_status: number | null,
 	/**  精确起始行字节，避免把展示字符串误作报文重建来源。 */
-	start_line_bytes?: number[],
+	start_line_bytes: number[],
 	/**  保留名称、值、大小写、重复项和原始顺序的 Header。 */
-	raw_headers?: RawHttpHeaderViewModel[],
+	raw_headers: RawHttpHeaderViewModel[],
 	/**  仅供展示和表单编辑的有损分组投影。 */
 	headers: { [key in string]: string[] },
 	body_text: string | null,
 	body_bytes: number[],
 	json: unknown | null,
 	content_length: number,
+	media_type: string | null,
+	charset: string | null,
+	content_kind: MessageContentKind,
+	codec_id: string | null,
+	decode_error: string | null,
+	query_string: string | null,
+	/**  仅当当前入口绑定 HTTP 协议包且 Body 非空时存在。 */
+	protocol: HttpProtocolBodyViewModel | null,
+	/**  协议处理失败时在返回错误前保存；与成功证据互斥。 */
+	protocol_failure: HttpProtocolFailureViewModel | null,
 };
 
 export type MessageStage = "tls_handshake" | "request" | "response" | "terminal";
+
+export type MitmSettings = {
+	enabled: boolean,
+	authority_allowlist: string[],
+	root_ca: CertificateReferenceId | null,
+	maximum_cached_leaf_certificates: number,
+};
+
+/**  丢弃某个方向上的第 N 个指定 TCP 标志包。 */
+export type NthTcpFlagDrop = {
+	direction: PacketDirection,
+	flag: TcpFlag,
+	nth: number,
+};
+
+/**  Number comparison supported by a typed Document predicate. */
+export type NumberOperator =
+/**  Exact numeric equality. */
+"equal" |
+/**  Strictly less than. */
+"less" |
+/**  Less than or equal. */
+"less_equal" |
+/**  Strictly greater than. */
+"greater" |
+/**  Greater than or equal. */
+"greater_equal";
+
+/**  A number predicate whose expected value is a validated JavaScript Number. */
+export type NumberPredicate = {
+	/**  Comparison operator. */
+	operator: NumberOperator,
+	/**  Expected number. */
+	value: DocumentNumber,
+};
 
 export type OperationResultViewModel = {
 	success: boolean,
@@ -381,43 +1513,476 @@ export type OperationResultViewModel = {
 	requires_restart: boolean,
 };
 
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection = PackageDocumentDirection_Serialize | PackageDocumentDirection_Deserialize;
+
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection_Deserialize = {
+	schema?: DocumentSchemaNode_Deserialize | null,
+};
+
+/**  Optional Schema metadata for one HTTP or Socket direction. */
+export type PackageDocumentDirection_Serialize = {
+	schema?: DocumentSchemaNode_Serialize | null,
+};
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments = PackageDocuments_Serialize | PackageDocuments_Deserialize;
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments_Deserialize = {
+	upstream: PackageDocumentDirection_Deserialize,
+	downstream: PackageDocumentDirection_Deserialize,
+};
+
+/**  Independent upstream and downstream Document metadata. */
+export type PackageDocuments_Serialize = {
+	upstream: PackageDocumentDirection_Serialize,
+	downstream: PackageDocumentDirection_Serialize,
+};
+
+/**  Protocol kind owned by one package version. */
+export type PackageKind =
+/**  HTTP body package. */
+"http" |
+/**  Socket frame package. */
+"socket";
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest = PackageManifest_Serialize | PackageManifest_Deserialize;
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest_Deserialize = {
+	api: number,
+	kind: PackageKind,
+	package: PackageMetadata,
+	document: PackageDocuments_Deserialize,
+};
+
+/**  Strict final API 1 package Manifest. */
+export type PackageManifest_Serialize = {
+	api: number,
+	kind: PackageKind,
+	package: PackageMetadata,
+	document: PackageDocuments_Serialize,
+};
+
+/**  Exact package identity and human-readable metadata. */
+export type PackageMetadata = {
+	id: ProtocolPackageId,
+	version: ProtocolPackageVersion,
+	name: string,
+	description: string,
+};
+
+/**  The only registration method. */
+export type PackageRegisterMethod =
+/**  `package.register`. */
+"package.register";
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification = PackageRegisterNotification_Serialize | PackageRegisterNotification_Deserialize;
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification_Deserialize = {
+	jsonrpc: JsonRpcVersion,
+	method: PackageRegisterMethod,
+	params: PackageManifest_Deserialize,
+};
+
+/**  One-way package registration notification. Its strict shape cannot contain an `id`. */
+export type PackageRegisterNotification_Serialize = {
+	jsonrpc: JsonRpcVersion,
+	method: PackageRegisterMethod,
+	params: PackageManifest_Serialize,
+};
+
+/**  Strict JSON-RPC error object. */
+export type PackageRpcError = {
+	code: number,
+	message: string,
+	data: PackageRpcErrorData,
+};
+
+/**  Stable-code error data shared with Domain and UI. */
+export type PackageRpcErrorData = {
+	code: ErrorCode,
+};
+
+/**  Strict failed JSON-RPC response. */
+export type PackageRpcFailure = {
+	/**  JSON-RPC 2.0 marker. */
+	jsonrpc: JsonRpcVersion,
+	/**  String request ID copied from the request. */
+	id: string,
+	/**  Typed error object. */
+	error: PackageRpcError,
+};
+
+/**  Every fixed package hook request. */
+export type PackageRpcRequest =
+/**  Upstream framing. */
+{ method: "hooks.upstream.frame";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Frame parameters. */
+params: FrameParams } |
+/**  Downstream framing. */
+{ method: "hooks.downstream.frame";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Frame parameters. */
+params: FrameParams } |
+/**  Upstream decode. */
+{ method: "hooks.upstream.decode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Decode parameters. */
+params: DecodeParams } |
+/**  Downstream decode. */
+{ method: "hooks.downstream.decode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Decode parameters. */
+params: DecodeParams } |
+/**  Upstream encode. */
+{ method: "hooks.upstream.encode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Encode parameters. */
+params: EncodeParams } |
+/**  Downstream encode. */
+{ method: "hooks.downstream.encode";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Encode parameters. */
+params: EncodeParams } |
+/**  Upstream Document display. */
+{ method: "document.upstream.display";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Display parameters. */
+params: DisplayParams } |
+/**  Downstream Document display. */
+{ method: "document.downstream.display";
+/**  JSON-RPC 2.0 marker. */
+jsonrpc: JsonRpcVersion;
+/**  Established string request ID. */
+id: string;
+/**  Display parameters. */
+params: DisplayParams };
+
+/**  Strict successful JSON-RPC response. */
+export type PackageRpcSuccess<R> = {
+	/**  JSON-RPC 2.0 marker. */
+	jsonrpc: JsonRpcVersion,
+	/**  String request ID copied from the request. */
+	id: string,
+	/**  Method-specific result. */
+	result: R,
+};
+
+/**  包在 TUN 中的移动方向。 */
+export type PacketDirection = "upload" | "download";
+
 /**  通用分页请求；`normalized` 会把越界页码和页大小限制到安全范围。 */
 export type PageRequest = {
 	page: number,
 	page_size: number,
 };
 
-export type ProxyState = "stopped" | "starting" | "running" | "stopping" | "faulted";
+/**  路径 MTU 与 TCP MSS 故障配置。 */
+export type PathMtuProfile = {
+	mtu: number | null,
+	mss_clamp: number | null,
+	mode: PmtuMode,
+};
+
+/**  超过路径 MTU 时的处理语义。 */
+export type PmtuMode = "pass" | "fragment_or_packet_too_big" | "signal_too_big" | "blackhole";
+
+/**  Typed package Document direction relative to the proxy. */
+export type ProtocolDirection = "upstream" | "downstream";
+
+/**  协议包两个方向与公共 Display 的完整能力投影。 */
+export type ProtocolPackageCapabilitiesViewModel = {
+	upstream: ProtocolPackageDirectionCapabilitiesViewModel,
+	downstream: ProtocolPackageDirectionCapabilitiesViewModel,
+	display: boolean,
+};
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel = ProtocolPackageDetailViewModel_Serialize | ProtocolPackageDetailViewModel_Deserialize;
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel_Deserialize = {
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	usages: ProtocolPackageUsageViewModel[],
+	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
+	external: ExternalPackageDetailViewModel | null,
+};
+
+/**  精确版本详情；不包含脚本、文件列表、安装路径或编译器内部对象。 */
+export type ProtocolPackageDetailViewModel_Serialize = {
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	usages: ProtocolPackageUsageViewModel[],
+	/**  仅外部执行来源具有的连接、指纹和方法映射；内部包固定为 `None`。 */
+	external: ExternalPackageDetailViewModel | null,
+};
 
 /**
- *  顶部状态栏和控制台所需的完整代理状态。
- *  `can_*` 与 `*_disabled_reason` 已包含业务权限判断，展示层不能自行推导。
+ *  一个方向在 Manifest 中声明并通过编译校验的能力。
+ *  编译后方向能力的只读投影。HTTP 不声明 Frame，Socket 必须声明；Decode 与 Encode
+ *  均由当前严格 Manifest 提供，不再交给入口配置开关选择。
  */
-export type ProxyStatusViewModel = {
-	state: ProxyState,
-	state_text: string,
-	ui_tone: UiTone,
-	runtime_epoch: string | null,
-	revision: number,
-	channels: ChannelStatusViewModel[],
-	app_to_proxy_health: ConnectionHealthViewModel,
-	proxy_to_server_health: ConnectionHealthViewModel,
-	active_sessions: number,
-	pending_breakpoints: number,
-	logical_memory_bytes: number,
-	logical_memory_text: string,
-	memory_capacity_bytes: number,
-	memory_capacity_text: string,
-	memory_usage_percent: number,
-	session_capacity: number,
-	default_timeout_seconds: number,
-	can_start: boolean,
-	start_disabled_reason: DisabledReason | null,
-	can_stop: boolean,
-	stop_disabled_reason: DisabledReason | null,
-	can_restart: boolean,
-	restart_disabled_reason: DisabledReason | null,
-	fault_reason: string | null,
+export type ProtocolPackageDirectionCapabilitiesViewModel = {
+	frame: boolean,
+	decode: boolean,
+	encode: boolean,
+};
+
+/**  内置协议包 Component 写入用户所选文件后的结果。 */
+export type ProtocolPackageExportOutcomeViewModel = {
+	bytes_written: number,
+	replaced_existing: boolean,
+};
+
+/**  列表按协议包 ID 聚合，但每个版本仍保留自己的名称、状态和精确身份。 */
+export type ProtocolPackageGroupViewModel = {
+	id: ProtocolPackageId,
+	/**  最新已安装版本声明的名称，作为分组行的稳定展示名称。 */
+	name: string,
+	/**  同一 ID 的所有版本必须属于同一数据平面。 */
+	kind: ProtocolPackageKindViewModel,
+	versions: ProtocolPackageVersionViewModel[],
+	/**  全部精确版本被已保存 Listener 引用的总次数。 */
+	reference_count: number,
+	/**  其中运行态不为 Stopped 的引用次数。 */
+	active_reference_count: number,
+};
+
+/**
+ *  应用级协议包的稳定 ID。
+ *  Wire 形式是字符串，必须匹配 `[a-z][a-z0-9-]*(\.[a-z0-9-]+)*`；小写限制保证跨平台文件系统、
+ *  ZIP 条目和数据库查询使用同一规范形式。
+ */
+export type ProtocolPackageId = string;
+
+/**
+ *  `WebView` 提交的未验证协议包身份。
+ *  IPC 先反序列化普通字符串，再在命令内部调用领域构造器，因此恶意或过期前端提交的
+ *  非法 ID/SemVer 也会得到稳定 `PROTOCOL_PACKAGE_INVALID`，而不是框架私有反序列化文本。
+ */
+export type ProtocolPackageIdentityInput = {
+	id: string,
+	version: string,
+};
+
+/**
+ *  prepare 时针对当前注册表快照得到的权威处置结果。
+ *  commit 仍会在 mutation gate 与 `SQLite` 事务内重新比较，因此这个值用于决定当前预览
+ *  是否可提交，而不是替代最终写入门禁。
+ */
+export type ProtocolPackageImportDispositionViewModel = "new" | "reusable" | "identity_conflict";
+
+/**  原生 Component 导入是新安装，还是相同身份和内容的幂等复用。 */
+export type ProtocolPackageImportOutcomeViewModel = "installed" | "reused";
+
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel = ProtocolPackageImportPreviewViewModel_Serialize | ProtocolPackageImportPreviewViewModel_Deserialize;
+
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel_Deserialize = {
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+};
+
+/**  Component 已完整校验、尚未安装时返回给确认 Dialog 的无源码预览。 */
+export type ProtocolPackageImportPreviewViewModel_Serialize = {
+	/**  冲突预览没有 token，类型层面保证它不能进入 commit。 */
+	token: ProtocolPackageImportToken | null,
+	disposition: ProtocolPackageImportDispositionViewModel,
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+};
+
+/**  一次已验证但未安装的 pending import 随机令牌。 */
+export type ProtocolPackageImportToken = string;
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel = ProtocolPackageImportViewModel_Serialize | ProtocolPackageImportViewModel_Deserialize;
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel_Deserialize = {
+	outcome: ProtocolPackageImportOutcomeViewModel,
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Deserialize | null,
+};
+
+/**
+ *  原生文件选择和完整校验成功后的无源码导入结果。
+ *  用户取消由命令返回 `None` 表示；任何 Component、Manifest、Schema 或实例化错误均作为
+ *  稳定 `AppError` 返回，不会构造该类型。
+ */
+export type ProtocolPackageImportViewModel_Serialize = {
+	outcome: ProtocolPackageImportOutcomeViewModel,
+	version: ProtocolPackageVersionViewModel,
+	kind: ProtocolPackageKindViewModel,
+	capabilities: ProtocolPackageCapabilitiesViewModel,
+	upstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+	downstream_schema: ProtocolPackageSchemaViewModel_Serialize | null,
+};
+
+/**  Manifest 结构推导出的协议包数据平面。 */
+export type ProtocolPackageKindViewModel = "http" | "socket";
+
+/**
+ *  Listener/Workspace 引用协议包时使用的精确身份。
+ *  ID 与版本缺一不可；该类型不表达版本范围，也不负责查询包是否已安装或启用。
+ */
+export type ProtocolPackageRef = {
+	/**  应用级协议包 ID。 */
+	id: ProtocolPackageId,
+	/**  必须精确匹配的协议包版本。 */
+	version: ProtocolPackageVersion,
+};
+
+/**  Legacy package-editor projection pending the package-contract phase. */
+export type ProtocolPackageSchemaFieldTypeViewModel = "string" | "number" | "boolean" | "object" | "array";
+
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel = ProtocolPackageSchemaViewModel_Serialize | ProtocolPackageSchemaViewModel_Deserialize;
+
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel_Deserialize = {
+	root: DocumentSchemaNode_Deserialize,
+};
+
+/**  协议包编辑器投影；权威领域 Schema 是递归 `DocumentSchemaNode`。 */
+export type ProtocolPackageSchemaViewModel_Serialize = {
+	root: DocumentSchemaNode_Serialize,
+};
+
+/**
+ *  精确协议包版本的执行来源。
+ *
+ *  本地 Component 在当前进程执行；远端调试包由外部进程执行。`online` 是可调用状态快照，
+ *  与用户启用状态相互独立。
+ */
+export type ProtocolPackageSourceViewModel =
+/**  由 Proxy 主进程拥有并管理生命周期。 */
+{ type: "managed"; online: boolean } |
+/**  由已注册的第三方进程通过 JSON-RPC 执行。 */
+{ type: "external"; online: boolean };
+
+/**
+ *  一个已保存 Listener 对精确协议包版本的引用。
+ *  `runtime_state` 由 Rust 合并运行时状态；没有活动运行记录时固定为 `Stopped`。删除只看
+ *  引用是否存在，停用则仅允许所有引用都已确认停止。
+ */
+export type ProtocolPackageUsageViewModel = {
+	workspace_id: WorkspaceId,
+	workspace_name: string,
+	listener_id: ListenerId,
+	listener_name: string,
+	listener_enabled: boolean,
+	runtime_state: ListenerRuntimeState,
+};
+
+/**  最近一次持久化校验的无源码结果。 */
+export type ProtocolPackageValidationViewModel = { state: "valid" } | { state: "invalid"; code: string };
+
+/**
+ *  协议包不可变版本号。
+ *  保存作者提供的完整 `SemVer` 文本，包括 prerelease 和 build metadata；Listener 后续必须绑定
+ *  此精确值，不做范围匹配或自动升级。
+ */
+export type ProtocolPackageVersion = string;
+
+/**  一个不可变协议包版本的轻量摘要。 */
+export type ProtocolPackageVersionViewModel = {
+	package: ProtocolPackageRef,
+	name: string,
+	host_api: number,
+	/**  安装时由严格 Manifest 推断并持久化的数据平面类型。 */
+	kind: ProtocolPackageKindViewModel,
+	/**  该精确版本的可判别执行来源。 */
+	package_source: ProtocolPackageSourceViewModel,
+	enabled: boolean,
+	validation: ProtocolPackageValidationViewModel,
+	installed_at: string,
+};
+
+export type ProxyListener = {
+	id: ListenerId,
+	name: string,
+	enabled: boolean,
+	bind_address: string,
+	port: number,
+	connect_timeout_ms: number,
+	read_timeout_ms: number,
+	write_timeout_ms: number,
+	data_plane: ListenerDataPlane,
+};
+
+export type ProxyWorkspace = {
+	id: WorkspaceId,
+	name: string,
+	revision: Revision,
+	listeners: ProxyListener[],
+	certificate_references: CertificateReference[],
+	/**
+	 *  与该 Workspace 一起迁移的 Android 设备网络方案。
+	 *  设备序列号、ADB transport、已解析桌面地址和运行态由宿主在启动时提供，
+	 *  不属于此字段。
+	 */
+	android_network_profiles: AndroidNetworkProfile[],
 };
 
 /**
@@ -425,60 +1990,190 @@ export type ProxyStatusViewModel = {
  *  Header 可能重复、大小写不同或包含有意义的空白，因此不能只用 Map 保存。
  */
 export type RawHttpHeaderViewModel = {
-	/**  字段名的精确线上字节，是断点转发时的权威表示；普通 `headers` 只是有损展示投影。 */
+	/**  字段名的精确线上字节，是无损转发时的权威表示；普通 `headers` 只是有损展示投影。 */
 	name_bytes: number[],
 	/**  字段值的精确字节，不含可选空白和 CRLF。 */
 	value_bytes: number[],
 	/**  冒号与实际字段值之间的原始可选空白。 */
-	leading_ows_bytes?: number[],
+	leading_ows_bytes: number[],
 	/**  实际字段值之后的原始可选空白。 */
-	trailing_ows_bytes?: number[],
+	trailing_ows_bytes: number[],
 };
 
-export type RuleAction = { type: "set_json_field"; path: string; value_json: string } | { type: "replace_body_text"; text: string } | { type: "set_header"; name: string; value: string } | { type: "delay"; milliseconds: number } | { type: "jitter"; minimum_milliseconds: number; maximum_milliseconds: number; scope: RuleJitterScope } | { type: "throttle"; bytes_per_second: number; chunk_bytes: number; direction: RuleTrafficDirection } | { type: "intermittent"; available_milliseconds: number; blocked_milliseconds: number; direction: RuleTrafficDirection } | { type: "pause" } | { type: "custom_http_status"; status: number } | { type: "terminal"; action: RuleTerminalAction };
+export type Revision = number;
 
-export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "pause" | "custom_http_status" | "reject_tls_handshake" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
-
-export type RuleByteInputViewModel = {
-	bytes: number[],
-	normalized: string,
+/**
+ *  单个动作在指定 HTTP 阶段中的可用能力。
+ *
+ *  前端只渲染这里返回的动作，不再根据动作名称推断请求、响应或 TLS 语义。
+ */
+export type RuleActionCapabilityViewModel = {
+	kind: RuleActionKind,
+	terminal: boolean,
+	traffic_direction: RuleTrafficDirection | null,
+	parameters_required: boolean,
 };
 
-export type RuleCondition = { type: "field"; field: RuleMatchField; operator: RuleMatchOperator } | { type: "nth_hit"; count: number };
+export type RuleActionKind = "set_json_field" | "replace_body_text" | "set_header" | "delay" | "jitter" | "throttle" | "intermittent" | "custom_http_status" | "disconnect_before_upstream" | "upstream_connect_timeout" | "upstream_write_timeout" | "upstream_read_timeout" | "drop_upstream_response" | "mock_response" | "invalid_json" | "incorrect_content_length" | "truncate_response" | "disconnect_during_upstream_write" | "disconnect_during_downstream_write";
 
-export type RuleConditionKind = "field" | "nth_hit";
+export type RuleCommonActionCapability = "record_match";
 
-/**  新建或编辑规则时由展示层提交的输入模型。 */
-export type RuleDraft = {
-	rule_id: string | null,
-	expected_revision: number | null,
+export type RuleContent = { type: "http"; value: HttpRuleContent } | { type: "socket"; value: SocketRuleContent };
+
+export type RuleDefinition = RuleDefinition_Serialize | RuleDefinition_Deserialize;
+
+export type RuleDefinitionDraft = {
 	name: string,
-	description: string,
 	enabled: boolean,
 	priority: number,
-	channel: ChannelId | null,
-	stage: MessageStage | null,
-	conditions: RuleCondition[],
-	actions: RuleAction[],
-	one_shot: boolean,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleContent,
 };
 
-export type RuleDropResponseMode = "read_complete_response" | "close_after_request_write";
-
-export type RuleHeaderInputViewModel = {
-	headers: ([string, string])[],
-	normalized: string,
+export type RuleDefinitionSaveInput = {
+	rule_id: RuleId | null,
+	expected_revision: Revision | null,
+	draft: RuleDefinitionDraft,
 };
 
-export type RuleJitterScope = "before_message" | "per_chunk";
+export type RuleDefinitionWire = {
+	rule_id: RuleId,
+	revision: Revision,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	lifecycle: RuleLifecycle,
+	content: RuleContent,
+};
 
-export type RuleMatchField = { type: "terminal_ip" } | { type: "certificate_fingerprint" } | { type: "path_or_request_type" } | { type: "json_path"; path: string };
+export type RuleDefinition_Deserialize = RuleDefinitionWire;
 
-export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "path_or_request_type" | "json_path";
+export type RuleDefinition_Serialize = {
+	rule_id: RuleId,
+	revision: Revision,
+	name: string,
+	enabled: boolean,
+	priority: number,
+	created_order: number,
+	listener_id: ListenerId,
+	stage: RuleStage,
+	lifecycle: RuleLifecycle,
+	content: RuleContent,
+};
 
-export type RuleMatchOperator = { type: "equals"; value: string } | { type: "contains"; value: string } | { type: "regex"; pattern: string };
+export type RuleDocumentActionCapability = {
+	kind: RuleLocalDocumentActionKind,
+	target_kind: RuleDocumentActionTargetKind,
+	target_value_type: RuleLocalDocumentValueType,
+	operand_value_type: RuleLocalDocumentValueType | null,
+};
 
-export type RuleMatchOperatorKind = "equals" | "contains" | "regex";
+export type RuleDocumentActionTargetKind = "node" | "array";
+
+export type RuleDocumentChangeViewModel = {
+	rule_id: RuleId,
+	matched: boolean,
+	operations: RuleDocumentOperationViewModel[],
+};
+
+export type RuleDocumentConditionPathCapability = {
+	wildcard_token: string,
+	wildcard_matches_exactly_one_level: boolean,
+	multiple_matches_use_any: boolean,
+};
+
+export type RuleDocumentOperationKindViewModel = "record_match" | "set" | "clear" | "insert" | "append";
+
+export type RuleDocumentOperationViewModel = {
+	kind: RuleDocumentOperationKindViewModel,
+	path: string | null,
+};
+
+export type RuleDocumentSchemaFieldCapability = {
+	path: string,
+	label: string,
+	value_type: RuleLocalDocumentValueType,
+	item_template: boolean,
+	predicates: RuleLocalDocumentPredicateKind[],
+	actions: RuleDocumentActionCapability[],
+};
+
+export type RuleEditorContentContext = { type: "http"; value: {
+	stages: HttpRuleEditorStageViewModel[],
+} } | { type: "socket"; value: {
+	package: ProtocolPackageRef,
+	stages: SocketRuleEditorStageViewModel[],
+} };
+
+/**  Rust-authoritative editor contract for one Listener. */
+export type RuleEditorContext = {
+	listener_id: ListenerId,
+	content: RuleEditorContentContext,
+	local_document_types: RuleLocalDocumentTypeCapability[],
+	document_condition_path: RuleDocumentConditionPathCapability,
+};
+
+export type RuleHttpActionDraftInput = {
+	kind: RuleActionKind,
+	parameters_json: string | null,
+};
+
+export type RuleId = string;
+
+/**  Lifecycle shared by HTTP and Socket rule definitions. */
+export type RuleLifecycle = {
+	hit_count: number,
+	last_hit_at: string | null,
+};
+
+export type RuleLocalDocumentActionKind = "set" | "clear" | "insert" | "append";
+
+export type RuleLocalDocumentPredicateKind = "equals" | "contains" | "starts_with" | "ends_with" | "less" | "less_equal" | "greater" | "greater_equal";
+
+export type RuleLocalDocumentTypeCapability = {
+	value_type: RuleLocalDocumentValueType,
+	predicates: RuleLocalDocumentPredicateKind[],
+	actions: RuleDocumentActionCapability[],
+};
+
+export type RuleLocalDocumentValueType = "string" | "number" | "boolean" | "null" | "object" | "array";
+
+export type RuleMatchFieldCapabilityViewModel = {
+	kind: RuleMatchFieldKind,
+	operators: RuleMatchOperatorKind[],
+	selector: RuleMatchSelectorKind | null,
+};
+
+export type RuleMatchFieldKind = "terminal_ip" | "certificate_fingerprint" | "method" | "request_target" | "header";
+
+export type RuleMatchOperatorKind = "equals" | "contains" | "starts_with" | "ends_with" | "wildcard";
+
+export type RuleMatchSelectorKind = "header_name_pointer";
+
+export type RuleNewDefinitionContent = { type: "http"; value: {
+	description: string,
+} } | { type: "socket"; value: {
+	package: ProtocolPackageRef,
+} };
+
+export type RuleNewDefinitionDraft = {
+	listener_id: ListenerId,
+	stage: RuleStage,
+	content: RuleNewDefinitionContent,
+};
+
+export type RuleStage = "proxy_to_upstream" | "proxy_to_app";
+
+/**  HTTP 规则编辑器针对一个阶段的完整能力表。 */
+export type RuleStageCapabilityViewModel = {
+	stage: RuleStage,
+	match_fields: RuleMatchFieldCapabilityViewModel[],
+	actions: RuleActionCapabilityViewModel[],
+};
 
 export type RuleSummaryViewModel = {
 	rule_id: string,
@@ -496,55 +2191,22 @@ export type RuleSummaryViewModel = {
 	ui_tone: UiTone,
 };
 
-export type RuleTerminalAction = { type: "reject_tls_handshake" } | { type: "disconnect_before_upstream" } | { type: "upstream_connect_timeout"; milliseconds: number } | { type: "upstream_write_timeout"; milliseconds: number } | { type: "upstream_read_timeout"; milliseconds: number } | { type: "drop_upstream_response"; mode: RuleDropResponseMode } | { type: "mock_response"; status: number; headers: ([string, string])[]; body_bytes: number[] } | { type: "invalid_json"; body_bytes: number[] } | { type: "incorrect_content_length"; delta: number } | { type: "truncate_response"; bytes: number } | { type: "disconnect_during_upstream_write"; after_bytes: number } | { type: "disconnect_during_downstream_write"; after_bytes: number };
-
 export type RuleTrafficDirection = "upstream" | "downstream";
 
-export type RuleViewModel = {
-	summary: RuleSummaryViewModel,
-	draft: RuleDraft,
+/**
+ *  Scripted 模式所需的完整、静态 Listener 配置。
+ *  入口精确绑定一个 `package id + version`，不会自动选择、升级或回退协议包。选择协议包即表示
+ *  两个方向固定执行 Frame、Decode、规则、Encode 与 Display，不再保存重复的阶段开关。
+ */
+export type ScriptedSocketProcessing = {
+	/**  入口固定使用的协议包 ID 与精确 `SemVer`。 */
+	package: ProtocolPackageRef,
 };
 
-/**  会话详情；完整请求/响应只在用户打开详情时返回。 */
-export type SessionDetailViewModel = {
-	summary: SessionSummaryViewModel,
-	runtime_epoch: string,
-	connection_id: string,
-	certificate_fingerprint: string,
-	upstream_host: string,
-	app_to_proxy_tls: string,
-	proxy_to_server_tls: string,
-	final_action: string,
-	timings_ms: { [key in string]: number },
-	request: MessageContentViewModel | null,
-	response: MessageContentViewModel | null,
-	rule_trace: string[],
+export type SecretReference = {
+	provider: string,
+	key: string,
 };
-
-export type SessionPageViewModel = {
-	items: SessionSummaryViewModel[],
-	total: number,
-	page: number,
-	page_size: number,
-	total_pages: number,
-	empty_message: string,
-};
-
-/**  会话页提交给 Rust 的筛选、时间范围、排序和分页条件。 */
-export type SessionQuery = {
-	keyword: string | null,
-	terminal_ip: string | null,
-	channel: ChannelId | null,
-	result: string | null,
-	rule_id: string | null,
-	started_from: string | null,
-	started_to: string | null,
-	sort: SessionSort,
-	direction: SortDirection,
-	page: PageRequest,
-};
-
-export type SessionSort = "started_at" | "terminal_ip" | "duration" | "request_size" | "response_size";
 
 export type SessionSummaryViewModel = {
 	session_id: string,
@@ -563,7 +2225,6 @@ export type SessionSummaryViewModel = {
 	matched_rule_ids: string[],
 	request_size_bytes: number,
 	response_size_bytes: number,
-	pending_breakpoint: boolean,
 	revision: number,
 };
 
@@ -579,16 +2240,16 @@ export type SettingsDraft = {
 	max_body_bytes: number,
 	max_sessions: number,
 	max_memory_bytes: number,
+	/**  Exchange observation producer queue; validated settings are the only source. */
+	ui_event_capacity: number,
 	leaf_sans: string[],
+	/**  固定路径 `/packages` 的外部软件包服务配置。 */
+	external_package_service: ExternalPackageServiceSettingsDraft,
 };
 
-/**  设置页展示模型，同时区分已保存值、当前生效值和操作权限。 */
+/**  设置页展示模型。 */
 export type SettingsViewModel = {
 	stored: SettingsDraft,
-	effective: SettingsDraft | null,
-	pending_changes: boolean,
-	requires_restart: boolean,
-	restart_reason: string | null,
 	revision: number,
 	can_write: boolean,
 	disabled_reason: DisabledReason | null,
@@ -598,7 +2259,163 @@ export type SettingsViewModel = {
 	payload_policy_text: string,
 };
 
+/**  连接建立时的模式化路由证据；LocalResponder 分支不存在可伪造的上游字段。 */
+export type SocketConnectionRouteViewModel = {
+	topology: "relay",
+} & SocketRelayRouteEvidenceViewModel | { topology: "local_responder"; downstream_tls_peer: string | null };
+
+/**  一次上游连接测试的脱敏结果。 */
+export type SocketConnectionTestEvidenceViewModel = {
+	resolved_address: string,
+	transport: string,
+	tls: SocketTlsEvidenceViewModel | null,
+	elapsed_millis: number,
+};
+
+export type SocketDiagnosticContextViewModel = {
+	connection_id: string | null,
+	workspace_runtime_epoch: string,
+	listener_run_epoch: string,
+	route: SocketConnectionRouteViewModel | null,
+	socket_failure: SocketFailureDiagnostic | null,
+	external_package_call: ExternalPackageCallDiagnosticViewModel | null,
+	stage: SocketDiagnosticStage,
+	direction: SocketDiagnosticDirection | null,
+	client_to_server_read_bytes: number,
+	client_to_server_bytes: number,
+	server_to_client_read_bytes: number,
+	server_to_client_bytes: number,
+};
+
+export type SocketDiagnosticDirection = "downstream" | "upstream" | "client_to_server" | "server_to_client" | "local_exchange";
+
+export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "connect" | "upstream_tls" | "relay_read" | "frame_inspect" | "decode" | "rule" | "encode" | "frame_process" | "relay_write" | "shutdown";
+
+/**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
+export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
+
+export type SocketDownstreamTlsSettings = {
+	server_identity: CertificateReferenceId,
+	client_authentication: DownstreamClientAuthentication,
+};
+
+export type SocketEndpoint = {
+	host: string,
+	port: number,
+};
+
+/**  已脱敏的 Socket 失败证据。 */
+export type SocketFailureDiagnostic = {
+	stage: SocketFailureStage,
+	code: string,
+};
+
+export type SocketFailureStage = "frame" | "decode" | "rule" | "encode" | "write";
+
+/**  不连接 Server、而是由协议包在本机生成响应的 Socket 拓扑。 */
+export type SocketLocalResponderTopology = {
+	downstream_security: SocketDownstreamSecurity,
+};
+
+/**
+ *  Socket payload 的处理方式。
+ *  `Direct` 保持现有透明字节转发，不加载脚本、不切 Frame、不创建 Document；`Scripted` 按绑定
+ *  协议包切分完整 Frame，并执行两个方向声明的完整处理链。
+ *  Wire 结构使用 `mode` + `settings`，例如 Direct 是 `{"mode":"direct"}`，Scripted 是
+ *  `{"mode":"scripted","settings":{...}}`。额外字段会被拒绝，防止 Direct 配置中夹带不会生效的
+ *  脚本字段。
+ */
+export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
+
+export type SocketRelayRouteEvidenceViewModel = {
+	configured_address: string | null,
+	resolved_address: string | null,
+	downstream_tls_peer: string | null,
+	upstream_tls: SocketTlsEvidenceViewModel | null,
+	connection_test: SocketConnectionTestEvidenceViewModel | null,
+};
+
+export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
+
+export type SocketRelaySettings = {
+	/**  网络拓扑。Relay 才拥有 Server 上游；LocalResponder 只拥有 App 侧安全设置。 */
+	topology: SocketTopology,
+	/**  Listener 同时接受的最大 Socket 连接数。 */
+	maximum_connections: number,
+	/**  经过 Workspace 校验后原样注入 Proxy/diagnostic runtime；运行时不得静默修正。 */
+	runtime_limits: SocketRuntimeLimits,
+	/**  Frame/payload 处理方式。 */
+	processing: SocketPayloadProcessing,
+};
+
+/**  具有真实 Server 上游的 Socket 转发拓扑。 */
+export type SocketRelayTopology = {
+	upstream: SocketEndpoint,
+	security: SocketRelaySecurity,
+};
+
+export type SocketRuleContent = {
+	package: ProtocolPackageRef,
+	condition: Condition,
+	action: UnifiedAction,
+};
+
+export type SocketRuleEditorStageViewModel = {
+	stage: RuleStage,
+	document_fields: RuleDocumentSchemaFieldCapability[],
+	common_actions: RuleCommonActionCapability[],
+	new_rule_draft: RuleNewDefinitionDraft,
+};
+
+/**  Socket 运行时所有内存队列和单次 OS read 的显式资源合同。 */
+export type SocketRuntimeLimits = {
+	read_chunk_bytes: number,
+	diagnostic_event_capacity: number,
+	diagnostic_memory_bytes: number,
+};
+
+/**  上游 TLS 握手的结构化证据；不保存证书原文。 */
+export type SocketTlsEvidenceViewModel = {
+	tls_version: string,
+	cipher_suite: string,
+	peer_subject: string,
+	peer_sha256_fingerprint: string,
+	hostname_verification_enabled: boolean,
+	client_identity_configured: boolean,
+};
+
+/**  Socket Listener 的网络拓扑。变体自身拥有且只拥有该模式可用的字段。 */
+export type SocketTopology = { mode: "relay"; settings: SocketRelayTopology } | { mode: "local_responder"; settings: SocketLocalResponderTopology };
+
+export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls";
+
+export type SocketUpstreamTlsSettings = {
+	verify_hostname: boolean,
+	tls_server_name?: string | null,
+	server_trust: CertificateReferenceId | null,
+	client_identity: CertificateReferenceId | null,
+};
+
 export type SortDirection = "asc" | "desc";
+
+/**  String comparison supported by a typed Document predicate. */
+export type StringOperator =
+/**  Exact string equality. */
+"equal" |
+/**  Substring containment. */
+"contains" |
+/**  Prefix match. */
+"starts_with" |
+/**  Suffix match. */
+"ends_with";
+
+/**  A string predicate whose expected value cannot be confused with another JSON type. */
+export type StringPredicate = {
+	/**  Comparison operator. */
+	operator: StringOperator,
+	/**  Expected string. */
+	value: string,
+};
 
 export type SubscriptionAckViewModel = {
 	subscription_id: number,
@@ -606,6 +2423,35 @@ export type SubscriptionAckViewModel = {
 	current_event_id: number,
 	snapshot_required: boolean,
 };
+
+/**  需要精确计数的 TCP 标志位。 */
+export type TcpFlag = "syn" | "syn_ack" | "ack" | "fin" | "rst";
+
+export type TerminalAction = "DisconnectBeforeUpstream" | ({ UpstreamConnectTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ UpstreamWriteTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never } | ({ UpstreamReadTimeout: {
+	milliseconds: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamWriteTimeout?: never } | ({ DropUpstreamResponse: {
+	mode: DropResponseMode,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ MockResponse: {
+	status: number,
+	headers: ([string, string])[],
+	body_bytes: number[],
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ InvalidJson: {
+	body_bytes: number[],
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ IncorrectContentLength: {
+	delta: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ TruncateResponse: {
+	bytes: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ DisconnectDuringUpstreamWrite: {
+	after_bytes: number,
+} }) & { DisconnectDuringDownstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ DisconnectDuringDownstreamWrite: {
+	after_bytes: number,
+} }) & { DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never };
+
+export type TrafficDirection = "Upstream" | "Downstream";
 
 /**  带顺序、周期和实体版本的实时事件信封。 */
 export type UiEventEnvelope = {
@@ -618,7 +2464,15 @@ export type UiEventEnvelope = {
 };
 
 /**  所有实时事件的封闭集合；适配器可穷举处理，不依赖字符串事件名。 */
-export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatusViewModel } | { type: "channel_status_changed"; data: ChannelStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "breakpoint_queued"; data: BreakpointSummaryViewModel } | { type: "breakpoint_resolved"; data: BreakpointSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } | { type: "resource_warning"; data: {
+export type UiEventPayload = { type: "workspace_changed"; data: WorkspaceChangedViewModel } | { type: "listener_status_changed"; data: ListenerStatusViewModel } | { type: "capture_rows_added"; data: CaptureRowViewModel[] } |
+/**  一条连接级 Exchange 观测证据已成功写入内存；正文仍由查询接口按需读取。 */
+{ type: "exchange_observation_changed" } | { type: "diagnostic_log_added"; data: DiagnosticLogEntryViewModel } | { type: "session_updated"; data: SessionSummaryViewModel } | { type: "rule_hit"; data: RuleSummaryViewModel } | { type: "android_vpn_status_changed"; data: AndroidNetworkStatusViewModel } | { type: "certificate_status_changed"; data: CertificateOverviewViewModel } | { type: "settings_changed"; data: SettingsViewModel } |
+/**  外部软件包服务绑定状态或在线连接数发生变化。 */
+{ type: "external_package_service_status_changed"; data: ExternalPackageServiceStatusViewModel } |
+/**  外部精确版本注册、断线、启停或删除后，目录消费者应重新读取权威快照。 */
+{ type: "protocol_package_catalog_changed"; data: {
+	package: ProtocolPackageRef,
+} } | { type: "resource_warning"; data: {
 	message: string,
 } } | { type: "operation_failed"; data: AppErrorViewModel } | { type: "snapshot_required"; data: {
 	reason: string,
@@ -626,6 +2480,70 @@ export type UiEventPayload = { type: "runtime_status_changed"; data: ProxyStatus
 
 /**  与具体组件库无关的视觉语义，前端只负责映射为 `HeroUI` 颜色。 */
 export type UiTone = "neutral" | "info" | "positive" | "warning" | "danger";
+
+/**  The one action paired with a rule condition. */
+export type UnifiedAction =
+/**  Records a match without mutating protocol data. */
+{ source: "record_match" } |
+/**  Document mutation. */
+{ source: "document"; value: DocumentMutation } |
+/**  Existing typed non-terminal HTTP/runtime action. */
+{ source: "http"; value: HttpAction } |
+/**  Terminal effect that stops later rules. */
+{ source: "terminal"; value: TerminalAction };
+
+export type UpstreamTlsSettings = {
+	verify_hostname: boolean,
+	server_trust: CertificateReferenceId | null,
+	client_identity: CertificateReferenceId | null,
+};
+
+/**  纯 Rust 弱网配置，也是桌面端、Companion 与数据面的唯一字段契约。 */
+export type WeakNetworkProfile = {
+	seed: number,
+	fixed_delay_millis: number,
+	uniform_jitter_millis: number,
+	upload_bytes_per_second: number | null,
+	download_bytes_per_second: number | null,
+	random_loss_basis_points: number,
+	burst_loss: BurstLossProfile | null,
+	duplicate_basis_points: number,
+	reorder_basis_points: number,
+	maximum_reorder_hold_millis: number,
+	blackout_windows: BlackoutWindow[],
+	dns_blackhole: boolean,
+	nth_tcp_flag_drops: NthTcpFlagDrop[],
+	path_mtu: PathMtuProfile,
+	corruption: BitCorruptionProfile,
+};
+
+export type WorkspaceChangeKind = "created" | "updated" | "selected" | "deleted" | "imported";
+
+/**  Workspace 集合变化事件；删除时 `summary` 为空，其余操作携带最新 Rust 摘要。 */
+export type WorkspaceChangedViewModel = {
+	workspace_id: WorkspaceId,
+	kind: WorkspaceChangeKind,
+	summary: WorkspaceSummaryViewModel | null,
+};
+
+export type WorkspaceId = string;
+
+/**  Workspace 列表只返回轻量摘要，完整配置仅在用户选择或编辑时加载。 */
+export type WorkspaceSummaryViewModel = {
+	id: WorkspaceId,
+	name: string,
+	revision: number,
+	listener_count: number,
+	enabled_listener_count: number,
+	selected: boolean,
+};
+
+/**  Rust Workspace 校验的完整结果。前端不得重复推导安全策略。 */
+export type WorkspaceValidationViewModel = {
+	valid: boolean,
+	normalized: ProxyWorkspace,
+	field_errors: { [key in string]: string[] },
+};
 
 /* Tauri Specta runtime */
 async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; data: T } | { status: "error"; error: E }> {
@@ -637,3 +2555,5 @@ async function typedError<T, E>(result: Promise<T>): Promise<{ status: "ok"; dat
     }
 }
 
+
+export const PACKAGE_CONTRACT_VALIDATION = {"packageIdPattern":"^[a-z][a-z0-9-]*(?:\\.[a-z0-9-]+)*$","packageIdMaxBytes":64,"packageVersionPattern":"^(0|[1-9]\\d*)\\.(0|[1-9]\\d*)\\.(0|[1-9]\\d*)(?:-((?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*)(?:\\.(?:0|[1-9]\\d*|\\d*[A-Za-z-][0-9A-Za-z-]*))*))?(?:\\+([0-9A-Za-z-]+(?:\\.[0-9A-Za-z-]+)*))?$","packageVersionMaxBytes":128,"packageVersionCoreNumericMax":"18446744073709551615","schemaTitleMaxChars":128,"stableErrorCodes":["PROXY_ALREADY_RUNNING","PROXY_NOT_RUNNING","OPERATION_IN_PROGRESS","PORT_IN_USE","CONFIG_INVALID","REVISION_CONFLICT","CERTIFICATE_NOT_READY","CERTIFICATE_INVALID","PKCS12_PASSWORD_INVALID","DPAPI_PROTECT_FAILED","DPAPI_UNPROTECT_FAILED","TLS_HANDSHAKE_FAILED","UPSTREAM_CONNECT_TIMEOUT","UPSTREAM_WRITE_TIMEOUT","UPSTREAM_READ_TIMEOUT","BODY_TOO_LARGE","HEADER_LIMIT_EXCEEDED","BODY_DECODE_FAILED","BODY_ENCODE_FAILED","JSON_INVALID","RULE_INVALID","RULE_EXECUTION_CANCELLED","RULE_CONFLICT_WARNING","PROTOCOL_PACKAGE_INVALID","DOCUMENT_SCHEMA_INVALID","DOCUMENT_NUMBER_INVALID","DOCUMENT_UNSAFE_INTEGER","DOCUMENT_POINTER_INVALID","DOCUMENT_PATH_MISSING","DOCUMENT_PATH_TYPE_MISMATCH","DOCUMENT_FIELD_UNDECLARED","DOCUMENT_FIELD_UNASSIGNED","DOCUMENT_FIELD_TYPE_MISMATCH","RESOURCE_EXHAUSTED","EVENT_CURSOR_EXPIRED","EXPORT_FAILED","IMPORT_FAILED","DATABASE_SCHEMA_INVALID","INVALID_STATE_TRANSITION","INTERNAL_ERROR"]} as const;

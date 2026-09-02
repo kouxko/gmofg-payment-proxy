@@ -1,0 +1,37 @@
+{
+  "result": "VERIFIED",
+  "checks": [
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --all-targets --all-features", "result": "PASS", "details": "87 unit; 14 rule_validation; 7 unified_rule_contract" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-protocol-scripting --all-targets --all-features", "result": "PASS", "details": "160 passed" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --all-targets --all-features", "result": "PASS", "details": "459 unit and all integrations passed" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib --all-features", "result": "PASS", "details": "651 passed" },
+    { "command": "cargo test --manifest-path examples/protocol-packages/nuvei_tango_rhai/tests/Cargo.toml", "result": "PASS", "details": "6 passed" },
+    { "command": "pnpm bindings && pnpm check:bindings && pnpm typecheck", "result": "PASS", "details": "fresh deterministic generated bindings and TypeScript" },
+    { "command": "pnpm vitest run src/features/listeners/socket-protocol-package-dialog.test.tsx", "result": "PASS", "details": "7 passed after old fixture migration" },
+    { "command": "pnpm test:task-20260829-002:phase3", "result": "PASS", "details": "14/14 Node contract and generated-binding regressions; legacy field-slot, ClearDocument and scalar-text scanner PASS" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --all-features protocol_rule_values", "result": "PASS", "details": "4/4 standard JSON and recursive value facade tests" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "PASS", "details": "ten ordered gates; frontend 62 files/534 tests; Rust workspace all targets/features 0 failed" },
+    { "command": "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings", "result": "PASS" },
+    { "command": "obsolete contract rg scans", "result": "PASS", "details": "existing four categories plus ClearDocument, clear_document, 字段值槽 and Schema 身份和结构 returned zero" },
+    { "command": "git diff --check", "result": "PASS" }
+  ],
+  "checkpoint_failures_before_final_pass": [
+    { "stage": "phase1 inventory", "result": "FAIL", "repair": "replace obsolete flat required fragments with recursive Phase 3 current-state fragments" },
+    { "stage": "source-size", "result": "FAIL", "repair": "registration.rs whitespace-only 502 to 498 lines; threshold unchanged" },
+    { "stage": "frontend test", "result": "FAIL 1/531", "repair": "frontend owner migrated socket package detail fixture from flat fields to recursive root; final 531/531" },
+    { "stage": "independent verifier", "result": "FAILED", "repair": "closed safe-integer, incomplete-schema, undeclared-path, generated number/null, Null wire, ClearDocument, public schema-definition and stale-contract findings" },
+    { "stage": "post-repair frontend test", "result": "OBSERVED FAIL 1/534", "repair": "focus-restore case targeted 1/1 and subsequent complete frontend runs 534/534" },
+    { "stage": "post-repair rustfmt", "result": "FAIL", "repair": "standard cargo fmt; complete ten-gate checkpoint rerun PASS" },
+    { "stage": "final independent review", "result": "FAILED P2", "repair": "removed stale Int/Bool/Blob Hex facade contract and integer-text budget; targeted 4/4, Node 14/14, strict Clippy, bindings and diff-check PASS" }
+  ],
+  "review": {
+    "state": "APPROVED",
+    "verdict": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "blockers": [],
+    "checkpoint_ready": true,
+    "independent_ten_gate_rerun": "PASS"
+  }
+}

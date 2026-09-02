@@ -1,0 +1,9 @@
+Archive:  nuvei-tango-json-rhai-1.0.0.zip
+  Length      Date    Time    Name
+---------  ---------- -----   ----
+     1210  01-01-1980 00:00   display.rhai
+      545  01-01-1980 00:00   document.toml
+      458  01-01-1980 00:00   manifest.toml
+     4065  01-01-1980 00:00   protocol.rhai
+---------                     -------
+     6278                     4 files

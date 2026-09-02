@@ -1,0 +1,24 @@
+{
+  "seed": 1,
+  "fixed_delay_millis": 0,
+  "uniform_jitter_millis": 0,
+  "upload_bytes_per_second": null,
+  "download_bytes_per_second": null,
+  "random_loss_basis_points": 0,
+  "burst_loss": null,
+  "duplicate_basis_points": 0,
+  "reorder_basis_points": 0,
+  "maximum_reorder_hold_millis": 0,
+  "blackout_windows": [],
+  "dns_blackhole": false,
+  "nth_tcp_flag_drops": [],
+  "path_mtu": {
+    "mtu": null,
+    "mss_clamp": null,
+    "mode": "pass"
+  },
+  "corruption": {
+    "probability_basis_points": 0,
+    "bits_per_packet": 0
+  }
+}

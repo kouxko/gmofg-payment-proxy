@@ -1,0 +1,14 @@
+Overall result: REQUEST CHANGES
+P0/P1/P2: 0/6/0
+
+P1 findings:
+1. Existing-task routing conflicted with the generic promotion rule.
+2. RUNNING QV records had no inactive-runner recovery and could remain indistinguishable from final NOT_RUN.
+3. Result aggregation, path prerequisites and cleanup propagation were not deterministic.
+4. Full Proxy path lacked a same-connection causal evidence contract.
+5. Required environment and external dependency information was incomplete.
+6. Task records and deterministic concurrency/interruption/finalization scenarios were incomplete.
+
+Resolution status:
+- All six findings were addressed in the authoritative rule, template, task record and deterministic state scenarios.
+- Independent re-review is required before task completion.

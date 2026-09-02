@@ -1,0 +1,29 @@
+error[E0432]: unresolved imports `intercept_proxy_infrastructure::PackageTransportClient`, `intercept_proxy_infrastructure::PackageTransportConfig`, `intercept_proxy_infrastructure::PackageTransportError`
+ --> crates/infrastructure/tests/phase7_transport_contract.rs:6:5
+  |
+6 |     PackageTransportClient, PackageTransportConfig, PackageTransportError,
+  |     ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^^  ^^^^^^^^^^^^^^^^^^^^^ no `PackageTransportError` in the root
+  |     |                       |
+  |     |                       no `PackageTransportConfig` in the root
+  |     no `PackageTransportClient` in the root
+
+error[E0432]: unresolved import `intercept_proxy_package_contract`
+ --> crates/infrastructure/tests/phase7_transport_contract.rs:8:5
+  |
+8 | use intercept_proxy_package_contract::{
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `intercept_proxy_package_contract`
+  |
+  = help: if you wanted to use a crate named `intercept_proxy_package_contract`, use `cargo add intercept_proxy_package_contract` to add it to your `Cargo.toml`
+
+error[E0433]: cannot find module or crate `intercept_proxy_package_contract` in this scope
+  --> crates/infrastructure/tests/phase7_transport_contract.rs:53:9
+   |
+53 |         intercept_proxy_package_contract::PackageKind::Socket
+   |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of unresolved module or unlinked crate `intercept_proxy_package_contract`
+   |
+   = help: if you wanted to use a crate named `intercept_proxy_package_contract`, use `cargo add intercept_proxy_package_contract` to add it to your `Cargo.toml`
+
+Some errors have detailed explanations: E0432, E0433.
+For more information about an error, try `rustc --explain E0432`.
+error: could not compile `intercept-proxy-infrastructure` (test "phase7_transport_contract") due to 3 previous errors
+CARGO_EXIT=101

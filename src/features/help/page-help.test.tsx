@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 
-/** 验证八页帮助 Drawer 可访问且不会触发工作区导航或业务命令。 */
+/** 验证各页面帮助 Drawer 可访问且不会触发工作区导航或业务命令。 */
 
 import "@testing-library/jest-dom/vitest";
 import { render, screen } from "@testing-library/react";
@@ -11,12 +11,13 @@ import { PageHelp } from "./page-help";
 import { pageHelpGuides } from "./page-help-content";
 
 const workspacePaths: WorkspacePath[] = [
-  "/console",
+  "/workspaces",
+  "/listeners",
+  "/protocol-packages",
+  "/android-network",
+  "/diagnostics",
   "/capture",
-  "/sessions",
-  "/breakpoints",
   "/rules",
-  "/faults",
   "/certificates",
   "/settings",
 ];
@@ -37,20 +38,61 @@ describe("page-specific usage guides", () => {
     }
   });
 
+  it("keeps entry guidance free of removed standalone pages", () => {
+    const listenerGuide = pageHelpGuides["/listeners"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(listenerGuide).toContain("HTTP 或 Socket");
+    expect(listenerGuide).not.toContain("运行监控");
+  });
+
+  it("does not describe the removed nth-hit rule behavior", () => {
+    const allGuidance = Object.values(pageHelpGuides)
+      .flatMap((guide) => guide.sections)
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(allGuidance).not.toMatch(/第 N 次命中|默认命中次数|一次性生效|仅命中一次/);
+  });
+
+  it("documents the native and non-mutating protocol-package import boundary", () => {
+    const protocolPackageGuide = pageHelpGuides["/protocol-packages"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(protocolPackageGuide).toContain("原生文件选择器读取文件");
+    expect(protocolPackageGuide).toContain("页面不会接收本机路径或 ZIP 字节");
+    expect(protocolPackageGuide).toContain("此阶段不会安装任何内容");
+    expect(protocolPackageGuide).toContain("新安装版本默认停用");
+    expect(protocolPackageGuide).toContain("导入不会自动修改或重绑任何入口");
+  });
+
+  it("documents capture lifecycle as connection status without inferring a business result", () => {
+    const captureGuide = pageHelpGuides["/capture"].sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(captureGuide).toContain("连接状态");
+    expect(captureGuide).toContain("保持连接");
+    expect(captureGuide).toContain("正常结束");
+    expect(captureGuide).toContain("异常结束");
+    expect(captureGuide).not.toContain("最终结果");
+    expect(captureGuide).not.toContain("支付成功");
+  });
+
   it("opens the current page guide in a Drawer without document navigation", async () => {
     const user = userEvent.setup();
     const documentUrl = window.location.href;
-    render(<PageHelp pathname="/console" />);
+    render(<PageHelp pathname="/workspaces" />);
 
     await user.click(
-      screen.getByRole("button", { name: "打开代理控制台使用说明" }),
+      screen.getByRole("button", { name: "打开Workspace 管理使用说明" }),
     );
 
     expect(
-      screen.getByRole("dialog", { name: "代理控制台使用说明" }),
+      screen.getByRole("dialog", { name: "Workspace 管理使用说明" }),
     ).toBeVisible();
-    expect(screen.getByText("首次运行前的准备")).toBeVisible();
-    expect(screen.getByText("真实设备链路的成功判定")).toBeVisible();
     expect(window.location.href).toBe(documentUrl);
   });
 

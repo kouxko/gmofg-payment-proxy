@@ -1,0 +1,38 @@
+{
+  "result": "PASS_WITH_NOT_RUN",
+  "frontend": {
+    "test_files": 67,
+    "tests": 659,
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "production_build": "PASS"
+  },
+  "rust": {
+    "workspace": "PASS_EXCEPT_LOCAL_NON_LOOPBACK_ENVIRONMENT_CASE_NOT_RUN",
+    "application_unit": 441,
+    "application_integration": [14, 7, 5, 12],
+    "infrastructure_unit": 612,
+    "infrastructure_integration": [24, 7, 8],
+    "runtime_unit": 178,
+    "runtime_integration": [3, 15, 16, 6, 7],
+    "format": "PASS",
+    "strict_lints": "PASS",
+    "windows_static_compile": "PASS"
+  },
+  "local_environment_not_run": {
+    "case": "production_bind_is_reachable_on_current_platform_interfaces_without_false_availability",
+    "reason": "The active local transparent proxy intercepts same-host LAN IPv4 traffic; the strict ten-second application exchange deadline expires",
+    "timeout_is_success": false
+  },
+  "static_gates": {
+    "architecture": "PASS",
+    "source_size": "PASS",
+    "bundle_branding": "PASS"
+  },
+  "mcp": {
+    "focused_tests": 71,
+    "resource_list": "PASS",
+    "validation_playbook_read": "PASS",
+    "capabilities_after_restart": "PASS"
+  }
+}

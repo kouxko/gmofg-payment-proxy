@@ -1,0 +1,33 @@
+{
+  "result": "PASS_WITH_NOT_RUN",
+  "pass": [
+    "documentation and architecture gates",
+    "diagnostic log newest-first ordering",
+    "HTTP capture response to unsaved Mock draft",
+    "HTTP Socket TLS and mTLS loopback data plane",
+    "external package isolation and local protocol services",
+    "First Data remote zero-business-byte TLS handshake",
+    "Android multi-device ownership automated contracts",
+    "environment candidate create apply status lifecycle",
+    "packaged App shutdown restart and MCP recovery",
+    "MCP validation playbook discovery and read"
+  ],
+  "not_run": [
+    {
+      "scenario": "Android two-device live parallel VPN",
+      "reason": "No Android devices are connected",
+      "required": "Two supported devices with Companion installed and authorized"
+    },
+    {
+      "scenario": "Nuvei Tango authorized live transaction",
+      "reason": "No authorized endpoint or transaction window is available",
+      "required": "Authorized backend endpoint and approved synthetic transaction window"
+    },
+    {
+      "scenario": "Production non-loopback IPv4 MCP exchange on this macOS host",
+      "reason": "The active local transparent proxy intercepts same-host LAN traffic and the strict exchange deadline expires",
+      "required": "A host network path without same-host LAN interception, such as the Windows runner"
+    }
+  ],
+  "fail": []
+}

@@ -1,0 +1,9 @@
+Commands:
+PYTHONPATH=examples/external-packages/nuvei_tango_json:examples/external-packages/nuvei_tango_json/tests python3 -m unittest discover -s examples/external-packages/nuvei_tango_json/tests -v
+python3 -m compileall -q examples/external-packages/nuvei_tango_json/nuvei_tango_json examples/external-packages/nuvei_tango_json/tests
+
+Result: PASS
+
+- 14 tests passed.
+- Canonical decimal string regression test passed.
+- compileall passed.

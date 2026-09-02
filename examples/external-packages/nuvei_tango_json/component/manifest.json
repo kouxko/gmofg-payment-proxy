@@ -1,0 +1,124 @@
+{
+  "api": 1,
+  "kind": "socket",
+  "package": {
+    "id": "nuvei-tango-json",
+    "version": "1.0.1",
+    "name": "Nuvei Tango JSON",
+    "description": "Read-only parser for length-prefixed Nuvei Tango JSON messages"
+  },
+  "document": {
+    "upstream": {
+      "schema": {
+        "type": "object",
+        "title": "Nuvei Tango JSON Upstream",
+        "properties": {
+          "frame_length": {
+            "type": "object",
+            "title": "Declared Body Bytes",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "control_header": {
+            "type": "object",
+            "title": "Opaque Control Header",
+            "properties": {
+              "type": { "type": "string" },
+              "value_base64": { "type": "string" }
+            }
+          },
+          "sequence": {
+            "type": "object",
+            "title": "Sequence",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "message_type": {
+            "type": "object",
+            "title": "Message Type",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "json_preview": {
+            "type": "object",
+            "title": "Redacted JSON Preview",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "encoding_context": {
+            "type": "object",
+            "title": "Read-only Encoding Context",
+            "properties": {
+              "type": { "type": "string" },
+              "value_base64": { "type": "string" }
+            }
+          }
+        }
+      }
+    },
+    "downstream": {
+      "schema": {
+        "type": "object",
+        "title": "Nuvei Tango JSON Downstream",
+        "properties": {
+          "frame_length": {
+            "type": "object",
+            "title": "Declared Body Bytes",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "control_header": {
+            "type": "object",
+            "title": "Opaque Control Header",
+            "properties": {
+              "type": { "type": "string" },
+              "value_base64": { "type": "string" }
+            }
+          },
+          "sequence": {
+            "type": "object",
+            "title": "Sequence",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "message_type": {
+            "type": "object",
+            "title": "Message Type",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "json_preview": {
+            "type": "object",
+            "title": "Redacted JSON Preview",
+            "properties": {
+              "type": { "type": "string" },
+              "value": { "type": "string" }
+            }
+          },
+          "encoding_context": {
+            "type": "object",
+            "title": "Read-only Encoding Context",
+            "properties": {
+              "type": { "type": "string" },
+              "value_base64": { "type": "string" }
+            }
+          }
+        }
+      }
+    }
+  }
+}

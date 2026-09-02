@@ -1,7 +1,7 @@
 //! 抓包会话的应用查询适配器。
 //!
-//! 会话正文只存在于受容量约束的运行时存储中，本模块负责分页、筛选和导出映射；找不到、
-//! 被淘汰或导出失败都显式返回，不把“空结果”伪装成成功命中。
+//! 会话正文只存在于受容量约束的运行时存储中，本模块负责分页、筛选和详情映射；找不到
+//! 或已被淘汰都显式返回，不把“空结果”伪装成成功命中。
 
 use std::{
     cmp::Ordering,
@@ -12,7 +12,7 @@ use std::{
 };
 
 use async_trait::async_trait;
-use gmofg_proxy_application::{
+use intercept_proxy_application::{
     AppError, AppResult, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
     CaptureRepositoryPort, CaptureRowViewModel, CaptureSort, InMemorySessionStore, RuntimeEpoch,
     SessionId, SessionQueryPort, SortDirection,
@@ -62,15 +62,10 @@ impl CaptureRepositoryAdapter {
         }
     }
 
+    #[cfg(test)]
     pub fn push(&self, row: CaptureRowViewModel) {
         let runtime_epoch = row.runtime_epoch;
         self.push_for_epoch(row, runtime_epoch);
-    }
-}
-
-impl Default for CaptureRepositoryAdapter {
-    fn default() -> Self {
-        Self::new(Arc::new(InMemorySessionStore::default()))
     }
 }
 
@@ -244,12 +239,16 @@ fn compare(left: &CaptureRowViewModel, right: &CaptureRowViewModel, sort: Captur
 #[cfg(test)]
 mod tests {
     use chrono::{TimeZone, Utc};
-    use gmofg_proxy_application::{
+    use intercept_proxy_application::{
         CaptureSort, ChannelId, MessageStage, PageRequest, SortDirection, UiTone,
     };
     use uuid::Uuid;
 
     use super::*;
+
+    fn test_adapter() -> CaptureRepositoryAdapter {
+        CaptureRepositoryAdapter::new(Arc::new(InMemorySessionStore::default()))
+    }
 
     fn row(event_id: u64, terminal: &str) -> CaptureRowViewModel {
         CaptureRowViewModel {
@@ -280,16 +279,13 @@ mod tests {
             duration_ms: Some(event_id),
             matched_rule_ids: Vec::new(),
             size_bytes: event_id,
-            breakpoint_id: None,
-            can_go_to_breakpoint: false,
-            breakpoint_disabled_reason: None,
         }
     }
 
     // CAPTURE-003~006, TEST-EVENT
     #[tokio::test]
     async fn query_and_clear_are_deterministic_without_deleting_rows() {
-        let adapter = CaptureRepositoryAdapter::default();
+        let adapter = test_adapter();
         adapter.push(row(2, "10.0.0.2"));
         adapter.push(row(1, "10.0.0.1"));
         let query = CaptureQuery {
@@ -321,7 +317,7 @@ mod tests {
 
     #[tokio::test]
     async fn resume_cursor_is_epoch_scoped_and_reports_retention_gap() {
-        let adapter = CaptureRepositoryAdapter::default();
+        let adapter = test_adapter();
         let epoch = Uuid::new_v4();
         for event_id in 1..=4_097 {
             let mut row = row(event_id, "10.0.0.1");

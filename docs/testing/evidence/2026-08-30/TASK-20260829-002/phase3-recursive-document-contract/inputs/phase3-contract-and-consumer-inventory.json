@@ -1,0 +1,52 @@
+{
+  "task_id": "TASK-20260829-002",
+  "phase": 3,
+  "contract": {
+    "document_identity": "none",
+    "value_variants": ["string", "number", "boolean", "null", "object", "array"],
+    "number": "validated finite f64 with JavaScript safe-integer rejection at JSON integer boundaries",
+    "pointer": "RFC6901; root is empty string; slash is only a UI display label",
+    "mutations": ["set", "clear", "insert", "append"],
+    "schema_identity": "none",
+    "schema_version": "none",
+    "schema_types": ["string", "number", "boolean", "object", "array"],
+    "schema_object": "properties map",
+    "schema_array": "required items node",
+    "schema_title": "optional UI metadata"
+  },
+  "deleted_contracts": [
+    "DocumentValue::Int",
+    "DocumentValue::Blob",
+    "flat values Vec<Option<DocumentValue>>",
+    "DocumentFieldType",
+    "DocumentField",
+    "DocumentSchema identity",
+    "ProtocolPackageSchemaViewModel.version",
+    "rule schema_version",
+    "DocumentSchemaWire flat fields"
+  ],
+  "immediate_consumers": [
+    "src-tauri/crates/domain/src/document/",
+    "src-tauri/crates/domain/src/external_package/",
+    "src-tauri/crates/domain/src/protocol_document_rule/",
+    "src-tauri/crates/application/src/environment_configuration/",
+    "src-tauri/crates/application/src/facade/protocol_package*.rs",
+    "src-tauri/crates/application/src/facade/protocol_rules/",
+    "src-tauri/crates/application/src/facade/unified_rule_editor/",
+    "src-tauri/crates/protocol-scripting/src/",
+    "src-tauri/crates/infrastructure/src/adapters/",
+    "src-tauri/crates/infrastructure/src/sqlite/tests/external_packages.rs",
+    "src-tauri/src/commands/protocol_packages/ and protocol_rules/",
+    "src-tauri/src/mcp/environment_contract/ and fixtures",
+    "src/generated/rust-types.ts",
+    "src/features/protocol-packages/",
+    "src/features/listeners/ and src/features/rules/ immediate schema consumers",
+    "examples/protocol-packages/nuvei_tango_rhai/",
+    "templates/socket-protocol/iso8583-standard/"
+  ],
+  "deferred": {
+    "phase4": "package contract replacement",
+    "phase5": "condition/action execution model replacement",
+    "pipeline_original_bytes": "model supports it; real unchanged-byte pipeline acceptance remains a later phase"
+  }
+}

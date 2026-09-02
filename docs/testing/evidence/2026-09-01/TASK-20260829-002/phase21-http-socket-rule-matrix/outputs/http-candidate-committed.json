@@ -1,0 +1,144 @@
+{
+  "baseline_public": {
+    "revision": 27,
+    "selected": false,
+    "workspace_id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df"
+  },
+  "candidate_id": "be3b329a-5397-418c-9f19-4f7f109d7a07",
+  "errors": [],
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "phase21-http",
+          "candidate_local_id": "bede1b59-f69f-4d2b-9647-4ad97149443f"
+        }
+      ],
+      "rules": [
+        {
+          "candidate_index": 0,
+          "candidate_local_id": "37b0aac4-3b62-4964-91d9-f7d57c40eddd",
+          "created_order": 1,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 1,
+          "candidate_local_id": "af547acb-d5b3-4aac-a094-22e270afbfd4",
+          "created_order": 2,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 2,
+          "candidate_local_id": "c8e6af5a-2613-432f-ac11-e3f4c8440198",
+          "created_order": 3,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 3,
+          "candidate_local_id": "8e333e6e-3051-4e0c-86ef-46f1179d819c",
+          "created_order": 4,
+          "listener_alias": "phase21-http"
+        }
+      ]
+    },
+    "target": {
+      "expected_revision": 27,
+      "mode": "existing",
+      "workspace_id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "committed",
+  "target_key": "existing:fbcf496f-bd1b-4fe9-9c41-02d111a7c6df",
+  "terminal_result": {
+    "apply_task_id": "7a577c27-648a-4441-bb1e-c87e3b69b585",
+    "diagnostics": [],
+    "result": "committed",
+    "revision": 28,
+    "selected_workspace_id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df",
+    "status_code": null,
+    "workspace_id": "fbcf496f-bd1b-4fe9-9c41-02d111a7c6df"
+  },
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

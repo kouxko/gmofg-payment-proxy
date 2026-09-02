@@ -5,10 +5,18 @@
 
 use std::path::PathBuf;
 
-use gmofg_proxy_application::{AppError, AppResult};
-use gmofg_proxy_infrastructure::{NativeFileDialog, adapters::FileSelection};
+use intercept_proxy_application::{AppError, AppResult};
+use intercept_proxy_infrastructure::{FileSelection, NativeFileDialog};
 use tauri::AppHandle;
 use tauri_plugin_dialog::DialogExt;
+
+const PKCS12_EXTENSIONS: &[&str] = &["p12", "pfx"];
+const CLIENT_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
+const SERVER_IDENTITY_EXTENSIONS: &[&str] = &["p12", "pfx", "pem"];
+const TRUST_CERTIFICATE_EXTENSIONS: &[&str] = &["cer", "crt", "pem", "der"];
+const PROTOCOL_PACKAGE_EXTENSIONS: &[&str] = &["wasm"];
+const APPLICATION_BACKUP_EXTENSIONS: &[&str] = &["zip"];
+const MARKDOWN_EXTENSIONS: &[&str] = &["md"];
 
 /// Desktop-native file picker used by infrastructure adapters.
 ///
@@ -32,33 +40,54 @@ impl TauriNativeFileDialog {
             "rules_json" => builder
                 .set_title("导入规则")
                 .add_filter("JSON 规则", &["json"]),
+            "protocol_package_wasm" => builder
+                .set_title("导入协议包")
+                .add_filter("协议包", PROTOCOL_PACKAGE_EXTENSIONS),
+            "application_backup_zip" => builder
+                .set_title("导入 Intercept Proxy 应用备份")
+                .add_filter("应用备份 ZIP", APPLICATION_BACKUP_EXTENSIONS),
             "pkcs12" => builder
                 .set_title("导入上游 PKCS12")
-                .add_filter("PKCS12", &["p12", "pfx"]),
+                .add_filter("PKCS12", PKCS12_EXTENSIONS),
+            "upstream_client_identity" => builder
+                .set_title("导入上游 mTLS 客户端身份")
+                .add_filter("客户端身份", CLIENT_IDENTITY_EXTENSIONS),
+            "server_identity_pem" => builder
+                .set_title("导入本监听服务端身份（证书链 + 私钥）")
+                .add_filter("服务端身份", SERVER_IDENTITY_EXTENSIONS),
+            "downstream_client_ca" => builder
+                .set_title("导入用于验证客户端证书的 CA")
+                .add_filter("客户端证书 CA", TRUST_CERTIFICATE_EXTENSIONS),
             "upstream_ca" => builder
                 .set_title("选择替换用上游 CA")
-                .add_filter("证书", &["cer", "crt", "pem", "der"]),
+                .add_filter("证书", TRUST_CERTIFICATE_EXTENSIONS),
             _ => builder.set_title("选择文件"),
         }
     }
 
-    fn save_builder(&self, purpose: &str) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
+    fn save_builder(
+        &self,
+        purpose: &str,
+        suggested_file_name: &str,
+    ) -> tauri_plugin_dialog::FileDialogBuilder<tauri::Wry> {
         let builder = self.app.dialog().file();
-        match purpose {
-            "session_json" => builder
-                .set_title("导出会话")
-                .set_file_name("session.json")
-                .add_filter("JSON", &["json"]),
-            "rules_json" => builder
-                .set_title("导出规则")
-                .set_file_name("rules.json")
-                .add_filter("JSON", &["json"]),
+        let builder = match purpose {
+            "rules_json" => builder.set_title("导出规则").add_filter("JSON", &["json"]),
             "root_ca" => builder
-                .set_title("导出统一测试 Root CA 公开证书")
-                .set_file_name("gmofg-test-proxy-root-ca.crt")
+                .set_title("导出 Intercept Proxy Root CA 公开证书")
                 .add_filter("X.509 证书", &["crt", "cer", "pem"]),
+            "application_backup_zip" => builder
+                .set_title("导出 Intercept Proxy 应用备份")
+                .add_filter("应用备份 ZIP", APPLICATION_BACKUP_EXTENSIONS),
+            "protocol_package_export_wasm" => builder
+                .set_title("导出 ISO 8583 协议包模板")
+                .add_filter("协议包", PROTOCOL_PACKAGE_EXTENSIONS),
+            "diagnostic_reproduction_markdown" => builder
+                .set_title("导出故障复现报告")
+                .add_filter("Markdown", MARKDOWN_EXTENSIONS),
             _ => builder.set_title("保存文件"),
-        }
+        };
+        builder.set_file_name(safe_suggested_file_name(purpose, suggested_file_name))
     }
 
     fn into_path(path: tauri_plugin_dialog::FilePath) -> AppResult<PathBuf> {
@@ -79,8 +108,12 @@ impl NativeFileDialog for TauriNativeFileDialog {
             .transpose()
     }
 
-    fn choose_save_file(&self, purpose: &str) -> AppResult<Option<FileSelection>> {
-        self.save_builder(purpose)
+    fn choose_save_file(
+        &self,
+        purpose: &str,
+        suggested_file_name: &str,
+    ) -> AppResult<Option<FileSelection>> {
+        self.save_builder(purpose, suggested_file_name)
             .blocking_save_file()
             .map(|path| {
                 Ok(FileSelection {
@@ -89,5 +122,47 @@ impl NativeFileDialog for TauriNativeFileDialog {
                 })
             })
             .transpose()
+    }
+}
+
+fn safe_suggested_file_name<'a>(purpose: &str, suggested_file_name: &'a str) -> &'a str {
+    let valid = !suggested_file_name.is_empty()
+        && suggested_file_name != "."
+        && suggested_file_name != ".."
+        && !suggested_file_name
+            .chars()
+            .any(|character| character.is_control() || matches!(character, '/' | '\\'));
+    if valid {
+        suggested_file_name
+    } else {
+        default_file_name(purpose)
+    }
+}
+
+fn default_file_name(purpose: &str) -> &'static str {
+    match purpose {
+        "rules_json" => "rules.json",
+        "root_ca" => "intercept-proxy-root-ca.crt",
+        "application_backup_zip" => "intercept-proxy-backup.zip",
+        "protocol_package_export_wasm" => "iso8583-ascii-standard-1.0.0.wasm",
+        "diagnostic_reproduction_markdown" => "intercept-proxy-reproduction.md",
+        _ => "export",
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::{
+        APPLICATION_BACKUP_EXTENSIONS, PKCS12_EXTENSIONS, PROTOCOL_PACKAGE_EXTENSIONS,
+        SERVER_IDENTITY_EXTENSIONS, TRUST_CERTIFICATE_EXTENSIONS,
+    };
+
+    #[test]
+    fn listener_certificate_picker_formats_match_supported_content_types() {
+        assert_eq!(PKCS12_EXTENSIONS, ["p12", "pfx"]);
+        assert_eq!(SERVER_IDENTITY_EXTENSIONS, ["p12", "pfx", "pem"]);
+        assert_eq!(TRUST_CERTIFICATE_EXTENSIONS, ["cer", "crt", "pem", "der"]);
+        assert_eq!(PROTOCOL_PACKAGE_EXTENSIONS, ["wasm"]);
+        assert_eq!(APPLICATION_BACKUP_EXTENSIONS, ["zip"]);
     }
 }

@@ -1,0 +1,74 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase9-local-sidecar-lifecycle",
+  "executed_at": "2026-08-30 23:10:00 +08:00",
+  "completed_at": "2026-08-31 01:04:27 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase8-boa-sidecar-runtime",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase8-boa-sidecar-runtime/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "6e2ea65a0233767582a1d258a753d37a935b1ecb",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase9 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "sidecar_sha256": "de7c402719d32ad051ef0a58804095cb4a958d74d9264feaeab8eb5a70514b4b",
+    "process_test_sha256": "eb27cd791178dc0231ee35f4af63c38fb343c6785638920ffa2d75f3011f0012",
+    "supervisor_sha256": "e4c7d0a727958f128567db8b2c6e0a2cfd1377608559551b7e26fa90cc112b28",
+    "supervisor_test_sha256": "32b2fdb39257ef9b573337816f428d52398b48b73f21d98d087a27fc255dc725",
+    "registry_sha256": "551b7788d720616eec059e6c68b0dcc92447c8e91e650bf015d92ab8601ca329",
+    "registry_test_sha256": "b765172b12cfbea3f8c63d1cd9569363d1945357d43e58c4451665d134fa6eae",
+    "checker_sha256": "4cc8ae94a5f8f7767b1c4ed7ae284fac20abc0bf7b5f22545a8aa56ef5d59699",
+    "checker_test_sha256": "42915300904b0c8566f9972ca1010b6cc99076cb30dd3b94c2f010b66dbf8a7f",
+    "cargo_lock_sha256": "0847478d7d0f4ff1becfe78d51292aaed10df615785886b236b29a6031936065",
+    "generated_bindings_sha256": "50a800f7f5bd5fced87a8d22c6a79b2b25e4b13007de3bef863aee6d53738954",
+    "restart_usecase_sha256": "d915609585c7ad7c46bb0ca2683f4050a608fc65dc37c85a720a4d08d20093c7",
+    "restart_ui_sha256": "9d79c947447158f754bea3d3b551febf223346cc57175fc93e7a3e6e7bb44a9d",
+    "restart_ui_test_sha256": "bb47dda679f40bfb535b2188ba1539ffda58534cff52c588c64ce5b5a6715b2a"
+  },
+  "results": {
+    "phase9_checker_mutations_and_control": { "passed": 15, "failed": 0 },
+    "real_sidecar_process": { "passed": 2, "failed": 0 },
+    "package_runtime_all_targets": { "passed": 20, "failed": 0 },
+    "local_supervisor": { "passed": 4, "failed": 0 },
+    "strict_importer_no_evaluation": { "passed": 3, "failed": 0 },
+    "application_local_remote_lifecycle": { "passed": 8, "failed": 0 },
+    "real_tauri_ipc_migrations": { "passed": 2, "failed": 0 },
+    "disabled_local_restart_guard": { "application": "PASS 1/1", "ui": "PASS 2/2", "tauri_ipc": "PASS 1/1" },
+    "first_registration_enabled_exact": { "passed": 1, "failed": 0 },
+    "external_package_affected": { "passed": 76, "failed": 0 },
+    "infrastructure_full": { "passed": 591, "failed": 0 },
+    "application_full": { "passed": 460, "failed": 0 },
+    "protocol_package_frontend_affected": { "passed": 84, "failed": 0 },
+    "frontend_checkpoint": { "passed": 545, "failed": 0, "files": 64 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_typecheck_fmt_clippy_diff": "PASS",
+    "global_checkpoint": "ENVIRONMENT_BLOCKED after all prior gates passed; workspace Tauri 129/130 then existing non-loopback MCP HTTP exchange deadline elapsed"
+  },
+  "not_run": [
+    "real signed macOS app bundle Sidecar location and launch",
+    "macOS firewall or system permission prompt E2E requiring human interaction",
+    "Phase10/11 complete HTTP and Socket pipeline/codec switch",
+    "Phase12 full legacy deletion",
+    "Phase13 built-in and template conversion",
+    "Phase15 complete UI",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "blockers": [
+    "human-assisted macOS bundle and system permission validation is NOT_RUN",
+    "existing non-loopback MCP HTTP exchange environment test timed out in affected and the single final workspace checkpoint"
+  ],
+  "checkpoint_ready": true,
+  "review_status": "VERIFIED_APPROVED",
+  "final_verdict": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED_APPROVED_CHECKPOINT_READY",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}

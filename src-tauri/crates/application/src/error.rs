@@ -14,6 +14,19 @@ use crate::RuntimeEpoch;
 pub type AppResult<T> = Result<T, AppError>;
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+/// 可安全跨 IPC 展示的导入定位信息。
+/// 所有字符串都必须在进入 Application 前完成校验：`file` 只能是包内相对路径，
+/// `field` 只能是收敛后的声明字段路径，`entry` 只能是合法脚本函数标识。这里刻意没有
+/// source、原始第三方错误文本或本机路径字段，避免诊断能力演变成源码泄漏通道。
+pub struct AppErrorDiagnosticViewModel {
+    pub file: Option<String>,
+    pub field: Option<String>,
+    pub line: Option<u32>,
+    pub column: Option<u32>,
+    pub entry: Option<String>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 pub struct AppErrorViewModel {
     pub code: String,
     pub message: String,
@@ -22,6 +35,7 @@ pub struct AppErrorViewModel {
     pub suggested_action: Option<String>,
     pub entity_id: Option<String>,
     pub runtime_epoch: Option<RuntimeEpoch>,
+    pub diagnostic: Option<AppErrorDiagnosticViewModel>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Error)]
@@ -41,6 +55,7 @@ impl AppError {
                 suggested_action: None,
                 entity_id: None,
                 runtime_epoch: None,
+                diagnostic: None,
             }),
         }
     }
@@ -73,6 +88,23 @@ impl AppError {
         self.view_model.runtime_epoch = Some(runtime_epoch);
         self
     }
+
+    #[must_use]
+    pub fn runtime_context(
+        mut self,
+        entity_id: impl Into<String>,
+        runtime_epoch: Option<RuntimeEpoch>,
+    ) -> Self {
+        self.view_model.entity_id = Some(entity_id.into());
+        self.view_model.runtime_epoch = runtime_epoch;
+        self
+    }
+
+    #[must_use]
+    pub fn diagnostic(mut self, diagnostic: AppErrorDiagnosticViewModel) -> Self {
+        self.view_model.diagnostic = Some(diagnostic);
+        self
+    }
 }
 
 impl From<AppError> for AppErrorViewModel {
@@ -81,8 +113,8 @@ impl From<AppError> for AppErrorViewModel {
     }
 }
 
-impl From<gmofg_proxy_domain::DomainError> for AppError {
-    fn from(value: gmofg_proxy_domain::DomainError) -> Self {
+impl From<intercept_proxy_domain::DomainError> for AppError {
+    fn from(value: intercept_proxy_domain::DomainError) -> Self {
         Self {
             view_model: Box::new(AppErrorViewModel {
                 code: value.code.as_str().to_owned(),
@@ -93,7 +125,8 @@ impl From<gmofg_proxy_domain::DomainError> for AppError {
                 entity_id: value.entity_id,
                 runtime_epoch: value
                     .runtime_epoch
-                    .map(gmofg_proxy_domain::RuntimeEpoch::as_uuid),
+                    .map(intercept_proxy_domain::RuntimeEpoch::as_uuid),
+                diagnostic: None,
             }),
         }
     }

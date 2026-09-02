@@ -1,0 +1,3 @@
+COMMAND     PID  USER   FD   TYPE             DEVICE SIZE/OFF NODE NAME
+intercept 41983 codin   18u  IPv4 0xa31521dc3b9a2313      0t0  TCP *:17653 (LISTEN)
+intercept 41983 codin   19u  IPv6 0x80b394e82b2cb718      0t0  TCP *:17653 (LISTEN)

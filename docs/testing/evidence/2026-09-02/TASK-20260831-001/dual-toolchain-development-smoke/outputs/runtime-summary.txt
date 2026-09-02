@@ -1,0 +1,48 @@
+Deno-only install
+PATH=/tmp/task-20260831-deno-bin.A8bByt:/Users/codin/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin
+deno=/tmp/task-20260831-deno-bin.A8bByt/deno
+node=NOT_FOUND
+pnpm=NOT_FOUND
+Installed 507 packages; reused 507 packages from Deno cache; exit_code=0
+
+Deno Next.js
+Task dev deno run -A --unstable-detect-cjs node_modules/next/dist/bin/next dev --webpack
+Next.js 16.2.12 (webpack); Ready
+listener=deno pid=87925 tcp=*:3000
+HTTP 200; bytes=31678; title=网络代理工具
+
+Deno Tauri
+Task tauri:dev deno run -A --unstable-detect-cjs node_modules/@tauri-apps/cli/tauri.js dev --config src-tauri/tauri.deno.conf.json
+BeforeDevCommand=deno task dev
+DevCommand=cargo run --no-default-features --color always --
+listener=deno pid=94003 tcp=*:3000
+native_process=target/debug/intercept-proxy pid=94012
+window_owner=intercept-proxy
+window_name=Intercept Proxy
+window_layer=0
+window_bounds=Width 1440, Height 900, X 1956, Y 280
+HTTP 200; bytes=31678; title=网络代理工具
+
+Node.js + pnpm Next.js regression
+node=v26.8.1
+pnpm=11.13.1
+Next.js 16.2.12 (webpack); Ready
+listener=node pid=301 tcp=*:3000
+HTTP 200; bytes=32183; title=网络代理工具
+
+Node.js + pnpm Tauri regression
+Tauri CLI process=node
+BeforeDevCommand=pnpm dev
+Next.js process=node
+native_process=target/debug/intercept-proxy
+window_owner=intercept-proxy
+window_name=Intercept Proxy
+window_layer=0
+window_bounds=Width 1440, Height 900, X 1956, Y 280
+HTTP 200; bytes=32183; title=网络代理工具
+
+Static checks
+JSON parse=PASS
+deno fmt --check=PASS
+git diff --check=PASS
+original package.json/pnpm-lock.yaml/tauri.conf.json/tauri.dev.conf.json unchanged=PASS

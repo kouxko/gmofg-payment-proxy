@@ -1,0 +1,37 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase21-http-socket-rule-matrix",
+  "executed_at": "2026-09-01 19:48:12 +08:00",
+  "result": "PASS",
+  "environment": {
+    "platform": "macOS arm64",
+    "app_pid": 84166,
+    "app_bundle": "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Intercept Proxy.app",
+    "mcp_port": 17653,
+    "package_bus_port": 8765
+  },
+  "http": {
+    "result": "PASS",
+    "valid_cases": 6,
+    "invalid_fail_closed": true,
+    "conditions": ["method", "header", "request_target_wildcard", "document_body"],
+    "server_records": "outputs/http-server-success-round.jsonl"
+  },
+  "socket": {
+    "result": "PASS",
+    "package": "iso8583-ascii-standard@1.0.0",
+    "match_rewritten_to": "0100",
+    "miss_unchanged": true,
+    "invalid_fail_closed": true,
+    "server_records": "outputs/socket-server.jsonl"
+  },
+  "ui": {
+    "result": "PASS",
+    "screenshot": "outputs/final-http-rule-editor.png",
+    "app_left_running": true
+  },
+  "not_applicable": {
+    "network_permissions": "No system permission prompt was required.",
+    "windows_runtime": "N/A; covered by the separate successful Windows build-only CI run, not this local macOS behavior case."
+  }
+}

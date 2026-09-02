@@ -1,0 +1,241 @@
+{
+  "dropped_events": 0,
+  "evicted_records": 0,
+  "ignored_events": 2,
+  "page": 1,
+  "page_size": 100,
+  "rows": [
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-01T08:41:30.080821Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age18 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: match-18\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":18.0}}",
+          "document": {
+            "customer": {
+              "age": 18.0
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-01T08:41:30.081818Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age18 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: match-18\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-01T08:41:30.081896Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age18 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: match-18\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-01T08:41:30.087400Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":18}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"upstream_received\":{\"customer\":{\"age\":18}}}",
+          "document": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":18}}}",
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-01T08:41:30.087592Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":18}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-01T08:41:30.087605Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":18}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-01T08:41:30.087868Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-01T08:41:30.088223Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "e3a9724e504349e7976a19ac27c62d6c",
+      "listener_id": "19402382-35bd-4e88-b310-decceaf093b7",
+      "peer_address": "127.0.0.1:57582",
+      "protocol": "http",
+      "runtime_epoch": "bb8461b1-232c-42b7-9d07-2589b5d57602",
+      "workspace_id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-01T08:41:30.590151Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":17}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age17 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: miss-17\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":17.0}}",
+          "document": {
+            "customer": {
+              "age": 17.0
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-01T08:41:30.590232Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":17}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age17 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: miss-17\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-01T08:41:30.590248Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":17}}",
+            "body_is_utf8": true,
+            "header": "POST /body?case=age17 HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 23\r\nx-case: miss-17\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-01T08:41:30.591399Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":17}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"upstream_received\":{\"customer\":{\"age\":17}}}",
+          "document": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":17}}}",
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-01T08:41:30.591423Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":17}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-01T08:41:30.591436Z"
+        },
+        {
+          "context": {
+            "body": "{\"upstream_received\":{\"customer\":{\"age\":17}}}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.0 200 OK\r\nServer: BaseHTTP/0.6 Python/3.14.7\r\nDate: Tue, 01 Sep 2026 08:41:30 GMT\r\ncontent-type: application/json\r\ncontent-length: 45\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-01T08:41:30.591704Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-01T08:41:30.592001Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "773fc296bd58435da75b612b9c2df309",
+      "listener_id": "19402382-35bd-4e88-b310-decceaf093b7",
+      "peer_address": "127.0.0.1:57590",
+      "protocol": "http",
+      "runtime_epoch": "bb8461b1-232c-42b7-9d07-2589b5d57602",
+      "workspace_id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-01T08:41:31.096997Z"
+        },
+        {
+          "context": {
+            "body": "{",
+            "body_is_utf8": true,
+            "header": "POST /body?case=invalid HTTP/1.1\r\nHost: 127.0.0.1:8080\r\nAccept-Encoding: identity\r\ncontent-type: application/json\r\ncontent-length: 1\r\nx-case: invalid-json\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "error": "JSON_INVALID\nInvalid Document JSON: EOF while parsing an object at line 1 column 1",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-01T08:41:31.097065Z",
+          "stage": "decode"
+        },
+        {
+          "error": "JSON_INVALID\nInvalid Document JSON: EOF while parsing an object at line 1 column 1",
+          "event": "closed",
+          "observed_at": "2026-09-01T08:41:31.097077Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "4014094f2b0543ddb4577acf17ccccb2",
+      "listener_id": "19402382-35bd-4e88-b310-decceaf093b7",
+      "peer_address": "127.0.0.1:57594",
+      "protocol": "http",
+      "runtime_epoch": "bb8461b1-232c-42b7-9d07-2589b5d57602",
+      "workspace_id": "ce1905a1-d9cb-4ce4-8c8c-0532772517d9"
+    }
+  ],
+  "total": 3
+}

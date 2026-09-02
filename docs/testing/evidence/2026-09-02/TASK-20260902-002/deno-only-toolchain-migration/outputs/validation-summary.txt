@@ -1,0 +1,30 @@
+TASK-20260902-002 / deno-only-toolchain-migration
+
+Deno-only PATH:
+  node=NOT_FOUND
+  npm=NOT_FOUND
+  pnpm=NOT_FOUND
+  deno=2.9.6
+
+PASS:
+  deno ci (507 packages; unrs-resolver postinstall allowed and executed)
+  deno task lint
+  deno task typecheck
+  deno task test (63 files, 532 tests)
+  deno task test:coverage-policy (4/4)
+  deno task test:bindings-check (6/6)
+  Deno toolchain + Windows workflow contracts (5/5)
+  deno task scan:architecture
+  deno task scan:source-size
+  deno task build (Next.js 16.2.12; 13 static routes)
+  deno task tauri build --bundles app
+  JSON parsing, selected deno fmt checks, active workflow scan, git diff --check
+
+FAILED, NOT IGNORED:
+  deno audit --level high --frozen-lockfile
+    5 advisories: 1 critical (vitest), 4 high (brace-expansion x3, js-yaml x1)
+  deno task scan:bundle-branding
+    built macOS executable matched /gmofg/i
+
+NOT_RUN:
+  Remote GitHub Actions, Windows/Linux runners, signing, publishing, push

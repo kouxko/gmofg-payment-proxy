@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="app_name">Intercept Proxy VPN</string>
+    <string name="vpn_notification_channel">定向弱网</string>
+    <string name="vpn_notification_title">Intercept Proxy 定向弱网运行中</string>
+    <string name="vpn_notification_text">仅选中的应用流量进入弱网引擎</string>
+    <string name="vpn_stop">停止并恢复网络</string>
+    <string name="vpn_permission_denied">未取得 VPN 授权，未接管任何流量</string>
+</resources>

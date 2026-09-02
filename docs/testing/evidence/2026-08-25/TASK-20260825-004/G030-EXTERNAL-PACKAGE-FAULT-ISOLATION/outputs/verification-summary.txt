@@ -1,0 +1,16 @@
+PASS cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+PASS cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets -- -D warnings
+PASS infrastructure external_package: 124 passed, 0 failed
+PASS domain external_package: 37 passed, 0 failed
+PASS application external_package: 7 passed, 0 failed
+PASS host external_package: 1 passed, 0 failed
+PASS Tauri mcp: 23 passed, 0 failed
+PASS pnpm scan:architecture
+PASS pnpm scan:frontend-boundaries
+FAIL pnpm scan:source-size (outside G030 ownership)
+  src-tauri/crates/host/tests/architecture.rs: 608
+  src/features/rules/socket-rules-view.test.tsx: 574
+  src-tauri/crates/infrastructure/src/adapters/listener_certificates.rs: 553
+  src-tauri/crates/infrastructure/src/adapters/certificates.rs: 524
+
+G030 largest owned file after split: 483 lines.
