@@ -73,9 +73,7 @@ async fn every_repository_example_and_template_builds_and_loads_as_a_component()
             .id
             .as_str()
             .to_owned();
-        assert!(
-            !package_id.is_empty()
-        );
+        assert!(!package_id.is_empty());
         let identity = package.manifest().package().identity();
         assert!(
             identities.insert(format!(

@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 17:32:21 +08:00`
+- 最后更新时间：`2026-09-02 17:38:48 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -127,6 +127,7 @@
 - 正确实现边界：由主进程内封闭 Wasm runtime owner 持有 Component/Store/Instance、Host capabilities、顺序调用、停用/重启/关闭清理和在线状态；本地路径不得保留 JSON-RPC、自连接、Sidecar fallback 或额外进程。
 - 当前已验证：完整桌面 CI run `33598183857` 的 Android、Windows/macOS Verify、Windows MSI/NSIS/portable 全部成功；唯一失败是 macOS DMG 构建。runner 原始错误为 `Error: Unknown option '--volumeName'`，发生在 `scripts/build-macos-universal.mjs` 调用 `diskutil image create from` 时。
 - 已确认根因：脚本使用了当前 GitHub macOS runner 不支持的 `diskutil image create from --volumeName` 参数组合；App universal binary 已完成编译，失败边界只在 DMG 容器创建。正确修复边界是改用 macOS 稳定的 `hdiutil create -volname ... -srcfolder ... -format UDZO` 合同并增加命令形状回归测试，不修改 App、签名、版本或其他发布步骤。
+- 当前已验证：完整桌面 run `33613664943` 的 macOS Verify 在 `Verify Rust formatting` 失败；本地对当前 head 执行同一 `cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check` 精确复现为 `repository_components.rs` 中单个 `assert!` 的非标准换行。根因是前一轮测试补充后未对该文件应用 rustfmt，修复边界仅为 rustfmt 机械格式化，不改变断言或业务行为。
 
 ## 最小改动与最优设计比较
 
@@ -226,6 +227,7 @@
 - `2026-09-01 23:18:03 +08:00`：补充托管 Component 详情派生证据：精确 Rust 查询测试 1/1 与协议包前端 7 files/77 tests 通过；详情不调用远端 connection metadata port。同步修正规则文档，明确多条规则独立匹配，不能把它们描述成单条规则 AND/OR 的等价表达。
 - `2026-09-02 12:21:42 +08:00`：最终 CI 调用合同收敛为两条独立 workflow：完整流程使用 `windows-release.yml` 的 `platform=all`，Windows 快速可执行文件使用无参数的 `windows-quick-build.yml`。本地 Rust、全部活动 manifest、CI 与操作文档统一到 `1.98.0`；Windows workflow 合同、Deno/Rust pin 合同和最终独立审查通过。
 - `2026-09-02 14:15:00 +08:00`：完整 CI run 33590640554 的 Android、macOS Verify、Windows bindings/前端/架构/rustfmt/Clippy/全量 Rust tests 均通过；Windows Verify 在 90 分钟 job 上限到达时取消了正在执行的 independent runtime gates，后续 Windows/macOS 打包因此跳过。根因是 Rust 1.98 Windows 冷缓存完整验证超过既有时间预算，不是测试失败。将 `ci.yml` 与 `windows-release.yml` 的 Verify 上限统一提高到 150 分钟，并增加 workflow 合同断言；不删除或跳过任何验证步骤。
+- `2026-09-02 17:38:48 +08:00`：无签名发布合同本地定向测试与 YAML 解析通过后，全平台 run `33613664943` 暴露 `repository_components.rs` 的单点 rustfmt 失败；已在修复前本地用相同命令复现并锁定为纯格式问题，后续仅应用 rustfmt 并重新跑同一门禁。
 - `2026-09-02 15:57:27 +08:00`：开始 WPC-12 远端 Windows 重放。MCP `tools/list`、`mcp_environment_capabilities` 与 `workspace_list` 已实时成功；远端当前只有默认 Workspace revision 1、一个 disabled HTTP Listener、无运行 Listener。内置 `iso8583-ascii-standard@1.0.0` 为 managed Wasm、enabled/online/valid，Frame/Decode/Encode/Display 与双向 Schema 可读；`au-eftex@1.1.0` 未安装。远端日志路径确认 Windows 用户数据目录，RDP 3389、SMB 445、MCP 17653 与外部包 8765 可达。以上只读盘点不算部署或重放完成。
 - `2026-09-02 16:43:08 +08:00`：修复 ISO Deno Host 整数规范化兼容并发布 `1.0.1`；Nuvei Rhai `1.0.1` 将 object/array 递归渲染为 nested table。远端五包逐字节重放通过后，用户截图证明另一个 `nuvei-tango-json@1.0.0` 仍在输出原始 JSON；随后只修改其 Display renderer、升级到 `1.0.1` 并增加正式 Host 回归，重新统一构建 5 个 Wasm。
 - `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
