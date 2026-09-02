@@ -1,11 +1,12 @@
 # Nuvei Tango JSON External Package
 
-`nuvei-tango-json@1.0.0` 同时提供两种等价入口：
+`nuvei-tango-json@1.0.1` 同时提供两种等价入口：
 
 - `nuvei_tango_json/`：保留的 Python WebSocket 外部调试实现，适合快速修改和观察 JSON-RPC 日志。
 - `component/`：Rust 实现的单文件 WebAssembly Component，供 Proxy 在同一进程内直接加载。
 
 两种实现都只读地拆分并解析 Nuvei Tango 观察到的长度前缀 JSON 报文，不允许修改或重新生成业务内容。
+Component `1.0.1` 将脱敏后的 JSON preview 递归渲染为嵌套 HTML table，不再输出原始 `<pre>` 文本。
 
 ## 线路合同
 
@@ -84,7 +85,7 @@ HMAC key 认证、绑定方向并有界保存；WIT 传入的 `original-input` �
 - `NUVEI_TANGO_ALLOW_INSECURE_REMOTE_WS=1`：仅在隔离测试中允许连接远端明文 `ws`；生产使用 `wss`
   或受控网络。
 
-包注册成功后，在 Proxy 的“协议包”页面启用 `nuvei-tango-json@1.0.0`，并绑定到 Nuvei Socket
+包注册成功后，在 Proxy 的“协议包”页面启用 `nuvei-tango-json@1.0.1`，并绑定到 Nuvei Socket
 Listener。Listener 保持 `relay`、上游 `tangodev.nuvei.com:9081` 和 TLS→TLS。外部包只负责协议拆帧、
 只读解析和显示，不改变 Listener 的连接、TLS 或读取超时配置。
 

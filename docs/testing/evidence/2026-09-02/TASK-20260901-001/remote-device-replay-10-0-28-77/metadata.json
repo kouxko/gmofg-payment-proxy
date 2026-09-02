@@ -1,0 +1,59 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "remote-device-replay-10-0-28-77",
+  "executed_at": "2026-09-02 16:18:51 +08:00",
+  "completed_at": "2026-09-02 17:02:32 +08:00",
+  "result": "WASM_AND_RULES_REMOTE_VERIFIED_HTTP_NOT_RUN",
+  "derived_from": [
+    {"task_id": "TASK-20260901-001", "case_id": "wasm-integrated-runtime", "evidence": "docs/testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/"},
+    {"task_id": "TASK-20260901-001", "case_id": "release-app-replay", "evidence": "docs/testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay/"}
+  ],
+  "environment": {
+    "mcp_endpoint": "http://10.0.28.77:17653/mcp",
+    "remote_observed_source_ip": "10.0.28.99",
+    "controlled_upstream_host": "10.0.34.59",
+    "mcp_protocol": "2026-07-28",
+    "rustc": "1.98.0",
+    "cargo": "1.98.0",
+    "node": "26.8.1",
+    "pnpm": "11.13.1"
+  },
+  "workspace": {
+    "id": "5578cfdb-4b94-4d7d-be99-fec767329700",
+    "name": "Remote Wasm Rules Replay 20260902",
+    "revision": 11,
+    "selected": true,
+    "runtime_epoch": "2db8a6c6-4f14-4567-9164-3d560ac7a146"
+  },
+  "artifacts": [
+    {"file": "resources/intercept-proxy-au-eftex-component.wasm", "bytes": 278782, "sha256": "d6b4cf4c7130fe82449bb6d53152e4c1c260d557aad74b6676ecf3d6f74a35ee"},
+    {"file": "resources/intercept-proxy-iso8583-ascii-standard-component.wasm", "bytes": 188741, "sha256": "3e880229b50f5c034f660df507b52fd8bf34efe3c018fb9c91a0f5b987e8b569"},
+    {"file": "resources/intercept-proxy-iso8583-deno-ascii-component.wasm", "bytes": 221692, "sha256": "9fe8a7aecb35c373e8ad80e10cdd6990926c689beeaac8a1eed80bca33d028ec"},
+    {"file": "resources/intercept-proxy-nuvei-tango-json-component.wasm", "bytes": 302986, "sha256": "f78778af55360760148ba3ed0a9f75d9e036e103358d8cf1bbe8dc178ac06e8b"},
+    {"file": "resources/intercept-proxy-nuvei-tango-json-rhai-component.wasm", "bytes": 254139, "sha256": "6b2f203295bcd40dadcf1f509227b9b387d21f40516e6d047d74e81b7c1a76a0"}
+  ],
+  "result_detail": {
+    "packages_replayed": 5,
+    "rules_hit": 5,
+    "rule_hit_counts": [1, 1, 1, 1, 1],
+    "miss_cases_completed": 4,
+    "intentional_invalid_frames_failed_closed": 4,
+    "exchange_total": 13,
+    "exchange_completed": 9,
+    "exchange_expected_failed": 4,
+    "byte_exact_client_responses": true,
+    "byte_exact_controlled_upstream_requests": true,
+    "nuvei_nested_display_without_pre": true,
+    "diagnostic_cursor": 348,
+    "listeners_left_running": 5,
+    "listener_faults": 0
+  },
+  "not_applicable": {
+    "tls_mtls": "Socket replay uses transparent TCP to TCP",
+    "http": "historical HTTP replay was outside this Wasm and rules rerun",
+    "au_rule_miss": "only one authoritative encrypted upstream vector exists",
+    "au_invalid_ciphertext": "no authoritative invalid ciphertext vector was available",
+    "ci": "not requested",
+    "production_key": "AU EFTEX Component contains only the public ANSI test BDK"
+  }
+}

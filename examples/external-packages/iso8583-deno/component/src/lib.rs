@@ -580,10 +580,9 @@ fn encode_field(value: &Value, spec: &FieldSpec) -> Result<Vec<u8>, String> {
             .as_bytes()
             .to_vec(),
         DocumentKind::Integer => {
-            let number = value
-                .as_u64()
+            let digits = non_negative_integer_digits(value)
                 .ok_or_else(|| format!("{} must be a non-negative integer", spec.name))?;
-            format!("{number:0width$}", width = spec.length).into_bytes()
+            format!("{digits:0>width$}", width = spec.length).into_bytes()
         }
     };
     if spec.document_kind != DocumentKind::Blob && !payload.is_ascii() {
@@ -700,11 +699,15 @@ fn printable_value(value: &Value, kind: DocumentKind) -> Result<String, String> 
             .as_str()
             .ok_or_else(|| "value must be a string".to_owned())?
             .to_owned()),
-        DocumentKind::Integer => Ok(value
-            .as_u64()
-            .ok_or_else(|| "value must be an integer".to_owned())?
-            .to_string()),
+        DocumentKind::Integer => {
+            non_negative_integer_digits(value).ok_or_else(|| "value must be an integer".to_owned())
+        }
     }
+}
+
+fn non_negative_integer_digits(value: &Value) -> Option<String> {
+    let number = value.as_f64()?;
+    (number.is_finite() && number >= 0.0 && number.fract() == 0.0).then(|| format!("{number:.0}"))
 }
 
 fn row(label: &str, value: &str) -> String {
@@ -765,5 +768,20 @@ mod tests {
         let html = Iso8583DenoAscii::display(r#"{"message_type":"<script>"}"#).unwrap();
         assert!(!html.contains("<script>"));
         assert!(html.contains("&lt;script&gt;"));
+    }
+
+    #[test]
+    fn display_and_encode_accept_host_serialized_integral_numbers() {
+        let document = Iso8583DenoAscii::decode(&request()).unwrap();
+        let mut host_document = serde_json::from_str::<Value>(&document).unwrap();
+        host_document["amount"] = serde_json::json!(1000.0);
+        let host_document = serde_json::to_string(&host_document).unwrap();
+
+        let html = Iso8583DenoAscii::display(&host_document).unwrap();
+        assert!(html.contains("<td>1000</td>"));
+        assert_eq!(Iso8583DenoAscii::encode(&host_document).unwrap(), request());
+
+        assert!(Iso8583DenoAscii::display(r#"{"amount":1000.5}"#).is_err());
+        assert!(Iso8583DenoAscii::encode(r#"{"message_type":"0200","amount":-1.0}"#).is_err());
     }
 }

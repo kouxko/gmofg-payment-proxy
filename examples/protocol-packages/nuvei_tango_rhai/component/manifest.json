@@ -3,7 +3,7 @@
   "kind": "socket",
   "package": {
     "id": "nuvei-tango-json-rhai",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "Nuvei Tango JSON Read-Only",
     "description": "Read-only length-prefixed Nuvei Tango JSON protocol package"
   },

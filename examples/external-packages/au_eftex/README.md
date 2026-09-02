@@ -25,8 +25,10 @@ dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm
 `cargo build --target wasm32-wasip2` 只生成未追加顶层 Manifest 的编译器原始产物；导入时必须使用
 统一构建入口生成的 `dist` 文件。
 
-运行 Component 时仍须通过 `AU_EFTEX_BDK_FILE` 或 `AU_EFTEX_BDK_HEX` 二选一提供 16 字节 BDK；
-WASI Host 会继承环境变量并提供文件访问。生产环境继续优先使用密钥文件。
+当前 Component 是历史测试记录重放专用产物，源码内置公开 ANSI DUKPT 测试 BDK
+`0123456789ABCDEFFEDCBA9876543210`，运行时不读取 `AU_EFTEX_BDK_FILE` 或
+`AU_EFTEX_BDK_HEX`。该 Component 不得用于生产交易或真实 BDK；Python 外部调试包继续使用下述
+运行时密钥配置。
 
 `au-eftex@1.1.0` 是 Intercept Proxy 的外部 Socket 软件包。它通过 Python、WebSocket JSON-RPC 和
 PyCryptodome 处理传统 2-key 3DES DUKPT 保护的 AU EFTEX 报文。
@@ -83,7 +85,7 @@ Document、Display hook、JSON-RPC hook 以及逐字节重加密结果。验证�
 验证器当前默认输出 MTI、字节数和布尔结果；如排障需要，可以扩展为保存完整 Document、报文和结果，并为输出
 配置容量、轮转与保留期限。
 
-## 密钥配置
+## Python 外部调试包密钥配置
 
 生产环境优先使用只有当前 OS 用户可读写的文件：
 
@@ -163,5 +165,5 @@ EFTEX MAC 算法。公开的 Retail MAC / ISO 9797-1 组合没有匹配该 trace
 - DE128 采用相同的 fail-closed 规则；任何带 DE128 的报文发生字段变化都会被拒绝。
 - 在获得厂商 MAC 模式、padding、输入区间与输出截断合同前，不应把字段修改、LocalResponder 或业务验收视为可用。
 
-BDK、PIN block、轨道数据和完整支付 trace 应视为敏感测试材料。该包的测试只使用公开 ANSI DUKPT 向量和
-合成非支付字节。
+BDK、PIN block、轨道数据和完整支付 trace 应视为敏感测试材料。Component 源码与自动化测试只使用上述
+公开 ANSI DUKPT 测试 BDK 和合成非支付字节；真实 BDK 不得写入该源码或由该 Component 处理。

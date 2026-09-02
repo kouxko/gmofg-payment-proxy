@@ -1,0 +1,17 @@
+{
+  "workspace": {"name": "Remote Wasm Rules Replay 20260902", "target": "new", "selected": true},
+  "listeners": [
+    {"listen": "0.0.0.0:8083", "upstream": "10.0.34.59:18086", "package": "au-eftex@1.1.0"},
+    {"listen": "0.0.0.0:8084", "upstream": "10.0.34.59:18084", "package": "iso8583-ascii-standard@1.0.0"},
+    {"listen": "0.0.0.0:8085", "upstream": "10.0.34.59:18085", "package": "iso8583-deno-ascii@1.0.1"},
+    {"listen": "0.0.0.0:8086", "upstream": "10.0.34.59:18087", "package": "nuvei-tango-json@1.0.1"},
+    {"listen": "0.0.0.0:8087", "upstream": "10.0.34.59:18088", "package": "nuvei-tango-json-rhai@1.0.1"}
+  ],
+  "rules": [
+    {"name": "AU message type observation", "stage": "proxy_to_upstream", "path": "/message_type/value", "equals": "1200", "set": "1200"},
+    {"name": "ISO standard MTI rewrite", "stage": "proxy_to_upstream", "path": "/message_type", "equals": "0200", "set": "0100"},
+    {"name": "ISO Deno MTI rewrite", "stage": "proxy_to_upstream", "path": "/message_type", "equals": "0200", "set": "0100"},
+    {"name": "Nuvei JSON message type observation", "stage": "proxy_to_upstream", "path": "/message_type/value", "equals": "AccptrAuthstnReq", "set": "AccptrAuthstnReq"},
+    {"name": "Nuvei Rhai message type observation", "stage": "proxy_to_upstream", "path": "/message_type", "equals": "AccptrAuthstnReq", "set": "AccptrAuthstnReq"}
+  ]
+}

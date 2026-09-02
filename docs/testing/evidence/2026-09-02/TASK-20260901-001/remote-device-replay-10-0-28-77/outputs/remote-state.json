@@ -1,0 +1,19 @@
+{
+  "workspace_id": "671380dd-7fe2-4973-ad57-68dbfe3c2b04",
+  "revision": 5,
+  "selected": true,
+  "runtime_epoch": "6f7e32a0-605f-495b-882f-d9fe1bf0c173",
+  "listeners": [
+    {"listener_id": "e6bb62b2-44a8-42e2-a38f-8bbee3d1babf", "listen_address": "0.0.0.0:8084", "package": "iso8583-ascii-standard@1.0.0", "state": "running", "client_to_server_bytes": 6, "server_to_client_bytes": 6, "fault_reason": null},
+    {"listener_id": "219a66b7-d5f2-4dab-b276-b03d930daab2", "listen_address": "0.0.0.0:8085", "package": "iso8583-deno-ascii@1.0.1", "state": "running", "client_to_server_bytes": 59, "server_to_client_bytes": 59, "fault_reason": null},
+    {"listener_id": "093a6d77-23e5-4007-bfda-a2a54883f8a4", "listen_address": "0.0.0.0:8086", "package": "nuvei-tango-json@1.0.0", "state": "running", "client_to_server_bytes": 48, "server_to_client_bytes": 49, "fault_reason": null},
+    {"listener_id": "d3ae2e42-363f-40bd-9327-042ae623e7e8", "listen_address": "0.0.0.0:8087", "package": "nuvei-tango-json-rhai@1.0.1", "state": "running", "client_to_server_bytes": 271, "server_to_client_bytes": 191, "fault_reason": null}
+  ],
+  "diagnostics": {
+    "current_cursor": 192,
+    "queried_after_event_id": 132,
+    "retained_rows": 17,
+    "warning_or_error_rows": 0,
+    "socket_failure_rows": 0
+  }
+}

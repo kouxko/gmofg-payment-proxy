@@ -73,7 +73,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-iso8583-deno-ascii-component"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64",
  "serde_json",

@@ -1,0 +1,52 @@
+{
+  "au-eftex@1.1.0": {
+    "request_bytes": 71,
+    "response_bytes": 63,
+    "client_equals_expected": true,
+    "upstream_received_exact_request": true,
+    "diagnostic_event_id": 26,
+    "exchange_id": "12c674a6f9334a31aac7abd5c6bcf1e0",
+    "result": "PASS"
+  },
+  "iso8583-ascii-standard@1.0.0": {
+    "request_bytes": 6,
+    "response_bytes": 6,
+    "client_equals_expected": true,
+    "upstream_received_exact_request": true,
+    "exchange_id": "af0bfc3880ce4232b6bd8a0f438158fe",
+    "display_events": 2,
+    "result": "PASS"
+  },
+  "iso8583-deno-ascii@1.0.1": {
+    "request_bytes": 59,
+    "response_bytes": 59,
+    "client_equals_expected": true,
+    "upstream_received_exact_request": true,
+    "exchange_id": "7002b290ced44712b0d133408b3edc9f",
+    "display_events": 2,
+    "display_contains_amount_1000": true,
+    "failed_events": 0,
+    "result": "PASS"
+  },
+  "nuvei-tango-json@1.0.0": {
+    "request_bytes": 48,
+    "response_bytes": 49,
+    "client_equals_expected": true,
+    "upstream_received_exact_request": true,
+    "exchange_id": "915febfe4a7c4a8692f770714420212d",
+    "display_events": 2,
+    "result": "PASS"
+  },
+  "nuvei-tango-json-rhai@1.0.1": {
+    "request_bytes": 271,
+    "response_bytes": 191,
+    "client_equals_expected": true,
+    "upstream_received_exact_request": true,
+    "exchange_id": "63555e86c28546ad97835b413610a6e2",
+    "display_events": 2,
+    "display_contains_nested_table": true,
+    "display_contains_pre": false,
+    "failed_events": 0,
+    "result": "PASS"
+  }
+}
