@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 17:24:26 +08:00`
+- 最后更新时间：`2026-09-02 17:32:21 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -89,10 +89,11 @@
 | `2026-09-02 16:52:48 +08:00` | 用户要求补充测试全部 5 个 Wasm 包的规则。规则验收必须分别证明命中、适用的未命中保持、非法 Frame fail-closed、规则持久化命中计数和上游/客户端实际字节；AU EFTEX 与 Nuvei 的 MAC/只读字段只使用同值动作观测规则命中，不绕过 Encode 合同。 |
 | `2026-09-02 17:19:32 +08:00` | 用户要求整理分支、合并应合并内容、删除应删除分支、推送 GitHub、合并到主分支并创建 Release。执行前实时确认 GitHub 当前没有 `main`/`master`，默认分支为 `codex/windows-ci-cache-warmup`；仓库当前版本为 `1.0.0` 且无历史 tag/Release。主分支命名/目标与首个 Release tag 仍需用户确认，确认前可以修复独立的发布阻断、推送当前功能分支并运行验证，但不得猜测创建 `main`、tag 或删除含独立提交/未提交修改的分支。 |
 | `2026-09-02 17:24:26 +08:00` | 用户确认一次性执行发布收口方案：以现有默认分支 tip 创建并切换 GitHub 默认分支为 `main`，当前任务分支通过 PR merge 到 `main`，首个 Release 使用 `v1.0.0`；合并与发布验证完成后删除已盘点的 1–6 项安全候选，包括当前任务分支、已被包含的 generalization 分支、干净的 wasm-runtime worktree/本地分支、旧默认分支、失效的 g032 worktree 元数据和未跟踪的根目录 `pnpm-lock.yaml`。保留含 3 个独立提交的 `g032-consolidation` 分支和有未提交修改的 g049 detached worktree。Windows 正式 Release 继续遵守 fail-closed 签名合同；实时 GitHub readback 尚未发现所需 Actions secrets/variable，因此不得在凭据门禁满足前创建 tag。 |
+| `2026-09-02 17:32:21 +08:00` | 用户明确暂时不配置 Windows 签名，要求以无签名状态发布。该结论替代上一条的签名门禁：`v1.0.0` tag 在三项签名配置均缺失时必须明确走 unsigned 分支，产物名称和 Release 说明必须标注未签名，不执行或伪造 Authenticode 校验；未来三项配置全部存在时仍执行现有签名与签发者/时间戳校验。部分配置存在属于错误配置并继续 fail-closed，禁止静默降级。 |
 
 ## 未确认事项
 
-- 主分支、首个 tag 和分支清理范围均已确认；实现合同无未确认事项。外部状态仍有一个发布门禁：GitHub Actions 当前未读到 `WINDOWS_CERTIFICATE`、`WINDOWS_CERTIFICATE_PASSWORD` 和 `WINDOWS_TIMESTAMP_URL`，需要配置后才能触发 fail-closed 的 `v1.0.0` 正式发布工作流。该外部状态不改变代码实现方向。
+- 主分支、首个 tag、无签名发布策略和分支清理范围均已确认；实现合同无未确认事项。
 
 ## 需求就绪检查
 
@@ -156,7 +157,7 @@
 | WPC-11 | 将本地、workspace MSRV、活动文档与全部 CI Rust 工具链统一到 `1.98.0` | WPC-10 | 否 | 已完成 | `rustc`/`cargo` 实际版本为 1.98.0，活动配置无 1.97，受影响检查和 CI 合同通过 |
 | WPC-12 | 在 `10.0.28.77` Windows App 重放历史 HTTP、ISO8583 Wasm 与 AU EFTEX Wasm 部署 | WPC-08、WPC-09、WPC-13 | 否 | 进行中 | 5 个 Socket Wasm 的真实加载、Display、规则命中/miss/fail-closed、客户端/受控上游原始字节、Exchange/diagnostics 和最终运行态已 VERIFIED；历史 HTTP 本轮 NOT_RUN，因此小任务不记为全部完成 |
 | WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
-| WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流成功并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
+| WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流在无签名配置时明确产出 unsigned 制品并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
