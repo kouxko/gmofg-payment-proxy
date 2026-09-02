@@ -1,0 +1,10 @@
+{
+  "build": {
+    "beforeDevCommand": "deno task dev"
+  },
+  "app": {
+    "security": {
+      "freezePrototype": false
+    }
+  }
+}

@@ -55,7 +55,7 @@ WebView 是展示层，也是较低信任边界。它可以被旧页面、损坏
 
 - 不要在 TypeScript 复制 Rust DTO、规则能力或分页逻辑；
 - 不要绕过 `src/lib/ipc/client.ts` 直接组织另一套 IPC；
-- 不要手改 `src/generated/rust-types.ts`；运行 `pnpm bindings` 重新生成；
+- 不要手改 `src/generated/rust-types.ts`；运行 `deno task bindings` 重新生成；
 - 不要让页面直接访问文件、证书、ADB、Socket、数据库或密钥。
 
 ### 2.3 一笔流量如何通过系统
@@ -91,7 +91,7 @@ Encode 或 transport 失败要 fail-closed，结束当前 Exchange。
 | Envelope | 原始字节、Document 和协议上下文的单次处理载体 | `crates/exchange` |
 | Document | 协议包解析出的递归 JSON tree | `domain/document` |
 | HTTP 标准规则 | Header、Body、状态、延迟、断开等 HTTP 阶段动作 | `domain/rule` |
-| 统一规则 | `RuleDefinition` 的非空扁平 `conditions`（固定 AND）与有序 `UnifiedAction` | `domain/unified_rule` |
+| 统一规则 | `RuleDefinition` 的唯一 `condition` 与对应 `action` | `domain/unified_rule` |
 | 协议包 | 提供 Frame、Decode、Encode、Display 能力的精确版本包 | package API 1 / WIT |
 | LocalResponder | 使用同一 Server 接口的本地响应端，不是旁路流程 | `exchange/local_server` |
 | Observation | 面向抓包 UI 的有界内存 Exchange 事件 | Infrastructure store |
@@ -273,9 +273,8 @@ Root CA 私钥、HTTP Basic 明文、运行态抓包或 Android 设备运行状�
 桌面开发的仓库基线是：
 
 - Git；
-- Node.js 22；
-- pnpm 11.13.1，版本固定在 `package.json`；
-- Rust 1.97.1、rustfmt、clippy，版本固定在 `rust-toolchain.toml`；
+- Deno 2.9.6；
+- Rust 1.98.0、rustfmt、clippy，版本固定在 `rust-toolchain.toml`；
 - macOS 使用 Xcode Command Line Tools；Windows 使用 Visual Studio C++ Build Tools 和 WebView2；
 - 需要 Android Companion 时，再安装 JDK 21、Android SDK 36、Build Tools 36.0.0 和 NDK
   29.0.14206865；
@@ -283,13 +282,12 @@ Root CA 私钥、HTTP Basic 明文、运行态抓包或 Android 设备运行状�
 先验证版本：
 
 ```bash
-node --version
-pnpm --version
+deno --version
 rustc --version
 cargo --version
 ```
 
-不要用升级全部依赖来解决首次安装问题。仓库锁定了 `pnpm-lock.yaml`、Rust toolchain 和关键 crate 版本，先
+不要用升级全部依赖来解决首次安装问题。仓库锁定了 `deno.lock`、Rust toolchain 和关键 crate 版本，先
 复现当前基线，再单独评估升级。
 
 ### 6.2 安装和首次校验
@@ -297,22 +295,22 @@ cargo --version
 从仓库根目录执行：
 
 ```bash
-pnpm install --frozen-lockfile
-pnpm bindings
-pnpm typecheck
+deno ci
+deno task bindings
+deno task typecheck
 cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain
 ```
 
-`pnpm bindings` 从 Rust/Specta 重新生成 TypeScript IPC 类型。首次生成后 `git status --short` 应保持干净；
+`deno task bindings` 从 Rust/Specta 重新生成 TypeScript IPC 类型。首次生成后 `git status --short` 应保持干净；
 如果出现差异，先查 Rust DTO、生成器版本或未提交绑定，不要直接编辑生成文件消除差异。
 
 ### 6.3 启动完整开发 App
 
 ```bash
-pnpm tauri:dev
+deno task tauri:dev
 ```
 
-该命令启动 Next.js 开发服务和 Tauri WebView。只运行 `pnpm dev` 只能看到 Web 前端，Tauri Command、原生
+该命令启动 Next.js 开发服务和 Tauri WebView。只运行 `deno task dev` 只能看到 Web 前端，Tauri Command、原生
 对话框、MCP、真实 Listener、SQLite、证书和 Android 控制都不可用，不能把浏览器页面当作完整功能验证。
 
 ### 6.4 构建 release App
@@ -320,16 +318,16 @@ pnpm tauri:dev
 只构建当前 macOS App：
 
 ```bash
-pnpm tauri build --bundles app
+deno task tauri build --bundles app
 ```
 
 完整桌面发布构建：
 
 ```bash
-pnpm tauri:build
+deno task tauri:build
 ```
 
-`pnpm tauri:build` 会先构建并验证 Android Companion，再构建桌面包，因此需要完整 Android 工具链。构建成功
+`deno task tauri:build` 会先构建并验证 Android Companion，再构建桌面包，因此需要完整 Android 工具链。构建成功
 只证明产物生成，不证明代理转发和真实业务结果。
 
 ## 7. 第一次打开 App 应该做什么
@@ -397,7 +395,7 @@ rg "ERROR_CODE|error_code" src-tauri/crates
 2. 先增加组件/交互回归测试；
 3. 修改页面，只处理展示、输入草稿和视觉状态；
 4. 验证 pending、失败恢复、焦点、键盘和 overlay 关闭；
-5. 运行定向 Vitest、`pnpm test:ui-contracts`、lint 和 typecheck；
+5. 运行定向 Vitest、`deno task test:ui-contracts`、lint 和 typecheck；
 6. 用真实 Tauri App 检查系统 WebView 行为。
 
 UI 设计原则和已关闭决策见[设计说明](../DESIGN.md)。
@@ -408,7 +406,7 @@ UI 设计原则和已关闭决策见[设计说明](../DESIGN.md)。
 2. 在领域层实现唯一规则；
 3. Application 组合 Port 并返回中文 ViewModel；
 4. Tauri Command 只转发和映射结构化错误；
-5. 运行 `pnpm bindings`，再更新前端；
+5. 运行 `deno task bindings`，再更新前端；
 6. 验证旧客户端或损坏 JSON 不能绕过 Rust 校验。
 
 ### 10.3 网络、Exchange 或 TLS 改动
@@ -422,9 +420,9 @@ panic、停止和端口释放，不能只有 happy path。修改共享抽象时�
 Rust DTO 是唯一来源：
 
 ```bash
-pnpm bindings
+deno task bindings
 git diff -- src/generated/rust-types.ts
-pnpm typecheck
+deno task typecheck
 ```
 
 Command 参数名、nullable/union、错误结构和事件 payload 都要有 Rust IPC 测试；不要在 TypeScript 写兼容镜像。
@@ -464,7 +462,7 @@ Command 参数名、nullable/union、错误结构和事件 payload 都要有 Rus
 示例：
 
 ```bash
-pnpm vitest run src/features/listeners/listeners-view.test.tsx
+deno task --eval "vitest run src/features/listeners/listeners-view.test.tsx"
 cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain
 cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime socket_relay
 cargo test --manifest-path src-tauri/Cargo.toml mcp:: --lib
@@ -473,10 +471,10 @@ cargo test --manifest-path src-tauri/Cargo.toml mcp:: --lib
 然后运行相关架构门禁，最后执行完整检查：
 
 ```bash
-pnpm check
+deno task check
 ```
 
-`pnpm check` 会生成 IPC bindings，执行架构/源码大小门禁、lint、typecheck、UI 合约、全量前端测试、Next
+`deno task check` 会生成 IPC bindings，执行架构/源码大小门禁、lint、typecheck、UI 合约、全量前端测试、Next
 production build、品牌检查、Rust fmt/clippy、Windows Rust 检查和 Cargo workspace tests。
 
 ### 11.2 App 测试
@@ -495,7 +493,7 @@ Socket Direct、Socket Scripted、不完整 Frame、成功/失败抓包、本地
 ```bash
 git status --short
 git diff --check
-pnpm check
+deno task check
 ```
 
 检查生成文件、测试缓存、数据库、日志、证书、密钥、完整业务报文和本地路径没有误入提交。提交应围绕一个清晰
@@ -514,13 +512,14 @@ pnpm check
 
 ### 12.3 Desktop release
 
-`.github/workflows/windows-release.yml` 支持：
+`.github/workflows/windows-release.yml` 只负责完整验证与桌面安装包构建：
 
-- `verify-and-build`：先完整验证，再构建测试安装包；
-- `build-only`：跳过 verify，快速生成分支测试产物；它不能替代本地/CI 完整门禁；
 - `platform=windows`：只构建 Windows；
 - `platform=all`：构建 Windows 和 macOS；
 - `v*` tag：正式发布，必须完整验证并使用 GitHub Secrets 中的 Authenticode 材料签名 Windows 产物。
+
+`.github/workflows/windows-quick-build.yml` 是独立的 Windows 快速出包入口，只构建并上传未签名
+`intercept-proxy.exe`，不运行 Android、完整 Verify、installer 或 macOS job，也不能替代完整门禁。
 
 Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigned；正式 tag 对主程序、MSI、NSIS 的
 签名、签发者和时间戳执行 fail-closed 检查。发布凭据只存在于 GitHub runner，不能放进仓库、编辑器任务或文档。
@@ -543,7 +542,7 @@ Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigne
 ### 14.1 App 启不来
 
 先看终端/Tauri 日志，再查 app-data、SQLite、资源路径和平台依赖。MCP 端口占用只会让 MCP 不可用，不应让主
-代理退出。若生成绑定失败，先运行 `pnpm bindings` 和 `cargo check`。
+代理退出。若生成绑定失败，先运行 `deno task bindings` 和 `cargo check`。
 
 ### 14.2 页面显示旧状态
 
@@ -575,7 +574,7 @@ Exchange ID 和外部 RPC request ID。半包返回 `NeedMore`，不能当作头
 
 ## 15. 新人最容易踩的坑
 
-- 只运行 `pnpm dev`，却认为 Tauri 功能坏了；
+- 只运行 `deno task dev`，却认为 Tauri 功能坏了；
 - 手改生成的 `rust-types.ts`，下次 bindings 又被覆盖；
 - 在 React 中复制规则能力、排序、分页或错误分类；
 - 把 HTTP Header/Status 语义塞进 Socket Document；
@@ -594,7 +593,7 @@ Exchange ID 和外部 RPC request ID。半包返回 `NeedMore`，不能当作头
 ### 第一天：运行和观察
 
 - 阅读本文、[README](../README.md)和[用户操作说明](user-operation-guide.md)；
-- 启动 `pnpm tauri:dev`；
+- 启动 `deno task tauri:dev`；
 - 完成一个 HTTP loopback Exchange；
 - 在抓包、诊断和 MCP 中找到同一操作的不同证据；
 - 运行一个前端定向测试和一个 Rust crate 测试。
@@ -619,7 +618,7 @@ Exchange ID 和外部 RPC request ID。半包返回 `NeedMore`，不能当作头
 - 先写行为合同和失败测试；
 - 只修改一个主要责任面；
 - 同步 bindings、文档和测试矩阵；
-- 完成 `pnpm check` 和相关 release App 场景；
+- 完成 `deno task check` 和相关 release App 场景；
 - 请相邻责任面的维护者评审边界。
 
 ### 第一个月：可以独立维护
@@ -632,7 +631,7 @@ Exchange ID 和外部 RPC request ID。半包返回 `NeedMore`，不能当作头
 - Exchange、Pipeline、Document、revision、epoch、generation 的区别；
 - 何时 fail-open，何时 fail-closed；
 - 如何选择最小测试、完整门禁和真实 App 验证；
-- CI、build-only、正式 tag 签名发布之间的差别；
+- 完整桌面 CI、Windows quick executable、正式 tag 签名发布之间的差别；
 - 哪些数据永远不能进入代码、日志、文档和提交。
 
 ## 17. 一次改动的完成定义
@@ -644,7 +643,7 @@ Exchange ID 和外部 RPC request ID。半包返回 `NeedMore`，不能当作头
 - [ ] 稳定错误、失败路径、取消和资源释放已覆盖；
 - [ ] Rust DTO 变化已重新生成 bindings，生成结果确定；
 - [ ] 定向测试先通过，再通过相关架构门禁；
-- [ ] `pnpm check` 通过，或明确记录当前环境无法执行的层级；
+- [ ] `deno task check` 通过，或明确记录当前环境无法执行的层级；
 - [ ] 受影响的 release App 用例已执行并记录用例与结果；
 - [ ] 架构、MCP、操作或验证范围变化已同步文档；
 - [ ] 没有秘密、本地数据库、日志、缓存和业务报文进入提交；

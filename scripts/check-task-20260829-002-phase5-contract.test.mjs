@@ -29,7 +29,7 @@ function sandbox() {
 }
 
 function run(cwd) {
-  return spawnSync(process.execPath, [checker], {
+  return spawnSync(process.execPath, ["run", "-A", checker], {
     cwd,
     encoding: "utf8",
     env: cwd === root ? process.env : { ...process.env, PHASE5_DISCOVERY_JSON: sandboxDiscovery },

@@ -1,0 +1,54 @@
+{
+  "task_id": "TASK-20260831-001",
+  "case_id": "dual-toolchain-development-smoke",
+  "executed_at": {
+    "started": "2026-09-02 09:58:32 +08:00",
+    "finished": "2026-09-02 10:20:08 +08:00"
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "aarch64",
+    "deno": "2.9.6",
+    "node": "v26.8.1",
+    "pnpm": "11.13.1",
+    "next": "16.2.12",
+    "tauri_cli": "2.11.4"
+  },
+  "deno_only_path": "/tmp/task-20260831-deno-bin.A8bByt:/Users/codin/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+  "deno_only_preconditions": {
+    "deno": "/tmp/task-20260831-deno-bin.A8bByt/deno",
+    "node": "NOT_FOUND",
+    "pnpm": "NOT_FOUND"
+  },
+  "tested_files": {
+    "deno.json": "c8e9f1bbe4b5e9fb868c8f400db663df44bebc097f49409e473a430475c02248",
+    "deno.lock": "178b7a2377686fe2909e847aecd94cc81e0b201fac97534fc9866b148e1a2505",
+    "src-tauri/tauri.deno.conf.json": "1b62441e946c4683bbaa8b923ec61f7ba1ca1747db44e595f33ea59c54a4b67c",
+    "package.json": "09dc5ddb86d64e770e9ab6f89803c6875d7a63d96514d7b058dafc0b030530fc",
+    "pnpm-lock.yaml": "cfac4b97cae183c8c89b10615645182bbb0d1eca58d824fb169087b6df74ebe7",
+    "src-tauri/tauri.conf.json": "94c7369d7e2725de2b98bbade7f1fb37710a3fc901a55f3a9ba8f03407890b91",
+    "src-tauri/tauri.dev.conf.json": "5c77e5c340f278733947b79ec199fb6adcd346e5838b6a7631eda4bda925f525"
+  },
+  "results": {
+    "deno_install": "VERIFIED",
+    "deno_next_dev": "VERIFIED",
+    "deno_tauri_dev": "VERIFIED",
+    "node_pnpm_install": "VERIFIED",
+    "node_next_dev": "VERIFIED",
+    "node_tauri_dev": "VERIFIED",
+    "config_and_diff_checks": "VERIFIED"
+  },
+  "not_run": [
+    "lint",
+    "typecheck",
+    "vitest",
+    "pnpm check",
+    "release bundle",
+    "CI",
+    "cross-platform matrix"
+  ],
+  "not_applicable": {
+    "webdriver": "macOS Tauri has no official WebDriver driver; verified the real process, HTTP response and on-screen CoreGraphics window instead."
+  },
+  "result": "VERIFIED"
+}

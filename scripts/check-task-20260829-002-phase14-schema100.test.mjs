@@ -25,7 +25,7 @@ function fixture(mutator) {
 }
 
 function run(root) {
-  return spawnSync(process.execPath, [checker, root], {
+  return spawnSync(process.execPath, ["run", "-A", checker, root], {
     cwd: root,
     encoding: "utf8",
   });

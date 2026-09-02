@@ -582,7 +582,7 @@ export type ChannelSettingsDraft = {
 	upstream_url: string,
 };
 
-/**  One typed condition in a flat rule condition list. */
+/**  The rule's one typed condition. */
 export type Condition =
 /**  A typed RFC 6901 Document predicate. */
 { source: "document";
@@ -922,8 +922,6 @@ export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display"
 
 /**  外部协议包详情的严格连接投影。 */
 export type ExternalPackageDetailViewModel = {
-	/**  历史字段名；`true` 表示由 Proxy 持久化 Component 并拥有本地实例生命周期。 */
-	local_process: boolean,
 	remote_address: string | null,
 	connection_id: string | null,
 	first_connected_at: string,

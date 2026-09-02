@@ -134,7 +134,7 @@ test("current Schema100 startup source is release ready", async () => {
 
   const result = spawnSync(
     process.execPath,
-    [path.join(import.meta.dirname, "check-task-20260829-002-phase2-release-blocker.mjs")],
+    ["run", "-A", path.join(import.meta.dirname, "check-task-20260829-002-phase2-release-blocker.mjs")],
     { encoding: "utf8" },
   );
   assert.equal(result.status, 0, result.stderr);
@@ -151,11 +151,11 @@ test("ordinary tauri builds do not run the explicit release readiness gate", asy
   );
   assert.equal(
     packageJson.scripts["tauri:build"],
-    "pnpm build:android-companion && tauri build",
+    "deno task build:android-companion && tauri build",
   );
   assert.equal(packageJson.scripts.tauri, "tauri");
-  assert.equal(tauriConfig.build.beforeBuildCommand, "pnpm build");
-  assert.equal(tauriConfig.build.beforeDevCommand, "pnpm dev");
+  assert.equal(tauriConfig.build.beforeBuildCommand, "deno task build");
+  assert.equal(tauriConfig.build.beforeDevCommand, "deno task dev");
   assert.equal(
     packageJson.scripts["tauri:dev"],
     "tauri dev --config src-tauri/tauri.dev.conf.json",

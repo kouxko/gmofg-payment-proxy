@@ -31,7 +31,7 @@ function sandbox() {
 }
 
 function run(cwd, discovered = discovery) {
-  return spawnSync(process.execPath, [checker], { cwd, encoding: "utf8", env: { ...process.env, PHASE6_CHECKER_TEST_MODE: "sandbox", PHASE6_DISCOVERY_JSON: discovered } });
+  return spawnSync(process.execPath, ["run", "-A", checker], { cwd, encoding: "utf8", env: { ...process.env, PHASE6_CHECKER_TEST_MODE: "sandbox", PHASE6_DISCOVERY_JSON: discovered } });
 }
 
 function mutate(file, transform) {

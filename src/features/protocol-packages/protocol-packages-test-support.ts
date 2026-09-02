@@ -79,7 +79,6 @@ export function detail(
 
 function externalDetail(): NonNullable<ProtocolPackageDetailViewModel["external"]> {
   return {
-    local_process: false,
     remote_address: "127.0.0.1:49152",
     connection_id: "018f6fc0-65d8-7d90-b25b-392f6d9b9481",
     first_connected_at: "2026-08-20T08:00:00Z",

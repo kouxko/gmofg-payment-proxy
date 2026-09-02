@@ -303,10 +303,7 @@ async fn assert_package_persisted(
         .protocol_package_detail(package.clone())
         .await
         .expect("load persisted package detail");
-    let external = detail.external.expect("external package lifecycle detail");
-    assert!(external.local_process);
-    assert_eq!(external.remote_address, None);
-    assert_eq!(external.recent_error, None);
+    assert_eq!(detail.external, None);
 }
 
 fn load_package_snapshot(

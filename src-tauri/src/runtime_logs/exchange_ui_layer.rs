@@ -452,12 +452,12 @@ fn context(fields: &Fields) -> Option<ExchangeContext> {
 }
 
 fn decode_hex(encoded: &str) -> Option<Vec<u8>> {
-    if !encoded.len().is_multiple_of(2) {
+    let (pairs, remainder) = encoded.as_bytes().as_chunks::<2>();
+    if !remainder.is_empty() {
         return None;
     }
-    encoded
-        .as_bytes()
-        .chunks_exact(2)
+    pairs
+        .iter()
         .map(|pair| {
             let text = std::str::from_utf8(pair).ok()?;
             u8::from_str_radix(text, 16).ok()

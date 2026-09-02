@@ -32,7 +32,7 @@ function sandbox() {
 }
 
 function run(cwd) {
-  return spawnSync(process.execPath, [checker], {
+  return spawnSync(process.execPath, ["run", "-A", checker], {
     cwd,
     encoding: "utf8",
     env: cwd === root ? process.env : { ...process.env, PHASE10_CHECKER_TEST_MODE: "sandbox" },
@@ -57,7 +57,7 @@ test("canonical repository passes", () => {
 
 test("fails closed when Phase10 Cargo discovery drifts", () => {
   const target = sandbox();
-  const result = spawnSync(process.execPath, [checker], {
+  const result = spawnSync(process.execPath, ["run", "-A", checker], {
     cwd: target,
     encoding: "utf8",
     env: {

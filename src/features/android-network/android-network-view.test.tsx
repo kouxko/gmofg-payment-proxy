@@ -98,7 +98,7 @@ describe("Android targeted network page", () => {
     expect(screen.queryByRole("heading", { name: "本机连接工具" })).not.toBeInTheDocument();
     expect(screen.queryByRole("heading", { name: "设备端控制" })).not.toBeInTheDocument();
     expect(screen.getByText("设备网络方案")).toBeVisible();
-    expect(screen.getByRole("button", { name: "新建设备网络方案" })).toBeVisible();
+    expect(await screen.findByRole("button", { name: "新建设备网络方案" })).toBeVisible();
     expect(screen.queryByRole("button", { name: "新建" })).not.toBeInTheDocument();
     expect(screen.queryByText("尚未选择设备网络方案")).not.toBeInTheDocument();
     expect(screen.queryByText("Profiles")).not.toBeInTheDocument();

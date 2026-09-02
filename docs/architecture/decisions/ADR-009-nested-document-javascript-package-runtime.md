@@ -15,12 +15,12 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
 
 1. 协议中立数据模型是递归 JSON `Document`，支持 null、boolean、number、string、object 和 array；
    Schema 描述递归能力，规则本地叶子仍由其类型化 condition/action 携带，不另建持久化字段。
-2. HTTP 与 Socket 共享 `RuleDefinition`、非空扁平条件列表和有序 action。同一规则内所有条件固定
-   为 AND；需要 OR 时创建多条规则。每个方向只在写出边界执行一次规则事务：`Proxy -> Server` 与
-   `Proxy -> App`。
+2. HTTP 与 Socket 共享 `RuleDefinition`；每条规则只包含一个 condition 和一个对应 action。复杂行为
+   通过多条独立规则表达，不提供单规则 AND、OR 或动作链。每个方向只在写出边界执行一次规则事务：
+   `Proxy -> Server` 与 `Proxy -> App`。
 3. 每个方向开始时创建私有 working Document。规则按确定顺序执行，每条 condition 读取当前 working
-   state；命中 action 立即更新它并对后序规则可见。方向完成后只 Encode 一次，成功才提交
-   NthHit/one-shot；失败或 Encode 失败回滚 Document 与 actor 生命周期。
+   state；命中 action 立即更新它并对后序规则可见。方向完成后只 Encode 一次，成功才提交规则命中
+   生命周期；失败或 Encode 失败回滚 Document 与 actor 生命周期。
 4. 本地包是严格 ZIP，根目录使用 `manifest.json`、`protocol.js` 和 `display.js`。独立 Boa Sidecar
    是唯一 JavaScript 执行 owner，不提供进程内、Rhai、Deno 或兼容别名路径。当前 host 不注入
    Node、文件系统、process、Buffer、fetch、timer 或 WebSocket bindings；这不是对 Boa 原生能力的
@@ -36,7 +36,7 @@ Rhai 包假设已被后续实现替代。继续把这些历史描述当作当前
 ## Why
 
 - 两个写出阶段与网络提交点一致，避免 Reader 阶段持有可变规则状态。
-- 当前 working state 按序匹配、立即 action 更新与一次提交把 Document 和 NthHit 生命周期放进同一事务。
+- 当前 working state 按序匹配、立即 action 更新与一次提交把 Document 和规则命中生命周期放进同一事务。
 - Rust capability/factory 是唯一能力所有者，UI 和文档不再复制 predicate/action 默认。
 - 单一 API 1 Sidecar 路径让本地 ZIP 与远端进程共享失败、预算、生命周期和观测合同。
 

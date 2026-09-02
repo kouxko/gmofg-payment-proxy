@@ -80,41 +80,48 @@ LocalServer 与 RemoteServer 实现同一个 Server 端口：LocalServer 只是�
 
 ## 开发
 
-环境要求：Node.js、pnpm、Rust、Tauri 的 macOS 构建依赖；需要 Android Companion 时还要安装
-JDK 和 Android SDK。桌面端使用系统已有的 `adb`，不内置 platform-tools。
+桌面开发需要 Deno 2.9.6、Rust 和 Tauri 对应平台的构建依赖。前端依赖安装、开发、测试、正式构建
+和 CI 统一使用 Deno，不要求系统安装 Node.js 或 pnpm。需要 Android Companion 时还要安装 JDK 和 Android SDK。
+桌面端使用系统已有的 `adb`，不内置 platform-tools。
+
+Deno 2.9.6：
 
 ```bash
-pnpm install
-pnpm tauri:dev
+deno install --allow-scripts
+deno task tauri:dev
 ```
+
+只启动浏览器前端时使用 `deno task dev`。Deno 读取 `package.json` 中的 npm 依赖和 scripts，使用
+`deno.lock` 冻结版本，并通过 npm/Node 兼容层及 `node-globals`、`unsafe-proto`、`sloppy-imports`、
+`detect-cjs` 运行 Next.js/Tauri 工具；它不会把 Deno 引入最终 Tauri App 运行时。
 
 常用验证：
 
 ```bash
-pnpm bindings
-pnpm scan:architecture
-pnpm scan:source-size
-pnpm lint
-pnpm typecheck
-pnpm test:ui-contracts
-pnpm test
-pnpm build
+deno task bindings
+deno task scan:architecture
+deno task scan:source-size
+deno task lint
+deno task typecheck
+deno task test:ui-contracts
+deno task test
+deno task build
 cargo test --manifest-path src-tauri/Cargo.toml --workspace
 ```
 
 完整门禁：
 
 ```bash
-pnpm check
+deno task check
 ```
 
 只构建 macOS App：
 
 ```bash
-pnpm tauri build --bundles app
+deno task tauri build --bundles app
 ```
 
-`pnpm tauri:build` 会先构建并验证固定升级签名的 Android Companion release APK，再构建桌面
+`deno task tauri:build` 会先构建并验证固定升级签名的 Android Companion release APK，再构建桌面
 安装包。测试脚本和固定端口见 [发布级验证矩阵](docs/testing/release-validation-matrix.md)。
 
 ## 维护约束

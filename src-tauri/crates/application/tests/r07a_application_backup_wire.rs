@@ -16,7 +16,7 @@ fn valid_application_json_round_trips_deterministically() {
     .unwrap();
 
     assert_eq!(first, second);
-    assert_eq!(parsed.referenced_paths().len(), 3);
+    assert_eq!(parsed.referenced_paths().len(), 2);
 }
 
 #[test]
@@ -159,19 +159,27 @@ fn application_json_requires_exact_protocol_identity_directory() {
 }
 
 #[test]
-fn application_json_rejects_duplicate_and_unsorted_references() {
-    let mut value = valid_document();
-    value["protocol_packages"][0]["files"] = json!([
-        "protocol-packages/sample/1.0.0/protocol.js",
-        "protocol-packages/sample/1.0.0/manifest.json"
-    ]);
+fn application_json_rejects_duplicate_or_extra_package_references() {
+    for files in [
+        json!([
+            "protocol-packages/sample/1.0.0/component.wasm",
+            "protocol-packages/sample/1.0.0/component.wasm"
+        ]),
+        json!([
+            "protocol-packages/sample/1.0.0/component.wasm",
+            "protocol-packages/sample/1.0.0/protocol.js"
+        ]),
+    ] {
+        let mut value = valid_document();
+        value["protocol_packages"][0]["files"] = files;
 
-    let error = parse_value(&value).expect_err("unsorted references rejected");
+        let error = parse_value(&value).expect_err("extra package reference rejected");
 
-    assert_eq!(
-        error.view_model.code,
-        "APPLICATION_BACKUP_REFERENCE_INVALID"
-    );
+        assert_eq!(
+            error.view_model.code,
+            "APPLICATION_BACKUP_REFERENCE_INVALID"
+        );
+    }
 }
 
 fn parse_value(
@@ -198,8 +206,7 @@ fn valid_document() -> Value {
             "package": { "id": "sample", "version": "1.0.0" },
             "enabled": true,
             "files": [
-                "protocol-packages/sample/1.0.0/manifest.json",
-                "protocol-packages/sample/1.0.0/protocol.js"
+                "protocol-packages/sample/1.0.0/component.wasm"
             ]
         }],
         "portable_materials": [{

@@ -3,42 +3,52 @@ import { readFile } from "node:fs/promises";
 import path from "node:path";
 import test from "node:test";
 
-const workflowPath = path.join(import.meta.dirname, "../.github/workflows/windows-release.yml");
+const releaseWorkflowPath = path.join(
+  import.meta.dirname,
+  "../.github/workflows/windows-release.yml",
+);
+const quickWorkflowPath = path.join(
+  import.meta.dirname,
+  "../.github/workflows/windows-quick-build.yml",
+);
 
-function job(source, name, nextName) {
-  const start = source.indexOf(`  ${name}:`);
-  const end = source.indexOf(`\n  ${nextName}:`, start + 1);
-  assert.notEqual(start, -1, `missing ${name} job`);
-  assert.notEqual(end, -1, `missing ${nextName} job after ${name}`);
-  return source.slice(start, end);
-}
+test("Windows quick workflow builds only one unsigned executable artifact", async () => {
+  const source = await readFile(quickWorkflowPath, "utf8");
 
-test("manual build-only windows runs one Windows executable job without Android or macOS", async () => {
-  const source = await readFile(workflowPath, "utf8");
-  const androidJob = job(source, "android-companion", "verify");
-  const verifyJob = job(source, "verify", "build-windows-executable");
-  const executableJob = job(source, "build-windows-executable", "build");
-  const installerJob = job(source, "build", "build-macos");
-  const macosJob = source.slice(source.indexOf("  build-macos:"));
-
+  assert.match(source, /^name: Windows quick executable$/mu);
+  assert.match(source, /^on:\n  workflow_dispatch:\s*$/mu);
+  assert.match(source, /group: windows-quick-executable-\$\{\{ github\.ref \}\}/u);
+  assert.match(source, /permissions:\s+contents: read/u);
+  assert.match(source, /^  build-windows-executable:$/mu);
+  assert.match(source, /runs-on: windows-latest/u);
   assert.match(
-    androidJob,
-    /if: >-\s+github\.event_name == 'push' \|\|\s+inputs\.run_mode != 'build-only' \|\|\s+inputs\.platform == 'all'/u,
-  );
-  assert.match(executableJob, /runs-on: windows-latest/u);
-  assert.match(
-    executableJob,
-    /github\.event_name == 'workflow_dispatch' &&\s+inputs\.run_mode == 'build-only' &&\s+inputs\.platform == 'windows'/u,
-  );
-  assert.match(
-    executableJob,
+    source,
     /cargo build --manifest-path src-tauri\/Cargo\.toml --release\s+--features tauri\/custom-protocol --bin intercept-proxy/u,
   );
-  assert.match(executableJob, /TAURI_CONFIG: '\{"bundle":\{"resources":\[\]\}\}'/u);
-  assert.match(executableJob, /src-tauri\/target\/release\/intercept-proxy\.exe/u);
-  assert.match(verifyJob, /if: github\.event_name == 'push' \|\| inputs\.run_mode != 'build-only'/u);
-  assert.match(installerJob, /needs\.android-companion\.result == 'success'/u);
-  assert.match(macosJob, /\(github\.event_name == 'push' \|\| inputs\.platform == 'all'\)/u);
-  assert.doesNotMatch(executableJob, /android-companion|build-macos|needs:/u);
-  assert.doesNotMatch(executableJob, /pnpm audit|cargo test|cargo clippy/u);
+  assert.match(source, /TAURI_CONFIG: '\{"bundle":\{"resources":\[\]\}\}'/u);
+  assert.match(source, /src-tauri\/target\/release\/intercept-proxy\.exe/u);
+  assert.match(source, /name: Intercept-Proxy-unsigned-executable-x64/u);
+  assert.doesNotMatch(
+    source,
+    /android-companion|build-macos|Verify before packaging|pnpm audit|cargo test|cargo clippy|pull_request:|push:/u,
+  );
+  assert.equal((source.match(/^  [a-z][a-z0-9-]+:\s*$/gmu) ?? []).length, 1);
+});
+
+test("full desktop release never exposes the quick-build bypass", async () => {
+  const source = await readFile(releaseWorkflowPath, "utf8");
+
+  assert.match(source, /permissions:\s+contents: read/u);
+  assert.match(source, /group: desktop-release-\$\{\{ github\.ref \}\}/u);
+  assert.doesNotMatch(source, /group: windows-quick-executable-/u);
+  assert.match(source, /^  android-companion:$/mu);
+  assert.match(source, /^  verify:$/mu);
+  assert.match(source, /^  build:$/mu);
+  assert.match(source, /^  build-macos:$/mu);
+  assert.doesNotMatch(source, /build-only|build-windows-executable|inputs\.run_mode/u);
+  assert.match(
+    source,
+    /needs\.android-companion\.result == 'success' && needs\.verify\.result == 'success'/u,
+  );
+  assert.match(source, /needs\.verify\.result == 'success' &&\s+\(github\.event_name/u);
 });

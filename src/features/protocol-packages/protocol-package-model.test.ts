@@ -116,6 +116,18 @@ describe("protocol package presentation model", () => {
     }, expected)).toBe("协议包详情数据不完整。");
   });
 
+  it("rejects the removed local_process compatibility field", () => {
+    const expected = { id: "iso-8583", version: "2.0.0" };
+    const current = detail();
+    const legacy = {
+      ...current,
+      external: { ...current.external!, local_process: false },
+    };
+
+    expect(protocolPackageDetailError(current, expected)).toBeUndefined();
+    expect(protocolPackageDetailError(legacy, expected)).toBe("协议包详情数据不完整。");
+  });
+
   it("rejects malformed and extended recursive Schema nodes", () => {
     const expected = { id: "iso-8583", version: "2.0.0" };
     const base = detail();

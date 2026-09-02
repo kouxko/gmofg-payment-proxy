@@ -3,6 +3,8 @@
 //! 各命令域位于独立子模块；这里仅公开稳定的 Rust IPC 接口并集中维护注册顺序。
 //! 子模块只做参数/错误映射，业务规则、数据库和网络 I/O 仍由 application 层负责。
 
+#![allow(clippy::result_large_err)]
+
 mod android;
 mod app;
 mod application_backup;

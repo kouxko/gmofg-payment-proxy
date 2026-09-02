@@ -251,14 +251,14 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 日常验证入口：
 
 ```text
-pnpm scan:architecture
-pnpm scan:source-size
-pnpm lint
-pnpm typecheck
-pnpm test
+deno task scan:architecture
+deno task scan:source-size
+deno task lint
+deno task typecheck
+deno task test
 cargo test --manifest-path src-tauri/Cargo.toml --workspace
-pnpm check
+deno task check
 ```
 
-`pnpm check` 是完整收口门禁：生成 IPC 类型、检查架构和文件大小、执行前端 lint/typecheck/tests/build、
+`deno task check` 是完整收口门禁：生成 IPC 类型、检查架构和文件大小、执行前端 lint/typecheck/tests/build、
 检查 bundle 品牌、Rust fmt/clippy/Windows check，并运行整个 Cargo workspace 测试。

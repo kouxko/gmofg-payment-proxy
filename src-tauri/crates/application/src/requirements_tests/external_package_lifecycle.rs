@@ -106,7 +106,6 @@ async fn disabled_local_offline_package_can_enable_and_start_its_owned_process()
         .descriptions
         .lock()
         .insert(target.clone(), description(target.clone()));
-    external.local_packages.lock().insert(target.clone());
     let application = fixture(
         external.clone(),
         Arc::new(EmptyUsage),
@@ -139,10 +138,6 @@ async fn manual_restart_is_available_only_for_local_external_packages() {
             ..external_record(disabled_local.clone(), false, false)
         },
     );
-    external
-        .local_packages
-        .lock()
-        .extend([local.clone(), disabled_local.clone()]);
     let application = fixture(
         external.clone(),
         Arc::new(EmptyUsage),

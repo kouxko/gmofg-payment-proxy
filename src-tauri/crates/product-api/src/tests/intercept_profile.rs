@@ -10,5 +10,17 @@ fn intercept_profile_is_clean_and_declares_no_product_channels() {
         "intercept-proxy.sqlite3"
     );
     assert!(profile.channels().is_empty());
+    assert!(
+        profile
+            .certificates()
+            .fixed_installation_root_ca_pem()
+            .is_none()
+    );
+    assert!(
+        profile
+            .certificates()
+            .fixed_installation_root_key_pem()
+            .is_none()
+    );
     assert!(profile.certificates().bundled_upstream_ca_pem().is_none());
 }

@@ -10,7 +10,7 @@ const repo = resolve(dirname(fileURLToPath(import.meta.url)), "..");
 const checker = resolve(repo, "scripts/check-unified-rule-model.mjs");
 
 test("current Rust source has one unified rule model", () => {
-  const result = spawnSync(process.execPath, [checker, repo], {
+  const result = spawnSync(process.execPath, ["run", "-A", checker, repo], {
     cwd: repo,
     encoding: "utf8",
   });
@@ -27,7 +27,7 @@ test("checker rejects reintroducing a legacy rule model", () => {
       resolve(root, "src-tauri/crates/domain/src/lib.rs"),
       "pub struct ProtocolDocumentRuleDefinition;\n",
     );
-    const result = spawnSync(process.execPath, [checker, root], {
+    const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
       cwd: root,
       encoding: "utf8",
     });
@@ -45,7 +45,7 @@ test("checker rejects a second Rule and RuleEngine aggregate", () => {
     mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
     mkdirSync(resolve(root, "test-support"), { recursive: true });
     writeFileSync(engine, "pub struct RuleEngine;\npub struct RuleDraft;\n");
-    const result = spawnSync(process.execPath, [checker, root], {
+    const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
       cwd: root,
       encoding: "utf8",
     });
@@ -64,7 +64,7 @@ test("checker rejects reintroducing only a public Rule aggregate", () => {
     mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
     mkdirSync(resolve(root, "test-support"), { recursive: true });
     writeFileSync(model, "pub struct Rule;\n");
-    const result = spawnSync(process.execPath, [checker, root], {
+    const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
       cwd: root,
       encoding: "utf8",
     });
@@ -83,7 +83,7 @@ test("checker rejects reintroducing a recursive ConditionTree aggregate", () => 
     mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
     mkdirSync(resolve(root, "test-support"), { recursive: true });
     writeFileSync(model, "pub enum ConditionTree { All(Vec<ConditionTree>) }\n");
-    const result = spawnSync(process.execPath, [checker, root], {
+    const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
       cwd: root,
       encoding: "utf8",
     });
@@ -106,7 +106,7 @@ test("checker rejects reintroducing the removed TLS rule stage or action", () =>
       mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
       mkdirSync(resolve(root, "test-support"), { recursive: true });
       writeFileSync(model, source);
-      const result = spawnSync(process.execPath, [checker, root], {
+      const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
         cwd: root,
         encoding: "utf8",
       });
@@ -125,7 +125,7 @@ test("checker rejects a legacy HTTP condition projection helper", () => {
     mkdirSync(resolve(root, "src-tauri/src"), { recursive: true });
     mkdirSync(resolve(root, "test-support"), { recursive: true });
     writeFileSync(model, "pub fn from_http_conditions() {}\n");
-    const result = spawnSync(process.execPath, [checker, root], {
+    const result = spawnSync(process.execPath, ["run", "-A", checker, root], {
       cwd: root,
       encoding: "utf8",
     });

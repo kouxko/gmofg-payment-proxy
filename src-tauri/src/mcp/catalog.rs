@@ -1,4 +1,4 @@
-//! Static MCP tool catalog for 36 reads and 5 environment tools.
+//! Static MCP tool catalog for 34 reads and 5 environment tools.
 
 mod contract;
 

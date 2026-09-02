@@ -1,6 +1,6 @@
 use std::{collections::VecDeque, path::PathBuf};
 
-use base64::{Engine as _, engine::general_purpose::STANDARD};
+use base64::engine::general_purpose::STANDARD;
 use intercept_proxy_application::CertificateReferenceId;
 use parking_lot::Mutex;
 

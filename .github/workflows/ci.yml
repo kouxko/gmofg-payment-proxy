@@ -22,20 +22,22 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: actions/setup-java@v4
+      - uses: actions/setup-java@cf277c60eb25467037889841efdb72551f06f6c3 # v4
         with:
           distribution: temurin
           java-version: 21
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@9fc6c4e9069bf8d3d10b2204b1fb8f6ef7065407 # v3
 
-      - uses: gradle/actions/setup-gradle@v4
+      - uses: gradle/actions/setup-gradle@0b6dd653ba04f4f93bf581ec31e66cbd7dcb644d # v4
         with:
           gradle-version: 9.6.1
           # 只让默认分支写共享缓存；PR 和手动分支只读，避免污染主线缓存。
           cache-read-only: ${{ github.event_name != 'push' || github.ref != 'refs/heads/main' }}
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
+        with:
+          toolchain: 1.98.0
 
       - name: Install Android SDK/NDK
         shell: bash
@@ -74,7 +76,7 @@ jobs:
             libxdo-dev \
             wget
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: intercept-proxy-android-companion
           path: companion-artifact
@@ -82,17 +84,14 @@ jobs:
       - name: Stage Companion desktop resource
         run: ./scripts/stage-android-companion.sh companion-artifact/app-release.apk
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          version: 11.13.1
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
+          deno-version: 2.9.6
+          cache: true
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
+          toolchain: 1.98.0
           components: llvm-tools-preview
           targets: wasm32-wasip2
 
@@ -104,17 +103,17 @@ jobs:
 
       - name: Install pinned coverage tools
         run: |
-          pnpm install --frozen-lockfile
+          deno ci
           cargo install cargo-llvm-cov --version 0.8.7 --locked
 
       - name: Verify coverage policy tests
-        run: pnpm test:coverage-policy
+        run: deno task test:coverage-policy
 
       - name: Verify frontend coverage
-        run: pnpm check:coverage:frontend
+        run: deno task check:coverage:frontend
 
       - name: Verify Rust coverage
-        run: pnpm check:coverage:rust
+        run: deno task check:coverage:rust
 
       - uses: actions/upload-artifact@ea165f8d65b6e75b540449e92b4886f43607fa02 # v4
         if: always()
@@ -137,25 +136,22 @@ jobs:
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
-      - uses: pnpm/action-setup@b906affcce14559ad1aafd4ab0e942779e9f58b1 # v4
+      - uses: denoland/setup-deno@22d081ff2d3a40755e97629de92e3bcbfa7cf2ed # v2.0.5
         with:
-          version: 11.13.1
-
-      - uses: actions/setup-node@49933ea5288caeca8642d1e84afbd3f7d6820020 # v4
-        with:
-          node-version: 22
-          cache: pnpm
+          deno-version: 2.9.6
+          cache: true
 
       - name: Restore Next.js build cache
         uses: actions/cache@5a3ec84eff668545956fd18022155c47e93e2684 # v4.2.3
         with:
           path: .next/cache
-          key: ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
+          key: ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json', 'next.config.*', 'src/**', 'public/**') }}
           restore-keys: |
-            ${{ runner.os }}-next-${{ hashFiles('pnpm-lock.yaml', 'package.json') }}-
+            ${{ runner.os }}-next-${{ hashFiles('deno.lock', 'package.json') }}-
 
       - uses: dtolnay/rust-toolchain@4cda84d5c5c54efe2404f9d843567869ab1699d4 # stable
         with:
+          toolchain: 1.98.0
           components: rustfmt, clippy
           targets: wasm32-wasip2
 
@@ -167,9 +163,9 @@ jobs:
           cache-on-failure: true
 
       - name: Install frontend dependencies
-        run: pnpm install --frozen-lockfile
+        run: deno ci
 
-      - uses: actions/download-artifact@v4
+      - uses: actions/download-artifact@d3f86a106a0bac45b974a628896c90dbdf5c8093 # v4
         with:
           name: intercept-proxy-android-companion
           path: companion-artifact
@@ -179,7 +175,7 @@ jobs:
         run: ./scripts/stage-android-companion.sh companion-artifact/app-release.apk
 
       - name: Audit production frontend dependencies
-        run: pnpm audit --prod --audit-level high
+        run: deno audit --level high --frozen-lockfile
 
       - name: Verify generated IPC bindings
         shell: pwsh
@@ -200,13 +196,13 @@ jobs:
       - name: Verify frontend
         run: |
           # 架构聚合门禁包含文档、跨平面、runtime、Socket 与 Rust-only frontend 边界。
-          pnpm scan:architecture
-          pnpm scan:source-size
-          pnpm lint
-          pnpm typecheck
-          pnpm test
-          pnpm build
-          pnpm scan:bundle-branding
+          deno task scan:architecture
+          deno task scan:source-size
+          deno task lint
+          deno task typecheck
+          deno task test
+          deno task build
+          deno task scan:bundle-branding
 
       - name: Verify Rust formatting
         run: cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
@@ -219,7 +215,7 @@ jobs:
         run: cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets
 
       - name: Verify protocol-package Component sources
-        run: pnpm test:protocol-packages
+        run: deno task test:protocol-packages
 
       - name: Verify Rust tests (Windows)
         if: runner.os == 'Windows'
@@ -232,7 +228,7 @@ jobs:
 
       - name: Verify independent runtime gates
         run: |
-          pnpm check:rust:windows
+          deno task check:rust:windows
           cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml --all-targets
           cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
           cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets -- -D warnings

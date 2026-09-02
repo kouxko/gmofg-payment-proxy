@@ -15,8 +15,8 @@ function run(command, args) {
 }
 
 run("rustup", ["target", "add", "wasm32-wasip2"]);
-run("pnpm", [
-  "exec",
+run("deno", [
+  "task",
   "tauri",
   "build",
   "--target",
@@ -26,7 +26,7 @@ run("pnpm", [
   "--features",
   "macos-universal-vendored-openssl",
 ]);
-run(process.execPath, ["scripts/sign-macos-app.mjs"]);
+run("deno", ["run", "-A", "scripts/sign-macos-app.mjs"]);
 const app = path.resolve(
   "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app",
 );
@@ -53,4 +53,4 @@ try {
 } finally {
   rmSync(dmgSource, { recursive: true, force: true });
 }
-run(process.execPath, ["scripts/verify-macos-universal.mjs"]);
+run("deno", ["run", "-A", "scripts/verify-macos-universal.mjs"]);

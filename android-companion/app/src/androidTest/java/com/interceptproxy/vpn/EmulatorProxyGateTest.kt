@@ -82,17 +82,6 @@ class EmulatorProxyGateTest {
     }
 
     @Test
-    fun eNthHitOneShotRuleAppliesOnlyToSecondRequest() {
-        val first = requireNotNull(parseResponse(exchange("/matrix/nth-hit")))
-        val second = requireNotNull(parseResponse(exchange("/matrix/nth-hit")))
-        val third = requireNotNull(parseResponse(exchange("/matrix/nth-hit")))
-
-        assertTrue(!first.head.contains("X-Nth-Hit", ignoreCase = true))
-        assertTrue(second.head.contains("\r\nX-Nth-Hit: second-only\r\n", ignoreCase = true))
-        assertTrue(!third.head.contains("X-Nth-Hit", ignoreCase = true))
-    }
-
-    @Test
     fun fDelayRuleAddsObservableLatency() {
         lateinit var response: ByteArray
         val elapsed = measureTimeMillis { response = exchange("/matrix/delay") }

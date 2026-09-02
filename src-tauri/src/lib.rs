@@ -67,7 +67,7 @@ pub fn export_bindings() -> Result<PathBuf, String> {
         .map_err(|error| error.to_string())?;
     // Specta 会把带成员文档的 tagged union 排成多行，并在联合分隔符或空文档行后
     // 留下空格。生成文件属于可重复构建产物：统一移除行尾空白，避免每次新增强类型
-    // DTO 都要删掉 Rust 文档，也保证 `pnpm bindings` 后 `git diff --check` 恒定通过。
+    // DTO 都要删掉 Rust 文档，也保证 `deno task bindings` 后 `git diff --check` 恒定通过。
     let generated = std::fs::read_to_string(&path).map_err(|error| error.to_string())?;
     let validation =
         serde_json::to_string(&intercept_proxy_package_contract::package_contract_validation())
@@ -103,7 +103,7 @@ fn initialize_application(
         .filter(|path| path.is_file());
     let dialog = Arc::new(TauriNativeFileDialog::new(app.handle().clone()));
     // 新应用使用纯通用配置：不读取旧数据库、不加载业务模板，也不携带业务 CA、
-    // 上游地址或客户端身份。包内固定测试 Root 的运行时副本由基础设施层交给系统密钥保护。
+    // 上游地址或客户端身份。基础设施为每个安装实例独立生成并保护 Root CA 私钥。
     let product = Arc::new(InterceptProxyProfile);
     let mut host_builder = ApplicationHostBuilder::new(
         app_data_dir,

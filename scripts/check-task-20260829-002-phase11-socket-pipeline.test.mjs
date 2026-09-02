@@ -34,7 +34,7 @@ function sandbox() {
   return target;
 }
 function run(cwd) {
-  return spawnSync(process.execPath, [checker], {
+  return spawnSync(process.execPath, ["run", "-A", checker], {
     cwd, encoding: "utf8",
     env: cwd === root ? process.env : { ...process.env, PHASE11_CHECKER_TEST_MODE: "sandbox" },
   });
@@ -84,7 +84,7 @@ for (const [name, mutate] of [
 
 test("fails closed when Phase11 Cargo discovery drifts", () => {
   const target = sandbox();
-  const result = spawnSync(process.execPath, [checker], {
+  const result = spawnSync(process.execPath, ["run", "-A", checker], {
     cwd: target,
     encoding: "utf8",
     env: { ...process.env, PHASE11_CHECKER_TEST_MODE: "sandbox", PHASE11_DISCOVERY_COUNT: "0" },

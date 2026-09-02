@@ -16,7 +16,7 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
         title: "首次配置推荐顺序",
         steps: [
           "先到“入口配置”创建需要 TLS 的入口，并确认客户端实际连接的监听 IP 或 DNS。",
-          "需要客户端信任 Proxy 时，先确认固定测试 Root CA 已初始化，再按当前 SAN 签发本机服务端叶子证书。",
+          "需要客户端信任 Proxy 时，先确认本机 Root CA 已初始化，再按当前 SAN 签发本机服务端叶子证书。",
           "点击“导出公开 Root CA”取得 PEM .crt，并把它加入需要连接该 Proxy 的受控客户端测试信任库；桌面应用不提供任何私钥导出接口。",
           "执行“重新检查”，确认本机 Root CA、服务端叶子证书和 SAN 有效。",
           "回到“入口配置”；普通上游 TLS 不需要 PKCS12，只有上游明确要求 mTLS 时才在该入口导入客户端身份。",
@@ -24,7 +24,7 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
         ],
         notes: [
           "本机 Root CA 仅限受控调试环境，不得用于生产、预生产或真实业务信任体系。",
-          "Windows 与 macOS 使用同一张固定测试 Root CA；更换电脑不改变 Root 指纹，但本机叶子证书会按新的 SAN 重新签发。",
+          "每个安装实例生成独立 Root CA；更换电脑或重置证书后 Root 指纹会改变，客户端必须删除旧 Root 并导入新 Root。",
           "上游 TLS/mTLS 材料与下游 Root CA 相互独立，不能混用。",
         ],
       },
@@ -34,7 +34,7 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
         steps: [
           "Server 客户端身份 PKCS12：仅在目标服务器要求 mTLS 时，到对应监听的固定 Server 配置中导入并自动绑定。",
           "Server CA Bundle：用于验证目标服务器，到对应监听的固定 Server 配置中导入；系统默认信任是否适用也由该监听决定。",
-          "固定测试 Root CA 公共证书：在证书页点击“导出公开 Root CA”取得 PEM .crt，用于让受控客户端信任各平台签发的服务端叶子证书。",
+          "本机 Root CA 公共证书：在证书页点击“导出公开 Root CA”取得 PEM .crt，用于让受控客户端信任当前安装实例签发的服务端叶子证书。",
           "Proxy 服务端叶子证书和私钥会根据 SAN 生成并安全保存，不导入客户端应用，也不得导出私钥。",
           "上游客户端 P12、上游 CA、本机 Root CA 和服务端叶子证书用途不同，不能通过改扩展名相互替代。",
         ],
@@ -43,10 +43,10 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
         id: "certificates-app-proxy",
         title: "A.客户端应用App → Proxy",
         steps: [
-          "固定测试 Root CA 用于签发本机服务端叶子证书；需要拦截 TLS 的受控客户端必须信任该公开 CA。",
+          "本机 Root CA 用于签发本机服务端叶子证书；需要拦截 TLS 的受控客户端必须信任该公开 CA。",
           "叶子证书 SAN 必须匹配客户端应用实际连接的 Proxy IP/DNS，否则 App → Proxy TLS 会因主机名不匹配失败。",
           "局域网 IP 或 DNS 变化后，先更新对应入口的监听配置，再用新地址重新签发服务端证书并更新入口引用。",
-          "重新签发叶子证书或更换电脑不会改变固定 Root CA，客户端无需重复导入，但必须校验新叶子证书 SAN。",
+          "仅重新签发叶子证书不会改变本机 Root CA；更换电脑或重置 Root 后，客户端必须删除旧 Root 并导入新 Root。",
           "入口可以选择“不校验客户端证书”“可选”或“必须”；只有后两种模式涉及客户端证书。",
         ],
       },
@@ -74,20 +74,21 @@ export const systemPageHelpGuides: Record<SystemHelpPath, PageHelpGuide> = {
       },
       {
         id: "certificates-storage-reset",
-        title: "安全存储与恢复固定测试证书",
+        title: "安全存储与重置本机证书",
         steps: [
           "Windows 使用当前登录用户范围 DPAPI，macOS 使用当前登录用户 Keychain 保护私钥、PKCS12 原始字节和密码。",
           "保护或解密失败时 Proxy 会禁止启动，不提供明文回退。",
-          "仅在本机证书材料损坏时使用“恢复固定测试证书”。",
-          "操作前先停止全部入口；操作会恢复固定 Root 并按当前 SAN 重新生成服务端叶子证书。",
-          "固定 Root 指纹不会改变，已信任该 Root 的客户端无需重新导入公开证书。",
+          "仅在本机证书材料损坏或需要撤销现有 Root 时使用“重置本机证书”。",
+          "操作前先停止全部入口；操作会生成新的本机 Root 并按当前 SAN 重新生成服务端叶子证书。",
+          "Root 指纹会改变；所有客户端必须删除旧 Root 并导入新导出的公开 Root CA。",
+          "升级后必须从客户端和 Windows/macOS 系统信任库中删除旧的 Intercept Proxy TEST ONLY Root CA。",
         ],
       },
       {
         id: "certificates-troubleshooting",
         title: "TLS 失败快速定位",
         steps: [
-          "客户端 → Proxy 失败：检查目标 IP/DNS、叶子 SAN、客户端是否信任固定测试 Root CA、入口客户端认证模式和电脑防火墙。",
+          "客户端 → Proxy 失败：检查目标 IP/DNS、叶子 SAN、客户端是否信任当前安装实例导出的 Root CA、入口客户端认证模式和电脑防火墙。",
           "Proxy → 上游失败：检查上游 URL 主机名、该入口引用的 P12/上游 CA、系统时间和网络；普通 TLS 不应强制要求客户端 P12。",
           "更换上游材料后结果未变化：在“入口配置”重新测试握手并重启该入口，以创建新的 TLS 上下文。",
           "证书显示有效但仍握手失败：到实时抓包/控制台查看具体 TLS 错误码和发生方向。",

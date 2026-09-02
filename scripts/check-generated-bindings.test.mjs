@@ -34,7 +34,7 @@ test("reports stale bindings and restores the checked-in bytes", async () => {
       generatedPath,
       runGenerator: () => writeFile(generatedPath, "fresh\n"),
     });
-    assert.deepEqual(failures, ["src/generated/rust-types.ts is stale; run pnpm bindings"]);
+    assert.deepEqual(failures, ["src/generated/rust-types.ts is stale; run deno task bindings"]);
     assert.equal(await readFile(generatedPath, "utf8"), "stale\n");
   });
 });
@@ -47,7 +47,7 @@ test("reports nondeterministic output and restores the checked-in bytes", async 
       runGenerator: () => writeFile(generatedPath, `generated-${generation += 1}\n`),
     });
     assert.deepEqual(failures, [
-      "src/generated/rust-types.ts is stale; run pnpm bindings",
+      "src/generated/rust-types.ts is stale; run deno task bindings",
       "binding generation is not deterministic across consecutive runs",
     ]);
     assert.equal(await readFile(generatedPath, "utf8"), "checked-in\n");
