@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 17:19:32 +08:00`
+- 最后更新时间：`2026-09-02 17:24:26 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -88,10 +88,11 @@
 | `2026-09-02 16:29:10 +08:00` | 用户要求修复 ISO Deno Display 的整数兼容问题，并把 Nuvei JSON 的 Display 改为 object/array 递归嵌套 HTML table；不得继续把嵌套 JSON 输出为 `<pre>`。两项修复均需重新构建 Wasm 放入 Downloads 并在远端双向 Display 实测。 |
 | `2026-09-02 16:52:48 +08:00` | 用户要求补充测试全部 5 个 Wasm 包的规则。规则验收必须分别证明命中、适用的未命中保持、非法 Frame fail-closed、规则持久化命中计数和上游/客户端实际字节；AU EFTEX 与 Nuvei 的 MAC/只读字段只使用同值动作观测规则命中，不绕过 Encode 合同。 |
 | `2026-09-02 17:19:32 +08:00` | 用户要求整理分支、合并应合并内容、删除应删除分支、推送 GitHub、合并到主分支并创建 Release。执行前实时确认 GitHub 当前没有 `main`/`master`，默认分支为 `codex/windows-ci-cache-warmup`；仓库当前版本为 `1.0.0` 且无历史 tag/Release。主分支命名/目标与首个 Release tag 仍需用户确认，确认前可以修复独立的发布阻断、推送当前功能分支并运行验证，但不得猜测创建 `main`、tag 或删除含独立提交/未提交修改的分支。 |
+| `2026-09-02 17:24:26 +08:00` | 用户确认一次性执行发布收口方案：以现有默认分支 tip 创建并切换 GitHub 默认分支为 `main`，当前任务分支通过 PR merge 到 `main`，首个 Release 使用 `v1.0.0`；合并与发布验证完成后删除已盘点的 1–6 项安全候选，包括当前任务分支、已被包含的 generalization 分支、干净的 wasm-runtime worktree/本地分支、旧默认分支、失效的 g032 worktree 元数据和未跟踪的根目录 `pnpm-lock.yaml`。保留含 3 个独立提交的 `g032-consolidation` 分支和有未提交修改的 g049 detached worktree。Windows 正式 Release 继续遵守 fail-closed 签名合同；实时 GitHub readback 尚未发现所需 Actions secrets/variable，因此不得在凭据门禁满足前创建 tag。 |
 
 ## 未确认事项
 
-- 发布收口前仍有两项会改变 Git/GitHub 结果的未确认事项：GitHub 当前不存在 `main`，需要确认是把现有默认分支 `codex/windows-ci-cache-warmup` 视为主分支，还是新建并切换默认分支为 `main`；仓库版本为 `1.0.0` 且无历史 tag/Release，需要确认首个 Release 是否使用 `v1.0.0`。其余实现合同无未确认事项。
+- 主分支、首个 tag 和分支清理范围均已确认；实现合同无未确认事项。外部状态仍有一个发布门禁：GitHub Actions 当前未读到 `WINDOWS_CERTIFICATE`、`WINDOWS_CERTIFICATE_PASSWORD` 和 `WINDOWS_TIMESTAMP_URL`，需要配置后才能触发 fail-closed 的 `v1.0.0` 正式发布工作流。该外部状态不改变代码实现方向。
 
 ## 需求就绪检查
 
