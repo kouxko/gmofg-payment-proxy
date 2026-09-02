@@ -14,13 +14,13 @@ fn intercept_profile_is_clean_and_declares_no_product_channels() {
         profile
             .certificates()
             .fixed_installation_root_ca_pem()
-            .is_none()
+            .is_some()
     );
     assert!(
         profile
             .certificates()
             .fixed_installation_root_key_pem()
-            .is_none()
+            .is_some()
     );
     assert!(profile.certificates().bundled_upstream_ca_pem().is_none());
 }

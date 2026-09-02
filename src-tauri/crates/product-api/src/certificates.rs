@@ -21,9 +21,10 @@ pub struct CertificateLabels {
 
 /// 外层装配选择的证书展示文案与可选上游信任锚。
 pub trait ProductCertificatePolicy: fmt::Debug + Send + Sync {
-    /// 可选的固定下游 Root CA。公开证书与签发私钥必须成对提供。
+    /// 跨平台固定的下游测试 Root CA。公开证书与签发私钥必须成对提供。
     ///
-    /// 返回 `None` 时，证书基础设施为每个安装实例独立生成 Root CA。
+    /// `None` 保留给确实需要每安装实例独立生成 Root CA 的其他宿主。Intercept Proxy
+    /// 受控测试产品返回固定材料，使 Windows、macOS 与测试客户端共享同一信任锚。
     fn fixed_installation_root_ca_pem(&self) -> Option<&'static [u8]> {
         None
     }

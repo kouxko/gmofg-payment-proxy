@@ -1,5 +1,5 @@
 #[tokio::test]
-async fn generic_profile_exports_its_installation_root_without_private_material() {
+async fn generic_profile_exports_the_fixed_test_root_without_private_material() {
     let directory = tempfile::tempdir().expect("tempdir");
     let export_path = directory.path().join("public-root-ca.crt");
     let adapter = CertificateServiceAdapter::new(
@@ -17,7 +17,7 @@ async fn generic_profile_exports_its_installation_root_without_private_material(
     adapter
         .generate_ca(vec!["127.0.0.1".into()])
         .await
-        .expect("installation signing material is initialized");
+        .expect("fixed test signing material is initialized");
     adapter.export_ca().await.expect("public-only export");
     let exported = std::fs::read(export_path).expect("exported public certificate");
     assert!(exported.starts_with(b"-----BEGIN CERTIFICATE-----"));
@@ -115,7 +115,7 @@ async fn protected_material_supports_listener_tls_configuration() {
 }
 
 #[tokio::test]
-async fn separate_proxy_installations_generate_distinct_roots_and_leaves() {
+async fn separate_proxy_installations_share_the_fixed_root_but_keep_distinct_leaves() {
     let dialog = || {
         Arc::new(QueueDialog {
             open: ParkingMutex::new(VecDeque::new()),
@@ -152,9 +152,13 @@ async fn separate_proxy_installations_generate_distinct_roots_and_leaves() {
     let first_leaf = first_materials.materials.get(LEAF).expect("first leaf");
     let second_leaf = second_materials.materials.get(LEAF).expect("second leaf");
 
-    assert_ne!(first_root.certificate_der, second_root.certificate_der);
-    assert_ne!(first_root.private_key_der, second_root.private_key_der);
-    assert_ne!(first_root.fingerprint, second_root.fingerprint);
+    assert_eq!(first_root.certificate_der, second_root.certificate_der);
+    assert_eq!(first_root.private_key_der, second_root.private_key_der);
+    assert_eq!(first_root.fingerprint, second_root.fingerprint);
+    assert_eq!(
+        first_root.fingerprint,
+        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+    );
     assert_ne!(first_leaf.certificate_der, second_leaf.certificate_der);
     assert_ne!(first_leaf.private_key_der, second_leaf.private_key_der);
     assert_eq!(first_leaf.sans, vec!["IP:10.0.34.50"]);
@@ -162,7 +166,7 @@ async fn separate_proxy_installations_generate_distinct_roots_and_leaves() {
 }
 
 #[tokio::test]
-async fn startup_synchronization_is_idempotent_for_the_installation_root() {
+async fn startup_synchronization_is_idempotent_for_the_fixed_test_root() {
     let adapter = CertificateServiceAdapter::new(
         Arc::new(SqliteStore::in_memory().expect("store")),
         Arc::new(XorProtector),
@@ -184,16 +188,18 @@ async fn startup_synchronization_is_idempotent_for_the_installation_root() {
     assert_eq!(first.revision, second.revision);
     let root = adapter
         .load_snapshot(&[ROOT])
-        .expect("installation root snapshot")
+        .expect("fixed root snapshot")
         .materials
         .remove(ROOT)
-        .expect("installation root");
-    assert!(!root.certificate_der.is_empty());
-    assert!(!root.private_key_der.is_empty());
+        .expect("fixed root");
+    assert_eq!(
+        root.fingerprint,
+        "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C"
+    );
 }
 
 #[tokio::test]
-async fn startup_synchronization_keeps_complete_installation_material() {
+async fn startup_synchronization_rejects_non_current_root_material() {
     let adapter = CertificateServiceAdapter::new(
         Arc::new(SqliteStore::in_memory().expect("store")),
         Arc::new(XorProtector),
@@ -225,11 +231,14 @@ async fn startup_synchronization_keeps_complete_installation_material() {
         .commit_snapshot(legacy_snapshot)
         .expect("store legacy installation");
 
-    let synchronized = adapter
+    let error = adapter
         .synchronize_installation_ca(vec!["127.0.0.1".into()])
         .await
-        .expect("complete installation material remains valid");
-    assert!(synchronized.ready);
+        .expect_err("non-current root must be rejected");
+    assert_eq!(
+        error.view_model.code,
+        "CERTIFICATE_INSTALLATION_STATE_INVALID"
+    );
 
     let unchanged = adapter
         .load_snapshot(&[ROOT, LEAF])
@@ -249,80 +258,5 @@ async fn startup_synchronization_keeps_complete_installation_material() {
             .expect("stored leaf")
             .fingerprint,
         legacy_leaf.metadata.fingerprint_sha256
-    );
-}
-
-#[tokio::test]
-async fn startup_rejects_the_revoked_shared_test_root_without_modifying_material() {
-    let adapter = CertificateServiceAdapter::new(
-        Arc::new(SqliteStore::in_memory().expect("store")),
-        Arc::new(XorProtector),
-        Arc::new(QueueDialog {
-            open: ParkingMutex::new(VecDeque::new()),
-        }),
-        test_profile(),
-    );
-    let revoked = adapter
-        .certificates
-        .parse_upstream_ca(include_bytes!(
-            "../../../../../resources/certificates/intercept-proxy-test-root-ca.crt"
-        ))
-        .expect("revoked public root detection fixture");
-    let replacement_seed = adapter
-        .certificates
-        .generate_root_ca("Replacement Seed")
-        .expect("replacement seed");
-    let legacy_leaf = adapter
-        .certificates
-        .generate_leaf(
-            &replacement_seed.certificate_der,
-            &replacement_seed.private_key_pkcs8_der,
-            &leaf_request(&["10.0.34.50".into()]).expect("leaf request"),
-        )
-        .expect("legacy leaf placeholder");
-    let mut revoked_material = from_bundle(1, &replacement_seed);
-    revoked_material.certificate_der = revoked.certificate_der.clone();
-    revoked_material.subject = revoked.metadata.subject;
-    revoked_material.fingerprint = revoked.metadata.fingerprint_sha256;
-    revoked_material.sans = revoked.metadata.san;
-    revoked_material.not_before = revoked.metadata.not_before;
-    revoked_material.not_after = revoked.metadata.not_after;
-    let mut snapshot = adapter.load_snapshot(&MATERIAL_KINDS).expect("snapshot");
-    snapshot.materials.insert(ROOT.into(), revoked_material);
-    snapshot
-        .materials
-        .insert(LEAF.into(), from_bundle(1, &legacy_leaf));
-    adapter
-        .commit_snapshot(snapshot)
-        .expect("store revoked legacy installation");
-
-    let Err(blocked) = adapter.freeze_installation_tls_material().await else {
-        panic!("revoked root cannot be used before startup synchronization");
-    };
-    assert_eq!(blocked.view_model.code, "CERTIFICATE_ROOT_REVOKED");
-
-    let error = adapter
-        .synchronize_installation_ca(vec!["127.0.0.1".into()])
-        .await
-        .expect_err("revoked root must stop startup");
-    assert_eq!(error.view_model.code, "CERTIFICATE_ROOT_REVOKED");
-    let unchanged = adapter
-        .load_snapshot(&[ROOT, LEAF])
-        .expect("unchanged revoked snapshot");
-    assert_eq!(
-        unchanged
-            .materials
-            .get(ROOT)
-            .expect("revoked root")
-            .certificate_der,
-        revoked.certificate_der
-    );
-    assert_eq!(
-        unchanged
-            .materials
-            .get(LEAF)
-            .expect("legacy leaf")
-            .certificate_der,
-        legacy_leaf.certificate_der
     );
 }

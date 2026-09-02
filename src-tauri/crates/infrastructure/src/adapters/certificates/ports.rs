@@ -6,11 +6,9 @@ use crate::adapters::listener_runtime::InstallationTlsMaterial;
 impl InstallationServerIdentityProvider for CertificateServiceAdapter {
     async fn load_installation_server_identity(&self) -> AppResult<ReverseClientIdentity> {
         let snapshot = self.load_snapshot_async(&[ROOT, LEAF]).await?;
-        let root = snapshot
-            .materials
-            .get(ROOT)
-            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "Root CA 尚未初始化。"))?;
-        Self::reject_revoked_shared_test_root(&root.certificate_der)?;
+        let root = snapshot.materials.get(ROOT).ok_or_else(|| {
+            AppError::new("CERTIFICATE_NOT_READY", "固定测试 Root CA 尚未初始化。")
+        })?;
         let leaf = snapshot
             .materials
             .get(LEAF)
@@ -52,11 +50,9 @@ struct FrozenMitmCertificateAuthority {
 impl ListenerMitmAuthorityProvider for CertificateServiceAdapter {
     async fn freeze_installation_tls_material(&self) -> AppResult<InstallationTlsMaterial> {
         let mut snapshot = self.load_snapshot_async(&[ROOT, LEAF]).await?;
-        let root = snapshot
-            .materials
-            .remove(ROOT)
-            .ok_or_else(|| AppError::new("CERTIFICATE_NOT_READY", "Root CA 尚未初始化。"))?;
-        Self::reject_revoked_shared_test_root(&root.certificate_der)?;
+        let root = snapshot.materials.remove(ROOT).ok_or_else(|| {
+            AppError::new("CERTIFICATE_NOT_READY", "固定测试 Root CA 尚未初始化。")
+        })?;
         let leaf = snapshot
             .materials
             .remove(LEAF)
@@ -114,9 +110,6 @@ impl CertificateServicePort for CertificateServiceAdapter {
     ) -> AppResult<CertificateOverviewViewModel> {
         let snapshot = self.load_snapshot_async(&MATERIAL_KINDS).await?;
         let Some(fixed_root) = self.fixed_root_bundle()? else {
-            if let Some(root) = snapshot.materials.get(ROOT) {
-                Self::reject_revoked_shared_test_root(&root.certificate_der)?;
-            }
             if snapshot.materials.contains_key(ROOT) && snapshot.materials.contains_key(LEAF) {
                 return self.overview_from_snapshot(&snapshot);
             }
@@ -174,7 +167,7 @@ impl CertificateServicePort for CertificateServiceAdapter {
         let root = snapshot.materials.get(ROOT).ok_or_else(|| {
             AppError::new(
                 "CERTIFICATE_NOT_INITIALIZED",
-                "Root CA 尚未初始化，请重新打开应用完成初始化。",
+                "固定测试 Root CA 尚未初始化，请重新打开应用或恢复测试证书。",
             )
         })?;
         let Some(selection) = self
@@ -200,11 +193,12 @@ impl CertificateServicePort for CertificateServiceAdapter {
     ) -> AppResult<CertificateOverviewViewModel> {
         let mut snapshot = self.load_snapshot_async(&MATERIAL_KINDS).await?;
         verify_revision(snapshot.revision, expected_revision)?;
-        let root =
-            snapshot.materials.get(ROOT).cloned().ok_or_else(|| {
-                AppError::new("CERTIFICATE_NOT_INITIALIZED", "Root CA 尚未初始化。")
-            })?;
-        Self::reject_revoked_shared_test_root(&root.certificate_der)?;
+        let root = snapshot.materials.get(ROOT).cloned().ok_or_else(|| {
+            AppError::new(
+                "CERTIFICATE_NOT_INITIALIZED",
+                "固定测试 Root CA 尚未初始化。",
+            )
+        })?;
         self.certificates
             .validate_root(&root.certificate_der, &root.private_key_der)
             .map_err(app_error)?;

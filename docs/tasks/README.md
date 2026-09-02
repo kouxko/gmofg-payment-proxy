@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 18:29:44 +08:00 | [恢复跨平台固定测试 Root CA](completed/2026-09-02/restore-fixed-test-root-ca.md) | Proxy 恢复随包固定测试 Root 与私钥，不同安装共享同一信任锚并继续按监听地址动态签发叶子证书 | PASS_WITH_REMOTE_HANDSHAKE_NOT_RUN；Rust 45 项、前端 8 项及证书逐字节比较通过；用户明确跳过对抗审查，远端部署与真机握手 NOT_RUN | 高 | Root CA、固定测试证书、Android Payment、TLS、证书指纹 |
 | 11:03:39 +08:00 | [将完整前端与 Tauri 工具链迁移到 Deno](completed/2026-09-02/migrate-entire-frontend-toolchain-to-deno.md) | 本地开发、测试、正式 Next/Tauri 构建及 CI 配置统一由 Deno 驱动，删除 pnpm 锁、Node overlay 和活动 Node/pnpm 命令，并增加工具链回归合同 | LOCAL_VERIFIED_CI_NOT_RUN_WITH_KNOWN_BLOCKERS；Deno-only 532 个前端测试、Next 13 路由和 macOS App 构建通过；远程 CI NOT_RUN，严格 audit 与品牌扫描失败已保留 | 高 | Deno、Next.js build、Tauri build、deno ci、GitHub Actions |
 | 10:35:23 +08:00 | [将 Deno 设为默认开发启动工具链](completed/2026-09-02/default-deno-development-toolchain.md) | 基础 Tauri 开发配置默认执行 Deno，Node.js + pnpm 通过独立 overlay 保持兼容；完整质量门禁与正式构建继续使用 pnpm | VERIFIED_WITH_APP_STATE_BLOCKER；配置路由、两套 Next.js 与 Rust App 启动通过；两套入口主窗口均被本机既有 `CERTIFICATE_ROOT_REVOKED` 状态阻断，未清理应用数据 | 低 | Deno default、Node.js compatibility、beforeDevCommand、Tauri overlay、pnpm |
 | 10:22:00 +08:00 | [支持 Node.js 与 Deno 双开发工具链](completed/2026-09-02/support-node-and-deno-development-toolchains.md) | 保留 Node.js + pnpm 权威入口，增加 Deno 官方 npm/Node 兼容配置、锁文件及独立 Next.js/Tauri 开发启动 overlay | VERIFIED；Deno-only 安装、Next/Tauri 主窗口与 Node/pnpm 回归通过；完整门禁、release bundle、CI 和跨平台矩阵按范围 NOT_RUN | 低 | Node.js、Deno、Next.js、pnpm、Tauri CLI、dual toolchain |
