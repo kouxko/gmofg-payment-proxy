@@ -214,11 +214,10 @@ function CertificateSafetyAlerts({
       <Alert status="danger">
         <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>本机 Root CA 仅限受控调试环境</Alert.Title>
+          <Alert.Title>固定测试 Root CA 仅限受控调试环境</Alert.Title>
           <Alert.Description>
-            每个安装实例生成独立 Root CA，私钥由当前系统用户密钥保护。
-            禁止用于生产、预生产或真实商户信任体系；旧的 Intercept Proxy TEST ONLY
-            Root CA 必须从客户端和系统信任库中删除。
+            Windows 与 macOS 使用同一张固定测试 Root CA，便于测试客户端只内置信任一次。
+            该签发材料随测试工具分发，不具备生产密钥的安全边界，禁止用于生产、预生产或真实商户信任体系。
           </Alert.Description>
         </Alert.Content>
       </Alert>

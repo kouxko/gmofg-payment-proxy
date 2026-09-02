@@ -91,7 +91,7 @@ export function DownstreamTlsCard({
             <section className="space-y-3 border-t border-[var(--telemetry-line)] pt-4">
               <SectionHeading
                 title="代理向客户端证明身份"
-                description="这里使用具备 serverAuth 的服务端身份：未选择固定身份时，代理使用当前安装实例的 Root CA 按客户端 SNI 动态签发匹配证书；选择独立身份后始终出示该固定证书。它不同于连接上游 Server 时使用的 clientAuth 客户端身份。"
+                description="这里使用具备 serverAuth 的服务端身份：未选择固定身份时，代理使用固定测试 Root CA 按客户端 SNI 动态签发匹配证书；选择独立身份后始终出示该固定证书。它不同于连接上游 Server 时使用的 clientAuth 客户端身份。"
               />
               <div className="grid grid-cols-[minmax(0,1fr)_auto] items-end gap-2 max-[620px]:grid-cols-1">
                 <CertificateReferenceSelect

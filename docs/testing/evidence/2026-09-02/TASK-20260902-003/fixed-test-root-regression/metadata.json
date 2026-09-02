@@ -1,0 +1,33 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260902-003",
+  "case_id": "fixed-test-root-regression",
+  "executed_at": "2026-09-02 18:29:44 +08:00",
+  "result": "PASS_WITH_REMOTE_HANDSHAKE_NOT_RUN",
+  "environment": {
+    "workspace": "/Users/codin/Code/gmofg-payment-proxy",
+    "payment_certificate": "/Users/codin/Code/jp_gmofg_payment/app/src/main/assets/server.crt",
+    "remote_proxy_ip": "10.0.28.99"
+  },
+  "expected_root_sha256": "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C",
+  "results": {
+    "cargo_fmt": "PASS",
+    "product_api": "6 passed, 0 failed",
+    "infrastructure_certificates": "39 passed, 0 failed",
+    "certificate_ui": "8 passed, 0 failed",
+    "payment_certificate_byte_comparison": "PASS",
+    "git_diff_check": "PASS"
+  },
+  "not_applicable": {
+    "protocol_frames": "N/A: 本任务只变更 TLS 信任根策略，不处理业务报文。",
+    "screenshots": "N/A: 文案由组件测试验证，不需要视觉验收。",
+    "remote_ci": "NOT_RUN: 未授权触发远程 CI。",
+    "remote_handshake": "NOT_RUN: 未部署 10.0.28.99 新构建，且不清理或迁移远端持久化证书。",
+    "adversarial_review": "NOT_RUN: 用户明确要求跳过。"
+  },
+  "replay_commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-product-api",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure certificates_tests:: -- --nocapture",
+    "deno run -A --unstable-detect-cjs node_modules/vitest/vitest.mjs run src/features/certificates/certificates-view.test.tsx"
+  ]
+}
