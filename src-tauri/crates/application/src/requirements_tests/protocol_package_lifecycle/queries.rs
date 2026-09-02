@@ -396,6 +396,7 @@ async fn managed_component_detail_omits_remote_connection_metadata() {
 
 fn assert_no_forbidden_protocol_package_keys(value: &serde_json::Value) {
     const FORBIDDEN: &[&str] = &[
+        "local_process",
         "source",
         "script",
         "script_content",

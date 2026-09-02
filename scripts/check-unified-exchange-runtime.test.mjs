@@ -9,7 +9,7 @@ const root = resolve(import.meta.dirname, "..");
 const checker = resolve(root, "scripts/check-unified-exchange-runtime.mjs");
 
 test("current production runtime has one unified working Exchange owner", () => {
-  const result = spawnSync(process.execPath, [checker, root], { encoding: "utf8" });
+  const result = spawnSync(process.execPath, ["run", "-A", checker, root], { encoding: "utf8" });
   assert.equal(result.status, 0, result.stderr);
 });
 
@@ -29,7 +29,7 @@ function mutated(relativePath, change) {
     }
     const target = resolve(sandbox, relativePath);
     writeFileSync(target, change(readFileSync(target, "utf8")));
-    return spawnSync(process.execPath, [checker, sandbox], { encoding: "utf8" });
+    return spawnSync(process.execPath, ["run", "-A", checker, sandbox], { encoding: "utf8" });
   } finally {
     rmSync(sandbox, { recursive: true, force: true });
   }

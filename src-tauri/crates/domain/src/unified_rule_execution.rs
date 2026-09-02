@@ -91,7 +91,7 @@ pub enum DocumentPredicate {
     NullEqual,
 }
 
-/// One typed condition in a flat rule condition list.
+/// The rule's one typed condition.
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "source", rename_all = "snake_case")]
 pub enum Condition {
@@ -157,14 +157,14 @@ where
     Ok(evaluated)
 }
 
-/// Matches only Document conditions. HTTP conditions are rejected at this boundary.
+/// Matches one Document condition. HTTP conditions are rejected at this boundary.
 pub fn matches_document_condition(
     condition: &Condition,
     document: &Document,
 ) -> Result<bool, DomainError> {
     Ok(evaluate_condition(condition, document, &mut |_, _| {
         Err(rule_error(
-            "conditions",
+            "condition",
             "HTTP 条件需要应用层提供类型化 HTTP 上下文",
         ))
     })?
@@ -197,7 +197,7 @@ pub fn evaluate_http_context_condition(
     })
     .map_err(|message| {
         DomainError::new(ErrorCode::RuleInvalid, "统一 HTTP 条件运行时匹配失败")
-            .with_field_error("conditions", message)
+            .with_field_error("condition", message)
     })
 }
 

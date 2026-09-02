@@ -41,7 +41,7 @@ export function CertificateOverviewSection({
     <div className="space-y-4">
       <Card>
         <Card.Header>
-          <Card.Title>A. 固定测试 Root CA 与客户端 → Proxy 服务端身份</Card.Title>
+          <Card.Title>A. 本机 Root CA 与客户端 → Proxy 服务端身份</Card.Title>
         </Card.Header>
         <Card.Content className="space-y-4">
           <div

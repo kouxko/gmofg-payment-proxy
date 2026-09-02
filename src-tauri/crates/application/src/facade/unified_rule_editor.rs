@@ -16,8 +16,8 @@ use crate::{
     RuleHttpActionDraftInput, RuleLocalDocumentActionKind, RuleLocalDocumentPredicateKind,
     RuleLocalDocumentValueType, RuleMatchFieldKind, RuleMatchOperatorKind,
     RuleNewDefinitionContent, RuleNewDefinitionDraft, RuleStage, RuleTerminalAction,
-    SocketPayloadProcessing, SocketRuleEditorStageViewModel, SocketTopology,
-    document_schema_field_capabilities, local_document_type_capabilities,
+    SocketPayloadProcessing, SocketRuleEditorStageViewModel, document_schema_field_capabilities,
+    local_document_type_capabilities,
 };
 use intercept_proxy_domain::{
     Condition, DocumentSchemaNode, DropResponseMode, HttpAction as DomainRuleAction, JitterScope,
@@ -66,11 +66,9 @@ impl Application {
                 let description = self
                     .rule_package_description(listener, &scripted.package)
                     .await?;
-                let local_responder =
-                    matches!(settings.topology, SocketTopology::LocalResponder(_));
                 RuleEditorContentContext::Socket {
                     package: scripted.package.clone(),
-                    stages: socket_stages(listener_id, &description, local_responder),
+                    stages: socket_stages(listener_id, &description),
                 }
             }
         };
@@ -374,9 +372,7 @@ fn http_stages(
 fn socket_stages(
     listener_id: ListenerId,
     description: &ProtocolPackageDescriptionViewModel,
-    local_responder: bool,
 ) -> Vec<SocketRuleEditorStageViewModel> {
-    let _ = local_responder;
     let stages: &[RuleStage] = &[RuleStage::ProxyToUpstream, RuleStage::ProxyToApp];
     stages
         .iter()

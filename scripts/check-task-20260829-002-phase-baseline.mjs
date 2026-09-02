@@ -48,15 +48,15 @@ export async function validateTaskPhaseBaseline({
   const checkpoint = inventory?.checkpoint;
   const commands = Array.isArray(checkpoint?.commands) ? checkpoint.commands : [];
   const requiredCommands = [
-    "pnpm test:task-20260829-002:phase1",
-    "pnpm check:bindings",
-    "pnpm scan:architecture",
-    "pnpm scan:source-size",
-    "pnpm lint",
-    "pnpm typecheck",
-    "pnpm test",
-    "pnpm check:rust:fmt",
-    "pnpm check:rust:clippy",
+    "deno task test:task-20260829-002:phase1",
+    "deno task check:bindings",
+    "deno task scan:architecture",
+    "deno task scan:source-size",
+    "deno task lint",
+    "deno task typecheck",
+    "deno task test",
+    "deno task check:rust:fmt",
+    "deno task check:rust:clippy",
     "cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features",
   ];
   if (

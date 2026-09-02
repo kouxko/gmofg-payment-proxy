@@ -15,7 +15,7 @@ $Archive = "$PortableDirectory.zip"
 if (-not $SkipBuild) {
     Push-Location $ProjectRoot
     try {
-        pnpm tauri build --no-bundle
+        deno task tauri build --no-bundle
     }
     finally {
         Pop-Location

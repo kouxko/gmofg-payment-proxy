@@ -28,7 +28,7 @@ function sandbox() {
   return target;
 }
 function run(cwd) {
-  return spawnSync(process.execPath, [checker], { cwd, encoding: "utf8" });
+  return spawnSync(process.execPath, ["run", "-A", checker], { cwd, encoding: "utf8" });
 }
 function append(file, text) {
   return (target) => fs.appendFileSync(path.join(target, file), text);

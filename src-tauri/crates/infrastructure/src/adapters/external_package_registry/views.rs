@@ -70,7 +70,6 @@ pub(super) fn application_detail(
     online: bool,
 ) -> ExternalPackageDetailViewModel {
     ExternalPackageDetailViewModel {
-        local_process: stored.local_archive.is_some(),
         remote_address: connection
             .and_then(|detail| detail.remote_address)
             .or(stored.remote_address)

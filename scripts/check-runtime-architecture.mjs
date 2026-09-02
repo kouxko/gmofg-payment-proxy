@@ -699,7 +699,7 @@ if (result.activeDebt.length > 0) {
   console.log(`Phase-1 spawn debt: ${result.activeDebt.length} site(s).`);
   for (const entry of result.activeDebt) console.log(`- ${entry.file} :: ${entry.symbol} :: ${entry.anchor}`);
   console.log("Clear each debt by routing it through ConnectionTaskScope::spawn_owned and deleting its productionSpawnDebt row.");
-  console.log("Final gate: node scripts/check-runtime-architecture.mjs --require-zero-debt");
+  console.log("Final gate: deno run -A scripts/check-runtime-architecture.mjs --require-zero-debt");
 } else {
   console.log("Phase-1 spawn debt is zero.");
 }

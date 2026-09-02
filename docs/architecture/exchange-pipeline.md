@@ -121,10 +121,11 @@ pub trait Encode<P: Protocol, D: Direction> {
 这些 trait 是运行时替换点。实现可以来自 Rust 内建逻辑或统一软件包 RPC，
 但 Exchange 只看见单阶段能力，不允许把整条组合处理器伪装成 Decode。
 
-规则链按既定顺序逐条接收前一条输出的 Document。单条协议 Document 规则内部：
+规则链按既定顺序逐条接收前一条输出的 Document。每条协议 Document 规则只有一个 condition 和
+一个对应 action；需要多个独立行为时创建多条规则，由规则顺序决定 working Document 的可见次序。
 
-- 多个条件按声明顺序执行 AND。
-- 动作按声明顺序执行。
+- condition 对当前 working Document 求值。
+- 命中后执行该规则的唯一 action。
 - 字段和值严格遵循 Schema 类型，不做隐式字符串/数字转换。
 
 ## 5. Envelope 不变量

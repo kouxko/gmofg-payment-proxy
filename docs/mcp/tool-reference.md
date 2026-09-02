@@ -110,7 +110,7 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 | `workspace_rule_list` | 必填 `workspace_id` | array：指定已保存工作区的统一规则定义 | 不依赖当前选择。 |
 | `protocol_package_list` | 无 | array：所有已安装不可变协议包版本及使用数 | 安装源文件不在 Application facade 中暴露。 |
 | `protocol_package_catalog` | 无 | object：已启用且已完成能力描述的协议包、方向能力、Schema 和目录校验信息 | 在线不等于能力描述成功。 |
-| `protocol_package_detail` | 必填 `package.id`、`package.version` | object：精确版本的 manifest 投影、方向能力、Schema、entry 使用、连接生命周期和最近稳定错误 | 不返回脚本或本机路径；详情可区分 online/enabled/local process，并返回注册 fingerprint、首次/最后连接及最后远端地址。 |
+| `protocol_package_detail` | 必填 `package.id`、`package.version` | object：精确版本的 manifest 投影、方向能力、Schema、entry 使用与适用的运行详情 | 不返回源码或本机路径。托管 Wasm 包的 `external` 为 `null`；只有远端 `/packages` 软件包返回连接 fingerprint、首次/最后连接、最近地址和稳定错误。 |
 | `protocol_package_usage` | 必填 `package.id`、`package.version` | array：引用该精确版本的工作区/entry | 版本是不可变身份的一部分。 |
 
 ## 证据组合建议
@@ -128,7 +128,7 @@ MCP 不会自动停止、启动或重启 Listener，也不会中断活动连接�
 
 - `intercept-proxy://docs/protocol-package-authoring/1.0`：`protocol-package-authoring`，递归 Document、
   两写出边界与协议包职责。
-- `intercept-proxy://docs/protocol-package-host-api/1.0`：严格 `manifest.json`、固定 Hook 和错误合同。
+- `intercept-proxy://docs/protocol-package-host-api/1.0`：单文件 Component 内嵌 Manifest、固定 WIT Hook 和错误合同。
 - `intercept-proxy://docs/socket-protocol-package-authoring/1.0`：Rust Component 与 Socket authoring。
 - `intercept-proxy://docs/external-package-integration-guide/1.0`：`/packages`、`package.register` 和生命周期。
 - `intercept-proxy://templates/iso8583-ascii-standard/1.0.0/{manifest.json,src/lib.rs,component.wasm}`：

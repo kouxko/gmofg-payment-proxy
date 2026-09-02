@@ -1,0 +1,53 @@
+{
+  "task_id": "TASK-20260902-001",
+  "case_id": "default-deno-development-entry",
+  "derived_from": {
+    "task_id": "TASK-20260831-001",
+    "case_id": "dual-toolchain-development-smoke",
+    "evidence": "docs/testing/evidence/2026-09-02/TASK-20260831-001/dual-toolchain-development-smoke/README.md"
+  },
+  "executed_at": {
+    "started": "2026-09-02 10:27:05 +08:00",
+    "finished": "2026-09-02 10:33:48 +08:00"
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "aarch64",
+    "deno": "2.9.6",
+    "node": "v26.8.1",
+    "pnpm": "11.13.1",
+    "next": "16.2.12",
+    "tauri_cli": "2.11.4"
+  },
+  "tested_files": {
+    "deno.json": "c8e9f1bbe4b5e9fb868c8f400db663df44bebc097f49409e473a430475c02248",
+    "deno.lock": "178b7a2377686fe2909e847aecd94cc81e0b201fac97534fc9866b148e1a2505",
+    "package.json": "09dc5ddb86d64e770e9ab6f89803c6875d7a63d96514d7b058dafc0b030530fc",
+    "pnpm-lock.yaml": "cfac4b97cae183c8c89b10615645182bbb0d1eca58d824fb169087b6df74ebe7",
+    "src-tauri/tauri.conf.json": "755121d247147cb520f7c476a39ada51c28fc8242175b7ca2a071215de13488c",
+    "src-tauri/tauri.dev.conf.json": "b009741cdce1af0cf3e01f5fc99aae9130ea66c5bd0700cf5b2b9764150dee3f",
+    "src-tauri/tauri.deno.conf.json": "5c77e5c340f278733947b79ec199fb6adcd346e5838b6a7631eda4bda925f525"
+  },
+  "results": {
+    "default_deno_config": "VERIFIED",
+    "node_pnpm_overlay": "VERIFIED",
+    "deno_next_http": "VERIFIED",
+    "deno_rust_app_launch": "VERIFIED",
+    "node_next_ready": "VERIFIED",
+    "node_rust_app_launch": "VERIFIED",
+    "tauri_main_window": "INCONCLUSIVE_CERTIFICATE_ROOT_REVOKED",
+    "temporary_source_paths": "ABSENT_MOVED_TO_TRASH",
+    "config_and_diff_checks": "VERIFIED"
+  },
+  "not_run": [
+    "lint",
+    "typecheck",
+    "vitest",
+    "pnpm check",
+    "release bundle",
+    "CI",
+    "cross-platform matrix",
+    "application data and certificate cleanup"
+  ],
+  "result": "VERIFIED_WITH_APP_STATE_BLOCKER"
+}

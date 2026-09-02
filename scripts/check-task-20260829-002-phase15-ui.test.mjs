@@ -24,6 +24,7 @@ const files = [
   "src-tauri/crates/application/src/facade/protocol_package_portability.rs",
   "src-tauri/crates/application/src/facade.rs",
   "src-tauri/crates/domain/src/workspace.rs",
+  "src-tauri/crates/domain/src/unified_rule.rs",
   "src-tauri/crates/domain/src/rule/matching.rs",
   "src-tauri/crates/proxy/src/http/contracts.rs",
   "src-tauri/crates/exchange/src/observation.rs",
@@ -51,7 +52,7 @@ function fixture(mutator) {
 }
 
 function run(root) {
-  return spawnSync(process.execPath, [checker, root], { cwd: root, encoding: "utf8" });
+  return spawnSync(process.execPath, ["run", "-A", checker, root], { cwd: root, encoding: "utf8" });
 }
 
 test("current source satisfies the complete Phase15 UI contract", () => {
@@ -80,8 +81,8 @@ test("checker rejects legacy Document runtime projection re-entry", () => {
 test("checker rejects loss of unified portability schema validation", () => {
   for (const token of [
     "workspace.rule_definitions",
-    "validate_document_conditions_schema",
-    "validate_unified_actions_schema",
+    "validate_document_condition_schema(binding.condition",
+    "validate_unified_action_schema(binding.action",
   ]) {
     const root = fixture((directory) => {
       const path = join(directory, "src-tauri/crates/application/src/facade/protocol_package_portability.rs");
@@ -196,12 +197,16 @@ test("checker rejects removal of each flat inline editor owner", () => {
     ["src/features/rules/rule-definition-list.tsx", "ruleDirectionLabel(rule.stage)"],
     ["src/features/rules/rule-definition-editor.tsx", "<RuleSinglePairEditor"],
     ["src/features/rules/rule-single-pair-editor.tsx", "async function materialize()"],
-    ["src/features/rules/rule-single-pair-editor.tsx", "conditions: [condition]"],
-    ["src/features/rules/rule-single-pair-editor.tsx", "actions: [action]"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "withSinglePair(props.input, condition, action)"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "newSaveInput(props.creation, condition, action)"],
+    ["src/features/rules/rule-single-pair-editor.tsx", "props.onSave(materialized)"],
     ["src/features/rules/rule-single-pair-editor.tsx", "保存规则"],
-    ["src/features/rules/rule-creation-editor.tsx", "onReadinessChange"],
-    ["src-tauri/crates/domain/src/unified_rule_execution.rs", "conditions.len() != 1"],
-    ["src-tauri/crates/domain/src/unified_rule_execution/program.rs", "actions.len() != 1"],
+    [
+      "src/features/rules/rule-creation-editor.tsx",
+      "const ready = context != null && structure != null",
+    ],
+    ["src-tauri/crates/domain/src/unified_rule.rs", "pub condition: Condition"],
+    ["src-tauri/crates/domain/src/unified_rule.rs", "pub action: UnifiedAction"],
     ["src/features/rules/rule-single-pair-editor.tsx", "commands.ruleDefinitionDocumentConditionDraft"],
     ["src/features/rules/rule-single-pair-editor.tsx", "commands.ruleDefinitionDocumentActionDraft"],
     ["src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs", "rule_definitions"],

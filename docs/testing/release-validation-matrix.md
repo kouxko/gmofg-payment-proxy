@@ -126,7 +126,8 @@ HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本。本地 C
 - `DisconnectDuringUpstreamWrite`
 - `DisconnectDuringDownstreamWrite`
 
-动作链额外验证声明顺序、终止动作后不再执行、总延迟和流量参数上限。
+每种动作通过独立规则验证；多规则只验证 `(priority, rule_id)` 权威顺序、终止动作停止后续规则、
+单动作延迟和流量参数上限，不再验证已不存在的单规则动作链。
 
 ## 5. Socket 功能矩阵
 
@@ -223,13 +224,13 @@ received/process/final/encoded Document evidence，并把 Display 作为独立�
 ### 8.1 静态和单元/集成门禁
 
 ```bash
-pnpm scan:architecture
-pnpm scan:source-size
-pnpm lint
-pnpm typecheck
-pnpm test:ui-contracts
-pnpm test
-pnpm build
+deno task scan:architecture
+deno task scan:source-size
+deno task lint
+deno task typecheck
+deno task test:ui-contracts
+deno task test
+deno task build
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features
@@ -246,7 +247,7 @@ examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
 
 ```bash
 cargo test --manifest-path src-tauri/Cargo.toml mcp:: --lib
-pnpm scan:architecture-docs
+deno task scan:architecture-docs
 ```
 
 定向套件必须同时锁定：
@@ -281,7 +282,7 @@ App/系统权限和复测入口；不得继续使用旧实现脚本，也不得�
 ### 8.3 最终构建
 
 ```bash
-CI=true pnpm tauri build --bundles app \
+CI=true deno task tauri build --bundles app \
   --config '{"bundle":{"macOS":{"signingIdentity":"-","hardenedRuntime":false}}}'
 ```
 

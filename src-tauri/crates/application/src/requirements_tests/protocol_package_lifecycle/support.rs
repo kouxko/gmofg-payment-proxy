@@ -178,7 +178,6 @@ impl ExternalPackageApplicationPort for FakeProtocolPackageServices {
             display: "hooks.display".into(),
         };
         Ok(ExternalPackageDetailViewModel {
-            local_process: false,
             remote_address: Some("127.0.0.1:9000".into()),
             connection_id: None,
             first_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),

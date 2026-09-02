@@ -208,8 +208,6 @@ pub struct ExternalPackageRecentErrorViewModel {
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
 /// 外部协议包详情的严格连接投影。
 pub struct ExternalPackageDetailViewModel {
-    /// 历史字段名；`true` 表示由 Proxy 持久化 Component 并拥有本地实例生命周期。
-    pub local_process: bool,
     pub remote_address: Option<String>,
     pub connection_id: Option<Uuid>,
     pub first_connected_at: DateTime<Utc>,

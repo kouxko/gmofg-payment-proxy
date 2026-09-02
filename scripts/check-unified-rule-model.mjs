@@ -1,4 +1,4 @@
-#!/usr/bin/env node
+#!/usr/bin/env -S deno run -A
 
 import { existsSync, readdirSync, readFileSync, statSync } from "node:fs";
 import { resolve, relative } from "node:path";

@@ -3,6 +3,14 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-02
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260902-002 | deno-only-toolchain-migration | 验证无 Node/npm/pnpm PATH 的 Deno 冻结安装、lint、typecheck、532 个前端测试、Next 正式构建、Tauri macOS App 构建及 CI/workflow 静态合同；严格 audit 与 bundle branding 失败如实保留，远程 CI 按用户要求 NOT_RUN | LOCAL_VERIFIED_CI_NOT_RUN_WITH_KNOWN_BLOCKERS | TASK-20260902-001 | default-deno-development-entry | [父证据](2026-09-02/TASK-20260902-001/default-deno-development-entry/README.md) | [证据](2026-09-02/TASK-20260902-002/deno-only-toolchain-migration/README.md) |
+| TASK-20260902-001 | default-deno-development-entry | 验证基础 Tauri 配置默认执行 Deno、Node overlay 保持 pnpm，并真实启动两套 Next.js 与 Rust App；两套入口主窗口均被当前本机既有吊销 Root CA 状态阻断 | VERIFIED_WITH_APP_STATE_BLOCKER | TASK-20260831-001 | dual-toolchain-development-smoke | [父证据](2026-09-02/TASK-20260831-001/dual-toolchain-development-smoke/README.md) | [证据](2026-09-02/TASK-20260902-001/default-deno-development-entry/README.md) |
+| TASK-20260831-001 | dual-toolchain-development-smoke | 验证无真实 Node/pnpm 的 Deno 安装、Next.js 与 Tauri 主窗口启动，并回归 Node.js + pnpm 安装、Next.js 和 Tauri 主窗口 | VERIFIED | 无 | 无 | 无 | [证据](2026-09-02/TASK-20260831-001/dual-toolchain-development-smoke/README.md) |
+
 ## 2026-09-01
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

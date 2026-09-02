@@ -386,9 +386,9 @@ if (
 }
 if (
   !ruleEditorSource.includes("async function materialize()") ||
-  !ruleEditorSource.includes("conditions: [condition]") ||
-  !ruleEditorSource.includes("actions: [action]") ||
-  !ruleEditorSource.includes("props.onSave(withSinglePair")
+  !ruleEditorSource.includes("withSinglePair(props.input, condition, action)") ||
+  !ruleEditorSource.includes("newSaveInput(props.creation, condition, action)") ||
+  !ruleEditorSource.includes("props.onSave(materialized)")
 ) {
   failures.push(
     "src/features/rules/rule-single-pair-editor.tsx: 条件与动作必须只在最终保存时由 Rust 工厂生成，并一次写入唯一规则配对",

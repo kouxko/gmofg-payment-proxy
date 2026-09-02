@@ -18,7 +18,7 @@ pub(super) fn validate_http_runtime_content(
         RuleStage::ProxyToUpstream => MessageStage::Request,
         RuleStage::ProxyToApp => MessageStage::Response,
     };
-    crate::validate_http_rule(stage, std::slice::from_ref(&content.condition), &[action])
+    crate::validate_http_rule(stage, &content.condition, &action)
 }
 
 pub(super) fn ensure_socket_only(

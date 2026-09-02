@@ -352,11 +352,16 @@ fn runtime_trap(error: &wasmtime::Error) -> DomainError {
 }
 
 fn runtime_guest_error(code: &str, message: &str) -> DomainError {
-    let code = ErrorCode::ALL
+    let Some(code) = ErrorCode::ALL
         .iter()
         .copied()
         .find(|known| known.as_str() == code)
-        .unwrap_or(ErrorCode::InternalError);
+    else {
+        return DomainError::new(
+            ErrorCode::ProtocolPackageInvalid,
+            format!("Wasm package returned unknown error code {code}: {message}"),
+        );
+    };
     DomainError::new(code, message)
 }
 
@@ -429,4 +434,27 @@ pub fn embed_package_manifest(
     .append_to_component(&mut output);
     read_package_component(&output)?;
     Ok(output)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::runtime_guest_error;
+    use intercept_proxy_domain::ErrorCode;
+
+    #[test]
+    fn unknown_guest_error_code_invalidates_the_package_without_fallback() {
+        let error = runtime_guest_error("FUTURE_UNKNOWN", "guest detail");
+
+        assert_eq!(error.code, ErrorCode::ProtocolPackageInvalid);
+        assert!(error.message.contains("FUTURE_UNKNOWN"));
+        assert!(error.message.contains("guest detail"));
+    }
+
+    #[test]
+    fn known_guest_error_code_preserves_the_stable_contract() {
+        let error = runtime_guest_error(ErrorCode::BodyDecodeFailed.as_str(), "decode detail");
+
+        assert_eq!(error.code, ErrorCode::BodyDecodeFailed);
+        assert_eq!(error.message, "decode detail");
+    }
 }

@@ -1,5 +1,5 @@
 use std::{
-    collections::{HashMap, HashSet},
+    collections::HashMap,
     sync::{
         Arc,
         atomic::{AtomicUsize, Ordering},
@@ -16,7 +16,6 @@ pub(super) struct FakeExternalPackages {
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageVersionViewModel>>,
     pub(super) descriptions:
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
-    pub(super) local_packages: parking_lot::Mutex<HashSet<ProtocolPackageRef>>,
     pub(super) disconnect_calls: AtomicUsize,
     pub(super) delete_calls: AtomicUsize,
     pub(super) set_enabled_calls: AtomicUsize,
@@ -72,9 +71,7 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
                 "外部软件包不存在。",
             ));
         }
-        Ok(external_detail(
-            self.local_packages.lock().contains(package),
-        ))
+        Ok(external_detail())
     }
 
     async fn set_enabled(&self, package: &ProtocolPackageRef, enabled: bool) -> AppResult<()> {
@@ -149,7 +146,7 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
     }
 }
 
-fn external_detail(local_process: bool) -> ExternalPackageDetailViewModel {
+fn external_detail() -> ExternalPackageDetailViewModel {
     let methods = ExternalPackageDirectionMethodsViewModel {
         frame: "hooks.upstream.frame".into(),
         decode: "hooks.upstream.decode".into(),
@@ -157,7 +154,6 @@ fn external_detail(local_process: bool) -> ExternalPackageDetailViewModel {
         display: "document.upstream.display".into(),
     };
     ExternalPackageDetailViewModel {
-        local_process,
         remote_address: Some("127.0.0.1:9000".into()),
         connection_id: None,
         first_connected_at: Utc.timestamp_opt(1_700_000_000, 0).single().unwrap(),

@@ -5,7 +5,7 @@
 
 ## 1. 所有权
 
-- Domain 拥有 `RuleDefinition`、递归 `Document`、Schema、扁平条件列表、action 与验证。
+- Domain 拥有 `RuleDefinition`、递归 `Document`、Schema、唯一 condition/action 配对与验证。
 - Application 提供 rule editor context 和 typed factory；UI 只消费 predicate/action capability，不生成默认。
 - Exchange 拥有 Reader/Writer 顺序与观察事件，Infrastructure 把统一规则接入 HTTP/Socket actor。
 - Proxy 拥有业务连接、网络写出与进程内本地 Component；`/packages` WebSocket 只承载远程调试包。
@@ -26,10 +26,10 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 
 ## 3. 条件与 action
 
-条件是非空扁平列表，同一规则内所有条件固定为 AND；需要 OR 时创建多条规则。每个条件使用 Rust
-capability 给出的 field、selector、operator 和 typed value。action 是有序列表；Set、Clear、Insert、
-Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，不能依赖
-前端隐藏非法选项。
+每条规则必须且只能包含一个 condition 和一个对应 action，不提供单条规则内的 AND/OR 或 action
+列表。condition 使用 Rust capability 给出的 field、selector、operator 和 typed value；Set、Clear、
+Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
+不能依赖前端隐藏非法选项。需要多个独立行为时创建多条规则，它们分别匹配并按规则顺序执行。
 
 HTTP 条件只有一套当前合同：Method、request target、Header、终端 IP 和证书指纹。request target 是
 请求入口捕获的原始 `/path?query`；同一 transaction 把这份不可变请求元数据传给请求与响应两个阶段，
@@ -60,10 +60,10 @@ evaluation；普通 HTTP 条件仍由 actor 自己求值。Encode 失败不提�
 
 ```text
 App -> Proxy:    Frame? -> Decode -> Display -> Envelope
-Proxy -> Server: working Document 条件 -> 有序 action -> Encode -> write
+Proxy -> Server: working Document condition -> action -> Encode -> write
 
 Server -> Proxy: Frame? -> Decode -> Display -> Envelope
-Proxy -> App:    working Document 条件 -> 有序 action -> Encode -> write
+Proxy -> App:    working Document condition -> action -> Encode -> write
 ```
 
 每个方向开始时从 Decode 结果创建私有 working Document。规则按

@@ -120,7 +120,7 @@ async fn production_ports_commit_minimal_new_workspace_with_builtin_package_inve
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn production_full_resource_candidate_requires_managed_package_online() {
+async fn production_full_resource_candidate_requires_referenced_package_installed() {
     let _guard = APPLICATION_HOST_LOCK.lock().await;
     let directory = TempDir::new().expect("temporary production Host data directory");
     let host = build_production_host(&directory).await;
@@ -141,7 +141,10 @@ async fn production_full_resource_candidate_requires_managed_package_online() {
     )
     .await;
     assert_eq!(created["status"], "validation_failed", "{created}");
-    assert_eq!(created["errors"][0]["code"], "EXTERNAL_PACKAGE_OFFLINE");
+    assert_eq!(
+        created["errors"][0]["code"],
+        "PROTOCOL_PACKAGE_NOT_INSTALLED"
+    );
     assert_eq!(
         created["validation_layers"][3]["layer"],
         "package_projection"
@@ -194,7 +197,7 @@ fn full_resource_candidate() -> Value {
     });
     http["data_plane"]["settings"]["body_processing"] = json!({
         "mode":"protocol",
-        "package":{"id":"iso8583-ascii-standard","version":"1.0.0"},
+        "package":{"id":"au-eftex","version":"1.1.0"},
     });
     http["data_plane"]["settings"]["fixed_server"] = Value::Null;
     let socket = &mut value["workspace"]["listeners"][1];
@@ -205,7 +208,7 @@ fn full_resource_candidate() -> Value {
     });
     socket["data_plane"]["settings"]["processing"] = json!({
         "mode":"scripted",
-        "settings":{"package":{"id":"iso8583-ascii-standard","version":"1.0.0"}},
+        "settings":{"package":{"id":"au-eftex","version":"1.1.0"}},
     });
     let document_rule = value["workspace"]["rules"]
         .as_array_mut()
@@ -213,8 +216,7 @@ fn full_resource_candidate() -> Value {
         .iter_mut()
         .find(|rule| rule["name"] == "Protocol Document values")
         .expect("full-shape protocol Document rule");
-    document_rule["content"]["value"]["package"] =
-        json!({"id":"iso8583-ascii-standard","version":"1.0.0"});
+    document_rule["content"]["value"]["package"] = json!({"id":"au-eftex","version":"1.1.0"});
     value["materials"] = json!({"certificates":[],"secrets":[]});
     value
 }

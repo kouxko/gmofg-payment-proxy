@@ -27,7 +27,7 @@ wire、Schema、catalog 与 transport 适配。Infrastructure 通过受保护材
 
 G036 已完成运行时接入：
 
-- 生产 catalog 现在包含原有 37 个只读工具和五个环境配置工具；旧工具的名称、只读注解和预算保持
+- 生产 catalog 现在包含 34 个只读工具和五个环境配置工具；这些工具的名称、只读注解和预算保持
   不变。
 - `mcp_environment_capabilities`、`environment_candidate_create`、`environment_candidate_status`、
   `environment_candidate_cancel`、`environment_candidate_apply` 已接入类型化 dispatch 和

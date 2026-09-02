@@ -97,8 +97,9 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
 - `reproduction_report`：汇总配置与日志；它不包含完整 Exchange payload。
 
 外部 RPC 失败按 typed `external_package_call` 的 stage、method、request ID、remote code 和 stable code
-关联；stable code 是自动化分支依据，remote message 不是。协议包详情中的 enabled/online、local process、
-registration fingerprint、首次/最后连接和最近错误是不同状态，不能合并成一个“可用”布尔值。
+关联；stable code 是自动化分支依据，remote message 不是。托管 Wasm 包的详情 `external=null`；远端
+`/packages` 软件包详情中的 enabled/online、registration fingerprint、首次/最后连接和
+最近错误是不同状态，不能合并成一个“可用”布尔值。
 
 产品 1.00 数据库兼容起点是 Schema 100。开发期低版本 recreate 只用于发布前数据库；Schema 100+
 不得以清空重建作为恢复或升级方式，未知/损坏版本必须 fail closed。

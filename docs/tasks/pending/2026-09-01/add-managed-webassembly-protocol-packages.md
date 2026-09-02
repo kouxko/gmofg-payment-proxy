@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-01 23:55:00 +08:00`
+- 最后更新时间：`2026-09-02 12:21:42 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -79,6 +79,9 @@
 | `2026-09-01 22:08:24 +08:00` | 用户明确删除协议包页面“恢复 ISO 8583 示例包”功能，不保留隐藏命令、兼容入口或失败回退；继续保留“导出 ISO 8583 模板”，其产物必须是由仓库 Rust 模板构建的单文件 Wasm Component。并行验证只覆盖现有 Wasm Decode/Display/Encode 与本机重放，不测试文件系统或出站 HTTP。 |
 | `2026-09-01 22:45:00 +08:00` | 用户明确本轮不测试文件系统或出站 HTTP Host capability；这些项目从本轮发布候选验收中排除，不得用静态存在性冒充运行验证。 |
 | `2026-09-01 23:00:00 +08:00` | 用户授权在本地审查和回归无重大问题后提交并推送当前分支，触发仅 Windows 的 CI，生成未签名 Windows 可执行文件；不得创建 tag、GitHub Release、Android/macOS job 或安装包构建。普通本地/Tauri 构建不得再自动执行 Phase2 release blocker。 |
+| `2026-09-02 09:54:16 +08:00` | 用户扩大交付验收：整体审查功能、文档和测试并修复所有确认问题；本地完整验证通过后提交推送，分别触发 `verify-and-build/all` 完整 CI 与 `build-only/windows` Windows-only 快速出包 CI，持续监控到终态并校验 Windows 产物。此授权替代上一条“仅 Windows CI”的限制；仍不创建 tag 或 GitHub Release。 |
+| `2026-09-02 11:18:09 +08:00` | 用户确认开发与 CI Rust 工具链升级到正式版 `1.98.0`，并计划卸载本机 `1.97`。活动 toolchain、workspace MSRV、CI 和当前操作文档必须统一到 `1.98.0`；历史测试证据中的实际 `1.97.1` 环境记录保持不可变。 |
+| `2026-09-02 12:21:42 +08:00` | `09:54:16` 记录中的旧 `run_mode` 调用方式已被最终 CI 设计替代：完整流程使用 `.github/workflows/windows-release.yml` 并传入 `platform=all`；Windows 快速可执行文件使用独立 `.github/workflows/windows-quick-build.yml`，无输入参数。两条流程使用独立 concurrency group；仍不创建 tag 或 GitHub Release。 |
 
 ## 未确认事项
 
@@ -105,7 +108,7 @@
 - 当前已验证：`src-tauri/crates/infrastructure/src/adapters/local_package_supervisor.rs` 每个精确本地包版本拥有一个由应用管理的通用 Sidecar 进程，并处理启动、替换、停止和退出。
 - 当前已验证：`src-tauri/crates/infrastructure/src/sqlite/external_packages.rs` 已把本地完整 ZIP 保存为 `local_archive BLOB`，相同身份需要 Manifest 和原始 archive bytes 一致才可复用。
 - 当前已验证：`src-tauri/crates/infrastructure/src/adapters/bundle.rs` 在 Windows 固定查找主程序同目录的 `intercept-proxy-package-sidecar.exe`，并创建 `LocalPackageSupervisor`；`src-tauri/tauri.conf.json` 把 Sidecar 声明为唯一 `externalBin`。删除 Sidecar 可以直接移除该跨平台额外二进制依赖。
-- 当前已验证：在线依赖预检显示 Wasmtime `48.0.1` 的 MSRV 为 Rust `1.95.0`，当前 workspace 声明 Rust `1.97`；这只证明版本门槛可满足，不证明最小 features、最终体积、运行行为或跨平台验收。
+- 当前已验证：在线依赖预检显示 Wasmtime `48.0.1` 的 MSRV 为 Rust `1.95.0`；当前 workspace、独立 test-support manifests、本地工具链和 CI 已统一声明 Rust `1.98.0`。版本门槛满足不单独证明 features、最终体积、运行行为或跨平台验收，相关结论仍以本任务的实际测试和 CI 为准。
 - 用户已确认：Wasm 协议包是嵌入严格 Manifest 的单个 `.wasm` 文件，不使用 `manifest.json + component.wasm` ZIP；新结论要求删除 JavaScript ZIP 执行路径。
 - 当前已验证：应用流水线已通过 `ExternalPackageRpc` 抽象调用 `direction + Frame/Decode/Encode/Display`；本地实现可替换为进程内 Wasm adapter，而不让领域层依赖 Wasmtime。
 - 当前已验证：Domain Document 是递归 JSON，而 Component Model/WIT 当前类型定义无环，因此 WIT 使用规范 JSON UTF-8 `string`；Socket 原始输入输出使用 `list<u8>`，避免把 JSON-RPC Base64 泄漏到 guest ABI。
@@ -141,6 +144,7 @@
 | WPC-08 | 验证本轮已确认的 Wasm Host、持久化和失败语义 | WPC-04、WPC-05 | 否 | 已完成 | 当前正式 Host runtime 直接加载 Component；AU EFTEX Decode/Display/Encode 旧向量通过；文件系统和出站 HTTP 按用户要求本轮 NOT_RUN |
 | WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 已完成 | macOS Release App 与真实 HTTP/Socket 回放通过；Windows executable-only CI run 33525227567 成功并完成产物校验 |
 | WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 已完成 | 活动文档已同步当前规则和 Wasm-only 合同；独立 code reviewer 与 architect 无提交阻断 |
+| WPC-11 | 将本地、workspace MSRV、活动文档与全部 CI Rust 工具链统一到 `1.98.0` | WPC-10 | 否 | 已完成 | `rustc`/`cargo` 实际版本为 1.98.0，活动配置无 1.97，受影响检查和 CI 合同通过 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -187,6 +191,9 @@
 
 ## 实施记录
 
+- `2026-09-02 11:33:14 +08:00`：按用户要求将 `rust-toolchain.toml` 固定到 `1.98.0`、workspace MSRV 固定到 `1.98`，并为完整 CI、Windows release 和 Windows quick build 中每个 Rust setup 显式指定 `1.98.0`。本机安装 `rustc/cargo 1.98.0`、rustfmt、Clippy 和 `wasm32-wasip2`；修复 1.98 新增的 Host async lint、统一 Tauri command error 边界 lint 与固定长度 hex 分块 lint，不改变 IPC error wire 或业务行为。
+- `2026-09-02 09:54:16 +08:00`：用户要求在现有 Wasm-only/规则/协议包交付上执行全仓功能、文档与测试审查，修复确认问题后运行本地完整验证，并推送同一提交同时触发完整跨平台 CI 与独立 Windows-only 快速出包 CI。需求目标、输入输出、失败标准和外部动作范围明确；保留“不测试文件系统/出站 HTTP”的既有人工验收排除项，但完整 CI 中既有自动化门禁照常执行。开始前已确认工作区仅有与本任务无关的 `docs/README.md` 和 `docs/tasks/pending/2026-08-31/` 脏状态，后续提交不得纳入或撤销。
+
 - `2026-09-01 10:20:26 +08:00`：读取当前包合同、Boa runtime、Sidecar WebSocket、Supervisor、ZIP BLOB 持久化、Tauri external binary 配置和既有任务历史；登记高优先级待确认任务。未修改生产源码、配置、运行时或测试。
 - `2026-09-01 15:47:36 +08:00`：按用户确认将 Wasm 交付格式固定为嵌入严格 Manifest 的单个 `.wasm` 文件，删除 Wasm ZIP 方案和对应未确认事项；现有 JavaScript ZIP 保持不变。任务仍有 7 项会改变实现方向的未确认事项，状态保持 `待确认`。
 - `2026-09-01 16:33:34 +08:00`：在完整读取当前 Manifest、RPC、Document、Sidecar、Transport、Exchange、Supervisor、SQLite 和导入调用链并核对 Wasmtime/WASI/Component Model 官方合同后，用户确认 Host WebSocket WIT、全宿主文件系统映射和 Wasm 文件无产品级大小上限。其余 WIT、Base64、错误、版本、异步 Transport 和既有边界由当前代码合同闭合；未确认事项降为 0，需求就绪门禁 PASS，任务转为 `待实现`。未修改生产源码、配置或测试。
@@ -198,9 +205,10 @@
 - `2026-09-01 22:08:24 +08:00`：按最新产品结论物理删除内置 ISO 示例恢复 UI、前端状态/校验、Tauri command、Application facade/port 方法、Infrastructure restore 实现和对应测试；保留 `builtin_archive` 单一导出边界。导出文件名为 `iso8583-ascii-standard-1.0.0.wasm`，字节来自 `templates/socket-protocol/iso8583-standard` Rust crate 经 `wasm32-wasip2` 编译并追加内嵌 Manifest 的 Component，不是源码目录或 ZIP。
 - `2026-09-01 22:40:00 +08:00`：直接使用当前 `dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm` 和正式 Wasmtime Host runtime 重放公开上下行旧向量；Frame、Decode、Display、Encode 均通过，编码结果逐字节保持。现有 App 进程未配置 AU EFTEX BDK，因此 App 数据面按真实 `PROTOCOL_PACKAGE_INVALID` fail-closed，不将配置缺失误报为算法回归。
 - `2026-09-01 22:55:00 +08:00`：构建并保持运行当前 macOS Release App；真实 HTTP 规则覆盖 Method、Header、Request target wildcard、Plain Body RFC6901、miss 和非法 JSON，真实 Socket Schema 规则覆盖 match/action、miss 和非法 Frame。受控 Server 的实际接收数据、客户端结果和诊断已归档到 `release-app-replay` 证据。
-- `2026-09-01 23:05:00 +08:00`：Windows workflow 新增严格 `build-only/windows` raw executable job；该路径不依赖 Android job、不运行 Verify、installer 或 macOS job，只构建 `intercept-proxy.exe`、检查 OpenSSL 动态依赖并上传未签名 artifact。普通 Tauri build 改为只执行前端 build，Phase2 release blocker 保留为显式发布门禁而不再自动重复执行。
+- `2026-09-01 23:05:00 +08:00`：Windows workflow 曾新增 `build-only/windows` raw executable job；后续最终 CI 设计已把该路径迁移为独立 `.github/workflows/windows-quick-build.yml`。当前快速流程不依赖 Android、Verify、installer 或 macOS job，只构建 `intercept-proxy.exe`、检查 OpenSSL 动态依赖并上传未签名 artifact。普通 Tauri build 只执行前端 build，Phase2 release blocker 保留为显式发布门禁而不再自动重复执行。
 - `2026-09-01 23:08:58 +08:00`：完成共享源码收口：Wasm Host/Registry 超长文件按职责拆分，托管 Component detail 不再读取远端连接元数据并有回归测试，活动架构/MCP/发布文档删除旧 Nth/one-shot/TLS 规则描述。Workspace check、strict Clippy、Rust fmt、bindings、typecheck、lint、Next production build、source-size 和 diff-check 均通过；进入最终独立审查。
 - `2026-09-01 23:18:03 +08:00`：补充托管 Component 详情派生证据：精确 Rust 查询测试 1/1 与协议包前端 7 files/77 tests 通过；详情不调用远端 connection metadata port。同步修正规则文档，明确多条规则独立匹配，不能把它们描述成单条规则 AND/OR 的等价表达。
+- `2026-09-02 12:21:42 +08:00`：最终 CI 调用合同收敛为两条独立 workflow：完整流程使用 `windows-release.yml` 的 `platform=all`，Windows 快速可执行文件使用无参数的 `windows-quick-build.yml`。本地 Rust、全部活动 manifest、CI 与操作文档统一到 `1.98.0`；Windows workflow 合同、Deno/Rust pin 合同和最终独立审查通过。
 
 ## 修改文件
 
@@ -233,6 +241,7 @@
 
 ## 测试结果
 
+- `PASS`：Rust `1.98.0` 下 workspace all-target/all-feature check、strict Clippy `-D warnings` 与 rustfmt；Deno 工具链/CI pin 合同 4/4、Windows workflow 合同 2/2、package-runtime 14/14、exchange UI layer 16/16。
 - `PASS`：`cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-runtime`，repository 1/1、合同 11/11。
 - `PASS`：`cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib`，414/414。
 - `PASS`：`cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib`，463/463；新增 SemVer 排序定向测试另行 PASS。

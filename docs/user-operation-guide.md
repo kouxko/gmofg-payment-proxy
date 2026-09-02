@@ -207,15 +207,13 @@ Proxy → Server，下行对应 Proxy → App。
 额外约束：
 
 - 限速与间歇通断方向由阶段固定，界面不允许手工选错；
-- 一条规则最多一个终止动作；
-- 终止动作必须是最后一个动作；
-- 添加终止动作后，“添加动作”禁用；
-- 一条规则的条件使用轻量扁平列表，所有条件固定为 AND；需要 OR 时创建多条规则；
+- 每条规则必须设置一个条件和一个对应动作，不提供多条件 AND/OR 或动作列表；
+- 终止动作作为该规则唯一动作，命中后结束当前方向的后续规则处理；
 - Header 名称和 HTTP/Socket Document 路径直接使用 `/a/b` 输入，有 Schema 时可以下拉选择或手工
   输入，无 Schema 时只手工输入；
-- 每条规则读取当前 working Document，命中的有序 actions 立即修改它并对后序规则可见，最终只
+- 每条规则读取当前 working Document，命中的唯一 action 立即修改它并对后序规则可见，最终只
   Encode 一次；
-- 终止动作命中后停止当前规则剩余动作和后续规则。
+- 终止动作命中后停止后续规则。
 
 “Proxy → Server 设置 response code”在概念上不成立，因此请求阶段不会显示自定义 HTTP 状态码；
 该动作只属于 Server response 经过 Proxy 返回 App 的响应阶段。
@@ -231,7 +229,7 @@ Document 规则只在两个写出阶段执行：
 1. Proxy → Server
 2. Proxy → App
 
-每个阶段从 Decode 结果创建私有 working Document；规则条件和 actions 按顺序读取/更新它，前序修改
+每个阶段从 Decode 结果创建私有 working Document；各规则的 condition/action 按规则顺序读取/更新它，前序修改
 对后序规则可见。一次读取产生一个 Envelope，长连接中的新报文追加新事件，不覆盖之前数据。
 
 ## 7. 实时抓包

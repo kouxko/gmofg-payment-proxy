@@ -34,7 +34,7 @@ test("current TASK-20260829-002 contract inventory is executable and GREEN", asy
 
 test("baseline validation fails closed when checkpoint commands drift", async () => {
   const inputs = await baselineInputs();
-  inputs.packageJson.scripts[inputs.inventory.checkpoint.package_script] = "pnpm typecheck";
+  inputs.packageJson.scripts[inputs.inventory.checkpoint.package_script] = "deno task typecheck";
   assert.match(
     (await validateTaskPhaseBaseline({ root: repositoryRoot, ...inputs })).join("\n"),
     /package script .* drifted from checkpoint commands/u,

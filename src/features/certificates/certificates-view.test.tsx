@@ -58,7 +58,7 @@ vi.mock("@/lib/ipc/use-ipc-query", () => ({
             items: [
               {
                 kind: "local_root_ca",
-                subject: "CN=Intercept Proxy TEST ONLY Root CA",
+                subject: "CN=Intercept Proxy Root CA",
                 usage: "签发本机代理服务端证书",
                 sans: [],
                 valid_from: "2026-08-01T00:00:00Z",
@@ -136,7 +136,7 @@ describe("CertificatesView settings freshness", () => {
     mocks.certificateResetCa.mockResolvedValue({
       revision: 2,
       ready: true,
-      status_text: "固定测试证书已恢复",
+      status_text: "本机证书已重置",
       ui_tone: "positive",
       items: [],
       can_initialize: false,
@@ -224,7 +224,7 @@ describe("CertificatesView settings freshness", () => {
     render(<CertificatesView />);
 
     await user.click(
-      screen.getByRole("button", { name: "恢复固定测试证书" }),
+      screen.getByRole("button", { name: "重置本机证书" }),
     );
     await user.click(screen.getByRole("button", { name: "确认重置" }));
 
@@ -233,13 +233,13 @@ describe("CertificatesView settings freshness", () => {
     expect(screen.getByRole("button", { name: "正在重置…" })).toBeDisabled();
     await user.keyboard("{Escape}");
     expect(
-      screen.getByRole("alertdialog", { name: "确认恢复固定测试证书？" }),
+      screen.getByRole("alertdialog", { name: "确认重置本机证书？" }),
     ).toBeVisible();
 
     finish({
       revision: 2,
       ready: true,
-      status_text: "固定测试证书已恢复",
+      status_text: "本机证书已重置",
       ui_tone: "positive",
       items: [],
       can_initialize: false,
@@ -250,7 +250,7 @@ describe("CertificatesView settings freshness", () => {
     await waitFor(() =>
       expect(
         screen.queryByRole("alertdialog", {
-          name: "确认恢复固定测试证书？",
+          name: "确认重置本机证书？",
         }),
       ).not.toBeInTheDocument(),
     );
@@ -274,7 +274,7 @@ describe("CertificatesView settings freshness", () => {
     render(<CertificatesView />);
 
     expect(
-      screen.getAllByText("CN=Intercept Proxy TEST ONLY Root CA"),
+      screen.getAllByText("CN=Intercept Proxy Root CA"),
     ).not.toHaveLength(0);
     expect(screen.getAllByText("CN=10.0.34.50")).not.toHaveLength(0);
     expect(screen.getByText("IP:10.0.34.50、DNS:proxy.test")).toBeVisible();
@@ -282,14 +282,14 @@ describe("CertificatesView settings freshness", () => {
     expect(screen.getByText("11:22:33:44")).toBeVisible();
   });
 
-  it("explains that restoring certificates keeps the fixed Root CA", () => {
+  it("explains that resetting certificates changes the Root CA", () => {
     render(<CertificatesView />);
 
     expect(
-      screen.getByText(/将恢复内置的固定测试 Root CA/),
+      screen.getByText(/将生成新的本机 Root CA/),
     ).toBeInTheDocument();
     expect(
-      screen.getByText(/已信任该固定 Root CA 的客户端无需重新导入/),
+      screen.getByText(/客户端必须删除旧 Root 并导入新 Root/),
     ).toBeInTheDocument();
   });
 });

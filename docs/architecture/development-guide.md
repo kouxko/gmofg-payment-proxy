@@ -3,6 +3,25 @@
 本文面向准备修改 Intercept Proxy 的开发者，说明代码应该放在哪里、如何沿数据流定位问题，以及
 提交前必须完成哪些验证。所有命令均从仓库根目录执行，除非小节另有说明。
 
+## 开发工具链
+
+项目统一使用 Deno 驱动本地 Next.js、Tauri、质量门禁和正式构建：
+
+```bash
+deno install --allow-scripts
+deno task tauri:dev
+```
+
+只启动 Next.js 前端时使用 `deno task dev`。Deno 配置位于根目录 `deno.json`，采用官方 Next.js 路线的
+npm/Node 兼容层、自动 `node_modules` 和 `node-globals`、`unsafe-proto`、`sloppy-imports`、
+`detect-cjs` 兼容开关。基础 `src-tauri/tauri.conf.json` 执行 `deno task dev` 和 `deno task build`；
+`src-tauri/tauri.dev.conf.json` 只保留开发态 `freezePrototype: false`。
+
+Deno 的 `--allow-scripts` 允许当前 npm 依赖执行安装脚本，是 Next.js/Tauri npm CLI 安装所需的明确
+权限。`package.json` 保留 npm 依赖与 Deno 可读取的 scripts，`deno.lock` 是唯一前端锁文件；本地与 CI
+统一通过 `deno task` / `deno ci` 执行。最终 Tauri App 仍由 Rust 与系统 WebView 组成，不携带 Node.js
+或 Deno 运行时。
+
 ## 1. 先判断改动属于哪个边界
 
 | 需求 | 首选位置 | 不应放入 |
@@ -180,9 +199,9 @@ Exchange 事件顺序。不能只验证 happy path DTO。
 ### 8.1 快速定向验证
 
 ```bash
-pnpm lint
-pnpm typecheck
-pnpm test:ui-contracts
+deno task lint
+deno task typecheck
+deno task test:ui-contracts
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain
 ```
@@ -192,10 +211,10 @@ cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain
 ### 8.2 架构与代码质量
 
 ```bash
-pnpm scan:architecture
-pnpm scan:source-size
-pnpm check:rust:clippy
-pnpm check:rust:windows
+deno task scan:architecture
+deno task scan:source-size
+deno task check:rust:clippy
+deno task check:rust:windows
 git diff --check
 ```
 
@@ -205,7 +224,7 @@ Windows Rust 编译面。
 ### 8.3 全量门禁
 
 ```bash
-pnpm check
+deno task check
 ```
 
 该命令依次生成 Rust-TypeScript bindings，执行架构/文件大小门禁、lint、typecheck、UI 契约和全量
@@ -214,11 +233,11 @@ pnpm check
 ### 8.4 覆盖率
 
 ```bash
-pnpm test:coverage-policy
-pnpm check:coverage:frontend
-pnpm check:coverage:rust
+deno task test:coverage-policy
+deno task check:coverage:frontend
+deno task check:coverage:rust
 # 或
-pnpm check:coverage
+deno task check:coverage
 ```
 
 Rust coverage 需要固定 `cargo-llvm-cov 0.8.7` 和 `llvm-tools-preview`。覆盖率阈值不能代替行为矩阵。
@@ -226,8 +245,8 @@ Rust coverage 需要固定 `cargo-llvm-cov 0.8.7` 和 `llvm-tools-preview`。覆
 ### 8.5 Android Companion
 
 ```bash
-pnpm build:android-companion
-pnpm verify:android-companion
+deno task build:android-companion
+deno task verify:android-companion
 ```
 
 脚本执行 Companion 测试、lint、Release build、签名/对齐校验并同步 APK。调试单个模块时可在
@@ -236,7 +255,7 @@ pnpm verify:android-companion
 ### 8.6 桌面发布构建
 
 ```bash
-pnpm tauri:build
+deno task tauri:build
 ```
 
 它会先构建 Android Companion，再执行 Tauri release build。构建成功只证明产物可生成；仍需按本节

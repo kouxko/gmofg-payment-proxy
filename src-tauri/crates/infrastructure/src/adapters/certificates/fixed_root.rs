@@ -1,8 +1,9 @@
-//! 固定测试 Root CA 的装载与本地叶子证书签发。
+//! 可选固定 Root CA 的装载与安装实例证书签发。
 //!
-//! 单独放在该模块中，是为了让“跨平台共享 Root”这一产品策略与证书存储、导入等
-//! 通用流程保持边界清晰。Windows 与 macOS 使用完全相同的固定 Root；每台机器仍会
-//! 根据自己的监听地址重新签发叶子证书。
+//! 固定 Root 由产品策略显式提供；未提供时为当前安装实例生成独立 Root。两条路径
+//! 共用相同的本地叶子证书签发与存储流程。
+
+use std::io::Cursor;
 
 use intercept_proxy_application::{AppError, AppResult};
 
@@ -10,7 +11,42 @@ use super::{
     CertificateServiceAdapter, LEAF, MaterialSnapshot, ROOT, app_error, from_bundle, leaf_request,
 };
 
+const REVOKED_SHARED_TEST_ROOT_CA_PEM: &[u8] =
+    include_bytes!("../../../../../resources/certificates/intercept-proxy-test-root-ca.crt");
+
 impl CertificateServiceAdapter {
+    pub(super) fn is_revoked_shared_test_root(certificate_der: &[u8]) -> AppResult<bool> {
+        let mut reader = Cursor::new(REVOKED_SHARED_TEST_ROOT_CA_PEM);
+        let mut certificates = rustls_pemfile::certs(&mut reader);
+        let revoked = certificates
+            .next()
+            .transpose()
+            .map_err(|error| {
+                AppError::new(
+                    "CERTIFICATE_INVALID",
+                    format!("已撤销 Root CA 检测资源解析失败：{error}"),
+                )
+            })?
+            .ok_or_else(|| AppError::new("CERTIFICATE_INVALID", "已撤销 Root CA 检测资源为空。"))?;
+        if certificates.next().is_some() {
+            return Err(AppError::new(
+                "CERTIFICATE_INVALID",
+                "已撤销 Root CA 检测资源必须只包含一张证书。",
+            ));
+        }
+        Ok(certificate_der == revoked.as_ref())
+    }
+
+    pub(super) fn reject_revoked_shared_test_root(certificate_der: &[u8]) -> AppResult<()> {
+        if Self::is_revoked_shared_test_root(certificate_der)? {
+            return Err(AppError::new(
+                "CERTIFICATE_ROOT_REVOKED",
+                "检测到已撤销的旧共享测试 Root CA。请清除全部配置与数据，并从客户端和系统信任库删除旧 Root 后重新初始化。",
+            ));
+        }
+        Ok(())
+    }
+
     pub(super) fn fixed_root_bundle(&self) -> AppResult<Option<crate::CertificateBundle>> {
         match (
             self.certificate_policy().fixed_installation_root_ca_pem(),

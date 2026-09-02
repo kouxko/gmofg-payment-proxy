@@ -104,7 +104,7 @@ impl fmt::Debug for ParsedPkcs12 {
 pub struct CertificateService;
 
 impl CertificateService {
-    /// 解析产品包内固定的测试 Root CA 与签发私钥。
+    /// 解析产品策略显式提供的固定 Root CA 与签发私钥。
     ///
     /// 固定材料仍经过与运行时生成证书相同的自签名、CA 能力和密钥匹配校验，避免
     /// 打包资源损坏或证书与私钥错配后继续启动监听。
@@ -400,7 +400,7 @@ impl CertificateService {
                 .verify_signature(Some(root.public_key()))
                 .is_err()
         {
-            return Err(invalid("Proxy 叶子证书不是由固定测试 Root CA 签发"));
+            return Err(invalid("Proxy 叶子证书不是由当前 Root CA 签发"));
         }
         let eku = certificate
             .extended_key_usage()

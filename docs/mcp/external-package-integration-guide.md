@@ -112,8 +112,9 @@ status 配置。超大或 malformed transport、错误/重复 ID 会关闭对应
 ## 7. MCP 排障顺序
 
 1. `external_package_service_status`：确认实际 URL、精确 `/packages`、监听状态和在线数。
-2. `protocol_package_detail`：确认精确身份、kind、online/enabled、local process、连接 ID、指纹、首次/
-   最后连接、最后远端地址和最近稳定错误。
+2. `protocol_package_detail`：先确认精确身份、kind、online/enabled；远端 `/packages` 软件包再读取
+   `external` 中的连接 ID、指纹、首次/最后连接、最后远端地址和最近稳定错误。托管
+   Wasm 包的 `external` 固定为 `null`。
 3. `protocol_package_usage`：确认引用该版本的 Workspace/Listener 及运行状态。
 4. `diagnostics_query` / `application_log_query`：按包 ID、连接 ID、method、request ID 或 stable code 对齐。
 5. `exchange_observation_query/get`：检查同一 runtime epoch 与 Exchange 的 received、processed、encoded、

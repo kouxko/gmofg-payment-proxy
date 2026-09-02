@@ -49,7 +49,7 @@ export async function checkGeneratedBindings({
   }
 
   const failures = [];
-  if (!original.equals(first)) failures.push("src/generated/rust-types.ts is stale; run pnpm bindings");
+  if (!original.equals(first)) failures.push("src/generated/rust-types.ts is stale; run deno task bindings");
   if (!first.equals(second)) failures.push("binding generation is not deterministic across consecutive runs");
   return failures;
 }

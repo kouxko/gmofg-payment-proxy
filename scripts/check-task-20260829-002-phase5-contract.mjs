@@ -94,9 +94,10 @@ function discoverTests() {
     "test", "--manifest-path", "src-tauri/Cargo.toml", "-p", "intercept-proxy-domain",
     "--test", "phase5_unified_rule_domain", "--", "--list", "--format", "terse",
   ]);
-  const pnpm = process.platform === "win32" ? "pnpm.cmd" : "pnpm";
-  const tsOutput = command(pnpm, [
-    "exec", "vitest", "list", "src/features/rules/rule-definition-model.test.ts", "--json",
+  const deno = process.platform === "win32" ? "deno.exe" : "deno";
+  const tsOutput = command(deno, [
+    "run", "-A", "node_modules/vitest/vitest.mjs", "list",
+    "src/features/rules/rule-definition-model.test.ts", "--json",
   ]);
   return {
     rust: rustOutput.split("\n").filter((line) => line.endsWith(": test")).map((line) => line.slice(0, -6)).sort(),

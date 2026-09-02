@@ -64,7 +64,7 @@ flowchart LR
 - 新协议阶段必须实现 `exchange` 已有 capability trait；不要创建第二套组合处理器。
 - 新 transport 适配器只实现 Reader、Writer、Connection 或 Server；不要拥有交易顺序状态机。
 - 修改依赖方向、Exchange 顺序、规则能力或错误语义时，必须同步对应详细文档及相应测试。
-- 运行 `pnpm scan:architecture` 检查架构边界和文档链接，运行 `pnpm check` 执行完整质量门禁。
+- 运行 `deno task scan:architecture` 检查架构边界和文档链接，运行 `deno task check` 执行完整质量门禁。
 
 ## 决策与验证
 

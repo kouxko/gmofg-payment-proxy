@@ -140,12 +140,16 @@ macro_rules! impl_websocket_host {
                     .map_err(|error| error.to_string())
             }
 
-            async fn drop(
+            fn drop(
                 &mut self,
                 connection: Resource<HostWebSocket>,
-            ) -> wasmtime::Result<()> {
-                self.table.delete(connection)?;
-                Ok(())
+            ) -> impl Future<Output = wasmtime::Result<()>> {
+                let result = self
+                    .table
+                    .delete(connection)
+                    .map(|_| ())
+                    .map_err(Into::into);
+                std::future::ready(result)
             }
         }
 

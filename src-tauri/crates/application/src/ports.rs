@@ -223,8 +223,8 @@ pub trait CertificateServicePort: Send + Sync + std::fmt::Debug {
     async fn status(&self) -> AppResult<CertificateOverviewViewModel>;
     /// 将持久化证书同步为产品策略要求的安装级信任链。
     ///
-    /// 对固定 Root CA 产品而言，这会在升级后替换旧安装实例 Root，并用原叶子 SAN
-    /// 重新签发服务端证书；材料已经一致时必须保持幂等且不增加修订号。
+    /// 产品策略未提供固定 Root 时，首次同步为当前安装实例生成独立 Root 和叶子证书；
+    /// 材料已经完整时必须保持幂等且不增加修订号。已撤销材料由基础设施层拒绝使用。
     async fn synchronize_installation_ca(
         &self,
         fallback_sans: Vec<String>,
