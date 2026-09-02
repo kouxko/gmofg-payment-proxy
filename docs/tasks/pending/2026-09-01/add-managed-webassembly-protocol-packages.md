@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 17:02:32 +08:00`
+- 最后更新时间：`2026-09-02 17:19:32 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -87,10 +87,11 @@
 | `2026-09-02 16:08:24 +08:00` | 验收必须覆盖当前权威旧向量的 Frame、Decode、Display、Encode，并比较请求逐字节往返及 63 字节预期响应；仅编译成功、静态校验成功、导入成功或 Listener 启动均不算完成。完成本地 Wasmtime 数据面验证后再恢复 `10.0.28.77` 的导入与重放。 |
 | `2026-09-02 16:29:10 +08:00` | 用户要求修复 ISO Deno Display 的整数兼容问题，并把 Nuvei JSON 的 Display 改为 object/array 递归嵌套 HTML table；不得继续把嵌套 JSON 输出为 `<pre>`。两项修复均需重新构建 Wasm 放入 Downloads 并在远端双向 Display 实测。 |
 | `2026-09-02 16:52:48 +08:00` | 用户要求补充测试全部 5 个 Wasm 包的规则。规则验收必须分别证明命中、适用的未命中保持、非法 Frame fail-closed、规则持久化命中计数和上游/客户端实际字节；AU EFTEX 与 Nuvei 的 MAC/只读字段只使用同值动作观测规则命中，不绕过 Encode 合同。 |
+| `2026-09-02 17:19:32 +08:00` | 用户要求整理分支、合并应合并内容、删除应删除分支、推送 GitHub、合并到主分支并创建 Release。执行前实时确认 GitHub 当前没有 `main`/`master`，默认分支为 `codex/windows-ci-cache-warmup`；仓库当前版本为 `1.0.0` 且无历史 tag/Release。主分支命名/目标与首个 Release tag 仍需用户确认，确认前可以修复独立的发布阻断、推送当前功能分支并运行验证，但不得猜测创建 `main`、tag 或删除含独立提交/未提交修改的分支。 |
 
 ## 未确认事项
 
-无会改变实现方向的未确认事项。具体 Rust 私有类型名、文件拆分和生成代码布局在实现中确定，但不得改变单文件 Wasm、本地进程内 owner、远端 `/packages` 调试路径、WIT、Host capability、错误和生命周期合同。
+- 发布收口前仍有两项会改变 Git/GitHub 结果的未确认事项：GitHub 当前不存在 `main`，需要确认是把现有默认分支 `codex/windows-ci-cache-warmup` 视为主分支，还是新建并切换默认分支为 `main`；仓库版本为 `1.0.0` 且无历史 tag/Release，需要确认首个 Release 是否使用 `v1.0.0`。其余实现合同无未确认事项。
 
 ## 需求就绪检查
 
@@ -122,6 +123,8 @@
 - 用户已确认：外部 WebSocket 由 Host WIT 跨语言保证；最新方案改由主进程实现该 Host。Unix/macOS 暴露 `/`，Windows 暴露全部可用盘符；Wasm 文件无产品级大小上限；不新增 Wasmtime fuel、内存、Hook timeout 或 Busy 限制。
 - 当前已验证：当前本地在线状态并非单纯由包记录决定；`LocalPackageSupervisor` 通过子进程连接 `ExternalPackageRegistryAdapter` 后才完成 online gate。进程内方案必须把 Registry/RPC 依赖重接到直接 runtime capability，不能只删除 spawn 和 `externalBin`。
 - 正确实现边界：由主进程内封闭 Wasm runtime owner 持有 Component/Store/Instance、Host capabilities、顺序调用、停用/重启/关闭清理和在线状态；本地路径不得保留 JSON-RPC、自连接、Sidecar fallback 或额外进程。
+- 当前已验证：完整桌面 CI run `33598183857` 的 Android、Windows/macOS Verify、Windows MSI/NSIS/portable 全部成功；唯一失败是 macOS DMG 构建。runner 原始错误为 `Error: Unknown option '--volumeName'`，发生在 `scripts/build-macos-universal.mjs` 调用 `diskutil image create from` 时。
+- 已确认根因：脚本使用了当前 GitHub macOS runner 不支持的 `diskutil image create from --volumeName` 参数组合；App universal binary 已完成编译，失败边界只在 DMG 容器创建。正确修复边界是改用 macOS 稳定的 `hdiutil create -volname ... -srcfolder ... -format UDZO` 合同并增加命令形状回归测试，不修改 App、签名、版本或其他发布步骤。
 
 ## 最小改动与最优设计比较
 
@@ -152,6 +155,7 @@
 | WPC-11 | 将本地、workspace MSRV、活动文档与全部 CI Rust 工具链统一到 `1.98.0` | WPC-10 | 否 | 已完成 | `rustc`/`cargo` 实际版本为 1.98.0，活动配置无 1.97，受影响检查和 CI 合同通过 |
 | WPC-12 | 在 `10.0.28.77` Windows App 重放历史 HTTP、ISO8583 Wasm 与 AU EFTEX Wasm 部署 | WPC-08、WPC-09、WPC-13 | 否 | 进行中 | 5 个 Socket Wasm 的真实加载、Display、规则命中/miss/fail-closed、客户端/受控上游原始字节、Exchange/diagnostics 和最终运行态已 VERIFIED；历史 HTTP 本轮 NOT_RUN，因此小任务不记为全部完成 |
 | WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
+| WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流成功并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
