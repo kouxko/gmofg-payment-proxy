@@ -71,7 +71,7 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
 ### 3.2 固定 Server
 
-1. 选择固定 Server 模式。
+1. 在“1. 响应方式”中选择“转发到固定 Server”。
 2. 填写唯一的 Server origin，例如 `http://127.0.0.1:19080` 或测试 HTTPS origin。
 3. 一个 Listener 只绑定一个 endpoint；Host、端口或证书策略变化时建立另一个 Listener。
 4. HTTP origin 只执行 TCP 探测；HTTPS origin 额外执行 TLS/hostname/CA 探测。
@@ -79,9 +79,10 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
 固定 Server 模式不会因为请求携带其他 authority 而改连另一个目标。
 
-### 3.3 Local HTTP Server
+### 3.3 本机应答
 
-选择“使用 Local HTTP Server”后，Listener 不创建真实上游连接。请求仍先经过 Proxy → Server
+在“1. 响应方式”中选择“本机应答”后，Listener 不创建真实上游连接；另外两个选项分别按原请求
+目标转发或转发到固定 Server。使用本机应答时，请求仍先经过 Proxy → Server
 规则；未被终止动作直接生成响应时，本地 Server 将收到的 HTTP Context 原样回环，再进入
 Proxy → App 规则。两个阶段都可以使用 `Mock Response`；规则参数中的 `body` 直接填写文本，运行时
 按照最终响应 BodyCodec 编码为网络字节。
@@ -338,12 +339,15 @@ TLS 可移植材料。它不包含运行时报文、ExchangeObservation 或本�
 
 1. 连接一台或多台 Android 设备并允许 ADB；桌面最多保留 8 台设备的运行 owner。
 2. 在目标设备卡片安装/更新 Companion，所有安装、授权和包查询都只作用于该 serial。
-3. 为目标设备选择需要接管的应用 allowlist；包名、UID 和 shared UID 校验读取同一设备清单。
-4. 选择该设备使用的 Profile，确认桌面 Listener 地址可被设备访问。
-5. 启动设备侧 VPN，并在对应 Android 权限弹窗中确认。不同设备可使用各自 Profile 并行运行。
-6. 在每台设备卡片分别检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态；离线 owner 会保留并等待同
+3. 新建或选择设备网络方案，再从目标应用列表中选择需要接管的应用；弱网只作用于这些应用。
+4. 在“常用弱网效果”中填写延迟、延迟波动、丢包率和上下行限速。弱网可以单独保存并启动，不要求
+   配置桌面代理入口。
+5. 只有需要时才展开“更多设置”：运行保护、弱网作用范围、同时接入代理调试和专家参数。若配置代理
+   调试，还要确认对应桌面 Listener 地址可被设备访问。
+6. 保存并启动设备侧 VPN，在对应 Android 权限弹窗中确认。不同设备可使用各自方案并行运行。
+7. 在每台设备卡片分别检查 TUN、SOCKS5、ADB reverse 或 LAN 路由状态；离线 owner 会保留并等待同
    serial 重连，不影响其他设备。
-7. 应用、停止和紧急恢复都绑定设备 serial 与当前 runtime epoch；完成后逐设备停止并清理其
+8. 应用、停止和紧急恢复都绑定设备 serial 与当前 runtime epoch；完成后逐设备停止并清理其
    forward/reverse/owner 状态。
 
 设备能连接桌面端口只证明网络可达；还要分别证明 TLS、代理转发、规则命中和业务回复。

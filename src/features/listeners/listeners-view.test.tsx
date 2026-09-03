@@ -52,12 +52,14 @@ describe("统一代理监听编辑器", () => {
   it("默认按请求目标转发，并可在同一监听启用固定 Server", async () => {
     const user = userEvent.setup();
     render(<ListenersView />);
-    expect(await screen.findByText("HTTP Server 模式")).toBeVisible();
-    expect(screen.getByText("按原请求目标转发")).toBeVisible();
+    expect(await screen.findByText("1. 响应方式")).toBeVisible();
+    const responseMode = screen.getByLabelText("HTTP 响应方式");
+    expect(responseMode).toHaveTextContent("按原请求目标转发");
     expect(screen.getByText(/读取每个请求中的目标主机和端口/)).toBeVisible();
     expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
-    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(responseMode);
+    await user.click(await screen.findByRole("option", { name: "转发到固定 Server" }));
     const serverUrl = await screen.findByRole("textbox", { name: "固定 Server URL" });
     await user.type(serverUrl, "https://server.test:443");
     expect(screen.getByText("固定 Server 目标")).toBeVisible();
@@ -73,18 +75,28 @@ describe("统一代理监听编辑器", () => {
     expect(screen.getByText(/自动模式遵循 Header；强制模式覆盖 charset/)).toBeVisible();
     expect(screen.getByRole("button", { name: /请求正文编码/ })).toBeVisible();
     expect(screen.getByRole("button", { name: /响应正文编码/ })).toBeVisible();
-    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(responseMode);
+    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
-    expect(screen.getByText("按原请求目标转发")).toBeVisible();
+    expect(responseMode).toHaveTextContent("按原请求目标转发");
   });
 
-  it("可切换到 Local HTTP Server 并保存互斥 topology", async () => {
+  it("使用与 Socket 一致的响应方式下拉切换并保存 HTTP topology", async () => {
     const user = userEvent.setup();
     render(<ListenersView />);
 
-    await user.click(await screen.findByRole("switch", { name: "使用 Local HTTP Server" }));
-    expect(screen.getByText("Local HTTP Server")).toBeVisible();
-    expect(screen.getByText(/不连接外部 Server/)).toBeVisible();
+    const responseMode = await screen.findByLabelText("HTTP 响应方式");
+    expect(responseMode).toHaveTextContent("按原请求目标转发");
+    expect(screen.queryByRole("switch", { name: "使用 Local HTTP Server" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("switch", { name: "转发到固定 Server" })).not.toBeInTheDocument();
+    await user.click(responseMode);
+    await user.click(await screen.findByRole("option", { name: "转发到固定 Server" }));
+    expect(responseMode).toHaveTextContent("转发到固定 Server");
+    expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toBeVisible();
+
+    await user.click(responseMode);
+    await user.click(await screen.findByRole("option", { name: "本机应答" }));
+    expect(responseMode).toHaveTextContent("本机应答");
     expect(screen.queryByRole("switch", { name: "转发到固定 Server" })).not.toBeInTheDocument();
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
 
@@ -94,6 +106,11 @@ describe("统一代理监听编辑器", () => {
       kind: "http",
       settings: { topology: { mode: "local_server" } },
     });
+
+    await user.click(responseMode);
+    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
+    expect(responseMode).toHaveTextContent("按原请求目标转发");
+    expect(screen.queryByRole("switch", { name: "转发到固定 Server" })).not.toBeInTheDocument();
   });
 
   it("固定 Server 关闭时保留 Basic 与 MITM 设置", async () => {
@@ -219,7 +236,8 @@ describe("统一代理监听编辑器", () => {
     render(<ListenersView />);
 
     await user.click(await screen.findByRole("button", { name: "新建代理监听" }));
-    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(screen.getByLabelText("HTTP 响应方式"));
+    await user.click(await screen.findByRole("option", { name: "转发到固定 Server" }));
     await user.type(
       screen.getByRole("textbox", { name: "固定 Server URL" }),
       "https://server.test:443",

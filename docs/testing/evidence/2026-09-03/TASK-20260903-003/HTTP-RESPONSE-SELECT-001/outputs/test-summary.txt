@@ -1,0 +1,10 @@
+PASS  deno task test src/features/listeners/listeners-view.test.tsx src/features/listeners/listeners-view.certificates.test.tsx
+      Test Files  2 passed (2)
+      Tests       32 passed (32)
+
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  git diff --check
+PASS  deno task tauri build --bundles app
+PASS  codesign --verify --deep --strict --verbose=2 /Applications/Intercept Proxy.app
+PASS  installed app live UI: HTTP response select contains three options and no fixed-server switch

@@ -1,6 +1,6 @@
 "use client";
 
-import { Card, Input, Label, Switch } from "@heroui/react";
+import { Card, Input, Label, ListBox, Select } from "@heroui/react";
 import type {
   FixedServerSettings,
   HttpListenerSettings,
@@ -22,48 +22,58 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
   const fixedServer = settings.topology.mode === "remote_server"
     ? settings.topology.settings.fixed_server
     : null;
+  const responseMode = localServer
+    ? "local_server"
+    : fixedServer
+      ? "fixed_server"
+      : "request_target";
 
-  function changeMode(enabled: boolean) {
+  function changeResponseMode(mode: "request_target" | "fixed_server" | "local_server") {
     onChange({
-      topology: {
-        mode: "remote_server",
-        settings: { fixed_server: enabled ? defaultFixedServer() : null },
-      },
-    });
-  }
-
-  function changeLocalServer(enabled: boolean) {
-    onChange({
-      topology: enabled
+      topology: mode === "local_server"
         ? { mode: "local_server" }
-        : { mode: "remote_server", settings: { fixed_server: null } },
+        : {
+            mode: "remote_server",
+            settings: {
+              fixed_server: mode === "fixed_server" ? defaultFixedServer() : null,
+            },
+          },
     });
   }
 
   return (
     <Card className="col-span-2 max-[700px]:col-span-1">
       <Card.Header>
-        <Card.Title>HTTP Server 模式</Card.Title>
+        <Card.Title>1. 响应方式</Card.Title>
         <Card.Description>
-          真实 Server 会转发请求；LocalServer 在进程内原样回环，并继续执行上下行规则。
+          选择把 HTTP 请求转发到上游服务，还是由本机直接生成应答。
         </Card.Description>
       </Card.Header>
       <Card.Content className="space-y-5">
-        <div className="flex items-center justify-between gap-4 rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3">
-          <div>
-            <p className="font-medium">{localServer ? "Local HTTP Server" : "真实 Server"}</p>
-            <p className="text-sm text-[var(--telemetry-muted)]">
-              {localServer
-                ? "不连接外部 Server；Proxy→Server 与 Proxy→App 仍经过同一套规则。"
-                : "按请求目标或固定 Server 建立真实上游连接。"}
-            </p>
-          </div>
-          <Switch aria-label="使用 Local HTTP Server" isSelected={localServer} onChange={changeLocalServer}>
-            <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content>
-          </Switch>
+        <div className="grid gap-4 md:grid-cols-2">
+          <Select
+            aria-label="HTTP 响应方式"
+            selectedKey={responseMode}
+            onSelectionChange={(key) => {
+              if (key === "request_target" || key === "fixed_server" || key === "local_server") {
+                changeResponseMode(key);
+              }
+            }}
+          >
+            <Label>响应方式</Label>
+            <Select.Trigger className="h-10 min-h-10">
+              <Select.Value className="truncate" />
+              <Select.Indicator />
+            </Select.Trigger>
+            <Select.Popover><ListBox>
+              <ListBox.Item id="request_target" textValue="按原请求目标转发">按原请求目标转发</ListBox.Item>
+              <ListBox.Item id="fixed_server" textValue="转发到固定 Server">转发到固定 Server</ListBox.Item>
+              <ListBox.Item id="local_server" textValue="本机应答">本机应答</ListBox.Item>
+            </ListBox></Select.Popover>
+          </Select>
         </div>
 
-        {!localServer && <div className="flex items-center justify-between gap-4 rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3">
+        {!localServer && <div className="rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3">
           <div>
             <p className="font-medium">
               {fixedServer ? "转发到固定 Server" : "按原请求目标转发"}
@@ -74,15 +84,6 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
                 : "读取每个请求中的目标主机和端口，适用于标准 HTTP/HTTPS 正向代理。"}
             </p>
           </div>
-          <Switch
-            aria-label="转发到固定 Server"
-            isSelected={fixedServer !== null}
-            onChange={changeMode}
-          >
-            <Switch.Content>
-              <Switch.Control><Switch.Thumb /></Switch.Control>
-            </Switch.Content>
-          </Switch>
         </div>}
 
         {!localServer && fixedServer && (
