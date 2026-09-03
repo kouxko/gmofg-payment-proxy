@@ -27,7 +27,7 @@ App 断开或 Server 读写失败时，该 Exchange 结束。
 
 App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-- HTTP 内容可以组合 Method、Path、Header、终端/证书条件与可选的协议 Document 条件，
+- HTTP 内容可以组合 Method、Path、Header 与可选的协议 Document 条件，
   并执行 HTTP 修改、故障、Mock 或 Document 动作。UI 中的 `Path（包含 Query 参数）` 始终是原始
   `/path?query`，请求与
   对应响应阶段读取同一份请求元数据，不包含 scheme、host 或 port。Header 名称使用单层 `/name`
@@ -181,6 +181,7 @@ prepare 静态校验 Component、Manifest 和 Schema。commit 会先在主进程
 Display 是协议包生成的 HTML 展示结果。App 会清洗并放入无能力 sandbox iframe：
 
 - 递归 Document、规则过程和最终值按 typed evidence 展示；
+- 宽表保留字段列宽，超出详情可视区域时在表格内横向滚动查看；
 - 不执行 script、事件属性、URL 导航或表单；
 - Display 失败时 HTTP 回退 Body、Socket 回退 Hex；
 - Display 失败属于观测失败，不改变已经成功的网络交易。

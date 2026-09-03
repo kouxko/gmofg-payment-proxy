@@ -1,0 +1,26 @@
+{
+  "task_id": "TASK-20260903-010",
+  "case_id": "gmofg-dll-json-tree-display",
+  "result": "PASS_WITH_RUNNING_APP_VISUAL_NOT_RUN",
+  "contracts": {
+    "complete_json_container_tree": "PASS",
+    "root_basic_information_open": "PASS",
+    "nested_containers_closed_and_toggleable": "PASS",
+    "field_names_array_indexes_types_and_counts": "PASS",
+    "dollar_jsonpath_removed": "PASS",
+    "table_colors_preserved": "PASS",
+    "horizontal_scroller_preserved": "PASS",
+    "details_summary_open_sanitized": "PASS",
+    "event_capabilities_removed": "PASS",
+    "source_and_node_limits_preserved": "PASS"
+  },
+  "tests": {
+    "package": { "passed": 14, "failed": 0 },
+    "host": { "passed": 1, "failed": 0 },
+    "safe_display": { "passed": 13, "failed": 0 }
+  },
+  "wasm": {
+    "bytes": 537608,
+    "sha256": "98f8a15009f52dda74a05c40b802dbe0f1ff0027294da76d67d1511e57df6074"
+  }
+}

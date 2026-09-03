@@ -1,0 +1,29 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-009",
+  "case_id": "PROTOCOL-DISPLAY-TABLE-SCROLL-001",
+  "executed_at": "2026-09-03 16:45:10 +08:00",
+  "completed_at": "2026-09-03 16:46:43 +08:00",
+  "repository_head": "c2fd81e9382a7adc36615ec7d64a03f267fc4605",
+  "tested_state": "repository HEAD plus current TASK-20260903-009 workspace changes",
+  "environment": {
+    "os": "macOS",
+    "frontend": "Deno, Vitest, Next.js 16.2.12",
+    "backend": "Rust, Cargo"
+  },
+  "result": "PASS",
+  "results": {
+    "targeted_frontend_tests": "4 files, 35 tests passed",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "rustfmt_check": "PASS",
+    "git_diff_check": "PASS",
+    "frontend_production_build": "PASS, 13 static pages generated",
+    "disabled_rule_runtime_regression": "PASS, 1 test passed"
+  },
+  "not_applicable": {
+    "protocol_binary_evidence": "No network message or protocol bytes are changed by the Display layout contract test.",
+    "ui_screenshot": "User explicitly chose to perform UI verification independently."
+  },
+  "replay": "Run the commands recorded in outputs/test-summary.txt from the repository root."
+}

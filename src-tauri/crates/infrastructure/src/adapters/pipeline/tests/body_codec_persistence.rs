@@ -70,7 +70,7 @@ async fn frozen_body_codec_pipeline_progresses_while_sqlite_executor_is_occupied
 }
 
 #[tokio::test(flavor = "current_thread")]
-async fn request_stage_mock_text_is_encoded_with_the_response_codec() {
+async fn request_stage_mock_uses_the_response_codec_and_stops_after_runtime_disable() {
     use intercept_proxy_domain::{
         BodyCodecKind, Condition, HttpListenerSettings, HttpRuleContent, ListenerDataPlane,
         ListenerId, MatchField, MatchOperator, ProxyListener, RuleContent, RuleDefinition,
@@ -116,11 +116,12 @@ async fn request_stage_mock_text_is_encoded_with_the_response_codec() {
     let epoch = Uuid::new_v4();
     let resolver = Arc::new(WorkspaceBodyCodecResolver::new());
     resolver.install_listener(epoch, Uuid::new_v4(), &listener);
+    let rules = Arc::new(StaticRules {
+        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
+    });
     let pipeline = RuntimePipelineAdapter::new(
         test_product_hooks(),
-        Arc::new(StaticRules {
-            snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
-        }),
+        rules.clone(),
         Arc::new(InMemorySessionStore::default()),
         Arc::new(EventHub::new(8)),
         test_capture_repository(),
@@ -144,4 +145,28 @@ async fn request_stage_mock_text_is_encoded_with_the_response_codec() {
     let (expected, _, had_errors) = encoding_rs::SHIFT_JIS.encode("結果D48");
     assert!(!had_errors);
     assert_eq!(mock_body, expected.as_ref());
+
+    {
+        let mut snapshot = rules.snapshot.lock();
+        let mut disabled = snapshot.rules[0].clone();
+        disabled
+            .set_enabled(disabled.revision(), false)
+            .expect("disable the persisted runtime rule");
+        *snapshot = RuleRuntimeSnapshot::with_collection_identity_and_order(
+            snapshot.collection_id,
+            snapshot.collection_revision + 1,
+            vec![disabled],
+            snapshot.execution_order.clone(),
+        );
+    }
+
+    let mut request_after_disable = request_message("request after disable");
+    let actions_after_disable = pipeline
+        .apply_request_policy(&context, request_metadata(), &mut request_after_disable)
+        .await
+        .unwrap();
+    assert!(
+        actions_after_disable.is_empty(),
+        "the next message on the same connection must not execute a disabled MockResponse"
+    );
 }

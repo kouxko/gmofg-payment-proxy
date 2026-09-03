@@ -48,12 +48,6 @@ pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel
         selector,
     };
     let match_fields = vec![
-        capability(Field::TerminalIp, string_operators.clone(), None),
-        capability(
-            Field::CertificateFingerprint,
-            string_operators.clone(),
-            None,
-        ),
         capability(Field::Method, vec![Operator::Equals], None),
         capability(Field::RequestTarget, string_operators.clone(), None),
         capability(
@@ -140,5 +134,29 @@ const fn action_parameters_required(kind: RuleActionKind) -> bool {
         | Action::TruncateResponse
         | Action::DisconnectDuringUpstreamWrite
         | Action::DisconnectDuringDownstreamWrite => true,
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn http_rule_editor_exposes_only_message_match_fields() {
+        for stage in [RuleStage::ProxyToUpstream, RuleStage::ProxyToApp] {
+            let kinds = stage_capability(stage)
+                .match_fields
+                .into_iter()
+                .map(|field| field.kind)
+                .collect::<Vec<_>>();
+            assert_eq!(
+                kinds,
+                vec![
+                    RuleMatchFieldKind::Method,
+                    RuleMatchFieldKind::RequestTarget,
+                    RuleMatchFieldKind::Header,
+                ]
+            );
+        }
     }
 }

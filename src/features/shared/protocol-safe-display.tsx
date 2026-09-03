@@ -3,12 +3,13 @@
 import { useEffect, useState } from "react";
 import { Alert, Spinner } from "@heroui/react";
 
-const DISPLAY_SOURCE_LIMIT = 128 * 1024;
-const DISPLAY_NODE_LIMIT = 4_096;
+const DISPLAY_SOURCE_LIMIT = 1024 * 1024;
+const DISPLAY_NODE_LIMIT = 8_192;
 const DISPLAY_DEPTH_LIMIT = 128;
 const SAFE_ELEMENTS = new Set([
   "article", "section", "div", "span", "p", "br", "hr", "strong", "em", "b", "i", "code", "pre",
   "h1", "h2", "h3", "h4", "h5", "h6", "ul", "ol", "li", "dl", "dt", "dd",
+  "details", "summary",
   "table", "caption", "thead", "tbody", "tfoot", "tr", "th", "td",
 ]);
 const DROP_WITH_CONTENT = new Set([
@@ -16,6 +17,8 @@ const DROP_WITH_CONTENT = new Set([
   "input", "button", "select", "textarea", "video", "audio", "canvas", "link", "meta", "base",
 ]);
 const DISPLAY_CLASSES: Partial<Record<string, string>> = {
+  details: "protocol-display-tree-node",
+  summary: "protocol-display-tree-summary",
   table: "protocol-display-table",
   caption: "protocol-display-caption",
   thead: "protocol-display-head",
@@ -36,15 +39,21 @@ const UNSAFE_STYLE_VALUE = /url\s*\(|expression\s*\(|javascript\s*:|data\s*:|@im
 const CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; media-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; style-src 'unsafe-inline'";
 const HOST_STYLE = `
 :root{color-scheme:light dark;font:14px/1.55 system-ui,sans-serif}body{margin:0;padding:16px;color:#172033;background:transparent}
-.protocol-display-table{border-collapse:separate;border-spacing:0;width:100%;overflow:hidden;border:1px solid #d5dbe5;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}
+.protocol-display-tree-node{margin:8px 0;padding:0 10px 10px;border:1px solid #d5dbe5;border-radius:10px}
+.protocol-display-tree-node .protocol-display-tree-node{margin-left:16px}
+.protocol-display-tree-summary{display:flex;align-items:baseline;gap:10px;padding:9px 2px;cursor:pointer;font-weight:600}
+.protocol-display-tree-summary>span{margin-left:auto;color:#64748b;font-size:12px;font-weight:500}
+.protocol-display-tree-node:not([open])>.protocol-display-tree-summary{padding-bottom:0}
+.protocol-display-scroll{max-width:100%;overflow-x:auto;overscroll-behavior-inline:contain}
+.protocol-display-table{border-collapse:separate;border-spacing:0;width:max-content;min-width:100%;overflow:hidden;border:1px solid #d5dbe5;border-radius:12px;background:#fff;box-shadow:0 1px 2px rgba(15,23,42,.05)}
 .protocol-display-caption{padding:0 0 10px;text-align:left;font-weight:650;color:#334155}
-.protocol-display-header,.protocol-display-cell{padding:10px 12px;text-align:left;vertical-align:top;border:0;border-bottom:1px solid #e2e7ef}
+.protocol-display-header,.protocol-display-cell{padding:10px 12px;text-align:left;vertical-align:top;white-space:pre;overflow-wrap:normal;word-break:normal;border:0;border-bottom:1px solid #e2e7ef}
 .protocol-display-header{background:#f4f6f9;color:#334155;font-weight:650}
 .protocol-display-row>:not(:first-child){border-left:1px solid #e2e7ef}
 .protocol-display-body .protocol-display-row:nth-child(even) .protocol-display-cell{background:#f8fafc}
 .protocol-display-body .protocol-display-row:last-child .protocol-display-cell,.protocol-display-foot .protocol-display-row:last-child>*{border-bottom:0}
 pre,code{font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere}
-@media(prefers-color-scheme:dark){body{color:#e7ecf3}.protocol-display-table{border-color:#3a414d;background:#171a1f;box-shadow:none}.protocol-display-caption{color:#d8dee8}.protocol-display-header{background:#23272f;color:#f1f4f8}.protocol-display-header,.protocol-display-cell{border-bottom-color:#353b46}.protocol-display-row>:not(:first-child){border-left-color:#353b46}.protocol-display-body .protocol-display-row:nth-child(even) .protocol-display-cell{background:#1d2128}}
+@media(prefers-color-scheme:dark){body{color:#e7ecf3}.protocol-display-tree-node{border-color:#3a414d}.protocol-display-tree-summary>span{color:#a8b2c1}.protocol-display-table{border-color:#3a414d;background:#171a1f;box-shadow:none}.protocol-display-caption{color:#d8dee8}.protocol-display-header{background:#23272f;color:#f1f4f8}.protocol-display-header,.protocol-display-cell{border-bottom-color:#353b46}.protocol-display-row>:not(:first-child){border-left-color:#353b46}.protocol-display-body .protocol-display-row:nth-child(even) .protocol-display-cell{background:#1d2128}}
 `;
 
 export function displayHtmlIsTooLarge(html: string): boolean {
@@ -60,6 +69,7 @@ function createSafeElement(node: Element, output: Document): HTMLElement | undef
   if (displayClass) element.className = displayClass;
   const title = node.getAttribute("title");
   if (title) element.setAttribute("title", title.slice(0, 512));
+  if (tag === "details" && node.hasAttribute("open")) element.setAttribute("open", "");
   copySafeInlineStyle(node, element, output);
   if (tag === "td" || tag === "th") {
     for (const name of ["colspan", "rowspan"] as const) {
@@ -117,7 +127,14 @@ function sanitizeDisplay(html: string): string | undefined {
     if (DROP_WITH_CONTENT.has(tag)) continue;
     const safe = createSafeElement(current.node, output);
     const parent = safe ?? current.parent;
-    if (safe) current.parent.appendChild(safe);
+    if (safe && tag === "table") {
+      const scroller = output.createElement("div");
+      scroller.className = "protocol-display-scroll";
+      current.parent.appendChild(scroller);
+      scroller.appendChild(safe);
+    } else if (safe) {
+      current.parent.appendChild(safe);
+    }
     for (let index = current.node.childNodes.length - 1; index >= 0; index -= 1) {
       const child = current.node.childNodes.item(index);
       if (child) pending.push({ node: child, parent, depth: current.depth + 1 });
@@ -160,7 +177,7 @@ export function ProtocolSafeDisplay({ html }: { html: string }) {
       <Alert status="warning">
         <Alert.Indicator />
         <Alert.Content>
-          <Alert.Title>协议视图超过 128 KiB，已禁止渲染</Alert.Title>
+          <Alert.Title>协议视图超过 1 MiB，已禁止渲染</Alert.Title>
           <Alert.Description>原始字节仍保留在当前 Exchange 记录中。</Alert.Description>
         </Alert.Content>
       </Alert>
