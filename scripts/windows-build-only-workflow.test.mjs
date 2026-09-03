@@ -63,6 +63,29 @@ test("full desktop release never exposes the quick-build bypass", async () => {
   );
 });
 
+test("full desktop release shares one cached Cargo target across runtime gates", async () => {
+  const source = await readFile(releaseWorkflowPath, "utf8");
+  const verifyJob = source.slice(
+    source.indexOf("  verify:"),
+    source.indexOf("  build:"),
+  );
+
+  assert.match(
+    verifyJob,
+    /env:\s*\n(?:\s*#.*\n)*\s*CARGO_TARGET_DIR: src-tauri\/target/u,
+  );
+  assert.match(verifyJob, /CARGO_PROFILE_DEV_DEBUG: "0"/u);
+  assert.match(verifyJob, /workspaces: src-tauri -> target/u);
+  assert.match(
+    verifyJob,
+    /test-support\/emulator-proxy-gate\/Cargo\.toml/u,
+  );
+  assert.match(
+    verifyJob,
+    /test-support\/socket-relay-gate\/Cargo\.toml/u,
+  );
+});
+
 test("tagged desktop releases distinguish complete signing from explicit unsigned mode", async () => {
   const source = await readFile(releaseWorkflowPath, "utf8");
 
