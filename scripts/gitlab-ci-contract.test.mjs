@@ -186,6 +186,7 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
 
 test("Android and Windows build-only mode packages the Companion without running other gates", async () => {
   const source = await readWorkflow();
+  const androidEnvironmentJob = topLevelBlock(source, "android_environment");
   const tauriConfig = JSON.parse(
     await readRepositoryFile("src-tauri/tauri.conf.json"),
   );
@@ -197,6 +198,23 @@ test("Android and Windows build-only mode packages the Companion without running
   const verifyJob = topLevelBlock(source, "verify_windows");
   const packageJob = topLevelBlock(source, "package_windows_unsigned");
   const buildOnlyJob = topLevelBlock(source, "windows_build_only");
+
+  assert.match(
+    androidEnvironmentJob,
+    /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,
+  );
+  assert.match(
+    androidEnvironmentJob,
+    /source scripts\/ci\/bootstrap-gitlab-linux\.sh android/u,
+  );
+  assert.doesNotMatch(
+    androidEnvironmentJob,
+    /(?:^|\n)[ ]*-[ ]+(?:deno task|cargo test|gradle|lint|clippy|audit)(?:[ ]|$)/u,
+  );
+  assert.match(
+    androidJob,
+    /job: android_environment\n[ ]{6}optional: true/u,
+  );
 
   assert.match(
     androidJob,

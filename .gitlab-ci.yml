@@ -42,6 +42,33 @@ variables:
   CARGO_TERM_COLOR: "always"
   CARGO_INCREMENTAL: "0"
 
+android_environment:
+  stage: prepare
+  image: ubuntu:24.04
+  tags:
+    - "docker test"
+  timeout: 45m
+  interruptible: true
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
+    - when: never
+  cache:
+    key:
+      files:
+        - android-companion/settings.gradle.kts
+        - src-tauri/Cargo.lock
+      prefix: "android-linux-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+  before_script:
+    - source scripts/ci/configure-ubuntu-apt-mirror.sh
+    - apt-get update
+    - >-
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
+        aria2 ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
+  script:
+    - source scripts/ci/bootstrap-gitlab-linux.sh android
+
 android_companion:
   stage: prepare
   image: ubuntu:24.04
@@ -49,6 +76,9 @@ android_companion:
     - "docker test"
   timeout: 45m
   interruptible: true
+  needs:
+    - job: android_environment
+      optional: true
   cache:
     key:
       files:
