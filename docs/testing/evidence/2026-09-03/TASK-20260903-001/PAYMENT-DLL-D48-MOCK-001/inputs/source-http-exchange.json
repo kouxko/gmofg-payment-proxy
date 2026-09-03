@@ -1,0 +1,19 @@
+{
+  "exchange_id": "a29db31153cc42c5a4f75b756b1b70e0",
+  "listener_id": "06acc281-217c-4bb9-933b-ef6d42f0eb9a",
+  "request": {
+    "method": "POST",
+    "target": "/",
+    "body": "{\"ConfirmCode\":\"32EB94A0F86D08177C4FEE95151D9C74\",\"Password\":\"ED1B87676BE00EE3908DD72B832FAD3A\",\"RequestDateTime\":\"20260903125545\",\"RequestID\":\"R\",\"TerminalID\":\"7777777700390\",\"TransactionType\":\"0001\",\"Yobi\":\"                \"}"
+  },
+  "response": {
+    "status": 200,
+    "headers": [
+      ["Cache-control", "private"],
+      ["Content-Type", "text/csv;charset=Shift_JIS"],
+      ["Date", "Thu,3 Sep 2026 12:55:48 GMT"],
+      ["Content-Length", "118"]
+    ],
+    "body": "{\"ErrorCode\":\"D48\",\"ResponseID\":\"A\",\"TransactionType\":\"0001\",\"ResponseTimeStamp\":\"20260903125548570\",\"DebitInp\":\"   \"}"
+  }
+}

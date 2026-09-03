@@ -7,6 +7,7 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260903-001 | PAYMENT-DLL-D48-MOCK-001 | 从 Payment DLL HTTP 抓包创建启用的 D48 Mock，以本机不可达上游证明 terminal 命中，并用 MCP 回读规则、抓包、固定 Root 和上游身份引用；保留 MCP 完整候选的 TLS domain 不兼容结果 | PASS_WITH_MCP_FULL_CANDIDATE_INCOMPATIBILITY | TASK-20260902-003 | fixed-test-root-regression | [父证据](2026-09-02/TASK-20260902-003/fixed-test-root-regression/README.md) | [证据](2026-09-03/TASK-20260903-001/PAYMENT-DLL-D48-MOCK-001/README.md) |
 | TASK-20260901-001 | wasm-only-package-source-cleanup | 删除四组 Python、Deno/TypeScript、Rhai/ZIP 重复实现，只保留五个 Rust Component；统一包测试构建 20/20、正式 Host 2/2、typecheck、lint、source-size 与活动文件扫描通过 | PASS | TASK-20260901-001 | wasm-integrated-runtime | [父证据](2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md) | [证据](2026-09-03/TASK-20260901-001/wasm-only-package-source-cleanup/README.md) |
 | TASK-20260901-001 | json-pretty-wasm-example | 交付无 Schema JSON Pretty HTTP Wasm、编辑器式分色和安全内联视觉样式；统一导入/详情/Listener 目录 nullable Schema 与 HTTP frame 合同，69 项定向前端测试、typecheck、开发构建及本地 App 用户验收通过 | LOCAL_APP_VERIFIED | TASK-20260901-001 | wasm-integrated-runtime | [父证据](2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md) | [证据](2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md) |
 

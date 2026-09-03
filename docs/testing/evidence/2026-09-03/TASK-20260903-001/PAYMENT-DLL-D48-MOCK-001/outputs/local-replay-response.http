@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+cache-control: private
+content-type: text/csv;charset=Shift_JIS
+date: Thu,3 Sep 2026 12:55:48 GMT
+content-length: 118
+
+{"ErrorCode":"D48","ResponseID":"A","TransactionType":"0001","ResponseTimeStamp":"20260903125548570","DebitInp":"   "}
