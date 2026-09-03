@@ -270,6 +270,8 @@ transport 缓冲区，下一轮才处理。App Reader EOF 正常结束；Server 
 `Server<P>` 是统一 Endpoint 端口：
 
 - Remote HTTP：`BufferedHttpServer` 的 Writer 调用真实 `UpstreamConnector`，Reader 返回响应。
+- Local HTTP：`LocalHttpServer` 原样回环 HTTP Context，不创建 `UpstreamConnector`，响应继续进入
+  downstream Pipeline。
 - Remote Socket：`RemoteSocketServer` 延迟建立 TCP/TLS，并暴露 Socket Reader/Writer。
 - Local protocol：`LocalServer<P>` 使用容量为 1 的 channel，把 upstream Context 原样交给
   downstream Reader；downstream Pipeline 仍会执行 Decode、Display、Rules、Encode。

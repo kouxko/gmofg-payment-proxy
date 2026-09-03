@@ -5,8 +5,8 @@ use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, Condition,
     DownstreamClientAuthentication, DownstreamTlsSettings, FixedServerSettings, HttpAction,
-    HttpListenerSettings, ListenerDataPlane, ListenerId, ProxyListener, Revision as DomainRevision,
-    UpstreamTlsSettings, WeakNetworkProfile,
+    HttpListenerSettings, HttpTopology, ListenerDataPlane, ListenerId, ProxyListener,
+    Revision as DomainRevision, UpstreamTlsSettings, WeakNetworkProfile,
 };
 use std::{collections::BTreeSet, sync::Arc};
 
@@ -181,14 +181,14 @@ fn referenced_workspace() -> ProxyWorkspace {
                 },
                 request_body_codec: BodyCodecKind::Utf8,
                 response_body_codec: BodyCodecKind::ShiftJis,
-                fixed_server: Some(FixedServerSettings {
+                topology: HttpTopology::remote(Some(FixedServerSettings {
                     upstream_url: "https://example.test".into(),
                     upstream_tls: UpstreamTlsSettings {
                         verify_hostname: true,
                         server_trust: Some(upstream_trust),
                         client_identity: Some(upstream_identity),
                     },
-                }),
+                })),
                 ..HttpListenerSettings::default()
             }),
             ..ProxyListener::default()

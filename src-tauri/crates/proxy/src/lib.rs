@@ -25,8 +25,9 @@ pub use forward::{
 };
 pub use http::{
     ConnectionAdmission, ConnectionService, HttpConnectionIdentity, HttpDirectionCapabilities,
-    HttpObservationMetadata, HttpProtocolCapabilityFactory, NoopPipelinePorts, PipelinePorts,
-    PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
+    HttpObservationMetadata, HttpProtocolCapabilityFactory, LocalHttpServerConfig,
+    LocalHttpServerService, NoopPipelinePorts, PipelinePorts, PlainHttpCapabilityFactory,
+    RulesChain, UpstreamConnector,
 };
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};

@@ -259,6 +259,11 @@ impl ListenerRuntimePort for ListenerRuntimeAdapter {
                 "该代理监听未配置固定 Server，没有上游连接可测试。",
             )
             .entity(listener.id.to_string())),
+            PreparedListenerRuntime::HttpLocal { .. } => Err(AppError::new(
+                "LISTENER_UPSTREAM_NOT_APPLICABLE",
+                "HTTP LocalServer 没有可测试的真实 Server 上游。",
+            )
+            .entity(listener.id.to_string())),
         }
     }
 }
@@ -331,8 +336,7 @@ impl ExternalPackageListenerRuntime for ListenerRuntimeAdapter {
 fn ensure_upstream_tls_enabled(listener: &ProxyListener) -> AppResult<()> {
     let enabled = match &listener.data_plane {
         intercept_proxy_domain::ListenerDataPlane::Http(http) => http
-            .fixed_server
-            .as_ref()
+            .fixed_server()
             .ok_or_else(|| {
                 AppError::new(
                     "FIXED_SERVER_NOT_CONFIGURED",

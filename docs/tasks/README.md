@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 15:04:03 +08:00 | [支持 HTTP LocalServer 与文本 Mock Body](completed/2026-09-03/http-local-server-and-text-mock-body.md) | HTTP Listener 显式选择 RemoteServer/LocalServer，Local 模式复用双向 Pipeline 且无真实上游；Mock 公共 body 改为文本并按响应 codec 写出，同时修复规则名称清空与 Path 选择器溢出 | PASS；Local HTTP 200/D48、双向规则各 1 次、公共合同/兼容/MCP/UI/绑定/静态门禁通过；CI NOT_RUN、对抗审查按用户要求跳过 | 高 | HTTP、LocalServer、MockResponse、BodyCodec、MCP、Rule、Path |
 | 12:37:48 +08:00 | [通过 MCP 验证并配置 Payment DLL 的 D48 Mock](completed/2026-09-03/configure-payment-dll-d48-mock.md) | 从 HTTP 抓包生成启用的 request-stage terminal Mock，保留固定 Root、Listener、Android 路由、上游身份引用和原规则，并完成无真实上游的本机命中重放 | PASS_WITH_MCP_FULL_CANDIDATE_INCOMPATIBILITY；Mock 命中 1 次、HTTP 200/118 字节 D48 响应逐字段一致；MCP 完整候选因动态签发 TLS 表达不兼容而未 apply | 高 | MCP、Payment DLL、HTTP、MockResponse、D48 |
 
 ## 2026-09-02

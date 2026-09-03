@@ -166,7 +166,7 @@ struct TestTarget {
 fn connection_target(listener: &ProxyListener) -> AppResult<TestTarget> {
     match &listener.data_plane {
         ListenerDataPlane::Http(settings) => {
-            let fixed = settings.fixed_server.as_ref().ok_or_else(|| {
+            let fixed = settings.fixed_server().ok_or_else(|| {
                 unsupported_connection_test(listener.id, "该 HTTP 监听器未开启固定 Server。")
             })?;
             let uses_tls = fixed.upstream_url.starts_with("https://");

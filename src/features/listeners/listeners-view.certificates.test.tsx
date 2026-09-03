@@ -71,7 +71,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(
-      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_tls.server_trust,
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.topology.settings.fixed_server.upstream_tls.server_trust,
     ).toBe("ca-ref-1");
     expect(await screen.findByText("CN=测试上游 CA")).toBeVisible();
     expect(screen.getByText("AA:BB:CC:DD")).toBeVisible();
@@ -195,13 +195,13 @@ describe("统一代理监听编辑器", () => {
             kind: "http" as const,
             settings: {
               ...fixedWorkspace.listeners[0].data_plane.settings,
-              fixed_server: {
-                ...fixedWorkspace.listeners[0].data_plane.settings.fixed_server!,
-                upstream_tls: {
-                  ...fixedWorkspace.listeners[0].data_plane.settings.fixed_server!.upstream_tls,
-                  server_trust: trust.id,
-                },
-              },
+              topology: { mode: "remote_server", settings: { fixed_server: {
+                  ...fixedWorkspace.listeners[0].data_plane.settings.topology.settings.fixed_server!,
+                  upstream_tls: {
+                    ...fixedWorkspace.listeners[0].data_plane.settings.topology.settings.fixed_server!.upstream_tls,
+                    server_trust: trust.id,
+                  },
+                } } },
             },
           },
         }],
@@ -262,13 +262,13 @@ describe("统一代理监听编辑器", () => {
         kind: "http" as const,
         settings: {
           ...base.data_plane.settings,
-          fixed_server: {
-            ...base.data_plane.settings.fixed_server!,
-            upstream_tls: {
-              ...base.data_plane.settings.fixed_server!.upstream_tls,
-              server_trust: trust.id,
-            },
-          },
+          topology: { mode: "remote_server", settings: { fixed_server: {
+              ...base.data_plane.settings.topology.settings.fixed_server!,
+              upstream_tls: {
+                ...base.data_plane.settings.topology.settings.fixed_server!.upstream_tls,
+                server_trust: trust.id,
+              },
+            } } },
         },
       },
     };

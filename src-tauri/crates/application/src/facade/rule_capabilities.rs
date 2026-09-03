@@ -90,6 +90,7 @@ pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel
             .map(|kind| (kind, false))
             .chain([
                 (Action::CustomHttpStatus, false),
+                (Action::MockResponse, true),
                 (Action::InvalidJson, true),
                 (Action::IncorrectContentLength, true),
                 (Action::TruncateResponse, true),

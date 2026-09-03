@@ -1,5 +1,6 @@
 import type {
   HttpListenerSettings,
+  FixedServerSettings,
   ListenerDataPlane,
   ProxyListener,
   SocketDownstreamTlsSettings,
@@ -29,9 +30,17 @@ export function defaultHttpDataPlane(): ListenerDataPlane {
       request_body_codec: "auto",
       response_body_codec: "auto",
       body_processing: { mode: "plain" },
-      fixed_server: null,
+      topology: { mode: "remote_server", settings: { fixed_server: null } },
     },
   };
+}
+
+export function httpFixedServer(
+  settings: HttpListenerSettings,
+): FixedServerSettings | null {
+  return settings.topology.mode === "remote_server"
+    ? settings.topology.settings.fixed_server
+    : null;
 }
 
 export function defaultSocketDataPlane(): ListenerDataPlane {

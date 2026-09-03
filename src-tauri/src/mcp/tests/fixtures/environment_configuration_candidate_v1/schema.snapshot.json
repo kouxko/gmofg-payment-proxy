@@ -2340,52 +2340,6 @@
                     ],
                     "type": "object"
                   },
-                  "fixed_server": {
-                    "oneOf": [
-                      {
-                        "type": "null"
-                      },
-                      {
-                        "additionalProperties": false,
-                        "properties": {
-                          "upstream_tls": {
-                            "additionalProperties": false,
-                            "properties": {
-                              "client_identity_alias": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "server_trust_alias": {
-                                "type": [
-                                  "string",
-                                  "null"
-                                ]
-                              },
-                              "verify_hostname": {
-                                "type": "boolean"
-                              }
-                            },
-                            "required": [
-                              "verify_hostname",
-                              "server_trust_alias",
-                              "client_identity_alias"
-                            ],
-                            "type": "object"
-                          },
-                          "upstream_url": {
-                            "type": "string"
-                          }
-                        },
-                        "required": [
-                          "upstream_url",
-                          "upstream_tls"
-                        ],
-                        "type": "object"
-                      }
-                    ]
-                  },
                   "mitm": {
                     "additionalProperties": false,
                     "properties": {
@@ -2431,6 +2385,90 @@
                       "utf8",
                       "shift_jis"
                     ]
+                  },
+                  "topology": {
+                    "oneOf": [
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "mode",
+                          "settings"
+                        ],
+                        "properties": {
+                          "mode": {
+                            "const": "remote_server"
+                          },
+                          "settings": {
+                            "type": "object",
+                            "additionalProperties": false,
+                            "required": [
+                              "fixed_server"
+                            ],
+                            "properties": {
+                              "fixed_server": {
+                                "oneOf": [
+                                  {
+                                    "type": "null"
+                                  },
+                                  {
+                                    "additionalProperties": false,
+                                    "properties": {
+                                      "upstream_tls": {
+                                        "additionalProperties": false,
+                                        "properties": {
+                                          "client_identity_alias": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "server_trust_alias": {
+                                            "type": [
+                                              "string",
+                                              "null"
+                                            ]
+                                          },
+                                          "verify_hostname": {
+                                            "type": "boolean"
+                                          }
+                                        },
+                                        "required": [
+                                          "verify_hostname",
+                                          "server_trust_alias",
+                                          "client_identity_alias"
+                                        ],
+                                        "type": "object"
+                                      },
+                                      "upstream_url": {
+                                        "type": "string"
+                                      }
+                                    },
+                                    "required": [
+                                      "upstream_url",
+                                      "upstream_tls"
+                                    ],
+                                    "type": "object"
+                                  }
+                                ]
+                              }
+                            }
+                          }
+                        }
+                      },
+                      {
+                        "type": "object",
+                        "additionalProperties": false,
+                        "required": [
+                          "mode"
+                        ],
+                        "properties": {
+                          "mode": {
+                            "const": "local_server"
+                          }
+                        }
+                      }
+                    ]
                   }
                 },
                 "required": [
@@ -2440,7 +2478,7 @@
                   "request_body_codec",
                   "response_body_codec",
                   "body_processing",
-                  "fixed_server"
+                  "topology"
                 ],
                 "type": "object"
               }
@@ -3483,14 +3521,6 @@
                   "MockResponse": {
                     "additionalProperties": false,
                     "properties": {
-                      "body_bytes": {
-                        "items": {
-                          "maximum": 255,
-                          "minimum": 0,
-                          "type": "integer"
-                        },
-                        "type": "array"
-                      },
                       "headers": {
                         "items": {
                           "items": false,
@@ -3510,12 +3540,15 @@
                       },
                       "status": {
                         "type": "integer"
+                      },
+                      "body": {
+                        "type": "string"
                       }
                     },
                     "required": [
                       "status",
                       "headers",
-                      "body_bytes"
+                      "body"
                     ],
                     "type": "object"
                   }

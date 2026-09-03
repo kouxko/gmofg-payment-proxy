@@ -229,11 +229,14 @@ function bindUpstream(
 ): ProxyListener {
   if (listener.data_plane.kind === "http") {
     const settings = listener.data_plane.settings;
-    const fixed = settings.fixed_server;
+    if (settings.topology.mode === "local_server") return listener;
+    const fixed = settings.topology.settings.fixed_server;
     if (!fixed) return listener;
     return { ...listener, data_plane: { kind: "http", settings: {
       ...settings,
-      fixed_server: { ...fixed, upstream_tls: { ...fixed.upstream_tls, ...changes } },
+      topology: { mode: "remote_server", settings: {
+        fixed_server: { ...fixed, upstream_tls: { ...fixed.upstream_tls, ...changes } },
+      } },
     } } };
   }
   const settings = listener.data_plane.settings;

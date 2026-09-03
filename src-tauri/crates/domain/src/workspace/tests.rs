@@ -29,7 +29,7 @@ fn default_workspace_is_empty_safe_and_serializable() {
     assert!(!listener.enabled);
     assert_eq!(listener.bind_address, "127.0.0.1");
     assert_eq!(listener.port, 8080);
-    assert!(http(listener).fixed_server.is_none());
+    assert!(http(listener).fixed_server().is_none());
     assert_eq!(http(listener).request_body_codec, BodyCodecKind::Auto);
     assert_eq!(http(listener).response_body_codec, BodyCodecKind::Auto);
     assert!(workspace.rule_definitions.is_empty());
@@ -116,7 +116,10 @@ fn non_loopback_fixed_server_allows_all_clients() {
     let listener = &mut workspace.listeners[0];
     listener.enabled = true;
     listener.bind_address = "0.0.0.0".into();
-    http_mut(listener).fixed_server = Some(FixedServerSettings {
+    http_mut(listener)
+        .remote_server_mut()
+        .expect("remote HTTP topology")
+        .fixed_server = Some(FixedServerSettings {
         upstream_url: "https://server.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -149,10 +152,10 @@ fn workspace_accepts_multiple_fixed_server_listener_mappings() {
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
             request_body_codec: BodyCodecKind::Raw,
             response_body_codec: BodyCodecKind::Raw,
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: upstream_url.into(),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
@@ -247,7 +250,10 @@ fn fixed_http_server_rejects_tls_certificate_configuration() {
         kind: CertificateReferenceKind::UpstreamServerTrust,
         reference: "managed:test-ca".into(),
     });
-    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0])
+        .remote_server_mut()
+        .expect("remote HTTP topology")
+        .fixed_server = Some(FixedServerSettings {
         upstream_url: "http://server.example.test:8080".into(),
         upstream_tls: UpstreamTlsSettings {
             server_trust: Some(trust_id),
@@ -256,11 +262,9 @@ fn fixed_http_server_rejects_tls_certificate_configuration() {
     });
 
     let error = workspace.validate().unwrap_err();
-    assert!(
-        error
-            .field_errors
-            .contains_key("listeners.0.data_plane.settings.fixed_server.upstream_tls")
-    );
+    assert!(error.field_errors.contains_key(
+        "listeners.0.data_plane.settings.topology.settings.fixed_server.upstream_tls"
+    ));
 }
 
 #[test]
@@ -273,7 +277,10 @@ fn listener_tls_rejects_certificate_references_used_in_the_wrong_role() {
         kind: CertificateReferenceKind::DownstreamClientTrust,
         reference: "managed:listener-tls:test-client-ca".into(),
     });
-    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0])
+        .remote_server_mut()
+        .expect("remote HTTP topology")
+        .fixed_server = Some(FixedServerSettings {
         upstream_url: "https://server.example.test:443".into(),
         upstream_tls: UpstreamTlsSettings {
             server_trust: Some(trust_id),
@@ -283,11 +290,9 @@ fn listener_tls_rejects_certificate_references_used_in_the_wrong_role() {
 
     let error = workspace.validate().unwrap_err();
 
-    assert!(
-        error
-            .field_errors
-            .contains_key("listeners.0.data_plane.settings.fixed_server.upstream_tls.server_trust")
-    );
+    assert!(error.field_errors.contains_key(
+        "listeners.0.data_plane.settings.topology.settings.fixed_server.upstream_tls.server_trust"
+    ));
 }
 
 #[test]
@@ -295,7 +300,10 @@ fn fixed_server_stores_body_encoding_on_the_listener() {
     let mut workspace = ProxyWorkspace::default();
     http_mut(&mut workspace.listeners[0]).request_body_codec = BodyCodecKind::Utf8;
     http_mut(&mut workspace.listeners[0]).response_body_codec = BodyCodecKind::ShiftJis;
-    http_mut(&mut workspace.listeners[0]).fixed_server = Some(FixedServerSettings {
+    http_mut(&mut workspace.listeners[0])
+        .remote_server_mut()
+        .expect("remote HTTP topology")
+        .fixed_server = Some(FixedServerSettings {
         upstream_url: "https://example.test".into(),
         upstream_tls: UpstreamTlsSettings::default(),
     });

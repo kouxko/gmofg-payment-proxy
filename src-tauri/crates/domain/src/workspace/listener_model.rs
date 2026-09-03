@@ -145,6 +145,37 @@ pub struct FixedServerSettings {
     pub upstream_tls: UpstreamTlsSettings,
 }
 
+#[derive(Clone, Debug, Default, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(deny_unknown_fields)]
+pub struct HttpRemoteServerTopology {
+    pub fixed_server: Option<FixedServerSettings>,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[serde(
+    tag = "mode",
+    content = "settings",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+pub enum HttpTopology {
+    RemoteServer(HttpRemoteServerTopology),
+    LocalServer,
+}
+
+impl Default for HttpTopology {
+    fn default() -> Self {
+        Self::RemoteServer(HttpRemoteServerTopology::default())
+    }
+}
+
+impl HttpTopology {
+    #[must_use]
+    pub fn remote(fixed_server: Option<FixedServerSettings>) -> Self {
+        Self::RemoteServer(HttpRemoteServerTopology { fixed_server })
+    }
+}
+
 /// HTTP Body 的处理方式。
 ///
 /// `Plain` 保持现有 HTTP 语义；`Protocol` 使用精确协议包版本把 UTF-8 Body 解码为
@@ -159,8 +190,7 @@ pub enum HttpBodyProcessing {
     },
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
-#[serde(deny_unknown_fields)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 pub struct HttpListenerSettings {
     pub authentication: ForwardProxyAuthentication,
     pub mitm: MitmSettings,
@@ -168,7 +198,7 @@ pub struct HttpListenerSettings {
     pub request_body_codec: BodyCodecKind,
     pub response_body_codec: BodyCodecKind,
     pub body_processing: HttpBodyProcessing,
-    pub fixed_server: Option<FixedServerSettings>,
+    pub topology: HttpTopology,
 }
 
 impl Default for HttpListenerSettings {
@@ -180,8 +210,98 @@ impl Default for HttpListenerSettings {
             request_body_codec: BodyCodecKind::Auto,
             response_body_codec: BodyCodecKind::Auto,
             body_processing: HttpBodyProcessing::Plain,
-            fixed_server: None,
+            topology: HttpTopology::default(),
         }
+    }
+}
+
+impl HttpListenerSettings {
+    #[must_use]
+    pub const fn remote_server(&self) -> Option<&HttpRemoteServerTopology> {
+        match &self.topology {
+            HttpTopology::RemoteServer(remote) => Some(remote),
+            HttpTopology::LocalServer => None,
+        }
+    }
+
+    #[must_use]
+    pub const fn remote_server_mut(&mut self) -> Option<&mut HttpRemoteServerTopology> {
+        match &mut self.topology {
+            HttpTopology::RemoteServer(remote) => Some(remote),
+            HttpTopology::LocalServer => None,
+        }
+    }
+
+    #[must_use]
+    pub fn fixed_server(&self) -> Option<&FixedServerSettings> {
+        self.remote_server()
+            .and_then(|remote| remote.fixed_server.as_ref())
+    }
+
+    #[must_use]
+    pub fn uses_request_target(&self) -> bool {
+        self.remote_server()
+            .is_some_and(|remote| remote.fixed_server.is_none())
+    }
+}
+
+impl<'de> Deserialize<'de> for HttpListenerSettings {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Default)]
+        struct LegacyFixedServer {
+            present: bool,
+            value: Option<FixedServerSettings>,
+        }
+
+        impl<'de> Deserialize<'de> for LegacyFixedServer {
+            fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+            where
+                D: Deserializer<'de>,
+            {
+                Ok(Self {
+                    present: true,
+                    value: Option::<FixedServerSettings>::deserialize(deserializer)?,
+                })
+            }
+        }
+
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct Wire {
+            authentication: ForwardProxyAuthentication,
+            mitm: MitmSettings,
+            downstream_tls: DownstreamTlsSettings,
+            request_body_codec: BodyCodecKind,
+            response_body_codec: BodyCodecKind,
+            body_processing: HttpBodyProcessing,
+            #[serde(default)]
+            topology: Option<HttpTopology>,
+            #[serde(default)]
+            fixed_server: LegacyFixedServer,
+        }
+
+        let wire = Wire::deserialize(deserializer)?;
+        if wire.topology.is_some() && wire.fixed_server.present {
+            return Err(serde::de::Error::custom(
+                "HTTP topology and legacy fixed_server cannot be configured together",
+            ));
+        }
+        Ok(Self {
+            authentication: wire.authentication,
+            mitm: wire.mitm,
+            downstream_tls: wire.downstream_tls,
+            request_body_codec: wire.request_body_codec,
+            response_body_codec: wire.response_body_codec,
+            body_processing: wire.body_processing,
+            topology: wire.topology.unwrap_or({
+                HttpTopology::RemoteServer(HttpRemoteServerTopology {
+                    fixed_server: wire.fixed_server.value,
+                })
+            }),
+        })
     }
 }
 

@@ -52,7 +52,7 @@ describe("统一代理监听编辑器", () => {
   it("默认按请求目标转发，并可在同一监听启用固定 Server", async () => {
     const user = userEvent.setup();
     render(<ListenersView />);
-    expect(await screen.findByText("请求转发方式")).toBeVisible();
+    expect(await screen.findByText("HTTP Server 模式")).toBeVisible();
     expect(screen.getByText("按原请求目标转发")).toBeVisible();
     expect(screen.getByText(/读取每个请求中的目标主机和端口/)).toBeVisible();
     expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
@@ -76,6 +76,24 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
     expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
     expect(screen.getByText("按原请求目标转发")).toBeVisible();
+  });
+
+  it("可切换到 Local HTTP Server 并保存互斥 topology", async () => {
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByRole("switch", { name: "使用 Local HTTP Server" }));
+    expect(screen.getByText("Local HTTP Server")).toBeVisible();
+    expect(screen.getByText(/不连接外部 Server/)).toBeVisible();
+    expect(screen.queryByRole("switch", { name: "转发到固定 Server" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("button", { name: "保存当前监听" }));
+    await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+    expect(mocks.listenerSave.mock.calls[0][2].data_plane).toMatchObject({
+      kind: "http",
+      settings: { topology: { mode: "local_server" } },
+    });
   });
 
   it("固定 Server 关闭时保留 Basic 与 MITM 设置", async () => {

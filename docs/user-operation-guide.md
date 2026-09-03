@@ -17,7 +17,7 @@ Workspace 是一套可切换的测试配置，保存 Listener、统一规则定�
 
 一个 Listener 只有一个本地端点和一种明确数据面：
 
-- HTTP：正向 absolute-form 请求，或固定 Server 转发。
+- HTTP：按请求目标转发、固定 Server 转发，或进程内 Local HTTP Server 回环。
 - Socket：RemoteServer 或 LocalServer；按协议转发或透明转发。
 
 一个 App connection 创建一个 Exchange。协议模式按 App 请求、Server 回复的严格顺序推进；
@@ -27,13 +27,14 @@ App 断开或 Server 读写失败时，该 Exchange 结束。
 
 App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-- HTTP 内容可以组合 Method、request target、Header、终端/证书条件与可选的协议 Document 条件，
-  并执行 HTTP 修改、故障、Mock 或 Document 动作。request target 始终是原始 `/path?query`，请求与
+- HTTP 内容可以组合 Method、Path、Header、终端/证书条件与可选的协议 Document 条件，
+  并执行 HTTP 修改、故障、Mock 或 Document 动作。UI 中的 `Path（包含 Query 参数）` 始终是原始
+  `/path?query`，请求与
   对应响应阶段读取同一份请求元数据，不包含 scheme、host 或 port。Header 名称使用单层 `/name`
   手动输入、ASCII 大小写不敏感，重复 Header 任一值命中即成立。
 - Socket 内容只处理协议包 Decode 后的类型化 Document 条件与动作，不提供 HTTP 能力。
 
-Method 只支持精确匹配；request target 与 Header 支持精确、包含、前缀、后缀和通配符。Document
+Method 只支持精确匹配；Path 与 Header 支持精确、包含、前缀、后缀和通配符。Document
 有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。Document
 条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
 Insert、Append 等动作始终使用精确路径，不接受通配符。旧 Path/JSONPath/Regex 匹配合同已删除，
@@ -78,7 +79,14 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
 固定 Server 模式不会因为请求携带其他 authority 而改连另一个目标。
 
-### 3.3 下游 TLS/mTLS
+### 3.3 Local HTTP Server
+
+选择“使用 Local HTTP Server”后，Listener 不创建真实上游连接。请求仍先经过 Proxy → Server
+规则；未被终止动作直接生成响应时，本地 Server 将收到的 HTTP Context 原样回环，再进入
+Proxy → App 规则。两个阶段都可以使用 `Mock Response`；规则参数中的 `body` 直接填写文本，运行时
+按照最终响应 BodyCodec 编码为网络字节。
+
+### 3.4 下游 TLS/mTLS
 
 这是 App 连接 Proxy 的安全边界。Proxy 作为 TLS Server：
 
@@ -87,7 +95,7 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 3. mTLS 选择 Client Trust，并设置 Optional 或 Required。
 4. Required 时，App 必须出示受信任客户端证书。
 
-### 3.4 上游 TLS/mTLS
+### 3.5 上游 TLS/mTLS
 
 这是 Proxy 连接 Server 的独立安全边界。Proxy 作为 TLS Client：
 

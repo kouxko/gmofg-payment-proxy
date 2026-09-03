@@ -174,7 +174,7 @@ pub(super) fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultA
         TerminalAction::MockResponse {
             status,
             headers,
-            body_bytes,
+            body,
         } => FaultAction::MockResponse {
             status: runtime_status!(*status)?,
             headers: Message {
@@ -189,7 +189,10 @@ pub(super) fn map_terminal_action(action: &TerminalAction) -> ProxyResult<FaultA
                 body_modified: false,
             }
             .header_map()?,
-            body: Bytes::copy_from_slice(body_bytes),
+            // MockResponse is a textual public contract. The pipeline resolves the
+            // response codec after the action headers are known and performs the
+            // only wire-byte encoding immediately before applying the fault.
+            body: Bytes::copy_from_slice(body.as_bytes()),
         },
         TerminalAction::InvalidJson { body_bytes } => FaultAction::ReplaceBody {
             body: Bytes::copy_from_slice(body_bytes),

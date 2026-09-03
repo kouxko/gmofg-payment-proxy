@@ -1,0 +1,22 @@
+PASS cargo test --manifest-path src-tauri/Cargo.toml --workspace --no-run
+PASS cargo test -p intercept-proxy-domain --lib http_topology_round_trips_local_and_reads_legacy_remote_settings (1 passed)
+PASS cargo test -p intercept-proxy-domain --test unified_rule_contract mock_response_is_textual_and_supported_on_both_http_directions (1 passed)
+PASS cargo test -p intercept-proxy-runtime --lib local_http_server_connector_echoes_the_exact_effective_request_without_network_upstream (1 passed)
+PASS cargo test -p intercept-proxy-infrastructure --lib request_stage_mock_text_is_encoded_with_the_response_codec (1 passed)
+PASS cargo test -p intercept-proxy-infrastructure --lib local_http_server_runs_both_rule_directions_and_returns_response_mock (1 passed)
+PASS cargo test -p intercept-proxy --lib published_input_and_output_schemas_equal_checked_in_snapshot_exactly (1 passed)
+PASS cargo test -p intercept-proxy --lib environment_create_schema_accepts_only_the_canonical_full_shape_fixture (1 passed)
+PASS deno task test listeners-view/http-protocol-processing/rule-definition-editor/rules-view (43 passed)
+PASS deno task typecheck
+PASS deno task check:bindings (fresh and deterministic)
+PASS deno task lint
+PASS cargo fmt --all -- --check
+PASS cargo clippy --workspace --all-targets --all-features -- -D warnings
+PASS deno task scan:architecture-docs
+
+Observed Local HTTP integration result:
+- response start: HTTP/1.1 200
+- response body: {"ErrorCode":"D48"}
+- Proxy -> Server policy count: 1
+- Proxy -> App policy count: 1
+- network UpstreamConnector: not constructed

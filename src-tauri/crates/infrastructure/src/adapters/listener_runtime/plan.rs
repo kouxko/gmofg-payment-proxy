@@ -4,16 +4,18 @@ use std::{net::SocketAddr, sync::Arc, time::Duration};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    DownstreamClientAuthentication, HttpListenerSettings, ListenerDataPlane, ProxyListener,
-    ProxyWorkspace, SocketDownstreamTlsSettings, SocketRelaySecurity as DomainSocketSecurity,
-    SocketRelaySettings, SocketTopology, SocketUpstreamTlsSettings,
+    DownstreamClientAuthentication, HttpListenerSettings, HttpTopology, ListenerDataPlane,
+    ProxyListener, ProxyWorkspace, SocketDownstreamTlsSettings,
+    SocketRelaySecurity as DomainSocketSecurity, SocketRelaySettings, SocketTopology,
+    SocketUpstreamTlsSettings,
 };
 use intercept_proxy_runtime::{
     ChannelId, DEFAULT_MAX_CONNECTIONS, ForwardAuthenticationMode, ForwardProxyAuthenticator,
-    ForwardProxyConfig, ForwardProxyService, HttpProtocolCapabilityFactory, MessageLimits,
-    NoAuthentication, PipelinePorts, PlainHttpCapabilityFactory, ReverseProxyConfig,
-    ReverseProxyService, SocketDownstreamTlsConfig, SocketRelaySecurity as RuntimeSocketSecurity,
-    SocketRelayService, SocketTlsIdentity, SocketUpstreamTlsConfig,
+    ForwardProxyConfig, ForwardProxyService, HttpProtocolCapabilityFactory, LocalHttpServerConfig,
+    LocalHttpServerService, MessageLimits, NoAuthentication, PipelinePorts,
+    PlainHttpCapabilityFactory, ReverseProxyConfig, ReverseProxyService, SocketDownstreamTlsConfig,
+    SocketRelaySecurity as RuntimeSocketSecurity, SocketRelayService, SocketTlsIdentity,
+    SocketUpstreamTlsConfig,
 };
 
 use super::{
@@ -38,6 +40,11 @@ pub(super) enum PreparedListenerRuntime {
         service: Box<ReverseProxyService>,
         protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
     },
+    HttpLocal {
+        bind_addr: SocketAddr,
+        service: LocalHttpServerService,
+        protocol: Option<Arc<HttpProtocolRuntimeSnapshot>>,
+    },
     Socket {
         bind_addr: SocketAddr,
         service: Arc<SocketRelayService>,
@@ -54,6 +61,7 @@ impl PreparedListenerRuntime {
         match self {
             Self::HttpForward { bind_addr, .. }
             | Self::HttpFixed { bind_addr, .. }
+            | Self::HttpLocal { bind_addr, .. }
             | Self::Socket { bind_addr, .. }
             | Self::ExternalScriptedSocket { bind_addr, .. } => *bind_addr,
         }
@@ -70,9 +78,9 @@ impl PreparedListenerRuntime {
 
     pub(super) fn http_protocol_snapshot(&self) -> Option<Arc<HttpProtocolRuntimeSnapshot>> {
         match self {
-            Self::HttpForward { protocol, .. } | Self::HttpFixed { protocol, .. } => {
-                protocol.clone()
-            }
+            Self::HttpForward { protocol, .. }
+            | Self::HttpFixed { protocol, .. }
+            | Self::HttpLocal { protocol, .. } => protocol.clone(),
             Self::Socket { .. } | Self::ExternalScriptedSocket { .. } => None,
         }
     }
@@ -216,19 +224,31 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
             pipeline,
             capabilities,
         };
-        if let Some(fixed) = &http.fixed_server {
-            return self.build_fixed_http(&context, fixed, full_runtime).await;
+        match &http.topology {
+            HttpTopology::RemoteServer(remote) => {
+                if let Some(fixed) = &remote.fixed_server {
+                    return self.build_fixed_http(&context, fixed, full_runtime).await;
+                }
+                if !full_runtime {
+                    return Err(AppError::new(
+                        "FIXED_SERVER_NOT_CONFIGURED",
+                        "该代理监听未配置固定 Server，没有上游连接可测试。",
+                    )
+                    .entity(listener.id.to_string()));
+                }
+                self.build_forward_http(&context, runtime_epoch).await
+            }
+            HttpTopology::LocalServer => {
+                if !full_runtime {
+                    return Err(AppError::new(
+                        "LISTENER_UPSTREAM_NOT_APPLICABLE",
+                        "HTTP LocalServer 没有可测试的真实 Server 上游。",
+                    )
+                    .entity(listener.id.to_string()));
+                }
+                self.build_local_http(&context).await
+            }
         }
-
-        if !full_runtime {
-            return Err(AppError::new(
-                "FIXED_SERVER_NOT_CONFIGURED",
-                "该代理监听未配置固定 Server，没有上游连接可测试。",
-            )
-            .entity(listener.id.to_string()));
-        }
-
-        self.build_forward_http(&context, runtime_epoch).await
     }
 
     async fn build_fixed_http(
@@ -323,6 +343,41 @@ impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
                     .expect("full runtime HTTP capabilities prepared"),
                 MessageLimits::default(),
             ),
+            protocol: context.protocol.clone(),
+        })
+    }
+
+    async fn build_local_http(
+        &self,
+        context: &HttpBuildContext<'_>,
+    ) -> AppResult<PreparedListenerRuntime> {
+        let config = LocalHttpServerConfig {
+            bind_addr: context.bind_addr,
+            downstream_tls: self
+                .adapter
+                .downstream_tls(context.workspace, context.listener, context.http)
+                .await?,
+            read_timeout: Duration::from_millis(context.listener.read_timeout_ms),
+            write_timeout: Duration::from_millis(context.listener.write_timeout_ms),
+        };
+        let service = LocalHttpServerService::build(
+            &config,
+            channel(context.listener)?,
+            context
+                .pipeline
+                .clone()
+                .expect("full runtime pipeline prepared"),
+            context
+                .capabilities
+                .clone()
+                .expect("full runtime HTTP capabilities prepared"),
+            MessageLimits::default(),
+            DEFAULT_MAX_CONNECTIONS,
+        )
+        .map_err(|error| runtime_error(context.listener, error.code, error.message))?;
+        Ok(PreparedListenerRuntime::HttpLocal {
+            bind_addr: context.bind_addr,
+            service,
             protocol: context.protocol.clone(),
         })
     }

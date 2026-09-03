@@ -1,16 +1,18 @@
 use intercept_proxy_domain::{
     BodyCodecKind, FixedServerSettings, ForwardProxyAuthentication, HttpBodyProcessing,
-    HttpListenerSettings, ListenerDataPlane, ListenerId, MitmSettings, ProtocolPackageId,
-    ProtocolPackageRef, ProtocolPackageVersion, ProxyListener, ScriptedSocketProcessing,
-    SocketDownstreamSecurity, SocketEndpoint, SocketLocalResponderTopology,
-    SocketPayloadProcessing, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
-    SocketRuntimeLimits, SocketTopology, UpstreamTlsSettings,
+    HttpListenerSettings, HttpRemoteServerTopology, HttpTopology, ListenerDataPlane, ListenerId,
+    MitmSettings, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion, ProxyListener,
+    ScriptedSocketProcessing, SocketDownstreamSecurity, SocketEndpoint,
+    SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+    SocketRelaySettings, SocketRelayTopology, SocketRuntimeLimits, SocketTopology,
+    UpstreamTlsSettings,
 };
 
 use super::{
     AppError, AppResult, AuthenticationTemplate, BodyCodec, BodyProcessingTemplate,
-    HttpListenerTemplate, ListenerDataPlaneTemplate, ListenerTemplate, ProtocolPackageExactRef,
-    SocketListenerTemplate, SocketPayloadProcessingTemplate, SocketTopologyTemplate,
+    HttpListenerTemplate, HttpTopologyTemplate, ListenerDataPlaneTemplate, ListenerTemplate,
+    ProtocolPackageExactRef, SocketListenerTemplate, SocketPayloadProcessingTemplate,
+    SocketTopologyTemplate,
 };
 
 impl ListenerTemplate {
@@ -65,14 +67,23 @@ impl HttpListenerTemplate {
                     package: package.to_domain()?,
                 },
             },
-            fixed_server: self.fixed_server.as_ref().map(|fixed| FixedServerSettings {
-                upstream_url: fixed.upstream_url.clone(),
-                upstream_tls: UpstreamTlsSettings {
-                    verify_hostname: fixed.upstream_tls.verify_hostname,
-                    server_trust: None,
-                    client_identity: None,
-                },
-            }),
+            topology: match &self.topology {
+                HttpTopologyTemplate::RemoteServer(remote) => {
+                    HttpTopology::RemoteServer(HttpRemoteServerTopology {
+                        fixed_server: remote.fixed_server.as_ref().map(|fixed| {
+                            FixedServerSettings {
+                                upstream_url: fixed.upstream_url.clone(),
+                                upstream_tls: UpstreamTlsSettings {
+                                    verify_hostname: fixed.upstream_tls.verify_hostname,
+                                    server_trust: None,
+                                    client_identity: None,
+                                },
+                            }
+                        }),
+                    })
+                }
+                HttpTopologyTemplate::LocalServer => HttpTopology::LocalServer,
+            },
         })
     }
 }

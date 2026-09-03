@@ -189,7 +189,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
                 crate::RuleHttpActionDraftInput {
                     kind: RuleActionKind::MockResponse,
                     parameters_json: Some(
-                        r#"{"status":201,"headers":[["x-test","explicit"]],"body_bytes":[98,111,100,121]}"#.into(),
+                        r#"{"status":201,"headers":[["x-test","explicit"]],"body":"body"}"#.into(),
                     ),
                 },
                 RuleStage::ProxyToUpstream,
@@ -198,7 +198,7 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
         DomainRuleAction::Terminal(intercept_proxy_domain::TerminalAction::MockResponse {
             status: 201,
             headers: vec![("x-test".into(), "explicit".into())],
-            body_bytes: b"body".to_vec(),
+            body: "body".into(),
         })
     );
 }
@@ -299,7 +299,7 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
             DomainRuleAction::Terminal(TerminalAction::MockResponse {
                 status: 200,
                 headers: Vec::new(),
-                body_bytes: Vec::new(),
+                body: String::new(),
             }),
         ),
     ];

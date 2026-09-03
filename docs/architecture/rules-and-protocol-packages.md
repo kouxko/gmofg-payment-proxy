@@ -31,8 +31,9 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
 不能依赖前端隐藏非法选项。需要多个独立行为时创建多条规则，它们分别匹配并按规则顺序执行。
 
-HTTP 条件只有一套当前合同：Method、request target、Header、终端 IP 和证书指纹。request target 是
-请求入口捕获的原始 `/path?query`；同一 transaction 把这份不可变请求元数据传给请求与响应两个阶段，
+HTTP 条件只有一套当前合同：Method、Path、Header、终端 IP 和证书指纹。UI 的
+`Path（包含 Query 参数）` 对应内部 request target，是请求入口捕获的原始 `/path?query`；同一
+transaction 把这份不可变请求元数据传给请求与响应两个阶段，
 响应阶段不得从 status line 重建目标，也不得加入 scheme、host、port 或规范化。Header selector 是
 单层 `/name`，名称按 ASCII 大小写不敏感，重复字段按 ANY 匹配。Method 只支持 Equals；其他字符串
 字段由 Rust capability 声明 Equals、Contains、StartsWith、EndsWith、Wildcard。

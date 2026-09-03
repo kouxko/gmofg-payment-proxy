@@ -115,7 +115,7 @@ fn empty_product_catalog_exposes_the_complete_generic_catalog() {
 }
 
 #[test]
-fn mock_and_invalid_json_use_injected_codec() {
+fn mock_keeps_text_while_invalid_json_uses_injected_codec() {
     let codec = TestBodyCodec {
         reject_marker: Some("🧪"),
     };
@@ -127,13 +127,10 @@ fn mock_and_invalid_json_use_injected_codec() {
         ),
     ]);
     let (_, mock) = mock_response(&mock_parameters, &codec).expect("mock");
-    let HttpAction::Terminal(TerminalAction::MockResponse { body_bytes, .. }) = mock else {
+    let HttpAction::Terminal(TerminalAction::MockResponse { body, .. }) = mock else {
         panic!("mock response action");
     };
-    assert_eq!(
-        codec.decode(&body_bytes).expect("decode"),
-        "{\"結果\":\"成功\"}"
-    );
+    assert_eq!(body, "{\"結果\":\"成功\"}");
 
     let invalid_parameters = BTreeMap::from([(
         "body".into(),
@@ -152,13 +149,12 @@ fn mock_and_invalid_json_use_injected_codec() {
             FaultParameterValue::Json("{\"value\":\"🧪\"}".into()),
         ),
     ]);
-    assert_eq!(
-        mock_response(&unencodable, &codec)
-            .expect_err("strict encoding")
-            .view_model
-            .code,
-        "BODY_ENCODE_FAILED"
-    );
+    let (_, unencodable_mock) =
+        mock_response(&unencodable, &codec).expect("MockResponse remains text until runtime");
+    let HttpAction::Terminal(TerminalAction::MockResponse { body, .. }) = unencodable_mock else {
+        panic!("mock response action");
+    };
+    assert_eq!(body, "{\"value\":\"🧪\"}");
     assert_eq!(
         invalid_json(
             &BTreeMap::from([("body".into(), FaultParameterValue::Text("🧪{".into()),)]),

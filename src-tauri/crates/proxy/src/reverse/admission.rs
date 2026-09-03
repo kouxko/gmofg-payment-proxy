@@ -15,8 +15,8 @@ use crate::transport::{
 use crate::{ErrorCode, ProxyError, Result};
 
 #[derive(Clone)]
-pub(super) struct ReverseConnectionAcceptor {
-    pub(super) tls: Option<DownstreamTlsAcceptor>,
+pub(crate) struct ReverseConnectionAcceptor {
+    pub(crate) tls: Option<DownstreamTlsAcceptor>,
 }
 
 impl std::fmt::Debug for ReverseConnectionAcceptor {

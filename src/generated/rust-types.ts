@@ -1108,7 +1108,7 @@ export type HttpListenerSettings = {
 	request_body_codec: BodyCodecKind,
 	response_body_codec: BodyCodecKind,
 	body_processing: HttpBodyProcessing,
-	fixed_server: FixedServerSettings | null,
+	topology: HttpTopology,
 };
 
 /**  HTTP 文本 Body 经协议包 Decode、两段规则和 Display 后冻结的证据。 */
@@ -1147,6 +1147,10 @@ export type HttpProtocolFailureViewModel = {
 	origin_body: number[],
 };
 
+export type HttpRemoteServerTopology = {
+	fixed_server: FixedServerSettings | null,
+};
+
 export type HttpRuleContent = {
 	description: string,
 	condition: Condition,
@@ -1169,6 +1173,8 @@ export type HttpRuleStageViewModel = {
 	document: Document,
 	display: HttpProtocolDisplayViewModel,
 };
+
+export type HttpTopology = { mode: "remote_server"; settings: HttpRemoteServerTopology } | { mode: "local_server" };
 
 export type JitterScope = "BeforeMessage" | "PerChunk";
 
@@ -2438,7 +2444,7 @@ export type TerminalAction = "DisconnectBeforeUpstream" | ({ UpstreamConnectTime
 } }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; IncorrectContentLength?: never; InvalidJson?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ MockResponse: {
 	status: number,
 	headers: ([string, string])[],
-	body_bytes: number[],
+	body: string,
 } }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; InvalidJson?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ InvalidJson: {
 	body_bytes: number[],
 } }) & { DisconnectDuringDownstreamWrite?: never; DisconnectDuringUpstreamWrite?: never; DropUpstreamResponse?: never; IncorrectContentLength?: never; MockResponse?: never; TruncateResponse?: never; UpstreamConnectTimeout?: never; UpstreamReadTimeout?: never; UpstreamWriteTimeout?: never } | ({ IncorrectContentLength: {

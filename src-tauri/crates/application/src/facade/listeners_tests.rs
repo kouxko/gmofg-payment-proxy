@@ -1,5 +1,5 @@
 use intercept_proxy_domain::{
-    FixedServerSettings, HttpListenerSettings, ListenerDataPlane, UpstreamTlsSettings,
+    FixedServerSettings, HttpListenerSettings, HttpTopology, ListenerDataPlane, UpstreamTlsSettings,
 };
 
 use crate::ListenerRuntimeState;
@@ -16,10 +16,10 @@ fn copied_listener_preserves_fixed_server_and_stops_by_default() {
         bind_address: "0.0.0.0".into(),
         port: 16_627,
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: "https://transaction.example.test:16627".into(),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
@@ -31,12 +31,7 @@ fn copied_listener_preserves_fixed_server_and_stops_by_default() {
     assert!(!copy.enabled);
     assert_eq!(copy.port, 16_627);
     assert_eq!(
-        copy.http()
-            .unwrap()
-            .fixed_server
-            .as_ref()
-            .unwrap()
-            .upstream_url,
+        copy.http().unwrap().fixed_server().unwrap().upstream_url,
         "https://transaction.example.test:16627"
     );
 }
@@ -52,10 +47,10 @@ fn overview_uses_workspace_as_the_only_listener_catalog() {
         bind_address: "127.0.0.1".into(),
         port: 9_001,
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: "https://api.example.test:9443".into(),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()

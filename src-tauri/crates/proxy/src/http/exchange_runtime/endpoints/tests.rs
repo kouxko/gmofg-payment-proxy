@@ -5,7 +5,7 @@ use http::{HeaderMap, Method, StatusCode};
 
 use super::super::{HttpExchangeOutput, HttpExchangeRequest};
 use super::*;
-use crate::http::{ChannelId, HandshakePolicy, SystemClock, UpstreamExchange};
+use crate::http::{ChannelId, HandshakePolicy, NoopPipelinePorts, SystemClock, UpstreamExchange};
 
 #[derive(Debug, Default)]
 struct RecordingWirePolicy {
@@ -183,6 +183,41 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
     assert_eq!(message.http_status(), Some(209));
     assert_eq!(written.body, "policy-response");
     assert!(written.header.starts_with("HTTP/1.1 209"));
+}
+
+#[tokio::test]
+async fn local_http_server_connector_echoes_the_exact_effective_request_without_network_upstream() {
+    let connector = LocalHttpServerConnector;
+    let message = Message {
+        start_line: "POST /payment HTTP/1.1".into(),
+        headers: vec![crate::RawHeader::new(
+            b"Content-Type".to_vec(),
+            b"application/json".to_vec(),
+        )],
+        body: Bytes::from_static(br#"{"TransactionType":"0001"}"#),
+        body_modified: false,
+    };
+    let exchange = connector
+        .send(
+            &connection_context(),
+            &NoopPipelinePorts,
+            ForwardRequest {
+                method: Method::POST,
+                uri: "/payment".parse().unwrap(),
+                message: message.clone(),
+            },
+            &[],
+            None,
+            &CancellationToken::new(),
+        )
+        .await
+        .expect("LocalHttpServer replies locally");
+
+    assert!(exchange.informational_heads.is_empty());
+    assert_eq!(exchange.final_response.start_line, message.start_line);
+    assert_eq!(exchange.final_response.headers.len(), message.headers.len());
+    assert_eq!(exchange.final_response.body, message.body);
+    assert_eq!(exchange.final_response.body_modified, message.body_modified);
 }
 
 fn state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExchangeState>> {

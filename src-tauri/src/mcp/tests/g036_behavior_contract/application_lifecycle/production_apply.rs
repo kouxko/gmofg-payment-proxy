@@ -199,7 +199,8 @@ fn full_resource_candidate() -> Value {
         "mode":"protocol",
         "package":{"id":"au-eftex","version":"1.1.0"},
     });
-    http["data_plane"]["settings"]["fixed_server"] = Value::Null;
+    http["data_plane"]["settings"]["topology"] =
+        json!({"mode":"remote_server","settings":{"fixed_server":null}});
     let socket = &mut value["workspace"]["listeners"][1];
     socket["enabled"] = json!(false);
     socket["data_plane"]["settings"]["topology"] = json!({

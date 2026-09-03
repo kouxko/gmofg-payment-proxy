@@ -1,0 +1,49 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-002",
+  "case_id": "HTTP-LOCAL-MOCK-001",
+  "executed_at": "2026-09-03 15:01:40 +08:00",
+  "result": "PASS",
+  "environment": {
+    "os": "macOS arm64",
+    "rustc": "1.98.0",
+    "cargo": "1.98.0",
+    "deno": "2.9.6",
+    "node": "26.8.1"
+  },
+  "tested_state": {
+    "branch": "codex/intercept-proxy-generalization",
+    "base_commit": "77e26874a0ea6fbde6f1b850921a548e03299dec",
+    "changed_during_test": false
+  },
+  "derived_from": {
+    "task_id": "TASK-20260903-001",
+    "case_id": "PAYMENT-DLL-D48-MOCK-001",
+    "evidence": "docs/testing/evidence/2026-09-03/TASK-20260903-001/PAYMENT-DLL-D48-MOCK-001/"
+  },
+  "assertions": {
+    "local_http_without_network_upstream": "PASS",
+    "proxy_to_server_rule_count": 1,
+    "proxy_to_app_rule_count": 1,
+    "d48_body_exact": "PASS",
+    "mock_body_public_string": "PASS",
+    "response_codec_encoding": "PASS",
+    "legacy_http_configuration": "PASS",
+    "mcp_schema_snapshot": "PASS",
+    "rule_name_preserved": "PASS",
+    "path_label_includes_query": "PASS",
+    "selected_value_single_line_truncation": "PASS"
+  },
+  "retest_commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib local_http_server_runs_both_rule_directions_and_returns_response_mock",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib request_stage_mock_text_is_encoded_with_the_response_codec",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --lib local_http_server_connector_echoes_the_exact_effective_request_without_network_upstream",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --test unified_rule_contract mock_response_is_textual_and_supported_on_both_http_directions",
+    "deno task test src/features/listeners/listeners-view.test.tsx src/features/listeners/http-protocol-processing-card.test.tsx src/features/rules/rule-definition-editor.test.tsx src/features/rules/rules-view.test.tsx"
+  ],
+  "not_applicable": {
+    "remote_server": "LocalServer acceptance intentionally creates no remote connection",
+    "real_device": "No Android or physical terminal behavior changed",
+    "ui_screenshot": "DOM component tests assert the selected value text, state, and truncation classes"
+  }
+}

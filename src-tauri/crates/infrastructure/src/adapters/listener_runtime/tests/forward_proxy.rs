@@ -79,6 +79,97 @@ async fn forward_absolute_form_http_enters_shared_pipeline() {
     runtime.stop(listener.id).await.unwrap();
 }
 
+#[derive(Debug, Default)]
+struct LocalHttpMockPipeline {
+    requests: AtomicUsize,
+    responses: AtomicUsize,
+}
+
+impl HandshakePolicy for LocalHttpMockPipeline {}
+
+#[async_trait]
+impl PipelinePorts for LocalHttpMockPipeline {
+    async fn apply_request_policy(
+        &self,
+        _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
+        _message: &mut Message,
+    ) -> intercept_proxy_runtime::Result<Vec<FaultAction>> {
+        self.requests.fetch_add(1, Ordering::SeqCst);
+        Ok(Vec::new())
+    }
+
+    async fn apply_response_policy(
+        &self,
+        _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
+        _message: &mut Message,
+    ) -> intercept_proxy_runtime::Result<Vec<FaultAction>> {
+        self.responses.fetch_add(1, Ordering::SeqCst);
+        Ok(vec![FaultAction::MockResponse {
+            status: http::StatusCode::OK,
+            headers: http::HeaderMap::new(),
+            body: bytes::Bytes::from_static(br#"{"ErrorCode":"D48"}"#),
+        }])
+    }
+}
+
+#[tokio::test]
+async fn local_http_server_runs_both_rule_directions_and_returns_response_mock() {
+    let reservation = TcpListener::bind("127.0.0.1:0").await.unwrap();
+    let bind_address = reservation.local_addr().unwrap();
+    drop(reservation);
+    let listener = ProxyListener {
+        id: ListenerId::new(),
+        name: "local HTTP".into(),
+        enabled: false,
+        bind_address: bind_address.ip().to_string(),
+        port: bind_address.port(),
+        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
+            topology: HttpTopology::LocalServer,
+            ..HttpListenerSettings::default()
+        }),
+        ..ProxyListener::default()
+    };
+    let workspace = ProxyWorkspace {
+        listeners: vec![listener.clone()],
+        ..ProxyWorkspace::default()
+    };
+    workspace.validate().unwrap();
+    let store = Arc::new(SqliteStore::in_memory().unwrap());
+    store
+        .insert_workspace(&WorkspaceRecord {
+            id: workspace.id.as_uuid(),
+            revision: workspace.revision.get(),
+            value: encode_workspace_record(&workspace).unwrap(),
+            updated_at: Utc::now(),
+        })
+        .unwrap();
+    let pipeline = Arc::new(LocalHttpMockPipeline::default());
+    let runtime = test_listener_runtime(store);
+    runtime.set_pipeline_ports(pipeline.clone());
+    runtime
+        .start(workspace.clone(), listener.clone())
+        .await
+        .unwrap();
+
+    let mut client = TcpStream::connect(bind_address).await.unwrap();
+    client
+        .write_all(
+            b"POST / HTTP/1.1\r\nHost: local.test\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}",
+        )
+        .await
+        .unwrap();
+    let mut response = Vec::new();
+    client.read_to_end(&mut response).await.unwrap();
+    assert!(response.starts_with(b"HTTP/1.1 200"));
+    assert!(response.ends_with(br#"{"ErrorCode":"D48"}"#));
+    assert_eq!(pipeline.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(pipeline.responses.load(Ordering::SeqCst), 1);
+
+    runtime.stop(listener.id).await.unwrap();
+}
+
 #[tokio::test]
 async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_body_bytes() {
     let upstream = TcpListener::bind("127.0.0.1:0").await.unwrap();
@@ -118,10 +209,10 @@ async fn fixed_server_listener_uses_selected_workspace_pipeline_and_preserves_bo
         bind_address: bind_address.ip().to_string(),
         port: bind_address.port(),
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: format!("http://{upstream_address}"),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()

@@ -14,10 +14,10 @@ async fn upstream_tls_probe_requires_a_fixed_https_server() {
 
     let http = ProxyListener {
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: "http://127.0.0.1:8080".into(),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
@@ -41,10 +41,10 @@ async fn upstream_connection_probe_accepts_a_fixed_http_server() {
     let runtime = test_listener_runtime(Arc::new(SqliteStore::in_memory().unwrap()));
     let listener = ProxyListener {
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: format!("http://{upstream_address}"),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()

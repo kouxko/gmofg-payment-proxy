@@ -2,7 +2,7 @@ use crate::{
     ChannelId, DomainError, ErrorCode, MessageStage, Revision, RuleId, RuntimeEpoch,
     TerminalIdentity,
 };
-use serde::{Deserialize, Serialize};
+use serde::{Deserialize, Deserializer, Serialize};
 use serde_json::Value;
 use specta::Type;
 use uuid::Uuid;
@@ -67,7 +67,7 @@ pub enum JitterScope {
     PerChunk,
 }
 
-#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+#[derive(Clone, Debug, Eq, PartialEq, Serialize, Type)]
 pub enum TerminalAction {
     DisconnectBeforeUpstream,
     UpstreamConnectTimeout {
@@ -85,7 +85,7 @@ pub enum TerminalAction {
     MockResponse {
         status: u16,
         headers: Vec<(String, String)>,
-        body_bytes: Vec<u8>,
+        body: String,
     },
     InvalidJson {
         body_bytes: Vec<u8>,
@@ -102,6 +102,85 @@ pub enum TerminalAction {
     DisconnectDuringDownstreamWrite {
         after_bytes: u64,
     },
+}
+
+impl<'de> Deserialize<'de> for TerminalAction {
+    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
+    where
+        D: Deserializer<'de>,
+    {
+        #[derive(Deserialize)]
+        enum Wire {
+            DisconnectBeforeUpstream,
+            UpstreamConnectTimeout { milliseconds: u64 },
+            UpstreamWriteTimeout { milliseconds: u64 },
+            UpstreamReadTimeout { milliseconds: u64 },
+            DropUpstreamResponse { mode: DropResponseMode },
+            MockResponse(MockResponseWire),
+            InvalidJson { body_bytes: Vec<u8> },
+            IncorrectContentLength { delta: i64 },
+            TruncateResponse { bytes: u64 },
+            DisconnectDuringUpstreamWrite { after_bytes: u64 },
+            DisconnectDuringDownstreamWrite { after_bytes: u64 },
+        }
+
+        #[derive(Deserialize)]
+        #[serde(deny_unknown_fields)]
+        struct MockResponseWire {
+            status: u16,
+            headers: Vec<(String, String)>,
+            #[serde(default)]
+            body: Option<String>,
+            #[serde(default)]
+            body_bytes: Option<Vec<u8>>,
+        }
+
+        Ok(match Wire::deserialize(deserializer)? {
+            Wire::DisconnectBeforeUpstream => Self::DisconnectBeforeUpstream,
+            Wire::UpstreamConnectTimeout { milliseconds } => {
+                Self::UpstreamConnectTimeout { milliseconds }
+            }
+            Wire::UpstreamWriteTimeout { milliseconds } => {
+                Self::UpstreamWriteTimeout { milliseconds }
+            }
+            Wire::UpstreamReadTimeout { milliseconds } => {
+                Self::UpstreamReadTimeout { milliseconds }
+            }
+            Wire::DropUpstreamResponse { mode } => Self::DropUpstreamResponse { mode },
+            Wire::MockResponse(wire) => {
+                let body = match (wire.body, wire.body_bytes) {
+                    (Some(body), None) => body,
+                    (None, Some(bytes)) => String::from_utf8(bytes).map_err(|_| {
+                        serde::de::Error::custom(
+                            "legacy MockResponse body_bytes is not valid UTF-8",
+                        )
+                    })?,
+                    (Some(_), Some(_)) => {
+                        return Err(serde::de::Error::custom(
+                            "MockResponse cannot contain both body and body_bytes",
+                        ));
+                    }
+                    (None, None) => {
+                        return Err(serde::de::Error::missing_field("body"));
+                    }
+                };
+                Self::MockResponse {
+                    status: wire.status,
+                    headers: wire.headers,
+                    body,
+                }
+            }
+            Wire::InvalidJson { body_bytes } => Self::InvalidJson { body_bytes },
+            Wire::IncorrectContentLength { delta } => Self::IncorrectContentLength { delta },
+            Wire::TruncateResponse { bytes } => Self::TruncateResponse { bytes },
+            Wire::DisconnectDuringUpstreamWrite { after_bytes } => {
+                Self::DisconnectDuringUpstreamWrite { after_bytes }
+            }
+            Wire::DisconnectDuringDownstreamWrite { after_bytes } => {
+                Self::DisconnectDuringDownstreamWrite { after_bytes }
+            }
+        })
+    }
 }
 
 impl TerminalAction {

@@ -26,6 +26,7 @@ use crate::listener::{ChildTaskError, ConnectionTaskScope};
 
 mod endpoints;
 
+pub(crate) use endpoints::LocalHttpServerConnector;
 use endpoints::{BufferedApp, BufferedHttpServer};
 
 /// Exchange 完成后交回 HTTP wire 层的结果。

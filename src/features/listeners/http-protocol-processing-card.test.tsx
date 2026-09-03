@@ -76,7 +76,7 @@ function settings(mode: "plain" | "protocol" = "plain"): HttpListenerSettings {
       mode: "protocol",
       package: { id: "http-json", version: "1.0.0" },
     },
-    fixed_server: null,
+    topology: { mode: "remote_server", settings: { fixed_server: null } },
   };
 }
 

@@ -38,7 +38,8 @@ fn packaged_resource_candidate_projects_with_builtin_package_and_no_private_mate
         "mode":"protocol",
         "package":{"id":"iso8583-ascii-standard","version":"1.0.0"},
     });
-    http["data_plane"]["settings"]["fixed_server"] = serde_json::Value::Null;
+    http["data_plane"]["settings"]["topology"] =
+        serde_json::json!({"mode":"remote_server","settings":{"fixed_server":null}});
 
     let socket = &mut value["workspace"]["listeners"][1];
     socket["enabled"] = serde_json::json!(false);

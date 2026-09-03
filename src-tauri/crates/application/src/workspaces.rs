@@ -82,7 +82,10 @@ fn remap_listener_certificates(
                 &mut settings.downstream_tls.client_authentication,
                 mapping,
             )?;
-            if let Some(fixed_server) = &mut settings.fixed_server {
+            if let Some(fixed_server) = settings
+                .remote_server_mut()
+                .and_then(|remote| remote.fixed_server.as_mut())
+            {
                 fixed_server.upstream_tls.server_trust = remap_optional(
                     fixed_server.upstream_tls.server_trust,
                     mapping,

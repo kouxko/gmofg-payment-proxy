@@ -60,7 +60,7 @@ export function dynamicListener(id = "listener-1", name = "默认代理监听", 
         request_body_codec: "auto" as const,
         response_body_codec: "auto" as const,
         body_processing: { mode: "plain" as const },
-        fixed_server: null,
+        topology: { mode: "remote_server" as const, settings: { fixed_server: null } },
       },
     },
   };
@@ -73,10 +73,10 @@ export function fixedListener(id: string, name: string, port: number, upstreamUr
       kind: "http" as const,
       settings: {
         ...dynamicListener(id, name, port).data_plane.settings,
-        fixed_server: {
-          upstream_url: upstreamUrl,
-          upstream_tls: { verify_hostname: true, server_trust: null, client_identity: null },
-        },
+        topology: { mode: "remote_server" as const, settings: { fixed_server: {
+            upstream_url: upstreamUrl,
+            upstream_tls: { verify_hostname: true, server_trust: null, client_identity: null },
+          } } },
       },
     },
   };

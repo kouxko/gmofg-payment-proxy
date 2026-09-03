@@ -133,8 +133,9 @@ Socket Relay 用 tagged union 表达四种可执行拓扑：
 LocalResponder 没有上游连接，使用独立的 `SocketDownstreamSecurity`，只能是 TCP 或下游 TLS；类型层面
 不能表达无效的上游地址/信任/客户端身份。
 
-HTTP 固定 Server 模式同样把 downstream TLS 与 `fixed_server.upstream_tls` 分开。MITM 动态证书签发
-只解决 App 信任 Proxy，不能代替 Proxy 对真实上游的 hostname/CA 校验。
+HTTP RemoteServer 模式同样把 downstream TLS 与 `topology.RemoteServer.fixed_server.upstream_tls`
+分开；HTTP LocalServer 没有上游 TLS 配置。MITM 动态证书签发只解决 App 信任 Proxy，不能代替
+Proxy 对真实上游的 hostname/CA 校验。
 
 ## 6. 配置快照中的 TLS
 

@@ -265,7 +265,7 @@ function HttpAuthentication({
           <span>启用 HTTP Basic 认证</span></Switch.Content>
       </Switch>
     </div>
-    {!settings.fixed_server && <MitmSwitch settings={settings} onChange={onChange} />}
+    {settings.topology.mode === "remote_server" && !settings.topology.settings.fixed_server && <MitmSwitch settings={settings} onChange={onChange} />}
     {settings.authentication.mode === "basic" && <>
       <div
         role="group"
@@ -293,7 +293,7 @@ function HttpAuthentication({
         </Button>
       </div>
     </>}
-    {!settings.fixed_server && settings.mitm.enabled && <MitmFields settings={settings} onChange={onChange} />}
+    {settings.topology.mode === "remote_server" && !settings.topology.settings.fixed_server && settings.mitm.enabled && <MitmFields settings={settings} onChange={onChange} />}
   </div>;
 }
 

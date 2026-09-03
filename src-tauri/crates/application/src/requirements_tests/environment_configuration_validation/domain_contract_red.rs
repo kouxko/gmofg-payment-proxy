@@ -398,8 +398,8 @@ async fn rejects_credential_alias_reuse_by_multiple_consumers() {
         listener["port"] = serde_json::json!(8081);
         listener["data_plane"]["settings"]["downstream_tls"]["server_identity_alias"] =
             serde_json::json!("second-http-listener-identity");
-        listener["data_plane"]["settings"]["fixed_server"]["upstream_tls"]["client_identity_alias"] =
-            serde_json::json!("second-http-upstream-client");
+        listener["data_plane"]["settings"]["topology"]["settings"]["fixed_server"]["upstream_tls"]
+            ["client_identity_alias"] = serde_json::json!("second-http-upstream-client");
         candidate["workspace"]["listeners"]
             .as_array_mut()
             .unwrap()
@@ -430,8 +430,8 @@ async fn rejects_credential_alias_reuse_by_multiple_consumers() {
 
 async fn assert_fixed_server_origin_rejected(upstream_url: &str) {
     let candidate = candidate_json_with(|candidate| {
-        candidate["workspace"]["listeners"][0]["data_plane"]["settings"]["fixed_server"]["upstream_url"] =
-            serde_json::json!(upstream_url);
+        candidate["workspace"]["listeners"][0]["data_plane"]["settings"]["topology"]["settings"]
+            ["fixed_server"]["upstream_url"] = serde_json::json!(upstream_url);
     });
     let original = candidate.clone();
     let port = Arc::new(RecordingValidationPort::new(Behavior::Pass));

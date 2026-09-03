@@ -72,7 +72,7 @@ fn validate_http(
     error: &mut DomainError,
 ) {
     if bind_ip.is_some_and(|ip| !ip.is_loopback())
-        && value.fixed_server.is_none()
+        && value.uses_request_target()
         && matches!(value.authentication, ForwardProxyAuthentication::None)
     {
         push_field_error(
@@ -84,7 +84,7 @@ fn validate_http(
     validate_http_authentication(value, prefix, error);
     validate_mitm(value, certificate_ids, certificate_kinds, prefix, error);
     validate_http_downstream_tls(value, certificate_ids, certificate_kinds, prefix, error);
-    if let Some(fixed_server) = &value.fixed_server {
+    if let Some(fixed_server) = value.fixed_server() {
         validate_fixed_server(
             fixed_server,
             certificate_ids,
@@ -199,7 +199,7 @@ fn validate_fixed_server(
     prefix: &str,
     error: &mut DomainError,
 ) {
-    let field = format!("{prefix}.data_plane.settings.fixed_server");
+    let field = format!("{prefix}.data_plane.settings.topology.settings.fixed_server");
     if !is_valid_upstream_origin(&value.upstream_url) {
         push_field_error(
             error,

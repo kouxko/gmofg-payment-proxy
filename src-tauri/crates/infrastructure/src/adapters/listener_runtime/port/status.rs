@@ -52,7 +52,7 @@ pub(super) fn http_probe_view(
     };
     let origin = listener
         .http()
-        .and_then(|http| http.fixed_server.as_ref())
+        .and_then(|http| http.fixed_server())
         .map_or_else(String::new, |fixed| fixed.upstream_url.clone());
     ListenerUpstreamConnectionTestViewModel {
         listener_id: listener.id,
