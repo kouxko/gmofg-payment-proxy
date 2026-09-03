@@ -65,7 +65,7 @@ android_environment:
     - apt-get update
     - >-
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
-        aria2 ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
+        aria2 build-essential ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
   script:
     - source scripts/ci/bootstrap-gitlab-linux.sh android
 
@@ -92,7 +92,7 @@ android_companion:
     - apt-get update
     - >-
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
-        aria2 ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
+        aria2 build-essential ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
     - source scripts/ci/bootstrap-gitlab-linux.sh android
   script:
     - |

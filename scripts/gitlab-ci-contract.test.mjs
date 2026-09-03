@@ -155,7 +155,7 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.doesNotMatch(variables, /SHA256/u);
   assert.match(source, /source scripts\/ci\/configure-ubuntu-apt-mirror\.sh/u);
-  assert.match(source, /aria2 ca-certificates curl/u);
+  assert.match(source, /aria2 build-essential ca-certificates curl/u);
   const linuxBootstrap = await readRepositoryFile(
     "scripts/ci/bootstrap-gitlab-linux.sh",
   );
