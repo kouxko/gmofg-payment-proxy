@@ -35,6 +35,7 @@ __pycache__/
 
 # Local agent/runtime state and generated scratch assets
 /.omx/
+/.ci-cache/
 /tmp/
 /=
 /examples/protocol-packages/nuvei_tango_rhai/tests/target/

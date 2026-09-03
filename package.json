@@ -9,6 +9,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "test:deno-toolchain": "deno test -A scripts/deno-toolchain-contract.test.mjs",
+    "test:gitlab-ci": "deno test -A scripts/gitlab-ci-contract.test.mjs",
     "test:coverage-policy": "deno test -A scripts/coverage-policy.test.mjs",
     "test:bindings-check": "deno test -A scripts/check-generated-bindings.test.mjs",
     "check:bindings": "deno run -A scripts/check-generated-bindings.mjs",

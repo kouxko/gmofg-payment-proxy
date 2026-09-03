@@ -1,0 +1,313 @@
+workflow:
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
+    - if: '$PIPELINE_MODE == "android-windows-build"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+    - if: '$CI_COMMIT_BRANCH && $CI_OPEN_MERGE_REQUESTS && $CI_PIPELINE_SOURCE == "push"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+
+stages:
+  - prepare
+  - quality
+  - verify
+  - package
+
+variables:
+  PIPELINE_MODE: "full"
+  DENO_VERSION: "2.9.6"
+  DENO_LINUX_SHA256: "394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
+  DENO_WINDOWS_SHA256: "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11"
+  RUSTUP_VERSION: "1.29.1"
+  RUSTUP_LINUX_SHA256: "dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
+  RUSTUP_WINDOWS_SHA256: "6f4bef66261261fcb43131be8720bab817d403a09edec7455c371974b90bdb7e"
+  RUST_TOOLCHAIN: "1.98.0"
+  CARGO_LLVM_COV_VERSION: "0.8.7"
+  GRADLE_VERSION: "9.6.1"
+  GRADLE_SHA256: "9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14"
+  ANDROID_PLATFORM: "36"
+  ANDROID_BUILD_TOOLS_VERSION: "36.0.0"
+  ANDROID_NDK_VERSION: "29.0.14206865"
+  ANDROID_COMMAND_LINE_TOOLS_VERSION: "15859902"
+  ANDROID_COMMAND_LINE_TOOLS_SHA256: "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583"
+  CARGO_TERM_COLOR: "always"
+  CARGO_INCREMENTAL: "0"
+
+android_companion:
+  stage: prepare
+  image: ubuntu:24.04
+  tags:
+    - "docker test"
+  timeout: 45m
+  interruptible: true
+  cache:
+    key:
+      files:
+        - android-companion/settings.gradle.kts
+        - src-tauri/Cargo.lock
+      prefix: "android-linux-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+  before_script:
+    - apt-get update
+    - >-
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
+        ca-certificates curl file git openjdk-21-jdk-headless unzip xz-utils zip
+    - source scripts/ci/bootstrap-gitlab-linux.sh android
+  script:
+    - |
+        if [ "$PIPELINE_MODE" = "android-windows-build" ]; then
+          (
+            cd android-companion
+            gradle --no-daemon :app:assembleRelease
+          )
+        else
+          ./scripts/build-android-companion.sh
+        fi
+    - mkdir -p android-companion-artifact
+    - >-
+        cp android-companion/app/build/outputs/apk/release/app-release.apk
+        android-companion-artifact/intercept-proxy-android-companion.apk
+  artifacts:
+    name: "intercept-proxy-android-companion-$CI_COMMIT_SHORT_SHA"
+    expire_in: 14 days
+    when: on_success
+    paths:
+      - android-companion-artifact/intercept-proxy-android-companion.apk
+
+coverage_gates:
+  stage: quality
+  image: ubuntu:24.04
+  tags:
+    - "docker test"
+  timeout: 45m
+  interruptible: true
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build"'
+      when: never
+    - when: on_success
+  needs:
+    - job: android_companion
+      artifacts: true
+  cache:
+    key:
+      files:
+        - deno.lock
+        - src-tauri/Cargo.lock
+      prefix: "coverage-linux-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+      - node_modules/
+  before_script:
+    - apt-get update
+    - >-
+        DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
+        build-essential ca-certificates curl file git libayatana-appindicator3-dev
+        librsvg2-dev libssl-dev libwebkit2gtk-4.1-dev libxdo-dev unzip wget xz-utils
+    - source scripts/ci/bootstrap-gitlab-linux.sh quality
+  script:
+    - >-
+        ./scripts/stage-android-companion.sh
+        android-companion-artifact/intercept-proxy-android-companion.apk
+    - deno ci
+    - deno task test:coverage-policy
+    - deno task check:coverage:frontend
+    - deno task check:coverage:rust
+  artifacts:
+    name: "coverage-reports-$CI_COMMIT_SHORT_SHA"
+    expire_in: 14 days
+    when: always
+    paths:
+      - coverage/
+
+verify_windows:
+  stage: verify
+  tags:
+    - "slave4"
+  timeout: 2h 30m
+  interruptible: true
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build"'
+      when: never
+    - when: on_success
+  needs:
+    - job: android_companion
+      artifacts: true
+  cache:
+    key:
+      files:
+        - deno.lock
+        - src-tauri/Cargo.lock
+      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+      - node_modules/
+      - .next/cache/
+  before_script:
+    - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
+  script:
+    - deno ci
+    - deno task test:gitlab-ci
+    - deno task test:deno-toolchain
+    - >-
+        .\scripts\ci\stage-android-companion-windows.ps1
+        -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
+    - deno audit --level high --frozen-lockfile
+    - |
+        cargo build --release --manifest-path src-tauri/Cargo.toml --features export-bindings --bin export-bindings
+        if ($LASTEXITCODE -ne 0) { throw "Binding generator build failed." }
+        $Generator = "src-tauri/target/release/export-bindings.exe"
+        & $Generator
+        if ($LASTEXITCODE -ne 0) { throw "First binding generation failed." }
+        git diff --exit-code -- src/generated/rust-types.ts
+        if ($LASTEXITCODE -ne 0) { throw "Generated bindings differ from the committed file." }
+        & $Generator
+        if ($LASTEXITCODE -ne 0) { throw "Second binding generation failed." }
+        git diff --exit-code -- src/generated/rust-types.ts
+        if ($LASTEXITCODE -ne 0) { throw "Binding generation is not deterministic." }
+    - deno task scan:architecture
+    - deno task scan:source-size
+    - deno task lint
+    - deno task typecheck
+    - deno task test
+    - deno task build
+    - deno task scan:bundle-branding
+    - cargo fmt --all --manifest-path src-tauri/Cargo.toml -- --check
+    - >-
+        cargo clippy --manifest-path src-tauri/Cargo.toml
+        --workspace --all-targets --all-features -- -D warnings
+    - >-
+        cargo test --manifest-path src-tauri/Cargo.toml
+        --workspace --all-targets --exclude intercept-proxy
+    - >-
+        cargo test --manifest-path src-tauri/Cargo.toml
+        -p intercept-proxy --all-targets --no-run
+    - deno task test:protocol-packages
+    - deno task check:rust:windows
+    - >-
+        cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml
+        --all-targets
+    - >-
+        cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml
+        --all-targets
+    - >-
+        cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml
+        --all-targets -- -D warnings
+
+package_windows_unsigned:
+  stage: package
+  tags:
+    - "slave4"
+  timeout: 1h
+  interruptible: true
+  variables:
+    OPENSSL_STATIC: "1"
+  needs:
+    - job: android_companion
+      artifacts: true
+    - job: verify_windows
+      artifacts: false
+    - job: coverage_gates
+      artifacts: false
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "merge_request_event"'
+      when: never
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_BRANCH == $CI_DEFAULT_BRANCH'
+    - if: '$CI_PIPELINE_SOURCE == "push" && $CI_COMMIT_TAG'
+    - if: '$CI_PIPELINE_SOURCE == "web"'
+    - when: never
+  cache:
+    key:
+      files:
+        - deno.lock
+        - src-tauri/Cargo.lock
+      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+      - node_modules/
+      - .next/cache/
+  before_script:
+    - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
+  script:
+    - deno ci
+    - >-
+        .\scripts\ci\stage-android-companion-windows.ps1
+        -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
+    - deno audit --level high --frozen-lockfile
+    - |
+        Remove-Item "src-tauri/target/release/bundle/msi" -Recurse -Force -ErrorAction SilentlyContinue
+        Remove-Item "src-tauri/target/release/bundle/nsis" -Recurse -Force -ErrorAction SilentlyContinue
+    - deno task tauri build --bundles msi,nsis
+    - .\scripts\verify-windows-openssl-runtime.ps1
+    - |
+        $App = Get-Item "src-tauri/target/release/intercept-proxy.exe" -ErrorAction Stop
+        $Msi = @(Get-ChildItem "src-tauri/target/release/bundle/msi/*.msi" -File -ErrorAction SilentlyContinue)
+        $Nsis = @(Get-ChildItem "src-tauri/target/release/bundle/nsis/*.exe" -File -ErrorAction SilentlyContinue)
+        if ($Msi.Count -lt 1) { throw "Expected at least one unsigned MSI installer." }
+        if ($Nsis.Count -lt 1) { throw "Expected at least one unsigned NSIS installer." }
+        $Artifacts = @($App.FullName)
+        $Artifacts += $Msi | Select-Object -ExpandProperty FullName
+        $Artifacts += $Nsis | Select-Object -ExpandProperty FullName
+        foreach ($Artifact in $Artifacts) {
+          $Signature = Get-AuthenticodeSignature -FilePath $Artifact
+          if ($Signature.Status -ne "NotSigned") {
+            throw "Expected an unsigned GitLab CI artifact at $Artifact, got $($Signature.Status)."
+          }
+        }
+    - .\scripts\package-portable.ps1 -SkipBuild
+  artifacts:
+    name: "Intercept-Proxy-unsigned-windows-x64-$CI_COMMIT_SHORT_SHA"
+    expire_in: 30 days
+    when: on_success
+    paths:
+      - src-tauri/target/release/bundle/msi/*.msi
+      - src-tauri/target/release/bundle/nsis/*.exe
+      - dist/*.zip
+
+windows_build_only:
+  stage: package
+  tags:
+    - "slave4"
+  timeout: 1h
+  interruptible: true
+  variables:
+    OPENSSL_STATIC: "1"
+  needs:
+    - job: android_companion
+      artifacts: true
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
+    - when: never
+  cache:
+    key:
+      files:
+        - deno.lock
+        - src-tauri/Cargo.lock
+      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    paths:
+      - .ci-cache/
+      - node_modules/
+      - .next/cache/
+  before_script:
+    - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
+  script:
+    - deno ci
+    - >-
+        .\scripts\ci\stage-android-companion-windows.ps1
+        -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
+    - deno task tauri build --bundles msi,nsis
+    - .\scripts\package-portable.ps1 -SkipBuild
+  artifacts:
+    name: "Intercept-Proxy-android-windows-build-$CI_COMMIT_SHORT_SHA"
+    expire_in: 30 days
+    when: on_success
+    paths:
+      - src-tauri/target/release/bundle/msi/*.msi
+      - src-tauri/target/release/bundle/nsis/*.exe
+      - dist/*.zip

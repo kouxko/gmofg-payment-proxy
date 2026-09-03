@@ -526,6 +526,17 @@ MSI、NSIS 的签名、签发者和时间戳执行 fail-closed 检查，在三�
 `unsigned` artifact 名称。只配置部分签名参数属于错误并 fail-closed，不会静默降级。发布凭据只存在于
 GitHub runner，不能放进仓库、编辑器任务或文档。
 
+### 12.4 GitLab Code verification
+
+根目录 `.gitlab-ci.yml` 为内部 GitLab 项目提供 Android Companion、coverage、Windows 验证和未签名 Windows
+打包流程。需要跳过完整门禁、只生成可使用 Android VPN Companion 的 Windows 候选包时，通过 API 或 Web
+手动流水线传入 `PIPELINE_MODE=android-windows-build`。该模式只运行 Android Companion release 编译和
+Windows 打包两个 job；Windows job 消费 APK 并生成包含该资源的 MSI、NSIS 和 portable ZIP，不执行
+coverage、完整 verify、测试、lint、audit 或发布。
+
+本地合同测试和 GitLab CI Lint 只证明配置结构有效；Runner 与产物必须由当前 commit 的真实 GitLab
+pipeline 证明。
+
 ## 13. 安全红线
 
 - 测试和诊断允许按任务需要保存完整 HTTP/Socket payload、Document 与支付 trace；仍不得把真实生产私钥、P12

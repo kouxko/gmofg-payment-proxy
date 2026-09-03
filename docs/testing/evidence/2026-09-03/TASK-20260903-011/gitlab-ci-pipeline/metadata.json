@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-011",
+  "case_id": "gitlab-ci-pipeline",
+  "executed_at": "2026-09-03 17:04:39 +08:00",
+  "retested_at": "2026-09-03 17:28:39 +08:00",
+  "result": "PASS_WITH_REMOTE_PIPELINE_NOT_RUN",
+  "repository": "/Users/codin/Code/gmofg-payment-proxy",
+  "gitlab_project": {
+    "url": "http://172.16.3.60/other/intercept_proxy.git",
+    "project_id": 1023,
+    "gitlab_version": "17.4.2",
+    "default_branch": "master"
+  },
+  "checks": [
+    {
+      "name": "gitlab_ci_contract",
+      "command": "deno task test:gitlab-ci",
+      "result": "PASS",
+      "details": "5 passed, 0 failed"
+    },
+    {
+      "name": "deno_toolchain_contract",
+      "command": "deno task test:deno-toolchain",
+      "result": "PASS",
+      "details": "4 passed, 0 failed"
+    },
+    {
+      "name": "static_checks",
+      "result": "PASS",
+      "details": "deno fmt, deno lint, ESLint, bash -n, Ruby YAML parse and git diff --check passed"
+    },
+    {
+      "name": "gitlab_ci_lint",
+      "result": "PASS",
+      "details": "valid=true, errors=[], warnings=[], five expected job definitions"
+    },
+    {
+      "name": "remote_pipeline",
+      "result": "NOT_RUN",
+      "details": "Push and pipeline trigger were not authorized"
+    }
+  ],
+  "not_applicable": {
+    "protocol_evidence": "No protocol or runtime behavior changed",
+    "ui_evidence": "No UI changed",
+    "user_resources": "No user-provided file resource was used"
+  },
+  "replay": "Run the commands documented in README.md; remote artifact verification requires a separately authorized GitLab pipeline."
+}
