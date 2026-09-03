@@ -114,7 +114,7 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
     variables,
-    /^[ ]{2}APT_MIRROR_URL: "http:\/\/mirrors\.aliyun\.com\/ubuntu"$/mu,
+    /^[ ]{2}APT_MIRROR_URL: "https:\/\/repo\.huaweicloud\.com\/ubuntu"$/mu,
   );
   assert.match(
     variables,
