@@ -162,6 +162,7 @@ impl ExchangeObservationStore {
         let matching = state
             .records
             .iter()
+            .rev()
             .filter(|record| record.workspace_id == query.workspace_id)
             .filter(|record| {
                 query

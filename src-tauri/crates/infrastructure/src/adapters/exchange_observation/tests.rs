@@ -150,6 +150,42 @@ fn producer_drop_counter_is_lock_free_and_visible_to_queries() {
 }
 
 #[test]
+fn query_pages_connections_from_newest_to_oldest() {
+    let workspace = WorkspaceId::new();
+    let store = ExchangeObservationStore::new(Arc::new(CapacityLedger::new(4096)));
+    assert!(store.open(record("exchange-a", workspace)));
+    assert!(store.open(record("exchange-b", workspace)));
+    assert!(store.open(record("exchange-c", workspace)));
+
+    let query = |page| ExchangeObservationQuery {
+        workspace_id: workspace,
+        listener_id: None,
+        page: PageRequest { page, page_size: 2 },
+    };
+
+    let first = store.query(&query(1));
+    assert_eq!(first.total, 3);
+    assert_eq!(
+        first
+            .rows
+            .iter()
+            .map(|record| record.exchange_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["exchange-c", "exchange-b"]
+    );
+
+    let second = store.query(&query(2));
+    assert_eq!(
+        second
+            .rows
+            .iter()
+            .map(|record| record.exchange_id.as_str())
+            .collect::<Vec<_>>(),
+        vec!["exchange-a"]
+    );
+}
+
+#[test]
 fn oversized_append_reverts_event_marks_evidence_evicted_and_counts_ignored() {
     let workspace = WorkspaceId::new();
     let opened = record("exchange-large", workspace);

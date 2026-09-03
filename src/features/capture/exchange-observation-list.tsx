@@ -64,7 +64,7 @@ export function ExchangeObservationList(props: Props) {
             }}
           >
             <Table.Header>
-              <Table.Column isRowHeader>建立时间</Table.Column>
+              <Table.Column isRowHeader>建立时间（最新优先）</Table.Column>
               <Table.Column>协议</Table.Column>
               <Table.Column>对端</Table.Column>
               <Table.Column>收到 / 发送 / 失败</Table.Column>

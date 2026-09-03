@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-006",
+  "case_id": "EXCHANGE-NEWEST-FIRST-001",
+  "executed_at": "2026-09-03 15:45:54 +08:00",
+  "base_commit": "d2346ca",
+  "environment": {
+    "platform": "macOS arm64",
+    "application": "/Applications/Intercept Proxy.app",
+    "application_pid": 61305,
+    "executable_sha256": "622d5015822d9c689d5fcdaa379435361861b5e7aea2fdbbd6c65f98405f4f44"
+  },
+  "input": {
+    "opened_order": ["exchange-a", "exchange-b", "exchange-c"],
+    "page_size": 2
+  },
+  "expected": {
+    "page_1": ["exchange-c", "exchange-b"],
+    "page_2": ["exchange-a"]
+  },
+  "actual": {
+    "page_1": ["exchange-c", "exchange-b"],
+    "page_2": ["exchange-a"]
+  },
+  "result": "PASS",
+  "checks": [
+    {
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure query_pages_connections_from_newest_to_oldest",
+      "result": "PASS",
+      "details": "1/1"
+    },
+    {
+      "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure adapters::exchange_observation::tests",
+      "result": "PASS",
+      "details": "9/9"
+    },
+    {
+      "command": "deno task test src/features/capture/exchange-observation-list.test.tsx src/features/capture/exchange-observation-model.test.ts src/features/capture/exchange-observation-view.test.tsx",
+      "result": "PASS",
+      "details": "3 files, 10 tests"
+    },
+    {
+      "command": "deno task typecheck",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task lint",
+      "result": "PASS"
+    },
+    {
+      "command": "cargo fmt --manifest-path src-tauri/Cargo.toml -- --check",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task tauri build --bundles app",
+      "result": "PASS",
+      "details": "13 static pages and one macOS app bundle"
+    },
+    {
+      "command": "installed app accessibility inspection",
+      "result": "PASS",
+      "details": "Capture column header is 建立时间（最新优先）"
+    }
+  ],
+  "not_applicable": {
+    "live_multirow_capture": "Current workspace contained zero records; deterministic store pagination test proves ordering",
+    "network_packets": "Observation projection only",
+    "remote_device": "Observation projection only",
+    "ci_push_release": "Local delivery only",
+    "adversarial_review": "Skipped by explicit user instruction"
+  }
+}
