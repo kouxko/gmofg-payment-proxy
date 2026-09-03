@@ -106,6 +106,14 @@ describe("Android runtime owner controls", () => {
     expect(screen.getByRole("button", { name: "紧急恢复网络 device-a" })).toBeEnabled();
   });
 
+  it("stretches the three device setup actions across equal grid columns", () => {
+    renderDeviceControl("device-b");
+
+    for (const label of ["安装设备端组件", "更新设备端组件", "授权网络接管"]) {
+      expect(screen.getByRole("button", { name: label })).toHaveClass("w-full");
+    }
+  });
+
   it("keeps owner stop and recovery available without a selected device", async () => {
     const user = userEvent.setup();
     const onStop = vi.fn();

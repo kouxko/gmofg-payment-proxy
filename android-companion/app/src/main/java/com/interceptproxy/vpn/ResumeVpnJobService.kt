@@ -14,7 +14,10 @@ class ResumeVpnJobService : JobService() {
             activation != null &&
             VpnService.prepare(this) == null
         ) {
-            startForegroundService(InterceptVpnService.startActivationIntent(this, activation))
+            AndroidPlatformCompatibility.startVpnService(
+                this,
+                InterceptVpnService.startActivationIntent(this, activation),
+            )
         }
         jobFinished(params, false)
         return false

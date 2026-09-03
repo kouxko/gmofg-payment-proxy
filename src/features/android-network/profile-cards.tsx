@@ -37,7 +37,7 @@ export function ProfileSelectorCard({
       <Card.Header className="flex-row items-center justify-between gap-3 pb-2">
         <div>
           <Card.Title>设备网络方案</Card.Title>
-          <Card.Description>保存目标应用、透明代理路由与可选弱网参数。</Card.Description>
+          <Card.Description>保存目标应用与弱网效果；代理调试为可选设置。</Card.Description>
         </div>
         {!isEmpty && (
           <Button size="sm" variant="primary" isDisabled={busy} onPress={onNew}>
@@ -111,7 +111,7 @@ export function ProfileBasicsCard({
         <Card.Title>方案基本信息</Card.Title>
         <Card.Description className="font-mono text-xs">{draft.id}</Card.Description>
       </Card.Header>
-      <Card.Content className="grid grid-cols-2 gap-4 p-4 max-[760px]:grid-cols-1">
+      <Card.Content className="p-4">
         <div className="grid gap-1">
           <Label>方案名称</Label>
           <Input
@@ -120,7 +120,23 @@ export function ProfileBasicsCard({
             onChange={(event) => onChange({ ...draft, name: event.target.value })}
           />
         </div>
-        <div className="flex items-end">
+      </Card.Content>
+    </Card>
+  );
+}
+
+export function ProfileRuntimeBehaviorCard({
+  draft,
+  onChange,
+}: ProfileBasicsCardProps): ReactElement {
+  return (
+    <Card className="border border-[var(--telemetry-line)] shadow-sm">
+      <Card.Header>
+        <Card.Title>运行保护</Card.Title>
+        <Card.Description>仅在需要改变设备重启后的恢复方式或控制失联处理时调整。</Card.Description>
+      </Card.Header>
+      <Card.Content className="grid gap-4 p-4">
+        <div>
           <Switch
             isSelected={draft.auto_resume_after_reboot}
             onChange={(autoResume) => onChange({
@@ -134,7 +150,7 @@ export function ProfileBasicsCard({
             </Switch.Content>
           </Switch>
         </div>
-        <div className="col-span-2 flex items-end max-[760px]:col-span-1">
+        <div>
           <Switch
             isSelected={draft.stop_vpn_on_control_loss}
             onChange={(stopOnControlLoss) => onChange({

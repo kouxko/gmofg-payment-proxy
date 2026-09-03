@@ -196,9 +196,9 @@ export function DeviceControlCard({
         </div>
 
         <div className="grid grid-cols-3 gap-2 max-[680px]:grid-cols-1">
-          <DeviceAction label="安装设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onInstall} />
-          <DeviceAction label="更新设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onUpdate} />
-          <DeviceAction label="授权网络接管" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onConsent} />
+          <DeviceAction label="安装设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onInstall} fullWidth />
+          <DeviceAction label="更新设备端组件" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onUpdate} fullWidth />
+          <DeviceAction label="授权网络接管" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onConsent} fullWidth />
         </div>
         <p className="text-xs text-[var(--telemetry-muted)]">
           已保留 {runtimeOwners.length}/8 个运行设备记录。
@@ -214,6 +214,7 @@ interface DeviceActionProps {
   onPress: () => void;
   danger?: boolean;
   accessibleSuffix?: string;
+  fullWidth?: boolean;
 }
 
 function DeviceAction({
@@ -222,9 +223,11 @@ function DeviceAction({
   onPress,
   danger = false,
   accessibleSuffix,
+  fullWidth = false,
 }: DeviceActionProps): ReactElement {
   return (
     <Button
+      className={fullWidth ? "w-full" : undefined}
       variant={danger ? "danger-soft" : "outline"}
       aria-label={accessibleSuffix ? `${label} ${accessibleSuffix}` : undefined}
       isDisabled={disabled}

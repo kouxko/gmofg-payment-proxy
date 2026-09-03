@@ -1,4 +1,4 @@
-import type { ReactElement } from "react";
+import { useState, type ReactElement } from "react";
 import { Alert, Button, Card, Input, Label, Switch } from "@heroui/react";
 import type {
   AndroidDestinationTarget,
@@ -7,6 +7,10 @@ import type {
 } from "@/generated/rust-types";
 import { NumericField } from "./android-network-fields";
 import type { UpdateWeakNetwork } from "./android-network-types";
+import {
+  matchingWeakNetworkScene,
+  WEAK_NETWORK_SCENES,
+} from "./weak-network-scenes";
 
 interface DestinationTargetsCardProps {
   draft: AndroidNetworkProfile;
@@ -107,22 +111,109 @@ export function BasicNetworkParametersCard({
   weak,
   onUpdate,
 }: BasicNetworkParametersCardProps): ReactElement {
+  const weakSignature = commonWeakNetworkSignature(weak);
+  const [customSignature, setCustomSignature] = useState<string | null>(
+    () => matchingWeakNetworkScene(weak) ? null : weakSignature,
+  );
+  const matchingScene = matchingWeakNetworkScene(weak);
+  const selectedScene = customSignature === weakSignature ? "custom" : matchingScene?.id ?? "custom";
+  const selectedSceneConfig = WEAK_NETWORK_SCENES.find((scene) => scene.id === selectedScene);
+
+  function updateCustom(changes: Partial<WeakNetworkProfile>): void {
+    setCustomSignature(commonWeakNetworkSignature({ ...weak, ...changes }));
+    onUpdate(changes);
+  }
+
   return (
     <Card className="border border-[var(--telemetry-line)] shadow-sm">
       <Card.Header>
-        <Card.Title>TCP/IP 弱网参数</Card.Title>
-        <Card.Description>概率使用 0–10000 基点，保存时统一校验。</Card.Description>
+        <Card.Title>常用弱网效果</Card.Title>
+        <Card.Description>
+          弱网可以单独运行，无需配置代理入口。设置常用效果后即可保存并启动。
+        </Card.Description>
+      </Card.Header>
+      <Card.Content className="space-y-4 p-4">
+        <div className="space-y-2">
+          <p className="text-sm font-medium">快速场景</p>
+          <div className="flex flex-wrap gap-2" role="group" aria-label="弱网快速场景">
+            <Button
+              size="sm"
+              variant={selectedScene === "custom" ? "primary" : "outline"}
+              aria-pressed={selectedScene === "custom"}
+              onPress={() => setCustomSignature(weakSignature)}
+            >
+              自定义
+            </Button>
+            {WEAK_NETWORK_SCENES.map((scene) => (
+              <Button
+                key={scene.id}
+                size="sm"
+                variant={selectedScene === scene.id ? "primary" : "outline"}
+                aria-pressed={selectedScene === scene.id}
+                onPress={() => {
+                  setCustomSignature(null);
+                  onUpdate(scene.settings);
+                }}
+              >
+                {scene.label}
+              </Button>
+            ))}
+          </div>
+          <p className="text-xs text-[var(--telemetry-muted)]">
+            {selectedScene === "custom"
+              ? "当前为自定义参数。"
+              : `${selectedSceneConfig?.detail}；来源：${selectedSceneConfig?.sourceLabel}；RTT 已换算为单向延迟。`}
+          </p>
+        </div>
+        <div className="grid grid-cols-3 gap-4 max-[900px]:grid-cols-2 max-[620px]:grid-cols-1">
+          <NumericField ariaLabel="延迟（ms）" label="延迟（ms）" value={weak.fixed_delay_millis} onChange={(fixedDelay) => updateCustom({ fixed_delay_millis: fixedDelay })} />
+          <NumericField ariaLabel="延迟波动（ms）" label="延迟波动（ms）" value={weak.uniform_jitter_millis} onChange={(jitter) => updateCustom({ uniform_jitter_millis: jitter })} />
+          <NumericField
+            ariaLabel="丢包率（%）"
+            label="丢包率（%）"
+            minValue={0}
+            maxValue={100}
+            step={0.01}
+            value={basisPointsToPercent(weak.random_loss_basis_points)}
+            onChange={(loss) => updateCustom({ random_loss_basis_points: percentToBasisPoints(loss) })}
+          />
+          <NumericField ariaLabel="上传限速（B/s，0 为不限）" label="上传限速（B/s，0 为不限）" value={weak.upload_bytes_per_second ?? 0} onChange={(value) => updateCustom({ upload_bytes_per_second: nullableZero(value) })} />
+          <NumericField ariaLabel="下载限速（B/s，0 为不限）" label="下载限速（B/s，0 为不限）" value={weak.download_bytes_per_second ?? 0} onChange={(value) => updateCustom({ download_bytes_per_second: nullableZero(value) })} />
+        </div>
+      </Card.Content>
+    </Card>
+  );
+}
+
+export function ExpertNetworkParametersCard({
+  weak,
+  onUpdate,
+}: BasicNetworkParametersCardProps): ReactElement {
+  return (
+    <Card className="border border-[var(--telemetry-line)] shadow-sm">
+      <Card.Header>
+        <Card.Title>专家弱网参数</Card.Title>
+        <Card.Description>用于复现确定性、重复包、乱序和 DNS 故障；保存时仍由 Rust 统一校验。</Card.Description>
       </Card.Header>
       <Card.Content className="grid grid-cols-3 gap-4 p-4 max-[900px]:grid-cols-2 max-[620px]:grid-cols-1">
-        <NumericField label="随机种子" value={weak.seed} onChange={(seed) => onUpdate({ seed })} />
-        <NumericField ariaLabel="固定延迟" label="固定延迟（ms）" value={weak.fixed_delay_millis} onChange={(fixedDelay) => onUpdate({ fixed_delay_millis: fixedDelay })} />
-        <NumericField ariaLabel="均匀抖动" label="均匀抖动（ms）" value={weak.uniform_jitter_millis} onChange={(jitter) => onUpdate({ uniform_jitter_millis: jitter })} />
-        <NumericField ariaLabel="随机丢包" label="随机丢包（基点）" value={weak.random_loss_basis_points} onChange={(loss) => onUpdate({ random_loss_basis_points: loss })} />
-        <NumericField label="重复包（基点）" value={weak.duplicate_basis_points} onChange={(duplicate) => onUpdate({ duplicate_basis_points: duplicate })} />
-        <NumericField label="乱序（基点）" value={weak.reorder_basis_points} onChange={(reorder) => onUpdate({ reorder_basis_points: reorder })} />
+        <NumericField ariaLabel="随机种子" label="随机种子" value={weak.seed} onChange={(seed) => onUpdate({ seed })} />
+        <NumericField
+          label="重复包率（%）"
+          minValue={0}
+          maxValue={100}
+          step={0.01}
+          value={basisPointsToPercent(weak.duplicate_basis_points)}
+          onChange={(duplicate) => onUpdate({ duplicate_basis_points: percentToBasisPoints(duplicate) })}
+        />
+        <NumericField
+          label="乱序率（%）"
+          minValue={0}
+          maxValue={100}
+          step={0.01}
+          value={basisPointsToPercent(weak.reorder_basis_points)}
+          onChange={(reorder) => onUpdate({ reorder_basis_points: percentToBasisPoints(reorder) })}
+        />
         <NumericField ariaLabel="乱序保持时间" label="乱序保持时间（ms）" value={weak.maximum_reorder_hold_millis} onChange={(hold) => onUpdate({ maximum_reorder_hold_millis: hold })} />
-        <NumericField label="上行 B/s（0 为不限）" value={weak.upload_bytes_per_second ?? 0} onChange={(value) => onUpdate({ upload_bytes_per_second: nullableZero(value) })} />
-        <NumericField label="下行 B/s（0 为不限）" value={weak.download_bytes_per_second ?? 0} onChange={(value) => onUpdate({ download_bytes_per_second: nullableZero(value) })} />
         <div className="flex items-end">
           <Switch isSelected={weak.dns_blackhole} onChange={(dnsBlackhole) => onUpdate({ dns_blackhole: dnsBlackhole })}>
             <Switch.Content>
@@ -138,4 +229,22 @@ export function BasicNetworkParametersCard({
 
 function nullableZero(value: number): number | null {
   return value === 0 ? null : value;
+}
+
+function basisPointsToPercent(value: number): number {
+  return value / 100;
+}
+
+function percentToBasisPoints(value: number): number {
+  return Math.round(value * 100);
+}
+
+function commonWeakNetworkSignature(weak: WeakNetworkProfile): string {
+  return JSON.stringify([
+    weak.fixed_delay_millis,
+    weak.uniform_jitter_millis,
+    weak.random_loss_basis_points,
+    weak.upload_bytes_per_second,
+    weak.download_bytes_per_second,
+  ]);
 }

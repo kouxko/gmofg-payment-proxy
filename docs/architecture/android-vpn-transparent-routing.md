@@ -38,6 +38,7 @@
 
 Kotlin 只负责 Android 平台边界：
 
+- 最低支持 Android 7.0（API 24），集中适配 API 26 前后的 Service 启动和通知合同；
 - VPN 授权、前台 Service 和通知；
 - `addAllowedApplication()`；
 - TUN 建立、复用、关闭和 fd 所有权；

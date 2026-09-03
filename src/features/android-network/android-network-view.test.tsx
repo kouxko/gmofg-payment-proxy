@@ -6,7 +6,6 @@ import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
 import { AndroidNetworkView } from "./android-network-view";
 import { testAndroidNetworkProfile } from "./android-network-test-profile";
-
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
   androidPackageList: vi.fn(), androidPackageRefresh: vi.fn(), androidPackageQuery: vi.fn(), deviceNetworkProfileList: vi.fn(), deviceNetworkStatus: vi.fn(),
@@ -18,7 +17,6 @@ const mocks = vi.hoisted(() => ({
   deviceNetworkEmergencyRestore: vi.fn(),
   workspaceList: vi.fn(), workspaceGet: vi.fn(),
 }));
-
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
@@ -86,12 +84,11 @@ describe("Android targeted network page", () => {
     mocks.deviceNetworkProfileSave.mockImplementation((_serial, value) => ok(value));
     mocks.deviceNetworkStart.mockReturnValue(ok({ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "running", state_text: "运行中", ui_tone: "positive", verified: true, transport: "local_abstract_socket", active_profile_id: "profile-1", companion_process_running: true, message: "运行中", unsupported_fields: [], stats: null }));
   });
-
   it("uses compact Chinese labels for the initial operation flow", async () => {
     render(<AndroidNetworkView />);
 
     expect(await screen.findByRole("heading", { name: "应用网络接管" })).toBeVisible();
-    expect(screen.getByText(/可将指定目标透明转交代理入口/)).toBeVisible();
+    expect(screen.getByText(/即可单独运行弱网/)).toBeVisible();
     expect(screen.queryByText(/填写.*Proxy IP/i)).not.toBeInTheDocument();
     expect(screen.getByText("设备连接与控制")).toBeVisible();
     expect(screen.getByLabelText("目标设备")).toBeVisible();
@@ -104,7 +101,6 @@ describe("Android targeted network page", () => {
     expect(screen.queryByText("Profiles")).not.toBeInTheDocument();
     expect(screen.queryByText("Companion 与 VPN")).not.toBeInTheDocument();
   });
-
   it("keeps one create action and only shows the selection hint when profiles exist", async () => {
     mocks.deviceNetworkProfileList.mockReturnValue(ok([{
       id: "saved-profile",
@@ -120,7 +116,6 @@ describe("Android targeted network page", () => {
     expect(screen.getAllByRole("button", { name: "新建" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: "新建设备网络方案" })).not.toBeInTheDocument();
   });
-
   it("uses a wrapping profile flow and marks the profile currently executed by VPN", async () => {
     mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([
@@ -291,6 +286,7 @@ describe("Android targeted network page", () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
+    await user.click(screen.getByRole("button", { name: /运行保护/ }));
 
     const autoResume = screen.getByRole("switch", {
       name: "解锁且网络可用后自动恢复",
@@ -319,6 +315,7 @@ describe("Android targeted network page", () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
+    await user.click(screen.getByRole("button", { name: /运行保护/ }));
 
     const protection = screen.getByRole("switch", {
       name: "ADB 或桌面控制失联 5 秒后自动关闭 VPN",
@@ -406,11 +403,28 @@ describe("Android targeted network page", () => {
     expect(mocks.deviceNetworkProfileSave.mock.invocationCallOrder[0]).toBeLessThan(mocks.deviceNetworkStart.mock.invocationCallOrder[0]);
   });
 
+  it("starts the complete-outage scene only with the explicit risk confirmation", async () => {
+    const user = userEvent.setup();
+    render(<AndroidNetworkView />);
+    await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
+    await user.click(await screen.findByRole("row", { name: /example\.target/ }));
+    await user.click(screen.getByRole("button", { name: "完全断网" }));
+
+    const confirmation = screen.getByRole("switch", { name: "确认 100% 丢包或黑洞风险" });
+    expect(confirmation).toBeVisible();
+    await user.click(confirmation);
+    await user.click(screen.getByRole("button", { name: "启动" }));
+
+    await waitFor(() => expect(mocks.deviceNetworkStart).toHaveBeenCalledWith("device-1", "profile-1", true));
+    expect(mocks.deviceNetworkProfileSave.mock.calls[0][1].weak_network.random_loss_basis_points).toBe(10_000);
+  });
+
   it("collects multiple transparent proxy routes using current Workspace listeners", async () => {
     const user = userEvent.setup();
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
 
+    await user.click(screen.getByRole("button", { name: /同时接入代理调试/ }));
     expect(screen.getByText(/业务 App 仍访问原始 Server/)).toBeVisible();
     expect(screen.queryByLabelText(/Proxy IP/i)).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "添加透明代理路由" }));
@@ -444,6 +458,7 @@ describe("Android targeted network page", () => {
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
 
+    await user.click(screen.getByRole("button", { name: /限制弱网范围/ }));
     expect(screen.getByText("弱网覆盖范围（可选）")).toBeVisible();
     expect(screen.getByText(/这里只限制哪些连接实施弱网，不改变请求去向/)).toBeVisible();
 
@@ -468,6 +483,7 @@ describe("Android targeted network page", () => {
     render(<AndroidNetworkView />);
     await user.click(await screen.findByRole("button", { name: "新建设备网络方案" }));
 
+    await user.click(screen.getByRole("button", { name: /专家参数/ }));
     await user.click(screen.getByRole("switch", { name: "启用连续丢包" }));
     await user.click(screen.getByRole("button", { name: "添加断网窗口" }));
     await user.click(screen.getByRole("button", { name: "添加 TCP 丢弃" }));
