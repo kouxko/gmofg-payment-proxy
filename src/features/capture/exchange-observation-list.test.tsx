@@ -14,6 +14,7 @@ describe("ExchangeObservationList", () => {
     render(<ExchangeObservationList page={page} loading={false} onSelect={vi.fn()} onPage={vi.fn()} onRetry={vi.fn()} onClear={vi.fn()} />);
     expect(screen.getByRole("heading", { name: "运行记录" })).toBeVisible();
     expect(screen.getByRole("grid", { name: "HTTP 与 Socket 运行记录" })).toBeVisible();
+    expect(screen.getByRole("columnheader", { name: "建立时间（最新优先）" })).toBeVisible();
     expect(screen.getByText("HTTP")).toBeVisible();
     expect(screen.getByText("SOCKET")).toBeVisible();
     expect(screen.queryByText("Exchange 连接时间线")).toBeNull();

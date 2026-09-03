@@ -1,0 +1,9 @@
+PASS  Rust focused newest-first pagination: 1/1
+PASS  ExchangeObservationStore module tests: 9/9
+PASS  Capture frontend tests: 3 files, 10/10
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  cargo fmt --manifest-path src-tauri/Cargo.toml -- --check
+PASS  git diff --check
+PASS  deno task tauri build --bundles app
+PASS  installed app header: 建立时间（最新优先）

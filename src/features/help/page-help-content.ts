@@ -33,7 +33,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "先在“入口配置”启动目标入口，再进入本页；页面会持续接收 HTTP 与 Socket 的 Exchange 事件。",
           "页面只有一张运行记录表；“协议”列明确标识 HTTP 或 SOCKET，不需要切换页签或查看两个区域。",
-          "每行对应一个 App connection，并显示建立时间、对端、收到/发送/失败计数、连接状态和 Exchange ID。",
+          "每行对应一个 App connection，并按建立时间最新优先显示对端、收到/发送/失败计数、连接状态和 Exchange ID。",
           "连接状态只描述连接生命周期：未出现关闭事件时为“保持连接”，completed 关闭为“正常结束”，错误关闭为“异常结束”并保留原始错误；它不推断协议业务结果。",
           "使用“上一页/下一页”查看当前工作区内存中保留的更多连接。",
           "点击任意表格行打开该 Exchange 的完整连接时间线。",
