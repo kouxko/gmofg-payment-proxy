@@ -25,6 +25,7 @@ variables:
   RUSTUP_UPDATE_ROOT: "https://rsproxy.cn/rustup"
   CARGO_REGISTRIES_CRATES_IO_INDEX: "sparse+https://rsproxy.cn/index/"
   ANDROID_MAVEN_MIRROR: "aliyun"
+  GRADLE_DISTRIBUTION_BASE_URL: "https://repo.huaweicloud.com/gradle"
   DENO_VERSION: "2.9.6"
   RUSTUP_VERSION: "1.29.1"
   RUST_TOOLCHAIN: "1.98.0"

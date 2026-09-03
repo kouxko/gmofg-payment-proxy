@@ -129,6 +129,10 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
     /^[ ]{2}CARGO_REGISTRIES_CRATES_IO_INDEX: "sparse\+https:\/\/rsproxy\.cn\/index\/"$/mu,
   );
   assert.match(variables, /^[ ]{2}ANDROID_MAVEN_MIRROR: "aliyun"$/mu);
+  assert.match(
+    variables,
+    /^[ ]{2}GRADLE_DISTRIBUTION_BASE_URL: "https:\/\/repo\.huaweicloud\.com\/gradle"$/mu,
+  );
   assert.match(variables, /^[ ]{2}RUSTUP_VERSION: "1\.29\.1"$/mu);
   assert.match(variables, /^[ ]{2}RUST_TOOLCHAIN: "1\.98\.0"$/mu);
   assert.match(variables, /^[ ]{2}GRADLE_VERSION: "9\.6\.1"$/mu);

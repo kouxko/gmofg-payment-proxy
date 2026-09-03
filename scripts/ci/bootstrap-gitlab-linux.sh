@@ -65,7 +65,7 @@ install_gradle() {
   local archive="$tools_root/gradle-$GRADLE_VERSION-bin.zip"
   if [[ ! -x "$gradle_home/bin/gradle" ]]; then
     curl --fail --show-error --silent --location \
-      "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" \
+      "$GRADLE_DISTRIBUTION_BASE_URL/gradle-$GRADLE_VERSION-bin.zip" \
       --output "$archive"
     unzip -q -o "$archive" -d "$tools_root"
   fi
