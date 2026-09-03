@@ -167,6 +167,10 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(linuxBootstrap, /--max-connection-per-server=16/u);
   assert.match(
     linuxBootstrap,
+    /if \[\[ ! -s "\$android_license" \]\]; then/u,
+  );
+  assert.match(
+    linuxBootstrap,
     /mirrors\.cloud\.tencent\.com\/AndroidSDK\/commandlinetools-linux-/u,
   );
   assert.match(linuxBootstrap, /replace-with = "rsproxy"/u);

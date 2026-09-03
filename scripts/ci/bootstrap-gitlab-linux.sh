@@ -120,13 +120,16 @@ install_android_sdk() {
   fi
 
   export PATH="$(dirname "$sdkmanager"):$ANDROID_SDK_ROOT/platform-tools:$PATH"
-  set +o pipefail
-  yes | "$sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null
-  local license_status=$?
-  set -o pipefail
-  if [[ $license_status -ne 0 ]]; then
-    echo "Android SDK license acceptance failed." >&2
-    return "$license_status"
+  local android_license="$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+  if [[ ! -s "$android_license" ]]; then
+    set +o pipefail
+    yes | "$sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null
+    local license_status=$?
+    set -o pipefail
+    if [[ $license_status -ne 0 ]]; then
+      echo "Android SDK license acceptance failed." >&2
+      return "$license_status"
+    fi
   fi
 
   local build_tools_home="$ANDROID_SDK_ROOT/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
