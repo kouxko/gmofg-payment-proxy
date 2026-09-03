@@ -133,13 +133,18 @@ describe("RuleDefinitionEditor single pair", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ action: { source: "http", value: nextAction } }) } }) }));
   });
 
-  it("keeps save, copy, and delete in one action row", () => {
-    render(<Harness initial={input(requestTarget, recordMatch)} />);
+  it("deletes an existing rule immediately without a second confirmation", async () => {
+    const onDelete = vi.fn();
+    const user = userEvent.setup();
+    render(<Harness initial={input(requestTarget, recordMatch)} onDelete={onDelete} />);
 
     const actions = screen.getByTestId("rule-editor-actions");
     expect(within(actions).getByRole("button", { name: "保存规则" })).toBeVisible();
     expect(within(actions).getByRole("button", { name: "复制规则" })).toBeVisible();
-    expect(within(actions).getByRole("button", { name: "删除规则" })).toBeVisible();
+    await user.click(within(actions).getByRole("button", { name: "删除规则" }));
+    expect(onDelete).toHaveBeenCalledOnce();
+    expect(screen.queryByRole("alertdialog")).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
   });
 
   it("keeps Socket on the Document boundary and materializes its single pair on Save", async () => {
@@ -168,9 +173,9 @@ describe("RuleDefinitionEditor single pair", () => {
   });
 });
 
-function Harness({ initial, contextValue = context, onSave = vi.fn() }: { initial: RuleDefinitionSaveInput; contextValue?: RuleEditorContext; onSave?: (value: RuleDefinitionSaveInput) => void }) {
+function Harness({ initial, contextValue = context, onDelete = vi.fn(), onSave = vi.fn() }: { initial: RuleDefinitionSaveInput; contextValue?: RuleEditorContext; onDelete?: () => void; onSave?: (value: RuleDefinitionSaveInput) => void }) {
   const [value, setValue] = useState(initial);
-  return <RuleDefinitionEditor context={contextValue} fieldErrors={{}} input={value} listener={listener} loading={false} pending={false} onChange={(change) => setValue((current) => typeof change === "function" ? change(current) : change)} onCopy={vi.fn()} onDelete={vi.fn()} onSave={onSave} />;
+  return <RuleDefinitionEditor context={contextValue} fieldErrors={{}} input={value} listener={listener} loading={false} pending={false} onChange={(change) => setValue((current) => typeof change === "function" ? change(current) : change)} onCopy={vi.fn()} onDelete={onDelete} onSave={onSave} />;
 }
 function input(condition: Condition, action: Extract<RuleDefinitionSaveInput["draft"]["content"], { type: "http" }>["value"]["action"]): RuleDefinitionSaveInput {
   return { rule_id: "http-rule", expected_revision: 1, draft: { name: "HTTP rule", enabled: true, priority: 1, listener_id: listener.id, stage: "proxy_to_upstream", content: { type: "http", value: { description: "", condition, action } } } };

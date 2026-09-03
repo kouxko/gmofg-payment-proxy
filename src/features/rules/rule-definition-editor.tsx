@@ -1,4 +1,3 @@
-import { useState } from "react";
 import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
 import type { HttpRuleEditorStageViewModel, ProxyListener, RuleDefinitionSaveInput, RuleEditorContext, SocketRuleEditorStageViewModel } from "@/generated/rust-types";
 import { ruleStageIncompatibility } from "./rule-definition-model";
@@ -20,7 +19,6 @@ export function RuleDefinitionEditor(props: {
   onCopy: () => void;
   onDelete: () => void;
 }) {
-  const [confirmingDelete, setConfirmingDelete] = useState(false);
   if (props.loading) return <EditorShell><p>正在读取规则…</p></EditorShell>;
   if (!props.input || !props.listener) return <EditorShell><p className="text-sm text-[var(--telemetry-muted)]">选择一条规则或新建规则进行编辑。</p></EditorShell>;
 
@@ -54,9 +52,8 @@ export function RuleDefinitionEditor(props: {
     </>
     {currentStageReason && <p className="text-sm text-red-600" role="alert">当前阶段不可保存：{currentStageReason}</p>}
     {input.draft.content.type === "http" ? <section className="space-y-4"><h3 className="font-semibold">HTTP 规则内容</h3><TextField><Label>说明</Label><TextArea className="min-h-20" value={input.draft.content.value.description} onChange={(event) => updateDescription(event.target.value)} /></TextField></section> : <h3 className="font-semibold">Socket Document 规则内容</h3>}
-    <RuleSinglePairEditor actions={existing ? <><Button isDisabled={props.pending} variant="outline" onPress={props.onCopy}>复制规则</Button><Button isDisabled={props.pending} variant="danger-soft" onPress={() => setConfirmingDelete(true)}>删除规则</Button></> : undefined} conditionPath={props.context?.document_condition_path} input={input} key={editorKey(input)} localTypes={props.context?.local_document_types ?? []} onSave={props.onSave} pending={props.pending || input.draft.name.trim() === "" || currentStageReason != null} stage={stage} />
+    <RuleSinglePairEditor actions={existing ? <><Button isDisabled={props.pending} variant="outline" onPress={props.onCopy}>复制规则</Button><Button isDisabled={props.pending} variant="danger-soft" onPress={props.onDelete}>删除规则</Button></> : undefined} conditionPath={props.context?.document_condition_path} input={input} key={editorKey(input)} localTypes={props.context?.local_document_types ?? []} onSave={props.onSave} pending={props.pending || input.draft.name.trim() === "" || currentStageReason != null} stage={stage} />
     {Object.values(props.fieldErrors).flat().length > 0 && <p className="text-sm text-red-600" role="alert">{Object.values(props.fieldErrors).flat().join("；")}</p>}
-    {confirmingDelete && <div className="rounded-lg border border-red-500 p-3" role="alertdialog"><p>删除后无法恢复。</p><div className="mt-2 flex gap-2"><Button variant="danger" onPress={props.onDelete}>确认删除</Button><Button variant="outline" onPress={() => setConfirmingDelete(false)}>取消</Button></div></div>}
   </EditorShell>;
 }
 

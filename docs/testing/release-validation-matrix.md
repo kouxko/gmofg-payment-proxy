@@ -94,8 +94,6 @@ HTTP Body Protocol 与 Scripted Socket 都绑定精确协议包版本。本地 C
 
 每个字段按 Rust 返回的可用操作符分别验证命中和不命中：
 
-- Terminal IP
-- Certificate fingerprint
 - Method
 - Request target（只含 path 与 query）
 - Header name/value

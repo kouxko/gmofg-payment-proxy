@@ -1,0 +1,287 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "gmofg-payment-dll",
+    "version": "1.0.0",
+    "name": "GMO-FG Payment DLL",
+    "description": "Complete downstream decoder, encoder, and display for GMO-FG Payment DLL responses"
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {
+      "schema": {
+        "type": "object",
+        "title": "GMO-FG Payment DLL downstream",
+        "properties": {
+          "ErrorCode": { "type": "string", "title": "Error code" },
+          "ResponseID": { "type": "string", "title": "Response ID" },
+          "TransactionType": { "type": "string", "title": "Transaction type" },
+          "ResponseTimeStamp": { "type": "string", "title": "Response timestamp" },
+          "DebitInp": { "type": "string", "title": "Debit input" },
+          "TerminalID": { "type": "string", "title": "Terminal ID" },
+          "TerminalSeqNo": { "type": "string", "title": "Terminal sequence number" },
+          "ResponseDateTime": { "type": "string", "title": "Response date time" },
+          "DLLUpdateAnn": { "type": "string", "title": "DLL update announcement" },
+          "KCCI_01": {
+            "type": "array",
+            "title": "Credit card companies",
+            "items": {
+              "type": "object",
+              "title": "Card company",
+              "properties": {
+                "kid": { "type": "string" },
+                "acquirer_code": { "type": "string" },
+                "card_issuer_name": { "type": "string" },
+                "manual_input": { "type": "string" },
+                "input_selection_info": { "type": "string" },
+                "password_input": { "type": "string" },
+                "payment_type_selection": { "type": "string" },
+                "card_ranges": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "from": { "type": "string" },
+                      "to": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "KJSI_01": {
+            "type": "object",
+            "title": "Merchant information",
+            "properties": {
+              "phone_number_1": { "type": "string" },
+              "phone_number_2": { "type": "string" },
+              "merchant_info_1": { "type": "string" },
+              "merchant_info_2": { "type": "string" },
+              "reserved_79_89": { "type": "string" }
+            }
+          },
+          "KBAT_01": {
+            "type": "object",
+            "title": "Credit batch information",
+            "properties": {
+              "sale_batch_sending_function": { "type": "string" },
+              "sale_batch_process_function": { "type": "string" }
+            }
+          },
+          "KDST_01": {
+            "type": "object",
+            "title": "Credit terminal AP",
+            "properties": {
+              "phone_number": { "type": "string" },
+              "ip_octet_1": { "type": "string" },
+              "ip_octet_2": { "type": "string" },
+              "ip_octet_3": { "type": "string" },
+              "ip_octet_4": { "type": "string" },
+              "port": { "type": "string" }
+            }
+          },
+          "KCAK_01": {
+            "type": "array",
+            "title": "Credit CA public-key groups",
+            "items": {
+              "type": "object",
+              "properties": {
+                "brand_id": { "type": "string" },
+                "public_keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "rid": { "type": "string" },
+                      "public_key_index": { "type": "string" },
+                      "public_key_modulus_size": { "type": "string" },
+                      "public_key_modulus": { "type": "string" },
+                      "public_key_exponent_size": { "type": "string" },
+                      "public_key_exponent": { "type": "string" },
+                      "hash_algorithm": { "type": "string" },
+                      "public_key_algorithm_index": { "type": "string" },
+                      "public_key_checksum": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "KBRD_01": {
+            "type": "array",
+            "title": "Credit brands",
+            "items": {
+              "type": "object",
+              "properties": {
+                "brand_id": { "type": "string" },
+                "aid": { "type": "string" },
+                "menu_display_name": { "type": "string" },
+                "validity": { "type": "string" },
+                "priority": { "type": "string" },
+                "default_acquirer": { "type": "string" }
+              }
+            }
+          },
+          "KICC_01": {
+            "type": "array",
+            "title": "Credit IC card companies",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kid": { "type": "string" },
+                "fallback": { "type": "string" },
+                "reserved_5_14": { "type": "string" },
+                "tables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "table_id": { "type": "string" },
+                      "communication_kid": { "type": "string" },
+                      "communication_id": { "type": "string" },
+                      "brand_id": { "type": "string" },
+                      "acquirer_code": { "type": "string" },
+                      "max_percent": { "type": "string" },
+                      "target_percent": { "type": "string" },
+                      "floor_limit": { "type": "string" },
+                      "threshold": { "type": "string" },
+                      "tac_default": { "type": "string" },
+                      "tac_denial": { "type": "string" },
+                      "tac_online": { "type": "string" },
+                      "force_online": { "type": "string" },
+                      "force_accept": { "type": "string" },
+                      "pin_bypass": { "type": "string" },
+                      "default_ddol": { "type": "string" },
+                      "reserved_155_156": { "type": "string" },
+                      "merchant_type_code": { "type": "string" },
+                      "transaction_type_code": { "type": "string" },
+                      "inquiry": { "type": "string" },
+                      "voice_inquiry": { "type": "string" },
+                      "default_product_code": { "type": "string" },
+                      "brand_individual_info": { "type": "string" },
+                      "reserved_351_372": { "type": "string" },
+                      "apl_info": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "KGIN_01": {
+            "type": "object",
+            "title": "UnionPay parameters",
+            "properties": {
+              "input_selection_info": { "type": "string" },
+              "pre_authorization_flag": { "type": "string" },
+              "retail_store_type": { "type": "string" },
+              "merchant_code": { "type": "string" },
+              "acquirer_id": { "type": "string" },
+              "bank_name": { "type": "string" },
+              "void_pin_flag": { "type": "string" }
+            }
+          },
+          "GDST_01": {
+            "type": "object",
+            "title": "UnionPay terminal AP",
+            "properties": {
+              "phone_number": { "type": "string" },
+              "ip_octet_1": { "type": "string" },
+              "ip_octet_2": { "type": "string" },
+              "ip_octet_3": { "type": "string" },
+              "ip_octet_4": { "type": "string" },
+              "port": { "type": "string" }
+            }
+          },
+          "GCAK_01": {
+            "type": "array",
+            "title": "UnionPay CA public-key groups",
+            "items": {
+              "type": "object",
+              "properties": {
+                "brand_id": { "type": "string" },
+                "public_keys": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "rid": { "type": "string" },
+                      "public_key_index": { "type": "string" },
+                      "public_key_modulus_size": { "type": "string" },
+                      "public_key_modulus": { "type": "string" },
+                      "public_key_exponent_size": { "type": "string" },
+                      "public_key_exponent": { "type": "string" },
+                      "hash_algorithm": { "type": "string" },
+                      "public_key_algorithm_index": { "type": "string" },
+                      "public_key_checksum": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          },
+          "GBRD_01": {
+            "type": "array",
+            "title": "UnionPay brands",
+            "items": {
+              "type": "object",
+              "properties": {
+                "brand_id": { "type": "string" },
+                "aid": { "type": "string" },
+                "menu_display_name": { "type": "string" },
+                "validity": { "type": "string" },
+                "priority": { "type": "string" },
+                "default_acquirer": { "type": "string" }
+              }
+            }
+          },
+          "GICC_01": {
+            "type": "array",
+            "title": "UnionPay IC card companies",
+            "items": {
+              "type": "object",
+              "properties": {
+                "kid": { "type": "string" },
+                "fallback": { "type": "string" },
+                "reserved_5_14": { "type": "string" },
+                "tables": {
+                  "type": "array",
+                  "items": {
+                    "type": "object",
+                    "properties": {
+                      "table_id": { "type": "string" },
+                      "communication_kid": { "type": "string" },
+                      "communication_id": { "type": "string" },
+                      "brand_id": { "type": "string" },
+                      "acquirer_code": { "type": "string" },
+                      "max_percent": { "type": "string" },
+                      "target_percent": { "type": "string" },
+                      "floor_limit": { "type": "string" },
+                      "threshold": { "type": "string" },
+                      "tac_default": { "type": "string" },
+                      "tac_denial": { "type": "string" },
+                      "tac_online": { "type": "string" },
+                      "force_online": { "type": "string" },
+                      "force_accept": { "type": "string" },
+                      "pin_bypass": { "type": "string" },
+                      "default_ddol": { "type": "string" },
+                      "reserved_155_156": { "type": "string" },
+                      "merchant_type_code": { "type": "string" },
+                      "transaction_type_code": { "type": "string" },
+                      "inquiry": { "type": "string" },
+                      "voice_inquiry": { "type": "string" },
+                      "default_product_code": { "type": "string" },
+                      "brand_individual_info": { "type": "string" },
+                      "reserved_351_372": { "type": "string" },
+                      "apl_info": { "type": "string" }
+                    }
+                  }
+                }
+              }
+            }
+          }
+        }
+      }
+    }
+  }
+}

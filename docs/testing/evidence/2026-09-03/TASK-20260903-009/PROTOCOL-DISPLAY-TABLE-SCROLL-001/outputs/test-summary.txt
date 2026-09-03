@@ -1,0 +1,16 @@
+PASS  deno task test src/features/rules/rule-definition-editor.test.tsx src/features/rules/rules-view.test.tsx src/features/shared/protocol-safe-display.test.tsx src/features/help/page-help.test.tsx
+      Test Files  4 passed (4)
+      Tests       35 passed (35)
+
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+PASS  git diff --check
+
+PASS  deno task build
+      Next.js 16.2.12 production build compiled successfully
+      13 static pages generated
+
+PASS  cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure request_stage_mock_uses_the_response_codec_and_stops_after_runtime_disable -- --nocapture
+      test adapters::pipeline::tests::request_stage_mock_uses_the_response_codec_and_stops_after_runtime_disable ... ok
+      test result: ok. 1 passed; 0 failed

@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-010",
+  "case_id": "gmofg-dll-json-tree-display",
+  "executed_at": "2026-09-03 16:44:34 +08:00",
+  "status": "PASS_WITH_RUNNING_APP_VISUAL_NOT_RUN",
+  "derived_from": {
+    "task_id": "TASK-20260903-005",
+    "case_id": "gmofg-dll-downstream-package",
+    "evidence_path": "docs/testing/evidence/2026-09-03/TASK-20260903-005/gmofg-dll-downstream-package/"
+  },
+  "environment": {
+    "platform": "macOS arm64",
+    "timezone": "Asia/Shanghai",
+    "rustc": "1.98.0",
+    "cargo": "1.98.0",
+    "deno": "2.9.6"
+  },
+  "tested_state": {
+    "base_commit": "c2fd81e9382a7adc36615ec7d64a03f267fc4605",
+    "working_tree_dirty": true,
+    "display_rs_sha256": "d0a1e1ac92275b2d1eeabdc7d1f5babed4a5a736356693bba208593c72184468",
+    "package_lib_rs_sha256": "ca52446d746c2342b757c15b6d04f497d5e61e7cb140e7297babcf44894ccdd7",
+    "safe_display_tsx_sha256": "017a8bcce785e00db3fe748781061e078d61af6dd26eec4e343979e338d7208c",
+    "safe_display_test_sha256": "13f85d11d411f9ce4f366d35f9dc73f35ae3dd31abd09294eb408325e52e27a5",
+    "host_test_sha256": "1dfb05c839f5b6c0025bf6e90c9d8740de3f680279ad5cafc83ae6f350f651d0"
+  },
+  "input": {
+    "fixture": "resources/credit-success.json",
+    "manifest": "resources/manifest.json"
+  },
+  "results": {
+    "package_tests": "14/14 PASS",
+    "host_component_test": "1/1 PASS",
+    "safe_display_tests": "13/13 PASS",
+    "rust_fmt": "PASS",
+    "strict_clippy": "PASS",
+    "targeted_eslint": "PASS",
+    "typescript": "PASS",
+    "wasm_release_build": "PASS",
+    "next_production_build": "PASS (13 routes)",
+    "git_diff_check": "PASS",
+    "deno_lock_unchanged": "PASS"
+  },
+  "artifact": {
+    "path": "outputs/gmofg-payment-dll-1.0.0.wasm",
+    "bytes": 537608,
+    "sha256": "98f8a15009f52dda74a05c40b802dbe0f1ff0027294da76d67d1511e57df6074"
+  },
+  "not_run": {
+    "running_desktop_app_visual_click_test": "No running packaged App visual session was used; DOM tests and production build passed.",
+    "real_server_android_ci": "N/A because this task changes only Display HTML and safe rendering."
+  }
+}
