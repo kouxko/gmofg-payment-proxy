@@ -1,103 +1,24 @@
-# ISO 8583 Deno External Package
+# ISO 8583 ASCII WebAssembly Component
 
-这是一个零第三方依赖的 Deno + TypeScript 示例进程。它作为 WebSocket JSON-RPC peer 连接 Intercept
-Proxy 的 `/packages` 服务，为 Socket listener 提供 ISO 8583 报文分帧、解析、重建和安全展示。
+`component/` 是 `iso8583-deno-ascii@1.0.1` 的唯一仓库实现。包 ID 为兼容既有安装身份而保留
+`deno` 名称，但当前实现是 Rust WebAssembly Component，不包含 Deno 或 TypeScript 运行路径。
 
-同目录的 `component/` 提供等价的 Rust WebAssembly Component 构建，可作为单个 `.wasm` 文件直接
-导入本地运行时。Deno 入口保留用于源码级远程调试；Component 入口不经过 WebSocket、JSON-RPC 或
-Base64 transport。
+它实现一个明确受限的 ISO 8583 Socket Profile：2 字节大端长度头、ASCII MTI、二进制位图、
+ASCII LLVAR/LLLVAR，以及清单声明的字段集合。未声明字段、错误长度、非法字符集和无法重建的报文
+均 fail-closed。
 
-它是一个明确受限的接入 Profile，不是“完整 ISO 8583 标准实现”。生产接入必须用收单机构、交换网络或厂商
-规范核对字段长度、字符集、二进制域、MAC 和密钥处理。
-
-## 运行
-
-要求 Deno 2.x：
+构建和局部回归：
 
 ```bash
-deno task check
-deno task start
-```
-
-构建本地 Component：
-
-```bash
+cargo test --manifest-path examples/external-packages/iso8583-deno/component/Cargo.toml --locked
 pnpm build:protocol-packages
 ```
 
-可导入文件为
-`dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm`。直接执行
-`cargo build` 得到的是尚未追加顶层 Manifest 的编译器原始产物。
+可导入产物：
 
-当前 Component 版本为 `iso8583-deno-ascii@1.0.1`；该版本接受 Host 按 JavaScript Number
-合同序列化的非负整数金额，并保持非整数和负数 fail-closed。下述 Deno 外部调试进程仍为
-`iso8583-deno-ascii@1.0.0`。
-
-默认连接 `ws://127.0.0.1:8765/packages`。可通过环境变量配置：
-
-```bash
-EXTERNAL_PACKAGE_URL=ws://127.0.0.1:8765/packages \
-RECONNECT_DELAY_MS=1000 \
-deno task start
+```text
+dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm
 ```
 
-在 Proxy 中首次注册后，外部软件包默认为停用。需要在“协议包”页面启用它，再将精确版本
-`iso8583-deno-ascii@1.0.0` 绑定到 Socket listener。软件包断线重连只恢复在线状态，不会自动重启
-listener。
-
-## 与 Proxy 的合同
-
-- Proxy 建立连接后主动且仅调用一次 `package.register`；本进程不会主动发送注册消息。
-- 支持上下行相同方法：
-  - `hooks.<direction>.split_frame`
-  - `hooks.<direction>.decode_iso8583`
-  - `hooks.<direction>.encode_iso8583`
-  - `document.<direction>.render_message`
-- JSON-RPC 响应严格复用请求的 string/number `id`，未知方法返回标准 error。
-- Deno 原生 WebSocket 栈处理 Ping/Pong；业务处理不实现自定义心跳消息。
-- 断线后进程按配置延迟重连。Proxy 不会自动重启已经停止的 Socket listener。
-- 单条 JSON-RPC wire message 最大 1 MiB；display HTML 最大 128 KiB。
-- LocalResponder 未配置响应规则时，Proxy 传入空的下行 Document；示例会生成最小 `0210`、DE39=`00`
-  响应。响应规则只要明确写入 `message_type`，示例就完全按规则产生的 Document 编码。
-
-## ISO 8583 Profile
-
-- Frame：2 字节大端 payload 长度头，长度不包含头本身；一帧总长度不超过 65,535 字节。
-- Message：4 字节 ASCII MTI、8 字节二进制主位图、可选 8 字节二进制第二位图。
-- 字符集：文本和长度前缀仅支持 ASCII。
-- 变量字段：支持 ASCII 两位 LLVAR、三位 LLLVAR；二进制字段按字节计长。
-- DE4 在 Document 中使用 canonical i64 十进制字符串；其他数字域使用 string 保留前导零。
-- 主要字段：DE2/3/4/7/11-14/18/22/23/25/32/35/37-39/41-43/49/52-55/60-64、
-  DE70/90/100/102/103/128。精确清单与长度见 `src/iso8583.ts` 的 `FIELD_SPECS`。
-- 设置位图中未实现字段会明确失败，不会猜测长度或透明转发。
-- 不支持第三位图、BCD MTI/字段、EBCDIC、自定义 TPDU、网络特有复合子域、加密、DUKPT、PIN block
-  解释、MAC 计算或验证。DE52/55/64/128 仅作为不透明 blob 保存并重建。
-
-`frame` 使用 Proxy 提供的完整方向累积缓冲，因此可以处理长度头半包、payload
-半包和粘包；一次只返回首帧的 `consumed_bytes`，剩余字节由 Proxy 继续处理。
-
-## 连接与日志
-
-外部软件包服务不要求 token、HMAC、mTLS、Origin、注册身份或授权；所有能够到达配置地址并正确实现 wire
-合同的进程都按受信任外部包接纳。监听范围只由 Proxy bind address 决定，没有额外的 loopback、CIDR
-或来源门禁。
-
-示例默认输出单行 JSON 诊断元数据，包括连接尝试、连接/断线、JSON-RPC
-ID、方法、耗时和结果类别。按排障需要 可以扩展为完整记录 frame、Document、JSON-RPC body 与结果；完整
-payload 被允许，实际部署应配置容量、轮转和 保留期限，避免无界增长。Proxy
-侧可用相同的软件包身份、业务连接、方向、方法和请求 ID 关联 MCP 查询诊断与 Exchange observation。
-
-## 故障排查
-
-- 一直无法注册：确认 Proxy 设置页显示的实际地址和端口，并确认路径严格为 `/packages`。
-- 注册后不能选择：首次注册默认停用，需要手动启用；入口只列出“在线 + 启用”的精确版本。
-- listener 不能恢复：软件包重连不会自动重启入口，需要在 Proxy 中重新检查并启动。
-- `DE<n> is not supported`：对端位图使用了本示例未声明字段；依据对端正式 Profile 增加 FieldSpec
-  和测试。
-- `length header does not match`：对端可能使用不同的长度头语义、TPDU 或包含/排除头长度约定。
-- `message has trailing bytes`：字段定义或某个 LLVAR/LLLVAR 长度与对端 Profile 不一致。
-- `response exceeds 1 MiB`：缩小报文/Document；当前 Proxy WebSocket transport
-  的单消息上限不可动态放大。
-
-测试覆盖注册一次性、完整方法名、相关 ID、半包、粘包、decode/encode roundtrip、HTML 转义、Ping/Pong
-职责边界和断线重连。执行 `deno task check` 同时运行格式、lint 和测试门禁。
+直接执行 `cargo build --target wasm32-wasip2` 只生成未追加顶层 Manifest 的原始产物；导入时必须使用
+统一构建入口生成的文件。

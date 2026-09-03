@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-03 10:46:55 +08:00`
+- 最后更新时间：`2026-09-03 11:07:41 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -42,7 +42,7 @@
 - 复用当前原始包 BLOB、精确身份冲突、启用/停用、重启、应用启动恢复、删除和备份恢复语义，但载荷只保存原始 `.wasm` bytes；是否需要 Schema 迁移以源码和 SQLite readback 决定。
 - 将内置 JSON、ISO8583、模板和活动 JavaScript fixture 重写或重新构建为满足相同业务向量的 Wasm Component；不保留 JavaScript 执行回退。
 - 仓库内 `examples/` 与 `templates/` 的协议包均必须提供可重复构建的 Rust Component 版本，并由同一仓库命令构建、校验和汇总单文件 `.wasm` 产物；无法由原 Python、Deno 或 Rhai 源码直接生成目标 Component 的实现按原行为重写为 Rust。
-- Python 与 Deno 外部软件包源码继续保留为 `/packages` 远端源级调试入口；其 Rust Component 版本用于本地单进程导入，两者不得共享本地 JSON-RPC/Base64 Transport 实现。
+- 仓库内置 example/template 只保留 Rust WebAssembly Component 实现；AU EFTEX Python、ISO8583 Deno/TypeScript、Nuvei Tango JSON Python 和 Nuvei Tango Rhai 历史实现全部删除，不保留同一协议包的多语言重复实现。通用 `/packages` 远端外部软件包接入能力继续保留。
 - 保留远端 `/packages` 服务、外部软件包注册/在线状态和 JSON-RPC API 1；本地 Wasm 与远端外部软件包在应用端口之后共享业务 Hook 语义，但本地调用不经过 WebSocket。
 - 更新作者文档、WIT、可复现多语言示例或最小 fixture、架构文档、ADR、测试矩阵和打包说明。
 
@@ -96,6 +96,7 @@
 | `2026-09-03 10:33:28 +08:00` | 用户确认该问题严重并明确授权修复 Proxy 中无 Schema HTTP 包的导入合同；该授权替代此前“不得修改 Proxy”的局部限制。HTTP 预览与详情允许上下行 Schema 为 `null`，Socket 仍要求两份合法 Schema；HTTP capability 必须投影为 `frame: false`。用户同时要求 Display 支持自定义 HTML 样式；结合此前编辑器式 JSON 分色目标，本轮只保留经过属性和值白名单过滤的内联视觉 CSS，不开放脚本、事件、外链资源、`<style>`、布局覆盖或全局样式。用户明确要求快速修复、不采用 TDD；本轮直接实现后执行定向回归。 |
 | `2026-09-03 10:42:27 +08:00` | 用户截图证明导入成功后入口配置仍报“入口协议包目录数据不完整”；确认第三处目录边界仍无条件要求上下行 Schema。修复范围扩展到 Listener 协议包目录的同一按类型 Schema 合同，不改变代理转发和 Socket 严格校验。 |
 | `2026-09-03 10:46:55 +08:00` | 用户在重新启动的本地开发 App 中确认无 Schema HTTP 包导入、目录读取及使用结果“可以了”，并要求提交。本次只创建本地提交，不 push、不触发 CI。 |
+| `2026-09-03 11:01:15 +08:00` | 用户确认删除盘点项 1–4 中所有非 Wasm 重复实现：AU EFTEX Python、ISO8583 Deno/TypeScript、Nuvei Tango JSON Python、Nuvei Tango Rhai 历史实现；只保留 `au-eftex`、`iso8583-deno-ascii`、`nuvei-tango-json`、`nuvei-tango-json-rhai`、`iso8583-ascii-standard` 的 Rust WebAssembly Component。`iso8583-ascii-standard` 当前没有非 Wasm 重复实现，因此无需删除。历史测试证据保持不可变，通用 `/packages` 外部接入能力不属于删除范围。Nuvei Rhai 旧实现目录中的活动 JSON 向量迁移到 Component 测试目录后继续作为 Wasm 回归资源。该结论替代 `2026-09-01 17:32:10` 和 `19:05:26` 关于保留仓库内 Python/Deno 源级调试实现的局部结论。 |
 
 ## 未确认事项
 
@@ -168,6 +169,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 | WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
 | WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流在无签名配置时明确产出 unsigned 制品并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
 | WPC-15 | 在 examples 中交付无 Schema 的 JSON Pretty HTTP Wasm 包，并修复导入与安全 Display 样式合同 | WPC-03、WPC-08 | 否 | 已完成 | HTTP null Schema 已在导入、详情和 Listener 目录中通过且 `frame: false`；Socket Schema 严格性不变；Display 保留安全内联视觉样式并继续拒绝主动内容；JSON Pretty 编辑器式分色经用户本地验收 |
+| WPC-16 | 删除四组仓库内非 Wasm 重复实现并收敛活动文档、构建与回归资源 | WPC-06、WPC-15 | 否 | 已完成 | 五个目标包只保留 Rust Component；Nuvei JSON 向量仍可由 Component 测试复用；统一 Component 构建、Host 集成测试、类型检查及活动引用扫描通过；历史证据和通用 `/packages` 接口不变 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -213,7 +215,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `docs/user-operation-guide.md`：保持 UI 不暴露实现类型，只记录统一导入和运行行为。
 - `docs/onboarding-guide.md`：补充 package-runtime、Wasmtime/WASI 和进程内 runtime 所有权。
 - `docs/testing/release-validation-matrix.md`：增加 Component、完整 WASI、生命周期、资源和跨平台打包层级。
-- 作者模板/fixture/WIT：提供可复现的 HTTP/Socket 最小实现和至少一个非 Rust 语言示例；最终语言矩阵需确认。
+- 作者模板/fixture/WIT：提供可复现的 Rust HTTP/Socket Component 最小实现；仓库不再维护同一包的其他语言重复实现。
 
 ## 实施记录
 
@@ -242,6 +244,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `2026-09-02 16:43:08 +08:00`：修复 ISO Deno Host 整数规范化兼容并发布 `1.0.1`；Nuvei Rhai `1.0.1` 将 object/array 递归渲染为 nested table。远端五包逐字节重放通过后，用户截图证明另一个 `nuvei-tango-json@1.0.0` 仍在输出原始 JSON；随后只修改其 Display renderer、升级到 `1.0.1` 并增加正式 Host 回归，重新统一构建 5 个 Wasm。
 - `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
 - `2026-09-03 10:46:55 +08:00`：新增独立 `examples/protocol-packages/json_pretty/` HTTP Component、包级锁文件、构建器、编辑器式 JSON 分色和单文件产物。修复后端 HTTP `frame: false` 投影，以及前端导入预览/结果、详情和 Listener 目录的 HTTP nullable Schema 合同；Socket 仍要求双向合法 Schema。Display 沙箱保留安全内联视觉样式并删除主动内容和越界 CSS。包级 4/4、相关前端 69/69、typecheck、Rust 导入测试和开发构建通过；最终产物 `161042` bytes，SHA-256 `5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3`。用户在重新启动的本地 App 中确认导入、目录与使用“可以了”。证据见 [`json-pretty-wasm-example`](../../../testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md)。
+- `2026-09-03 11:07:41 +08:00`：按用户确认删除 AU EFTEX Python、ISO8583 Deno/TypeScript、Nuvei Tango JSON Python 和 Nuvei Tango Rhai/ZIP 四组重复实现；保留五个 Rust Component，并把 Nuvei 合成 JSON fixture 移入其 Component 测试目录。同步删除 AU Python trace verifier、失效命令和 TypeScript 排除项，四个 README 改为 Component-only。统一包测试与构建 `20/20`、正式 Host 集成 `2/2`、typecheck、lint、source-size、rustfmt、diff-check 和非 Wasm 活动文件零匹配扫描全部 PASS；通用 `/packages` 代码及历史证据未改。证据见 [`wasm-only-package-source-cleanup`](../../../testing/evidence/2026-09-03/TASK-20260901-001/wasm-only-package-source-cleanup/README.md)。
 
 ## 修改文件
 
@@ -303,6 +306,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `PASS`：`deno run -A examples/protocol-packages/json_pretty/build.mjs`，Rust 逻辑测试 4/4、`wasm32-wasip2 --release`、严格 Manifest section 校验和产物生成通过。
 - `PASS`：JSON Pretty 包的 rustfmt、Clippy `-D warnings`、`deno check`、SHA-256 校验与当前 Wasmtime Host 加载；最终产物为 `161042` bytes。
 - `PASS`：协议包导入/详情/Display 定向前端测试 20/20，Listener 目录与 HTTP 入口相关前端测试 49/49，`pnpm typecheck`，Rust HTTP Manifest 导入投影定向测试，以及本地 `deno task tauri:dev` 编译启动和用户验收。
+- `PASS`：非 Wasm 重复实现删除后，五个 Component 局部测试与统一构建 `20/20`、正式 Host 集成 `2/2`、typecheck、lint、source-size、rustfmt、diff-check 和活动文件扫描通过；见 [`wasm-only-package-source-cleanup`](../../../testing/evidence/2026-09-03/TASK-20260901-001/wasm-only-package-source-cleanup/README.md)。
 
 ## CI 情况
 
@@ -313,3 +317,4 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 
 - `当前 Wasm/规则交付完成`：AU EFTEX 已内置公开测试 BDK，5 个最终 Wasm、两项 Display 修复和远端规则数据面均通过。远端 5 条 Listener 与受控上游保持运行供检查。历史 HTTP 未按本轮范围重跑，完整 CI 的 Windows 冷缓存超时复跑也尚未完成，因此总任务继续保持进行中，不归档。
 - `JSON Pretty 示例包完成`：无 Schema 单文件 HTTP Component、导入/详情/入口目录合同、安全自定义 Display 样式和编辑器式分色已通过定向自动化与本地 App 用户验收。总任务因 WPC-12/WPC-14 仍在进行中而继续保持进行中，不归档。
+- `重复实现清理完成`：AU EFTEX、ISO8583 Deno ASCII、Nuvei Tango JSON、Nuvei Tango JSON Rhai 和 ISO8583 ASCII Standard 在活动仓库中只保留 Rust WebAssembly Component；旧 Python/Deno/Rhai 实现已删除，通用远端 `/packages` 接口与历史证据保持不变。总任务仍因 WPC-12/WPC-14 进行中而不归档。
