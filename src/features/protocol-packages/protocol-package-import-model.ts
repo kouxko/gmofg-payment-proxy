@@ -63,8 +63,7 @@ export function isImportPreview(
     && isCounter(value.host_api)
     && (value.kind === "http" || value.kind === "socket")
     && isCapabilities(value.capabilities, value.kind)
-    && isProtocolPackageSchema(value.upstream_schema)
-    && isProtocolPackageSchema(value.downstream_schema);
+    && areSchemasValid(value.kind, value.upstream_schema, value.downstream_schema);
 }
 
 export function isCommittableImportPreview(
@@ -88,8 +87,7 @@ export function importResultError(
     || value.version.package.version !== preview.package.version
     || value.kind !== preview.kind
     || !isCapabilities(value.capabilities, preview.kind)
-    || !isProtocolPackageSchema(value.upstream_schema)
-    || !isProtocolPackageSchema(value.downstream_schema)) {
+    || !areSchemasValid(preview.kind, value.upstream_schema, value.downstream_schema)) {
     return "协议包导入结果与已确认预览不一致，请刷新列表后重试。";
   }
   return undefined;
@@ -163,6 +161,18 @@ function isDirectionCapabilities(value: unknown, kind: "http" | "socket"): boole
     && value.frame === (kind === "socket")
     && value.decode === true
     && value.encode === true;
+}
+
+function areSchemasValid(
+  kind: "http" | "socket",
+  upstream: unknown,
+  downstream: unknown,
+): boolean {
+  return isSchemaValidForKind(kind, upstream) && isSchemaValidForKind(kind, downstream);
+}
+
+function isSchemaValidForKind(kind: "http" | "socket", schema: unknown): boolean {
+  return schema === null ? kind === "http" : isProtocolPackageSchema(schema);
 }
 
 function isCounter(value: unknown): value is number {

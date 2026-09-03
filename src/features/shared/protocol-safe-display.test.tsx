@@ -62,6 +62,19 @@ describe("ProtocolSafeDisplay", () => {
     expect(source).not.toMatch(/<script|<img|<svg|<math|<iframe|<object|<embed|<form|<input|<meta[^>]+refresh|<base|<link/i);
   });
 
+  it("keeps allowlisted inline visual styles and removes unsafe CSS", async () => {
+    render(
+      <ProtocolSafeDisplay
+        html={'<pre style="background-color:#1e1e1e;color:#d4d4d4;padding:12px;border-radius:8px;font-family:monospace;position:fixed;width:9999px;background-image:url(https://evil.test/x)"><span style="color:#9cdcfe;font-weight:700;transform:scale(20)">key</span></pre>'}
+      />,
+    );
+
+    const source = await renderedSource();
+    expect(source).toContain('style="background-color: rgb(30, 30, 30); color: rgb(212, 212, 212); padding: 12px; border-radius: 8px; font-family: monospace;"');
+    expect(source).toContain('style="color: rgb(156, 220, 254); font-weight: 700;"');
+    expect(source).not.toMatch(/position:\s*fixed|width:\s*9999|background-image:|transform:\s*scale|evil\.test/i);
+  });
+
   it("uses a no-capability iframe with an inner deny-by-default CSP", async () => {
     render(<ProtocolSafeDisplay html="<p>safe</p>" />);
 

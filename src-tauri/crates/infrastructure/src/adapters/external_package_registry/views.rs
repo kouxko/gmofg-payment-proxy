@@ -39,7 +39,7 @@ pub(crate) fn application_description(
     registration: &PackageManifest,
 ) -> ProtocolPackageDescriptionViewModel {
     let capabilities = ProtocolPackageDirectionCapabilitiesViewModel {
-        frame: true,
+        frame: matches!(registration.kind(), PackageKind::Socket),
         decode: true,
         encode: true,
     };

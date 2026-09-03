@@ -87,6 +87,8 @@ describe("Socket Listener model", () => {
       display: true,
     });
     candidate.kind = "http";
+    candidate.upstream_schema = null;
+    candidate.downstream_schema = null;
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(true);
@@ -99,6 +101,12 @@ describe("Socket Listener model", () => {
     candidate.capabilities.upstream.frame = true;
     expect(isListenerProtocolPackageCatalog({
       options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+    })).toBe(false);
+
+    const socketWithoutSchema = option();
+    socketWithoutSchema.upstream_schema = null;
+    expect(isListenerProtocolPackageCatalog({
+      options: [socketWithoutSchema], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
     })).toBe(false);
   });
 

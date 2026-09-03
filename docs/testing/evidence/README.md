@@ -3,6 +3,12 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-03
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260901-001 | json-pretty-wasm-example | 交付无 Schema JSON Pretty HTTP Wasm、编辑器式分色和安全内联视觉样式；统一导入/详情/Listener 目录 nullable Schema 与 HTTP frame 合同，69 项定向前端测试、typecheck、开发构建及本地 App 用户验收通过 | LOCAL_APP_VERIFIED | TASK-20260901-001 | wasm-integrated-runtime | [父证据](2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md) | [证据](2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md) |
+
 ## 2026-09-02
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

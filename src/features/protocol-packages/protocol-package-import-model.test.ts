@@ -33,6 +33,31 @@ describe("protocol package import boundary model", () => {
     expect(isImportPreview({ ...importPreview(), content_types: ["application/json"] })).toBe(false);
   });
 
+  it("accepts nullable HTTP schemas while keeping Socket schemas required", () => {
+    const http = importPreview({
+      kind: "http",
+      capabilities: {
+        upstream: { frame: false, decode: true, encode: true },
+        downstream: { frame: false, decode: true, encode: true },
+        display: true,
+      },
+      upstream_schema: null,
+      downstream_schema: null,
+    });
+    expect(isImportPreview(http)).toBe(true);
+    expect(isImportPreview(importPreview({ upstream_schema: null }))).toBe(false);
+
+    const result = {
+      ...importResult(),
+      kind: "http" as const,
+      capabilities: http.capabilities,
+      upstream_schema: null,
+      downstream_schema: null,
+      version: { ...importResult().version, kind: "http" as const },
+    };
+    expect(importResultError(result, http)).toBeUndefined();
+  });
+
   it("rejects a malformed or identity-mismatched commit result", () => {
     const preview = importPreview();
     expect(importResultError(importResult(), preview)).toBeUndefined();
