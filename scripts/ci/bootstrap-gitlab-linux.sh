@@ -56,17 +56,21 @@ download_with_parallel_ranges() {
     "$url"
 }
 
+deno_version() {
+  "$DENO_INSTALL/bin/deno" --version 2>/dev/null | awk 'NR == 1 { print $2; exit }'
+}
+
 install_deno() {
   local archive="$tools_root/deno-$DENO_VERSION-linux-x64.zip"
   if [[ ! -x "$DENO_INSTALL/bin/deno" ]] ||
-    [[ "$("$DENO_INSTALL/bin/deno" --version 2>/dev/null | sed -n '1s/^deno //p')" != "$DENO_VERSION" ]]; then
+    [[ "$(deno_version)" != "$DENO_VERSION" ]]; then
     curl --fail --show-error --silent --location \
       "$DENO_DIST_BASE_URL/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip" \
       --output "$archive"
     mkdir -p "$DENO_INSTALL/bin"
     unzip -q -o "$archive" -d "$DENO_INSTALL/bin"
   fi
-  test "$("$DENO_INSTALL/bin/deno" --version | sed -n '1s/^deno //p')" = "$DENO_VERSION"
+  test "$(deno_version)" = "$DENO_VERSION"
   deno --version
 }
 

@@ -41,8 +41,15 @@ $Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
 
 $DenoExecutable = Join-Path $env:DENO_INSTALL "deno.exe"
 $DenoArchive = Join-Path $ToolsRoot "deno-$env:DENO_VERSION-windows-x64.zip"
+function Get-DenoVersion([string]$Executable) {
+    $VersionLine = & $Executable --version | Select-Object -First 1
+    if ($VersionLine -match '^deno\s+(\S+)') {
+        return $Matches[1]
+    }
+    return $null
+}
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
-    (& $DenoExecutable --version | Select-Object -First 1) -replace '^deno ', ''
+    Get-DenoVersion $DenoExecutable
 } else {
     $null
 }
@@ -69,7 +76,7 @@ if (-not (Test-Path $RustupExecutable -PathType Leaf)) {
 }
 
 $env:Path = "$env:DENO_INSTALL;$CargoBin;$env:Path"
-$InstalledDenoVersion = (& $DenoExecutable --version | Select-Object -First 1) -replace '^deno ', ''
+$InstalledDenoVersion = Get-DenoVersion $DenoExecutable
 if ($InstalledDenoVersion -ne $env:DENO_VERSION) {
     throw "Deno executable version mismatch: $InstalledDenoVersion"
 }
