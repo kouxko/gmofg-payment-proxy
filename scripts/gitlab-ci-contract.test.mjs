@@ -126,7 +126,7 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(
     variables,
-    /^[ ]{2}CARGO_REGISTRIES_CRATES_IO_INDEX: "sparse\+https:\/\/rsproxy\.cn\/index\/"$/mu,
+    /^[ ]{2}CARGO_RSPROXY_INDEX: "sparse\+https:\/\/rsproxy\.cn\/index\/"$/mu,
   );
   assert.match(variables, /^[ ]{2}ANDROID_MAVEN_MIRROR: "aliyun"$/mu);
   assert.match(
@@ -161,6 +161,11 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(linuxBootstrap, /download_with_parallel_ranges/u);
   assert.match(linuxBootstrap, /--max-connection-per-server=16/u);
+  assert.match(linuxBootstrap, /replace-with = "rsproxy"/u);
+  const windowsBootstrap = await readRepositoryFile(
+    "scripts/ci/bootstrap-gitlab-windows.ps1",
+  );
+  assert.match(windowsBootstrap, /replace-with = "rsproxy"/u);
   assert.doesNotMatch(
     linuxBootstrap,
     /"ndk;\$ANDROID_NDK_VERSION"/u,

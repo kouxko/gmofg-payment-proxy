@@ -25,6 +25,20 @@ $env:DENO_DIR = if ($env:DENO_DIR) { $env:DENO_DIR } else { Join-Path $Repositor
     New-Item -ItemType Directory -Force -Path $_ | Out-Null
 }
 
+$CargoConfig = @"
+[source.crates-io]
+replace-with = "rsproxy"
+
+[source.rsproxy]
+registry = "$env:CARGO_RSPROXY_INDEX"
+"@
+$Utf8NoBom = New-Object System.Text.UTF8Encoding($false)
+[System.IO.File]::WriteAllText(
+    (Join-Path $env:CARGO_HOME "config.toml"),
+    $CargoConfig,
+    $Utf8NoBom
+)
+
 $DenoExecutable = Join-Path $env:DENO_INSTALL "deno.exe"
 $DenoArchive = Join-Path $ToolsRoot "deno-$env:DENO_VERSION-windows-x64.zip"
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {

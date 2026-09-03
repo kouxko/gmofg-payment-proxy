@@ -31,6 +31,14 @@ mkdir -p \
 
 export PATH="$DENO_INSTALL/bin:$CARGO_HOME/bin:$PATH"
 
+printf '%s\n' \
+  '[source.crates-io]' \
+  'replace-with = "rsproxy"' \
+  '' \
+  '[source.rsproxy]' \
+  "registry = \"$CARGO_RSPROXY_INDEX\"" \
+  > "$CARGO_HOME/config.toml"
+
 download_with_parallel_ranges() {
   local url="$1"
   local destination="$2"
