@@ -1,0 +1,47 @@
+{
+  "workspace_id": "0ec6c07a-9fa9-4116-bd89-e176930f4361",
+  "workspace_revision": 18,
+  "listener": {
+    "id": "06acc281-217c-4bb9-933b-ef6d42f0eb9a",
+    "name": "Payment DLL",
+    "enabled": false,
+    "bind_address": "127.0.0.1",
+    "port": 8080,
+    "downstream_tls_enabled": true,
+    "server_identity": null
+  },
+  "mock_rule": {
+    "rule_id": "b3996e35-0c57-4971-9a73-74b809d33aee",
+    "name": "Payment DLL D48 Mock",
+    "enabled": true,
+    "priority": 100,
+    "stage": "proxy_to_upstream",
+    "condition": {
+      "source": "http",
+      "field": "RequestTarget",
+      "operator": {"Equals": "/"}
+    },
+    "action": {
+      "source": "terminal",
+      "status": 200,
+      "content_length": 118,
+      "body": "{\"ErrorCode\":\"D48\",\"ResponseID\":\"A\",\"TransactionType\":\"0001\",\"ResponseTimeStamp\":\"20260903125548570\",\"DebitInp\":\"   \"}"
+    },
+    "lifecycle": {
+      "hit_count": 1,
+      "last_hit_at": "2026-09-03T04:35:43.790670Z"
+    }
+  },
+  "capture": {
+    "session_id": "92f808f5-383a-42ec-a5a5-20ad27621f94",
+    "runtime_epoch": "3ca73ae6-3fa5-4dfe-990a-a60a2e7ed235",
+    "stage": "terminal",
+    "result": "成功",
+    "http_status": 200,
+    "matched_rule_ids": ["b3996e35-0c57-4971-9a73-74b809d33aee"],
+    "duration_ms": 3,
+    "target": "http://127.0.0.1:9/"
+  },
+  "fixed_root_sha256": "B4:72:77:A5:8D:81:AD:EB:3C:CE:59:7A:15:58:85:4D:AB:3D:0B:30:AB:CE:15:06:5A:FB:73:33:9B:CB:D7:4C",
+  "workspace_client_identity_reference_id": "8f6c650a-5fb9-4ad8-98b6-f5acdc6ed9de"
+}

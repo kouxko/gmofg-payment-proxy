@@ -2,6 +2,12 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-03
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 12:37:48 +08:00 | [通过 MCP 验证并配置 Payment DLL 的 D48 Mock](completed/2026-09-03/configure-payment-dll-d48-mock.md) | 从 HTTP 抓包生成启用的 request-stage terminal Mock，保留固定 Root、Listener、Android 路由、上游身份引用和原规则，并完成无真实上游的本机命中重放 | PASS_WITH_MCP_FULL_CANDIDATE_INCOMPATIBILITY；Mock 命中 1 次、HTTP 200/118 字节 D48 响应逐字段一致；MCP 完整候选因动态签发 TLS 表达不兼容而未 apply | 高 | MCP、Payment DLL、HTTP、MockResponse、D48 |
+
 ## 2026-09-02
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

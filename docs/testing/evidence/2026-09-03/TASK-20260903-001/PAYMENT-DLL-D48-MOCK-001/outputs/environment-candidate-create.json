@@ -1,0 +1,21 @@
+{
+  "candidate_id": "115ad010-1731-4091-a0ba-c9f1e805202d",
+  "confirmation_token": null,
+  "status": "validation_failed",
+  "errors": [
+    {
+      "code": "LISTENER_DOMAIN_INVALID",
+      "message": "environment configuration operation failed",
+      "severity": "error"
+    }
+  ],
+  "validation_layers": [
+    {"layer": "schema", "status": "passed", "code": null},
+    {"layer": "domain", "status": "failed", "code": "LISTENER_DOMAIN_INVALID"},
+    {"layer": "material", "status": "skipped_dependency", "code": null},
+    {"layer": "package_projection", "status": "skipped_dependency", "code": null},
+    {"layer": "dns_tcp_port", "status": "skipped_dependency", "code": null},
+    {"layer": "tls_mtls", "status": "skipped_dependency", "code": null},
+    {"layer": "preview_baseline", "status": "skipped_dependency", "code": null}
+  ]
+}

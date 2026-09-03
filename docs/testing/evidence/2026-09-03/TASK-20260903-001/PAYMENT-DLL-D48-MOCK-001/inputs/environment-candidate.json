@@ -1,0 +1,181 @@
+{
+  "schema_version": 1,
+  "target": {
+    "mode": "existing",
+    "workspace_id": "0ec6c07a-9fa9-4116-bd89-e176930f4361",
+    "expected_revision": 17
+  },
+  "workspace": {
+    "listeners": [
+      {
+        "alias": "payment-dll",
+        "id": "06acc281-217c-4bb9-933b-ef6d42f0eb9a",
+        "name": "Payment DLL",
+        "enabled": false,
+        "bind_address": "127.0.0.1",
+        "port": 8080,
+        "connect_timeout_ms": 30000,
+        "read_timeout_ms": 70000,
+        "write_timeout_ms": 70000,
+        "data_plane": {
+          "kind": "http",
+          "settings": {
+            "authentication": {
+              "mode": "none"
+            },
+            "mitm": {
+              "enabled": false,
+              "authority_allowlist": [],
+              "root_ca_selector": null,
+              "maximum_cached_leaf_certificates": 256
+            },
+            "downstream_tls": {
+              "enabled": true,
+              "server_identity_alias": null,
+              "dynamic_sni_allowlist": [],
+              "client_authentication": {
+                "mode": "disabled"
+              }
+            },
+            "request_body_codec": "auto",
+            "response_body_codec": "auto",
+            "body_processing": {
+              "mode": "plain"
+            },
+            "fixed_server": null
+          }
+        }
+      }
+    ],
+    "rules": [
+      {
+        "existing_rule_id": "834e4b0d-70d9-4bfe-b8a3-7bcc16b5c839",
+        "name": "D48 -> T02",
+        "enabled": true,
+        "priority": 100,
+        "listener_alias": "payment-dll",
+        "stage": "proxy_to_app",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "",
+            "condition": {
+              "source": "document",
+              "path": "/ErrorCode",
+              "predicate": {
+                "type": "string",
+                "value": {
+                  "operator": "equal",
+                  "value": "D48"
+                }
+              }
+            },
+            "action": {
+              "source": "document",
+              "value": {
+                "type": "set",
+                "path": "/ErrorCode",
+                "value": "T02"
+              }
+            }
+          }
+        }
+      },
+      {
+        "name": "Payment DLL D48 Mock",
+        "enabled": true,
+        "priority": 100,
+        "listener_alias": "payment-dll",
+        "stage": "proxy_to_upstream",
+        "content": {
+          "type": "http",
+          "value": {
+            "description": "由 2026-09-03 Payment DLL HTTP 抓包 a29db31153cc42c5a4f75b756b1b70e0 的服务器响应生成。",
+            "condition": {
+              "source": "http",
+              "field": "RequestTarget",
+              "operator": {
+                "Equals": "/"
+              }
+            },
+            "action": {
+              "source": "terminal",
+              "value": {
+                "MockResponse": {
+                  "status": 200,
+                  "headers": [
+                    [
+                      "cache-control",
+                      "private"
+                    ],
+                    [
+                      "content-type",
+                      "text/csv;charset=Shift_JIS"
+                    ],
+                    [
+                      "date",
+                      "Thu,3 Sep 2026 12:55:48 GMT"
+                    ]
+                  ],
+                  "body_bytes": [123, 34, 69, 114, 114, 111, 114, 67, 111, 100, 101, 34, 58, 34, 68, 52, 56, 34, 44, 34, 82, 101, 115, 112, 111, 110, 115, 101, 73, 68, 34, 58, 34, 65, 34, 44, 34, 84, 114, 97, 110, 115, 97, 99, 116, 105, 111, 110, 84, 121, 112, 101, 34, 58, 34, 48, 48, 48, 49, 34, 44, 34, 82, 101, 115, 112, 111, 110, 115, 101, 84, 105, 109, 101, 83, 116, 97, 109, 112, 34, 58, 34, 50, 48, 50, 54, 48, 57, 48, 51, 49, 50, 53, 53, 52, 56, 53, 55, 48, 34, 44, 34, 68, 101, 98, 105, 116, 73, 110, 112, 34, 58, 34, 32, 32, 32, 34, 125]
+                }
+              }
+            }
+          }
+        }
+      }
+    ],
+    "android_network_profiles": [
+      {
+        "id": "b0a83e8e-25e0-49c2-948d-31a673edc6a6",
+        "name": "新建设备网络方案",
+        "target_applications": [
+          {
+            "package_name": "jp.gmofg.app",
+            "uid": 10144,
+            "display_name": "jp.gmofg.app"
+          }
+        ],
+        "destination_targets": [],
+        "proxy_routes": [
+          {
+            "destination": "https.gmo-fg.net",
+            "ports": [16127],
+            "listener_alias": "payment-dll"
+          }
+        ],
+        "confirmed_shared_uids": [],
+        "auto_resume_after_reboot": false,
+        "stop_vpn_on_control_loss": true,
+        "weak_network": {
+          "seed": 1,
+          "fixed_delay_millis": 0,
+          "uniform_jitter_millis": 0,
+          "upload_bytes_per_second": null,
+          "download_bytes_per_second": null,
+          "random_loss_basis_points": 0,
+          "burst_loss": null,
+          "duplicate_basis_points": 0,
+          "reorder_basis_points": 0,
+          "maximum_reorder_hold_millis": 0,
+          "blackout_windows": [],
+          "dns_blackhole": false,
+          "nth_tcp_flag_drops": [],
+          "path_mtu": {
+            "mtu": null,
+            "mss_clamp": null,
+            "mode": "pass"
+          },
+          "corruption": {
+            "probability_basis_points": 0,
+            "bits_per_packet": 0
+          }
+        }
+      }
+    ]
+  },
+  "materials": {
+    "certificates": [],
+    "secrets": []
+  }
+}
