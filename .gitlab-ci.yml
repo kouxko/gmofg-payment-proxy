@@ -19,7 +19,7 @@ stages:
 
 variables:
   PIPELINE_MODE: "full"
-  APT_MIRROR_URL: "https://repo.huaweicloud.com/ubuntu"
+  APT_MIRROR_URL: "http://repo.huaweicloud.com/ubuntu"
   NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
   RUSTUP_DIST_SERVER: "https://rsproxy.cn"
   RUSTUP_UPDATE_ROOT: "https://rsproxy.cn/rustup"
