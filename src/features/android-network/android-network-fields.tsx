@@ -8,6 +8,7 @@ interface NumericFieldProps {
   ariaLabel?: string;
   minValue?: number;
   maxValue?: number;
+  step?: number;
 }
 
 export function NumericField({
@@ -17,12 +18,14 @@ export function NumericField({
   ariaLabel,
   minValue,
   maxValue,
+  step,
 }: NumericFieldProps): ReactElement {
   return (
     <NumberField
       aria-label={ariaLabel}
       minValue={minValue}
       maxValue={maxValue}
+      step={step}
       value={value}
       onChange={onChange}
     >

@@ -13,7 +13,7 @@ repo_dir="$(cd "$companion_dir/.." && pwd)"
 manifest="$repo_dir/src-tauri/Cargo.toml"
 target_dir="$companion_dir/build/rust-target"
 jni_dir="$companion_dir/app/src/main/jniLibs"
-android_api="${ANDROID_MIN_API:-26}"
+android_api="${ANDROID_MIN_API:-24}"
 
 if [[ -n "${ANDROID_NDK_HOME:-}" ]]; then
   ndk_dir="$ANDROID_NDK_HOME"

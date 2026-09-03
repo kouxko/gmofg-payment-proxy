@@ -25,7 +25,7 @@ class CompanionControlServer(private val context: Context) {
     fun start() {
         acceptExecutor.execute {
             runCatching {
-                // LocalServerSocket 在 API 28 才声明实现 Closeable，不能在 minSdk 26 上使用
+                // LocalServerSocket 在 API 28 才声明实现 Closeable，不能在 minSdk 24 上使用
                 // Kotlin `use`。`close()` 本身从 API 1 就存在，因此显式 finally 最安全。
                 val server = LocalServerSocket(ControlProtocol.SOCKET_NAME)
                 try {
@@ -175,7 +175,8 @@ class CompanionControlServer(private val context: Context) {
             ownerEpoch.orEmpty(),
             profile.stopVpnOnControlLoss,
         ) { generation ->
-            context.startForegroundService(
+            AndroidPlatformCompatibility.startVpnService(
+                context,
                 InterceptVpnService.startIntent(
                     context,
                     profileJson,

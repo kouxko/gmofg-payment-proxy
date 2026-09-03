@@ -1,10 +1,12 @@
 package com.interceptproxy.vpn
 
+import android.annotation.SuppressLint
 import android.app.Notification
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
 import android.content.Intent
+import android.os.Build
 
 internal object VpnForegroundNotification {
     private const val CHANNEL_ID = "intercept_proxy_vpn"
@@ -16,6 +18,12 @@ internal object VpnForegroundNotification {
     }
 
     private fun createChannel(service: InterceptVpnService) {
+        if (!AndroidPlatformCompatibility.usesApi26ForegroundContract(Build.VERSION.SDK_INT)) return
+        createChannelApi26(service)
+    }
+
+    @SuppressLint("NewApi")
+    private fun createChannelApi26(service: InterceptVpnService) {
         val manager = service.getSystemService(NotificationManager::class.java)
         manager.createNotificationChannel(
             NotificationChannel(
@@ -26,6 +34,7 @@ internal object VpnForegroundNotification {
         )
     }
 
+    @Suppress("DEPRECATION")
     private fun create(service: InterceptVpnService): Notification {
         val stopIntent = PendingIntent.getService(
             service,
@@ -44,7 +53,12 @@ internal object VpnForegroundNotification {
             service.getString(R.string.vpn_stop),
             stopIntent,
         ).build()
-        return Notification.Builder(service, CHANNEL_ID)
+        val builder = if (AndroidPlatformCompatibility.usesApi26ForegroundContract(Build.VERSION.SDK_INT)) {
+            createBuilderApi26(service)
+        } else {
+            Notification.Builder(service).setPriority(Notification.PRIORITY_LOW)
+        }
+        return builder
             .setSmallIcon(android.R.drawable.ic_lock_lock)
             .setContentTitle(service.getString(R.string.vpn_notification_title))
             .setContentText(service.getString(R.string.vpn_notification_text))
@@ -53,4 +67,8 @@ internal object VpnForegroundNotification {
             .addAction(stopAction)
             .build()
     }
+
+    @SuppressLint("NewApi")
+    private fun createBuilderApi26(service: InterceptVpnService): Notification.Builder =
+        Notification.Builder(service, CHANNEL_ID)
 }

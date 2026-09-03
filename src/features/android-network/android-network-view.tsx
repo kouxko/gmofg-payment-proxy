@@ -12,13 +12,12 @@ import type {
 import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
-import { AdvancedNetworkCard } from "./advanced-network-card";
 import { toneColor } from "@/lib/format";
 import { DeviceControlCard } from "./device-control-card";
 import {
   BasicNetworkParametersCard,
-  DestinationTargetsCard,
 } from "./network-parameter-cards";
+import { NetworkMoreSettings } from "./network-more-settings";
 import {
   ProfileActions,
   ProfileBasicsCard,
@@ -26,8 +25,6 @@ import {
   UnselectedProfileState,
 } from "./profile-cards";
 import { TargetApplicationsCard } from "./target-applications-card";
-import { ProxyRoutesCard } from "./proxy-routes-card";
-import { RuntimeEndpointsCard } from "./runtime-endpoints-card";
 import { useCurrentWorkspaceListeners } from "./use-current-workspace-listeners";
 import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { runtimeAlertStatus } from "./android-network-types";
@@ -302,7 +299,7 @@ export function AndroidNetworkView(): ReactElement {
         <div>
           <h1 className="sr-only">应用网络接管</h1>
           <p className="mt-1 text-sm text-[var(--telemetry-muted)]">
-            设备端 VPN 只接管所选应用，可将指定目标透明转交代理入口，并按需实施 TCP/IP 弱网。
+            选择设备和目标应用后即可单独运行弱网；需要时再接入代理调试或展开专家设置。
           </p>
         </div>
 
@@ -350,12 +347,6 @@ export function AndroidNetworkView(): ReactElement {
             </Alert>
           )}
 
-          <RuntimeEndpointsCard
-            snapshot={endpoints.data}
-            loading={endpoints.isLoading}
-            error={endpoints.error}
-          />
-
           <ProfileSelectorCard
             profiles={profiles.data ?? []}
             selectedProfileId={draft?.id}
@@ -386,18 +377,17 @@ export function AndroidNetworkView(): ReactElement {
                 onRefresh={() => void run("refresh-packages", refreshPackages)}
                 onTogglePackage={togglePackage}
               />
-              <ProxyRoutesCard
+              <BasicNetworkParametersCard key={draft.id} weak={draft.weak_network} onUpdate={updateWeak} />
+              <NetworkMoreSettings
                 draft={draft}
                 listeners={workspaceListeners.listeners}
-                loading={workspaceListeners.loading}
-                error={workspaceListeners.error}
+                listenersLoading={workspaceListeners.loading}
+                listenersError={workspaceListeners.error}
+                endpointsSnapshot={endpoints.data}
+                endpointsLoading={endpoints.isLoading}
+                endpointsError={endpoints.error}
                 onChange={setDraft}
-              />
-              <DestinationTargetsCard draft={draft} onChange={setDraft} />
-              <BasicNetworkParametersCard weak={draft.weak_network} onUpdate={updateWeak} />
-              <AdvancedNetworkCard
-                weak={draft.weak_network}
-                onUpdate={updateWeak}
+                onUpdateWeak={updateWeak}
                 onApplyIntent={(intent) => void run(
                   `profile-intent:${intent.kind}`,
                   () => applyProfileIntent(intent),

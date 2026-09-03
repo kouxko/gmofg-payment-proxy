@@ -3,10 +3,10 @@
 ## Source of truth
 
 - Status: Active baseline
-- Last refreshed: 2026-08-17
+- Last refreshed: 2026-09-03
 - Architecture boundary: [R01 architecture index](docs/architecture/README.md)
 - Primary product surfaces: Tauri desktop application, persistent Next.js workspace shell, Rust-owned proxy configuration and runtime state.
-- Evidence reviewed: `docs/requirements.md`, `docs/user-operation-guide.md`, `design-qa.md`, `docs/assets/ui/*.png`, `src/app/globals.css`, `src/features/shell/app-shell.tsx`, `src/features/shell/workspace-navigation.tsx`, `src/features/listeners/listeners-view.tsx`, `src/features/listeners/socket-listener-settings.tsx`.
+- Evidence reviewed: `docs/requirements.md`, `docs/user-operation-guide.md`, `design-qa.md`, `docs/assets/ui/*.png`, `src/app/globals.css`, `src/features/shell/app-shell.tsx`, `src/features/shell/workspace-navigation.tsx`, `src/features/listeners/listeners-view.tsx`, `src/features/listeners/socket-listener-settings.tsx`, `src/features/android-network/android-network-view.tsx`, `src/features/android-network/network-parameter-cards.tsx`, `src/features/android-network/advanced-network-card.tsx`.
 - Feature contract: `.omx/plans/socket-protocol-scripting.md`, `templates/socket-protocol/API.md`, `templates/socket-protocol/AUTHORING.md`.
 
 ## Brand
@@ -150,6 +150,17 @@ Socket 数据处理
 - Validation is Rust evidence: the frontend renders package and Listener ViewModels and does not infer compilation or compatibility.
 - Preserve raw evidence: protocol HTML supplements Hex and never removes access to original Frame bytes.
 - Tradeoff: the version-detail Dialog favors diagnostic density over a simplified consumer-style layout because its users are protocol authors and operators.
+
+### Android weak-network progressive disclosure
+
+- Primary job: a QA tester selects a device and target application, configures common weak-network effects, and starts the device-side weak-network engine without creating or selecting a Proxy Listener.
+- Default hierarchy: device connection, device-network profile, target applications, common weak-network effects, then save/start actions.
+- Common weak-network effects use outcome-oriented labels: delay, delay variation, packet-loss percentage, upload limit and download limit.
+- Runtime recovery/protection, optional target-address filtering, transparent Proxy routing, Proxy endpoint diagnostics and expert TCP/IP failures stay available under a single `更多设置` disclosure instead of occupying the default path.
+- A collapsed optional section must summarize configured runtime behavior, routes, targets or expert effects so active behavior is never hidden.
+- Empty `proxy_routes` is a complete, supported standalone weak-network configuration. Proxy setup is optional debugging integration and must not block weak-network start.
+- Existing saved profiles, Rust validation, runtime ownership, stop/emergency recovery and dangerous-operation confirmation remain authoritative and visible at the action boundary.
+- Reference scenes may map published RTT and bandwidth values into the existing profile fields when the source, unit conversion and engine adaptation are explicit. Names use `参考` and do not imply a calibrated carrier, region, subway or elevator trace; those real-world labels still require measured data and a separate contract.
 
 ## Visual language
 

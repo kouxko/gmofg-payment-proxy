@@ -56,6 +56,20 @@ describe("page-specific usage guides", () => {
     expect(allGuidance).not.toMatch(/第 N 次命中|默认命中次数|一次性生效|仅命中一次/);
   });
 
+  it("documents standalone weak-network setup before optional proxy settings", () => {
+    const androidGuide = pageHelpGuides["/android-network"];
+    const androidGuidance = androidGuide.sections
+      .flatMap((section) => section.steps)
+      .join("\n");
+
+    expect(androidGuide.summary).toContain("单独运行弱网");
+    expect(androidGuidance).toContain("不配置代理入口也可以单独保存并启动弱网");
+    expect(androidGuidance).toContain("参考慢速 4G");
+    expect(androidGuidance).toContain("RTT 换算为单向延迟");
+    expect(androidGuidance).toContain("同时接入代理调试");
+    expect(androidGuidance).toContain("专家参数");
+  });
+
   it("documents the native and non-mutating protocol-package import boundary", () => {
     const protocolPackageGuide = pageHelpGuides["/protocol-packages"].sections
       .flatMap((section) => section.steps)

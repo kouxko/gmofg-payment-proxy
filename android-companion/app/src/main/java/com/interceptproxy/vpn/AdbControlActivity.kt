@@ -100,7 +100,8 @@ class AdbControlActivity : Activity() {
             generation,
             profile.stopVpnOnControlLoss,
         )
-        startForegroundService(
+        AndroidPlatformCompatibility.startVpnService(
+            this,
             InterceptVpnService.startIntent(this, rawJson, proxyRuntimeJson, generation),
         )
         finish()

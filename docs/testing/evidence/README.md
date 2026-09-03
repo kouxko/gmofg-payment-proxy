@@ -7,6 +7,8 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260903-004 | STANDALONE-WEAK-NETWORK-UI-001 | 验证无代理独立弱网、四个有来源场景、五项常用效果、渐进披露、运行保护及三个设备操作按钮等宽布局 | PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_MANUAL_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-004/STANDALONE-WEAK-NETWORK-UI-001/README.md) |
+| TASK-20260903-007 | ANDROID-7-COMPATIBILITY-001 | 验证主 APK、两个探针和四 ABI Rust 数据面最低版本统一为 API 24，并保持 API 26+ 前台服务/通知合同、固定签名、zipalign 与 16 KiB 对齐 | PASS_WITH_ANDROID_7_RUNTIME_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-007/ANDROID-7-COMPATIBILITY-001/README.md) |
 | TASK-20260903-008 | RULE-FORM-IMMEDIATE-001 | 验证新建规则在名称和优先级为空时立即显示完整条件/动作表单且保存保持禁用，并完成正式构建、签名、安装和实际 UI 检查 | PASS | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-008/RULE-FORM-IMMEDIATE-001/README.md) |
 | TASK-20260903-006 | EXCHANGE-NEWEST-FIRST-001 | 验证 Exchange 运行记录在分页前按连接建立顺序从新到旧返回，并回归 Store、抓包 UI、正式构建、签名、安装和实际表头 | PASS | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-006/EXCHANGE-NEWEST-FIRST-001/README.md) |
 | TASK-20260903-003 | HTTP-RESPONSE-SELECT-001 | 验证 HTTP Listener 以单一下拉框映射按请求目标、固定 Server 和本机应答三种路由，并回归证书生命周期、正式构建、签名、安装和实际 UI | PASS | TASK-20260903-002 | HTTP-LOCAL-MOCK-001 | [父证据](2026-09-03/TASK-20260903-002/HTTP-LOCAL-MOCK-001/README.md) | [证据](2026-09-03/TASK-20260903-003/HTTP-RESPONSE-SELECT-001/README.md) |

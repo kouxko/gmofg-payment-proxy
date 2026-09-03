@@ -165,11 +165,12 @@ describe("Android runtime owner view", () => {
     expect(screen.queryByText("设备 A 正在运行。")).not.toBeInTheDocument();
     expect(screen.getByLabelText("目标设备")).toHaveTextContent("A8700");
     expect(screen.getByLabelText("设备网络运行所有者")).toHaveTextContent("device-a");
-    expect(screen.getByLabelText("实际运行端点")).not.toHaveTextContent("device-a");
+    expect(screen.queryByLabelText("实际运行端点")).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: /设备 A 方案/ }));
     await waitFor(() =>
       expect(mocks.deviceNetworkEndpoints).toHaveBeenCalledWith("device-b", "profile-a"),
     );
+    await user.click(screen.getByRole("button", { name: /同时接入代理调试/ }));
     expect(screen.getByLabelText("方案配置端点")).toHaveTextContent("当前方案入口");
     expect(await screen.findByRole("button", { name: "启动" })).toBeEnabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();

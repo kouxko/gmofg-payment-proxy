@@ -6,6 +6,8 @@ Android 系统流量和 ADB 不进入 TUN。
 ## 当前实现
 
 - 包名固定为 `com.interceptproxy.vpn`。
+- 最低支持 Android 7.0（API 24）；API 24/25 使用普通 Service 启动和旧式低优先级通知，
+  API 26 及以上使用前台 Service 启动与 Notification Channel。
 - `VpnConsentActivity` 只调用系统 `VpnService.prepare()` 授权页。
 - `InterceptVpnService` 负责前台通知、TUN、`addAllowedApplication()`、JNI 和 socket
   `protect()` 回调。
