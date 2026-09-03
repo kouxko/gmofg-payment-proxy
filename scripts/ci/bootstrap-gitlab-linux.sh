@@ -116,10 +116,42 @@ install_android_sdk() {
     echo "Android SDK license acceptance failed." >&2
     return "$license_status"
   fi
-  "$sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
-    "platform-tools" \
-    "platforms;android-$ANDROID_PLATFORM" \
-    "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+
+  local build_tools_home="$ANDROID_SDK_ROOT/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+  if [[ ! -f "$build_tools_home/source.properties" ]]; then
+    local build_tools_archive="$tools_root/build-tools-$ANDROID_BUILD_TOOLS_VERSION-linux.zip"
+    local unpacked_build_tools="$ANDROID_SDK_ROOT/build-tools/android-16"
+
+    download_with_parallel_ranges "$ANDROID_BUILD_TOOLS_ARCHIVE_URL" "$build_tools_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/build-tools"
+    unzip -q -o "$build_tools_archive" -d "$ANDROID_SDK_ROOT/build-tools"
+    test -f "$unpacked_build_tools/source.properties"
+    test ! -e "$build_tools_home"
+    mv "$unpacked_build_tools" "$build_tools_home"
+    rm -f "$build_tools_archive" "$build_tools_archive.aria2"
+  fi
+  test -f "$build_tools_home/source.properties"
+
+  local platform_home="$ANDROID_SDK_ROOT/platforms/android-$ANDROID_PLATFORM"
+  if [[ ! -f "$platform_home/source.properties" ]]; then
+    local platform_archive="$tools_root/platform-android-$ANDROID_PLATFORM.zip"
+
+    download_with_parallel_ranges "$ANDROID_PLATFORM_ARCHIVE_URL" "$platform_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/platforms"
+    unzip -q -o "$platform_archive" -d "$ANDROID_SDK_ROOT/platforms"
+    rm -f "$platform_archive" "$platform_archive.aria2"
+  fi
+  test -f "$platform_home/source.properties"
+
+  local platform_tools_home="$ANDROID_SDK_ROOT/platform-tools"
+  if [[ ! -f "$platform_tools_home/source.properties" ]]; then
+    local platform_tools_archive="$tools_root/platform-tools-linux.zip"
+
+    download_with_parallel_ranges "$ANDROID_PLATFORM_TOOLS_ARCHIVE_URL" "$platform_tools_archive"
+    unzip -q -o "$platform_tools_archive" -d "$ANDROID_SDK_ROOT"
+    rm -f "$platform_tools_archive" "$platform_tools_archive.aria2"
+  fi
+  test -f "$platform_tools_home/source.properties"
 
   export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
   if [[ ! -f "$ANDROID_NDK_HOME/source.properties" ]]; then
