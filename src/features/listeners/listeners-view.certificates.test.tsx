@@ -140,7 +140,8 @@ describe("统一代理监听编辑器", () => {
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
-    await user.click(screen.getByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(await screen.findByLabelText("HTTP 响应方式"));
+    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
 
     await waitFor(() => expect(mocks.listenerCertificateDiscard).toHaveBeenCalledWith(
       certificateReference("ca-ref-1", "测试 CA", "upstream_server_trust"),
@@ -280,7 +281,8 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup();
     render(<ListenersView />);
 
-    await user.click(await screen.findByRole("switch", { name: "转发到固定 Server" }));
+    await user.click(await screen.findByLabelText("HTTP 响应方式"));
+    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
 
     expect(mocks.listenerCertificateDiscard).not.toHaveBeenCalled();
   });

@@ -75,6 +75,6 @@ function listenerDestination(listener: ProxyListener) {
     return `${host || "未配置主机"}:${port}`;
   }
   const topology = listener.data_plane.settings.topology;
-  if (topology.mode === "local_server") return "Local HTTP Server";
+  if (topology.mode === "local_server") return "本地应答";
   return topology.settings.fixed_server?.upstream_url || "请求中的目标地址";
 }
