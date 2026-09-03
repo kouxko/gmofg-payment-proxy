@@ -137,8 +137,22 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(variables, /^[ ]{2}RUST_TOOLCHAIN: "1\.98\.0"$/mu);
   assert.match(variables, /^[ ]{2}GRADLE_VERSION: "9\.6\.1"$/mu);
   assert.match(variables, /^[ ]{2}ANDROID_NDK_VERSION: "29\.0\.14206865"$/mu);
+  assert.match(
+    variables,
+    /^[ ]{2}ANDROID_NDK_ARCHIVE_URL: "https:\/\/dl\.google\.com\/android\/repository\/android-ndk-r29-linux\.zip"$/mu,
+  );
   assert.doesNotMatch(variables, /SHA256/u);
   assert.match(source, /source scripts\/ci\/configure-ubuntu-apt-mirror\.sh/u);
+  assert.match(source, /aria2 ca-certificates curl/u);
+  const linuxBootstrap = await readRepositoryFile(
+    "scripts/ci/bootstrap-gitlab-linux.sh",
+  );
+  assert.match(linuxBootstrap, /download_with_parallel_ranges/u);
+  assert.match(linuxBootstrap, /--max-connection-per-server=16/u);
+  assert.doesNotMatch(
+    linuxBootstrap,
+    /"ndk;\$ANDROID_NDK_VERSION"/u,
+  );
   const androidSettings = await readRepositoryFile(
     "android-companion/settings.gradle.kts",
   );

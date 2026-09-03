@@ -31,6 +31,23 @@ mkdir -p \
 
 export PATH="$DENO_INSTALL/bin:$CARGO_HOME/bin:$PATH"
 
+download_with_parallel_ranges() {
+  local url="$1"
+  local destination="$2"
+
+  aria2c \
+    --allow-overwrite=true \
+    --auto-file-renaming=false \
+    --continue=true \
+    --dir="$(dirname "$destination")" \
+    --file-allocation=none \
+    --max-connection-per-server=16 \
+    --min-split-size=4M \
+    --out="$(basename "$destination")" \
+    --split=16 \
+    "$url"
+}
+
 install_deno() {
   local archive="$tools_root/deno-$DENO_VERSION-linux-x64.zip"
   if [[ ! -x "$DENO_INSTALL/bin/deno" ]] ||
@@ -82,11 +99,12 @@ install_android_sdk() {
   local sdkmanager="$tools_home/cmdline-tools/bin/sdkmanager"
 
   if [[ ! -x "$sdkmanager" ]]; then
-    curl --fail --show-error --silent --location \
+    download_with_parallel_ranges \
       "https://dl.google.com/android/repository/commandlinetools-linux-${command_line_tools_version}_latest.zip" \
-      --output "$tools_archive"
+      "$tools_archive"
     mkdir -p "$tools_home"
     unzip -q -o "$tools_archive" -d "$tools_home"
+    rm -f "$tools_archive" "$tools_archive.aria2"
   fi
 
   export PATH="$(dirname "$sdkmanager"):$ANDROID_SDK_ROOT/platform-tools:$PATH"
@@ -101,10 +119,22 @@ install_android_sdk() {
   "$sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" \
     "platform-tools" \
     "platforms;android-$ANDROID_PLATFORM" \
-    "build-tools;$ANDROID_BUILD_TOOLS_VERSION" \
-    "ndk;$ANDROID_NDK_VERSION"
+    "build-tools;$ANDROID_BUILD_TOOLS_VERSION"
+
   export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
-  test -d "$ANDROID_NDK_HOME"
+  if [[ ! -f "$ANDROID_NDK_HOME/source.properties" ]]; then
+    local ndk_archive="$tools_root/android-ndk-r29-linux.zip"
+    local unpacked_ndk="$ANDROID_SDK_ROOT/ndk/android-ndk-r29"
+
+    download_with_parallel_ranges "$ANDROID_NDK_ARCHIVE_URL" "$ndk_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/ndk"
+    unzip -q -o "$ndk_archive" -d "$ANDROID_SDK_ROOT/ndk"
+    test -f "$unpacked_ndk/source.properties"
+    test ! -e "$ANDROID_NDK_HOME"
+    mv "$unpacked_ndk" "$ANDROID_NDK_HOME"
+    rm -f "$ndk_archive" "$ndk_archive.aria2"
+  fi
+  test -f "$ANDROID_NDK_HOME/source.properties"
 }
 
 install_rust
