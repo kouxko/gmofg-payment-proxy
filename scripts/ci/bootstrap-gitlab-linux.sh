@@ -49,7 +49,7 @@ install_rust() {
   local installer="$tools_root/rustup-init-$RUSTUP_VERSION-linux-x64"
   if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
     curl --proto '=https' --tlsv1.2 --fail --show-error --silent --location \
-      "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
+      "$RUSTUP_UPDATE_ROOT/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
       --output "$installer"
     chmod +x "$installer"
     "$installer" -y --no-modify-path --profile minimal --default-toolchain none

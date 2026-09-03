@@ -538,7 +538,9 @@ coverage、完整 verify、测试、lint、audit 或发布。
 pipeline 证明。
 
 GitLab Linux Job 使用 `mirrors.aliyun.com` 作为 Ubuntu apt 源，Deno npm 依赖使用
-`registry.npmmirror.com`；工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。
+`registry.npmmirror.com`，Rust 工具链和 crates 使用 `rsproxy.cn`，Android Gradle 依赖使用阿里云
+Google/Maven Central 镜像。Android SDK/NDK 仍保持 API 36、Build Tools 36.0.0 和 NDK 29 的官方固定版本；
+Ubuntu apt 包不能替代这些版本。工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。
 
 ## 13. 安全红线
 

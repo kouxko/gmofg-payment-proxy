@@ -120,12 +120,26 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
     variables,
     /^[ ]{2}NPM_CONFIG_REGISTRY: "https:\/\/registry\.npmmirror\.com"$/mu,
   );
+  assert.match(
+    variables,
+    /^[ ]{2}RUSTUP_DIST_SERVER: "https:\/\/rsproxy\.cn"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}CARGO_REGISTRIES_CRATES_IO_INDEX: "sparse\+https:\/\/rsproxy\.cn\/index\/"$/mu,
+  );
+  assert.match(variables, /^[ ]{2}ANDROID_MAVEN_MIRROR: "aliyun"$/mu);
   assert.match(variables, /^[ ]{2}RUSTUP_VERSION: "1\.29\.1"$/mu);
   assert.match(variables, /^[ ]{2}RUST_TOOLCHAIN: "1\.98\.0"$/mu);
   assert.match(variables, /^[ ]{2}GRADLE_VERSION: "9\.6\.1"$/mu);
   assert.match(variables, /^[ ]{2}ANDROID_NDK_VERSION: "29\.0\.14206865"$/mu);
   assert.doesNotMatch(variables, /SHA256/u);
   assert.match(source, /source scripts\/ci\/configure-ubuntu-apt-mirror\.sh/u);
+  const androidSettings = await readRepositoryFile(
+    "android-companion/settings.gradle.kts",
+  );
+  assert.match(androidSettings, /maven\.aliyun\.com\/repository\/google/u);
+  assert.match(androidSettings, /maven\.aliyun\.com\/repository\/central/u);
   assert.match(source, /deno ci/u);
   assert.doesNotMatch(source, /actions\/setup-node|pnpm\/action-setup/u);
   assert.doesNotMatch(source, /(?:^|\s)(?:node|npm|pnpm)\s/u);

@@ -46,7 +46,7 @@ $RustupInstaller = Join-Path $ToolsRoot "rustup-init-$env:RUSTUP_VERSION-windows
 if (-not (Test-Path $RustupExecutable -PathType Leaf)) {
     Invoke-WebRequest `
         -UseBasicParsing `
-        -Uri "https://static.rust-lang.org/rustup/archive/$env:RUSTUP_VERSION/x86_64-pc-windows-msvc/rustup-init.exe" `
+        -Uri "$env:RUSTUP_UPDATE_ROOT/archive/$env:RUSTUP_VERSION/x86_64-pc-windows-msvc/rustup-init.exe" `
         -OutFile $RustupInstaller
     & $RustupInstaller -y --no-modify-path --profile minimal --default-toolchain none
     if ($LASTEXITCODE -ne 0) {
