@@ -155,10 +155,11 @@ async fn assert_nuvei_json_replay(runtime: &mut WasmPackageRuntime) {
 }
 
 async fn assert_nuvei_rhai_replay(repository: &Path, runtime: &mut WasmPackageRuntime) {
-    let payload = std::fs::read(
-        repository.join("examples/protocol-packages/nuvei_tango_rhai/tests/fixtures/request.json"),
-    )
-    .expect("read Nuvei Rhai replay payload");
+    let payload =
+        std::fs::read(repository.join(
+            "examples/protocol-packages/nuvei_tango_rhai/component/tests/fixtures/request.json",
+        ))
+        .expect("read Nuvei Rhai replay payload");
     let body_bytes = 4 + 8 + payload.len();
     let mut frame = Vec::with_capacity(4 + body_bytes);
     frame.extend_from_slice(

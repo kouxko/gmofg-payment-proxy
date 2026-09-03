@@ -350,12 +350,12 @@ mod tests {
         for (direction, payload, message_type) in [
             (
                 Direction::Upstream,
-                include_bytes!("../../tests/fixtures/request.json").as_slice(),
+                include_bytes!("../tests/fixtures/request.json").as_slice(),
                 "AccptrAuthstnReq",
             ),
             (
                 Direction::Downstream,
-                include_bytes!("../../tests/fixtures/response.json").as_slice(),
+                include_bytes!("../tests/fixtures/response.json").as_slice(),
                 "AccptrAuthstnRspn",
             ),
         ] {

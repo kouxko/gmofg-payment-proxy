@@ -174,7 +174,7 @@ Direct 模式只验证 transport，不调用 Frame/Decode/Display/Rules/Encode�
 | P-COMPONENT-ISO8583 | 本地单文件 Component | Frame/Decode/Display/Encode | 顶层 manifest、WIT export、分段/粘包、无修改原字节、启停/重启与实例清理 |
 | P-EXT-SOCKET | 第三方进程 | `/packages` WebSocket JSON-RPC | 无 id 注册 notification、固定方法、上下行 hook、断线与重连 |
 | P-EXT-HTTP | 第三方进程 | HTTP Body Decode/Display/Encode | string wire、request/response 独立 Schema、规则 transaction 与 Encode rollback |
-| P-AU-EFTEX | Rust Component；Python 保留远端调试 | H01 + DUKPT + ISO8583 | 两方向派生、解密、Document、Display、重加密逐字节一致 |
+| P-AU-EFTEX | 本地单文件 Rust Component | H01 + DUKPT + ISO8583 | 两方向派生、解密、Document、Display、重加密逐字节一致 |
 
 所有包共同验证：
 
@@ -234,10 +234,7 @@ deno task build
 cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
 cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
 cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features
-examples/external-packages/au_eftex/.venv/bin/python -m unittest \
-  scripts/test_verify_au_eftex_trace.py
-examples/external-packages/au_eftex/.venv/bin/python -m unittest discover \
-  -s examples/external-packages/au_eftex/tests -v
+pnpm test:protocol-packages
 ```
 
 ### 8.1.1 MCP 契约专项
