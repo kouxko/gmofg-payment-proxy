@@ -69,7 +69,7 @@ export function RuleCreationEditor(props: {
       {error && <p role="alert" className="text-sm text-red-600">{error}</p>}
       {structure?.content.type === "http" && <section className="space-y-4"><h3 className="font-semibold">HTTP 规则内容</h3><TextField><Label>说明</Label><TextArea className="min-h-20" value={description} onChange={(event) => setDescription(event.target.value)} /></TextField></section>}
       {structure?.content.type === "socket" && <h3 className="font-semibold">Socket Document 规则内容</h3>}
-      {context && structure && priority != null && <RuleSinglePairEditor
+      {context && structure && <RuleSinglePairEditor
         conditionPath={context.document_condition_path}
         creation={{ structure, name, enabled, priority, description }}
         key={`${structure.listener_id}:${structure.stage}`}

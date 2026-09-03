@@ -7,6 +7,7 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260903-008 | RULE-FORM-IMMEDIATE-001 | 验证新建规则在名称和优先级为空时立即显示完整条件/动作表单且保存保持禁用，并完成正式构建、签名、安装和实际 UI 检查 | PASS | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-008/RULE-FORM-IMMEDIATE-001/README.md) |
 | TASK-20260903-006 | EXCHANGE-NEWEST-FIRST-001 | 验证 Exchange 运行记录在分页前按连接建立顺序从新到旧返回，并回归 Store、抓包 UI、正式构建、签名、安装和实际表头 | PASS | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-006/EXCHANGE-NEWEST-FIRST-001/README.md) |
 | TASK-20260903-003 | HTTP-RESPONSE-SELECT-001 | 验证 HTTP Listener 以单一下拉框映射按请求目标、固定 Server 和本机应答三种路由，并回归证书生命周期、正式构建、签名、安装和实际 UI | PASS | TASK-20260903-002 | HTTP-LOCAL-MOCK-001 | [父证据](2026-09-03/TASK-20260903-002/HTTP-LOCAL-MOCK-001/README.md) | [证据](2026-09-03/TASK-20260903-003/HTTP-RESPONSE-SELECT-001/README.md) |
 | TASK-20260903-002 | HTTP-LOCAL-MOCK-001 | 验证 HTTP LocalServer 无真实上游且双向规则各执行一次并返回 D48；验证文本 Mock body、响应 codec、旧配置、MCP schema、规则名称保持与 Path 选择器防溢出 | PASS | TASK-20260903-001 | PAYMENT-DLL-D48-MOCK-001 | [父证据](2026-09-03/TASK-20260903-001/PAYMENT-DLL-D48-MOCK-001/README.md) | [证据](2026-09-03/TASK-20260903-002/HTTP-LOCAL-MOCK-001/README.md) |
