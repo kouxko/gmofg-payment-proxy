@@ -108,7 +108,7 @@ install_android_sdk() {
 
   if [[ ! -x "$sdkmanager" ]]; then
     download_with_parallel_ranges \
-      "https://dl.google.com/android/repository/commandlinetools-linux-${command_line_tools_version}_latest.zip" \
+      "https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-${command_line_tools_version}_latest.zip" \
       "$tools_archive"
     mkdir -p "$tools_home"
     unzip -q -o "$tools_archive" -d "$tools_home"

@@ -531,17 +531,17 @@ GitHub runner，不能放进仓库、编辑器任务或文档。
 根目录 `.gitlab-ci.yml` 为内部 GitLab 项目提供 Android Companion、coverage、Windows 验证和未签名 Windows
 打包流程。需要跳过完整门禁、只生成可使用 Android VPN Companion 的 Windows 候选包时，通过 API 或 Web
 手动流水线传入 `PIPELINE_MODE=android-windows-build`。该模式只运行 Android Companion release 编译和
-Windows 打包两个 job；Windows job 消费 APK 并生成包含该资源的 MSI、NSIS 和 portable ZIP，不执行
-coverage、完整 verify、测试、lint、audit 或发布。
+Windows 打包，并先运行一个只负责缓存工具链的 Android 环境准备 job；Windows job 消费 APK 并生成包含
+该资源的 MSI、NSIS 和 portable ZIP，不执行 coverage、完整 verify、测试、lint、audit 或发布。
 
 本地合同测试和 GitLab CI Lint 只证明配置结构有效；Runner 与产物必须由当前 commit 的真实 GitLab
 pipeline 证明。
 
-GitLab Linux Job 使用 `mirrors.aliyun.com` 作为 Ubuntu apt 源，Deno npm 依赖使用
+GitLab Linux Job 使用华为云作为 Ubuntu apt 源，Deno npm 依赖使用
 `registry.npmmirror.com`，Rust 工具链和 crates 使用 `rsproxy.cn`，Android Gradle 依赖使用阿里云
-Google/Maven Central 镜像，Gradle distribution 使用华为云镜像。Android SDK/NDK 仍保持 API 36、
-Build Tools 36.0.0 和 NDK 29 的官方固定版本；Ubuntu apt 包不能替代这些版本。工具版本仍固定，但 CI
-不再对下载归档执行 checksum 校验。
+Google/Maven Central 镜像，Gradle distribution 使用华为云镜像，Android SDK/NDK 固定版本归档使用
+腾讯云 AndroidSDK 镜像。Android 版本保持 API 36、Build Tools 36.0.0 和 NDK 29；Ubuntu apt 包不能
+替代这些版本。工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。
 
 ## 13. 安全红线
 

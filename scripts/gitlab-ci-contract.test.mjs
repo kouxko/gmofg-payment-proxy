@@ -139,19 +139,19 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(variables, /^[ ]{2}ANDROID_NDK_VERSION: "29\.0\.14206865"$/mu);
   assert.match(
     variables,
-    /^[ ]{2}ANDROID_BUILD_TOOLS_ARCHIVE_URL: "https:\/\/dl\.google\.com\/android\/repository\/build-tools_r36_linux\.zip"$/mu,
+    /^[ ]{2}ANDROID_BUILD_TOOLS_ARCHIVE_URL: "https:\/\/mirrors\.cloud\.tencent\.com\/AndroidSDK\/build-tools_r36_linux\.zip"$/mu,
   );
   assert.match(
     variables,
-    /^[ ]{2}ANDROID_PLATFORM_ARCHIVE_URL: "https:\/\/dl\.google\.com\/android\/repository\/platform-36_r02\.zip"$/mu,
+    /^[ ]{2}ANDROID_PLATFORM_ARCHIVE_URL: "https:\/\/mirrors\.cloud\.tencent\.com\/AndroidSDK\/platform-36_r02\.zip"$/mu,
   );
   assert.match(
     variables,
-    /^[ ]{2}ANDROID_PLATFORM_TOOLS_ARCHIVE_URL: "https:\/\/dl\.google\.com\/android\/repository\/platform-tools_r37\.0\.1-linux\.zip"$/mu,
+    /^[ ]{2}ANDROID_PLATFORM_TOOLS_ARCHIVE_URL: "https:\/\/mirrors\.cloud\.tencent\.com\/AndroidSDK\/platform-tools_r37\.0\.1-linux\.zip"$/mu,
   );
   assert.match(
     variables,
-    /^[ ]{2}ANDROID_NDK_ARCHIVE_URL: "https:\/\/dl\.google\.com\/android\/repository\/android-ndk-r29-linux\.zip"$/mu,
+    /^[ ]{2}ANDROID_NDK_ARCHIVE_URL: "https:\/\/mirrors\.cloud\.tencent\.com\/AndroidSDK\/android-ndk-r29-linux\.zip"$/mu,
   );
   assert.doesNotMatch(variables, /SHA256/u);
   assert.match(source, /source scripts\/ci\/configure-ubuntu-apt-mirror\.sh/u);
@@ -161,6 +161,10 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(linuxBootstrap, /download_with_parallel_ranges/u);
   assert.match(linuxBootstrap, /--max-connection-per-server=16/u);
+  assert.match(
+    linuxBootstrap,
+    /mirrors\.cloud\.tencent\.com\/AndroidSDK\/commandlinetools-linux-/u,
+  );
   assert.match(linuxBootstrap, /replace-with = "rsproxy"/u);
   const windowsBootstrap = await readRepositoryFile(
     "scripts/ci/bootstrap-gitlab-windows.ps1",
