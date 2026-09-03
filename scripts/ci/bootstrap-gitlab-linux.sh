@@ -117,13 +117,13 @@ install_android_sdk() {
   test -d "$ANDROID_NDK_HOME"
 }
 
-install_deno
 install_rust
 
 if [[ "$mode" == "android" ]]; then
   install_gradle
   install_android_sdk
 else
+  install_deno
   rustup component add llvm-tools-preview --toolchain "$RUST_TOOLCHAIN"
   rustup target add wasm32-wasip2 --toolchain "$RUST_TOOLCHAIN"
   if ! cargo llvm-cov --version 2>/dev/null | grep -F "cargo-llvm-cov $CARGO_LLVM_COV_VERSION" >/dev/null; then
