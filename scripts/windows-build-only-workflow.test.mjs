@@ -72,9 +72,8 @@ test("full desktop release shares one cached Cargo target across runtime gates",
 
   assert.match(
     verifyJob,
-    /env:\s*\n(?:\s*#.*\n)*\s*CARGO_TARGET_DIR: src-tauri\/target/u,
+    /name: Verify independent runtime gates\s+env:\s*\n(?:\s*#.*\n)*\s*CARGO_TARGET_DIR: \$\{\{ github\.workspace \}\}\/src-tauri\/target/u,
   );
-  assert.match(verifyJob, /CARGO_PROFILE_DEV_DEBUG: "0"/u);
   assert.match(verifyJob, /workspaces: src-tauri -> target/u);
   assert.match(
     verifyJob,

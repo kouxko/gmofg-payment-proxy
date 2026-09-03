@@ -77,11 +77,6 @@ jobs:
       fail-fast: false
       matrix:
         os: ${{ fromJSON((github.event_name == 'push' || inputs.platform == 'all') && '["windows-latest","macos-14"]' || '["windows-latest"]') }}
-    env:
-      # 独立 gate 也复用主 workspace 的 target，避免重复冷编译 Wasmtime。
-      CARGO_TARGET_DIR: src-tauri/target
-      # CI 测试不发布调试符号；减少 Windows OpenSSL PDB 警告和缓存体积。
-      CARGO_PROFILE_DEV_DEBUG: "0"
     steps:
       - uses: actions/checkout@11d5960a326750d5838078e36cf38b85af677262 # v4
 
@@ -172,6 +167,9 @@ jobs:
           cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --all-targets --no-run
 
       - name: Verify independent runtime gates
+        env:
+          # 独立 gate 复用已恢复的主 workspace target，避免重复冷编译 Wasmtime。
+          CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
         run: |
           deno task check:rust:windows
           cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml --all-targets
