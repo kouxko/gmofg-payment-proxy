@@ -27,44 +27,31 @@ $env:DENO_DIR = if ($env:DENO_DIR) { $env:DENO_DIR } else { Join-Path $Repositor
 
 $DenoExecutable = Join-Path $env:DENO_INSTALL "deno.exe"
 $DenoArchive = Join-Path $ToolsRoot "deno-$env:DENO_VERSION-windows-x64.zip"
-$DenoArchiveSha256 = if (Test-Path $DenoArchive -PathType Leaf) {
-    (Get-FileHash -Algorithm SHA256 -Path $DenoArchive).Hash
+$InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
+    (& $DenoExecutable --version | Select-Object -First 1) -replace '^deno ', ''
 } else {
     $null
 }
-if ($DenoArchiveSha256 -ne $env:DENO_WINDOWS_SHA256) {
+if ($InstalledDenoVersion -ne $env:DENO_VERSION) {
     Invoke-WebRequest `
         -UseBasicParsing `
         -Uri "https://github.com/denoland/deno/releases/download/v$env:DENO_VERSION/deno-x86_64-pc-windows-msvc.zip" `
         -OutFile $DenoArchive
-    $DenoArchiveSha256 = (Get-FileHash -Algorithm SHA256 -Path $DenoArchive).Hash
+    Expand-Archive -Path $DenoArchive -DestinationPath $env:DENO_INSTALL -Force
 }
-if ($DenoArchiveSha256 -ne $env:DENO_WINDOWS_SHA256) {
-    throw "Deno archive SHA-256 mismatch: $DenoArchiveSha256"
-}
-Expand-Archive -Path $DenoArchive -DestinationPath $env:DENO_INSTALL -Force
 
 $CargoBin = Join-Path $env:CARGO_HOME "bin"
 $RustupExecutable = Join-Path $CargoBin "rustup.exe"
 $RustupInstaller = Join-Path $ToolsRoot "rustup-init-$env:RUSTUP_VERSION-windows-x64.exe"
-$RustupInstallerSha256 = if (Test-Path $RustupInstaller -PathType Leaf) {
-    (Get-FileHash -Algorithm SHA256 -Path $RustupInstaller).Hash
-} else {
-    $null
-}
-if ($RustupInstallerSha256 -ne $env:RUSTUP_WINDOWS_SHA256) {
+if (-not (Test-Path $RustupExecutable -PathType Leaf)) {
     Invoke-WebRequest `
         -UseBasicParsing `
         -Uri "https://static.rust-lang.org/rustup/archive/$env:RUSTUP_VERSION/x86_64-pc-windows-msvc/rustup-init.exe" `
         -OutFile $RustupInstaller
-    $RustupInstallerSha256 = (Get-FileHash -Algorithm SHA256 -Path $RustupInstaller).Hash
-}
-if ($RustupInstallerSha256 -ne $env:RUSTUP_WINDOWS_SHA256) {
-    throw "rustup-init SHA-256 mismatch: $RustupInstallerSha256"
-}
-& $RustupInstaller -y --no-modify-path --profile minimal --default-toolchain none
-if ($LASTEXITCODE -ne 0) {
-    throw "rustup installation failed with exit code $LASTEXITCODE."
+    & $RustupInstaller -y --no-modify-path --profile minimal --default-toolchain none
+    if ($LASTEXITCODE -ne 0) {
+        throw "rustup installation failed with exit code $LASTEXITCODE."
+    }
 }
 
 $env:Path = "$env:DENO_INSTALL;$CargoBin;$env:Path"

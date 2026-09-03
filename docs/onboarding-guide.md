@@ -537,6 +537,9 @@ coverage、完整 verify、测试、lint、audit 或发布。
 本地合同测试和 GitLab CI Lint 只证明配置结构有效；Runner 与产物必须由当前 commit 的真实 GitLab
 pipeline 证明。
 
+GitLab Linux Job 使用 `mirrors.aliyun.com` 作为 Ubuntu apt 源，Deno npm 依赖使用
+`registry.npmmirror.com`；工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。
+
 ## 13. 安全红线
 
 - 测试和诊断允许按任务需要保存完整 HTTP/Socket payload、Document 与支付 trace；仍不得把真实生产私钥、P12

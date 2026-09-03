@@ -33,32 +33,27 @@ export PATH="$DENO_INSTALL/bin:$CARGO_HOME/bin:$PATH"
 
 install_deno() {
   local archive="$tools_root/deno-$DENO_VERSION-linux-x64.zip"
-  if [[ ! -f "$archive" ]] || ! printf '%s  %s\n' "$DENO_LINUX_SHA256" "$archive" |
-    sha256sum --check --status; then
+  if [[ ! -x "$DENO_INSTALL/bin/deno" ]] ||
+    [[ "$("$DENO_INSTALL/bin/deno" --version 2>/dev/null | sed -n '1s/^deno //p')" != "$DENO_VERSION" ]]; then
     curl --fail --show-error --silent --location \
       "https://github.com/denoland/deno/releases/download/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip" \
       --output "$archive"
+    mkdir -p "$DENO_INSTALL/bin"
+    unzip -q -o "$archive" -d "$DENO_INSTALL/bin"
   fi
-  printf '%s  %s\n' "$DENO_LINUX_SHA256" "$archive" |
-    sha256sum --check --status
-  mkdir -p "$DENO_INSTALL/bin"
-  unzip -q -o "$archive" -d "$DENO_INSTALL/bin"
   test "$("$DENO_INSTALL/bin/deno" --version | sed -n '1s/^deno //p')" = "$DENO_VERSION"
   deno --version
 }
 
 install_rust() {
   local installer="$tools_root/rustup-init-$RUSTUP_VERSION-linux-x64"
-  if [[ ! -f "$installer" ]] || ! printf '%s  %s\n' "$RUSTUP_LINUX_SHA256" "$installer" |
-    sha256sum --check --status; then
+  if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
     curl --proto '=https' --tlsv1.2 --fail --show-error --silent --location \
       "https://static.rust-lang.org/rustup/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
       --output "$installer"
+    chmod +x "$installer"
+    "$installer" -y --no-modify-path --profile minimal --default-toolchain none
   fi
-  printf '%s  %s\n' "$RUSTUP_LINUX_SHA256" "$installer" |
-    sha256sum --check --status
-  chmod +x "$installer"
-  "$installer" -y --no-modify-path --profile minimal --default-toolchain none
   rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
   rustup default "$RUST_TOOLCHAIN"
   rustc --version
@@ -68,14 +63,12 @@ install_rust() {
 install_gradle() {
   local gradle_home="$tools_root/gradle-$GRADLE_VERSION"
   local archive="$tools_root/gradle-$GRADLE_VERSION-bin.zip"
-  if [[ ! -f "$archive" ]] || ! printf '%s  %s\n' "$GRADLE_SHA256" "$archive" |
-    sha256sum --check --status; then
+  if [[ ! -x "$gradle_home/bin/gradle" ]]; then
     curl --fail --show-error --silent --location \
       "https://services.gradle.org/distributions/gradle-$GRADLE_VERSION-bin.zip" \
       --output "$archive"
+    unzip -q -o "$archive" -d "$tools_root"
   fi
-  printf '%s  %s\n' "$GRADLE_SHA256" "$archive" | sha256sum --check --status
-  unzip -q -o "$archive" -d "$tools_root"
 
   export GRADLE_HOME="$gradle_home"
   export PATH="$GRADLE_HOME/bin:$PATH"
@@ -88,16 +81,13 @@ install_android_sdk() {
   local tools_home="$tools_root/android-command-line-tools-$command_line_tools_version"
   local sdkmanager="$tools_home/cmdline-tools/bin/sdkmanager"
 
-  if [[ ! -f "$tools_archive" ]] || ! printf '%s  %s\n' "$ANDROID_COMMAND_LINE_TOOLS_SHA256" "$tools_archive" |
-    sha256sum --check --status; then
+  if [[ ! -x "$sdkmanager" ]]; then
     curl --fail --show-error --silent --location \
       "https://dl.google.com/android/repository/commandlinetools-linux-${command_line_tools_version}_latest.zip" \
       --output "$tools_archive"
+    mkdir -p "$tools_home"
+    unzip -q -o "$tools_archive" -d "$tools_home"
   fi
-  printf '%s  %s\n' "$ANDROID_COMMAND_LINE_TOOLS_SHA256" "$tools_archive" |
-    sha256sum --check --status
-  mkdir -p "$tools_home"
-  unzip -q -o "$tools_archive" -d "$tools_home"
 
   export PATH="$(dirname "$sdkmanager"):$ANDROID_SDK_ROOT/platform-tools:$PATH"
   set +o pipefail

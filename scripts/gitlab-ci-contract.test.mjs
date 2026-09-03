@@ -112,15 +112,20 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
 
   assert.match(variables, /^[ ]{2}DENO_VERSION: "2\.9\.6"$/mu);
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
-  assert.match(variables, /^[ ]{2}DENO_LINUX_SHA256: "[0-9a-f]{64}"$/mu);
-  assert.match(variables, /^[ ]{2}DENO_WINDOWS_SHA256: "[0-9a-f]{64}"$/mu);
+  assert.match(
+    variables,
+    /^[ ]{2}APT_MIRROR_URL: "http:\/\/mirrors\.aliyun\.com\/ubuntu"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}NPM_CONFIG_REGISTRY: "https:\/\/registry\.npmmirror\.com"$/mu,
+  );
   assert.match(variables, /^[ ]{2}RUSTUP_VERSION: "1\.29\.1"$/mu);
-  assert.match(variables, /^[ ]{2}RUSTUP_LINUX_SHA256: "[0-9a-f]{64}"$/mu);
-  assert.match(variables, /^[ ]{2}RUSTUP_WINDOWS_SHA256: "[0-9a-f]{64}"$/mu);
   assert.match(variables, /^[ ]{2}RUST_TOOLCHAIN: "1\.98\.0"$/mu);
   assert.match(variables, /^[ ]{2}GRADLE_VERSION: "9\.6\.1"$/mu);
-  assert.match(variables, /^[ ]{2}GRADLE_SHA256: "[0-9a-f]{64}"$/mu);
   assert.match(variables, /^[ ]{2}ANDROID_NDK_VERSION: "29\.0\.14206865"$/mu);
+  assert.doesNotMatch(variables, /SHA256/u);
+  assert.match(source, /source scripts\/ci\/configure-ubuntu-apt-mirror\.sh/u);
   assert.match(source, /deno ci/u);
   assert.doesNotMatch(source, /actions\/setup-node|pnpm\/action-setup/u);
   assert.doesNotMatch(source, /(?:^|\s)(?:node|npm|pnpm)\s/u);

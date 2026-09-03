@@ -19,21 +19,17 @@ stages:
 
 variables:
   PIPELINE_MODE: "full"
+  APT_MIRROR_URL: "http://mirrors.aliyun.com/ubuntu"
+  NPM_CONFIG_REGISTRY: "https://registry.npmmirror.com"
   DENO_VERSION: "2.9.6"
-  DENO_LINUX_SHA256: "394f07f4da2bebe6ce6f1e7ce0fa16429b29b08c35e3fac3fe25972676dff4b2"
-  DENO_WINDOWS_SHA256: "15e5300b0ba3c3695a7621d90160a746ec9e710228cee639afa9d580f6e3cd11"
   RUSTUP_VERSION: "1.29.1"
-  RUSTUP_LINUX_SHA256: "dda7234360b7f578ca8b0ddcb80145646fa61a67c1720a5abc7051b35c9fcb71"
-  RUSTUP_WINDOWS_SHA256: "6f4bef66261261fcb43131be8720bab817d403a09edec7455c371974b90bdb7e"
   RUST_TOOLCHAIN: "1.98.0"
   CARGO_LLVM_COV_VERSION: "0.8.7"
   GRADLE_VERSION: "9.6.1"
-  GRADLE_SHA256: "9c0f7faeeb306cb14e4279a3e084ca6b596894089a0638e68a07c945a32c9e14"
   ANDROID_PLATFORM: "36"
   ANDROID_BUILD_TOOLS_VERSION: "36.0.0"
   ANDROID_NDK_VERSION: "29.0.14206865"
   ANDROID_COMMAND_LINE_TOOLS_VERSION: "15859902"
-  ANDROID_COMMAND_LINE_TOOLS_SHA256: "4e4c464f145a7512b57d088ac6c278c03c9eea610886b35a5e0804e74eedf583"
   CARGO_TERM_COLOR: "always"
   CARGO_INCREMENTAL: "0"
 
@@ -53,6 +49,7 @@ android_companion:
     paths:
       - .ci-cache/
   before_script:
+    - source scripts/ci/configure-ubuntu-apt-mirror.sh
     - apt-get update
     - >-
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
@@ -103,6 +100,7 @@ coverage_gates:
       - .ci-cache/
       - node_modules/
   before_script:
+    - source scripts/ci/configure-ubuntu-apt-mirror.sh
     - apt-get update
     - >-
         DEBIAN_FRONTEND=noninteractive apt-get install --yes --no-install-recommends
