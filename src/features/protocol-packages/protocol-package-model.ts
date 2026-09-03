@@ -148,8 +148,7 @@ export function protocolPackageDetailError(
     || value.version.kind !== value.kind
     || (expectedKind !== undefined && value.kind !== expectedKind)
     || !isCapabilities(value.capabilities, value.kind)
-    || !isProtocolPackageSchema(value.upstream_schema)
-    || !isProtocolPackageSchema(value.downstream_schema)
+    || !areSchemasValid(value.kind, value.upstream_schema, value.downstream_schema)
     || !Array.isArray(value.usages)
     || !value.usages.every(isUsage)
     || (value.version.package_source.type === "managed"
@@ -158,6 +157,18 @@ export function protocolPackageDetailError(
     return "协议包详情数据不完整。";
   }
   return undefined;
+}
+
+function areSchemasValid(
+  kind: "http" | "socket",
+  upstream: unknown,
+  downstream: unknown,
+): boolean {
+  return isSchemaValidForKind(kind, upstream) && isSchemaValidForKind(kind, downstream);
+}
+
+function isSchemaValidForKind(kind: "http" | "socket", schema: unknown): boolean {
+  return schema === null ? kind === "http" : isProtocolPackageSchema(schema);
 }
 
 function isExternalDetail(value: unknown): boolean {

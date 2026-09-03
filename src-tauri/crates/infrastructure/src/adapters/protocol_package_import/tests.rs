@@ -146,6 +146,10 @@ async fn component_manifest_previews_without_instantiating_guest_exports() {
     );
     assert!(preview.token.is_some());
     assert_eq!(preview.host_api, 1);
+    assert!(!preview.capabilities.upstream.frame);
+    assert!(!preview.capabilities.downstream.frame);
+    assert!(preview.upstream_schema.is_none());
+    assert!(preview.downstream_schema.is_some());
 }
 
 #[tokio::test]

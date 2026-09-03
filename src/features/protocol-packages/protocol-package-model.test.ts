@@ -105,6 +105,11 @@ describe("protocol package presentation model", () => {
         upstream: { ...http.capabilities.upstream, frame: true },
       },
     }, expected)).toBe("协议包详情数据不完整。");
+    expect(protocolPackageDetailError({
+      ...http,
+      upstream_schema: null,
+      downstream_schema: null,
+    }, expected)).toBeUndefined();
 
     const socket = detail();
     expect(protocolPackageDetailError({
@@ -113,6 +118,10 @@ describe("protocol package presentation model", () => {
         ...socket.capabilities,
         downstream: { ...socket.capabilities.downstream, frame: false },
       },
+    }, expected)).toBe("协议包详情数据不完整。");
+    expect(protocolPackageDetailError({
+      ...socket,
+      upstream_schema: null,
     }, expected)).toBe("协议包详情数据不完整。");
   });
 

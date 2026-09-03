@@ -1,0 +1,14 @@
+JSON Pretty build: PASS
+Rust unit tests: 4 passed, 0 failed
+Artifact bytes: 161042
+Artifact SHA-256: 5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3
+Manifest upstream schema: absent
+Manifest downstream schema: absent
+Import/detail/display frontend tests: 20/20 PASS
+Listener catalog frontend tests: 49/49 PASS
+TypeScript: PASS
+Development App build/start: PASS
+Local App user acceptance: PASS
+Rust HTTP import projection: 1/1 PASS
+Remote Windows retest: NOT_RUN
+Remote CI: NOT_RUN

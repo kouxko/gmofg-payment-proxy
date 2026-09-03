@@ -249,11 +249,22 @@ function isCatalogOption(value: unknown): value is ListenerProtocolPackageOption
     || !isProtocolPackageSource(value.package_source)
     || (value.kind !== "http" && value.kind !== "socket")
     || !isCapabilities(value.capabilities, value.kind)
-    || !isProtocolPackageSchema(value.upstream_schema)
-    || !isProtocolPackageSchema(value.downstream_schema)) {
+    || !areSchemasValid(value.kind, value.upstream_schema, value.downstream_schema)) {
     return false;
   }
   return true;
+}
+
+function areSchemasValid(
+  kind: "http" | "socket",
+  upstream: unknown,
+  downstream: unknown,
+): boolean {
+  return isSchemaValidForKind(kind, upstream) && isSchemaValidForKind(kind, downstream);
+}
+
+function isSchemaValidForKind(kind: "http" | "socket", schema: unknown): boolean {
+  return schema === null ? kind === "http" : isProtocolPackageSchema(schema);
 }
 
 function isPackageRef(value: unknown): value is ProtocolPackageRef {

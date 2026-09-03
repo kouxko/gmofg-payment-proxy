@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-02 18:01:55 +08:00`
+- 最后更新时间：`2026-09-03 10:46:55 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -90,6 +90,12 @@
 | `2026-09-02 17:19:32 +08:00` | 用户要求整理分支、合并应合并内容、删除应删除分支、推送 GitHub、合并到主分支并创建 Release。执行前实时确认 GitHub 当前没有 `main`/`master`，默认分支为 `codex/windows-ci-cache-warmup`；仓库当前版本为 `1.0.0` 且无历史 tag/Release。主分支命名/目标与首个 Release tag 仍需用户确认，确认前可以修复独立的发布阻断、推送当前功能分支并运行验证，但不得猜测创建 `main`、tag 或删除含独立提交/未提交修改的分支。 |
 | `2026-09-02 17:24:26 +08:00` | 用户确认一次性执行发布收口方案：以现有默认分支 tip 创建并切换 GitHub 默认分支为 `main`，当前任务分支通过 PR merge 到 `main`，首个 Release 使用 `v1.0.0`；合并与发布验证完成后删除已盘点的 1–6 项安全候选，包括当前任务分支、已被包含的 generalization 分支、干净的 wasm-runtime worktree/本地分支、旧默认分支、失效的 g032 worktree 元数据和未跟踪的根目录 `pnpm-lock.yaml`。保留含 3 个独立提交的 `g032-consolidation` 分支和有未提交修改的 g049 detached worktree。Windows 正式 Release 继续遵守 fail-closed 签名合同；实时 GitHub readback 尚未发现所需 Actions secrets/variable，因此不得在凭据门禁满足前创建 tag。 |
 | `2026-09-02 17:32:21 +08:00` | 用户明确暂时不配置 Windows 签名，要求以无签名状态发布。该结论替代上一条的签名门禁：`v1.0.0` tag 在三项签名配置均缺失时必须明确走 unsigned 分支，产物名称和 Release 说明必须标注未签名，不执行或伪造 Authenticode 校验；未来三项配置全部存在时仍执行现有签名与签发者/时间戳校验。部分配置存在属于错误配置并继续 fail-closed，禁止静默降级。 |
+| `2026-09-03 09:47:00 +08:00` | 用户要求在 `examples` 中生成 JSON Pretty Wasm 包；随后询问编辑器式语法分色，并明确不得修改 Proxy 代码，无法在当前清洗合同下分色则接受不实现。最终范围只新增 `examples/protocol-packages/json_pretty/` 及对应证据，不修改 `src/` 或 `src-tauri/`。 |
+| `2026-09-03 10:09:15 +08:00` | 用户截图显示首次产物导入时报“协议包校验预览数据不完整。未安装任何协议包内容。”。只读定位确认旧包 Manifest 的上下行 Schema 为空，后端返回的两个 Schema 为 `null`，不满足当前前端预览完整性检查；曾临时在包内补充 Schema 以验证该候选原因，未修改 Proxy。 |
+| `2026-09-03 10:24:00 +08:00` | 本地 App 使用补充 Schema 的产物仍失败；源码进一步确认后端把 HTTP 方向能力固定投影为 `frame: true`，前端却要求 HTTP 为 `frame: false`。用户随后明确该 HTTP 包本来就没有 Schema，因此撤销临时 Schema，恢复上下行空 Document 元数据。无 Schema HTTP 包在当前 Proxy UI 无法导入；用户此前要求不修改 Proxy，故保留 Host 可运行产物并把 App 导入记为失败。 |
+| `2026-09-03 10:33:28 +08:00` | 用户确认该问题严重并明确授权修复 Proxy 中无 Schema HTTP 包的导入合同；该授权替代此前“不得修改 Proxy”的局部限制。HTTP 预览与详情允许上下行 Schema 为 `null`，Socket 仍要求两份合法 Schema；HTTP capability 必须投影为 `frame: false`。用户同时要求 Display 支持自定义 HTML 样式；结合此前编辑器式 JSON 分色目标，本轮只保留经过属性和值白名单过滤的内联视觉 CSS，不开放脚本、事件、外链资源、`<style>`、布局覆盖或全局样式。用户明确要求快速修复、不采用 TDD；本轮直接实现后执行定向回归。 |
+| `2026-09-03 10:42:27 +08:00` | 用户截图证明导入成功后入口配置仍报“入口协议包目录数据不完整”；确认第三处目录边界仍无条件要求上下行 Schema。修复范围扩展到 Listener 协议包目录的同一按类型 Schema 合同，不改变代理转发和 Socket 严格校验。 |
+| `2026-09-03 10:46:55 +08:00` | 用户在重新启动的本地开发 App 中确认无 Schema HTTP 包导入、目录读取及使用结果“可以了”，并要求提交。本次只创建本地提交，不 push、不触发 CI。 |
 
 ## 未确认事项
 
@@ -108,7 +114,7 @@
 
 ## 问题与根因分析
 
-本任务是新增协议包实现能力，不是缺陷修复。
+JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已经允许 HTTP `document.schema = None`，但前端导入预览、导入结果、详情和 Listener 目录解析无条件要求 Schema 对象；同时后端 ViewModel 对 HTTP/Socket 均固定声明 `frame: true`，而前端合同要求 HTTP 为 `false`。前两项导致合法无 Schema HTTP 包在 Host 可运行但 UI 导入预览被拒绝；修复后又由 Listener 目录的同类校验阻止入口选择。正确修复边界是所有消费端按包类型校验 Schema、后端按包类型投影 Frame capability，不给包补造 Schema，也不放宽 Socket 合同。Display 样式需求的边界是现有沙箱 iframe 内的安全内联视觉样式白名单，仍删除主动内容和可能越界的 CSS。
 
 - 当前已验证：`src-tauri/crates/package-runtime/src/lib.rs` 只接受严格 JavaScript ZIP，路径验证只允许 `manifest.json` 和 `.js`。
 - 当前已验证：`src-tauri/crates/package-runtime/src/sidecar.rs` 的 `LocalSidecarRuntime` 持有 Boa Context、已评估的 `protocol.js`/`display.js` Module 和固定 exports。
@@ -161,6 +167,7 @@
 | WPC-12 | 在 `10.0.28.77` Windows App 重放历史 HTTP、ISO8583 Wasm 与 AU EFTEX Wasm 部署 | WPC-08、WPC-09、WPC-13 | 否 | 进行中 | 5 个 Socket Wasm 的真实加载、Display、规则命中/miss/fail-closed、客户端/受控上游原始字节、Exchange/diagnostics 和最终运行态已 VERIFIED；历史 HTTP 本轮 NOT_RUN，因此小任务不记为全部完成 |
 | WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
 | WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流在无签名配置时明确产出 unsigned 制品并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
+| WPC-15 | 在 examples 中交付无 Schema 的 JSON Pretty HTTP Wasm 包，并修复导入与安全 Display 样式合同 | WPC-03、WPC-08 | 否 | 已完成 | HTTP null Schema 已在导入、详情和 Listener 目录中通过且 `frame: false`；Socket Schema 严格性不变；Display 保留安全内联视觉样式并继续拒绝主动内容；JSON Pretty 编辑器式分色经用户本地验收 |
 
 此前 WPC-01 至 WPC-10 的双运行时/Sidecar 计划全部失效，由上表替代。共享 `package-runtime`、package contract、规则、文档和 checker 当前仍受 `TASK-20260829-002` 修改；生产实现不得覆盖或撤销工作区现有修改。接口、WIT、Schema、生命周期和文件所有权稳定前不得并行。
 
@@ -234,6 +241,7 @@
 - `2026-09-02 15:57:27 +08:00`：开始 WPC-12 远端 Windows 重放。MCP `tools/list`、`mcp_environment_capabilities` 与 `workspace_list` 已实时成功；远端当前只有默认 Workspace revision 1、一个 disabled HTTP Listener、无运行 Listener。内置 `iso8583-ascii-standard@1.0.0` 为 managed Wasm、enabled/online/valid，Frame/Decode/Encode/Display 与双向 Schema 可读；`au-eftex@1.1.0` 未安装。远端日志路径确认 Windows 用户数据目录，RDP 3389、SMB 445、MCP 17653 与外部包 8765 可达。以上只读盘点不算部署或重放完成。
 - `2026-09-02 16:43:08 +08:00`：修复 ISO Deno Host 整数规范化兼容并发布 `1.0.1`；Nuvei Rhai `1.0.1` 将 object/array 递归渲染为 nested table。远端五包逐字节重放通过后，用户截图证明另一个 `nuvei-tango-json@1.0.0` 仍在输出原始 JSON；随后只修改其 Display renderer、升级到 `1.0.1` 并增加正式 Host 回归，重新统一构建 5 个 Wasm。
 - `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
+- `2026-09-03 10:46:55 +08:00`：新增独立 `examples/protocol-packages/json_pretty/` HTTP Component、包级锁文件、构建器、编辑器式 JSON 分色和单文件产物。修复后端 HTTP `frame: false` 投影，以及前端导入预览/结果、详情和 Listener 目录的 HTTP nullable Schema 合同；Socket 仍要求双向合法 Schema。Display 沙箱保留安全内联视觉样式并删除主动内容和越界 CSS。包级 4/4、相关前端 69/69、typecheck、Rust 导入测试和开发构建通过；最终产物 `161042` bytes，SHA-256 `5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3`。用户在重新启动的本地 App 中确认导入、目录与使用“可以了”。证据见 [`json-pretty-wasm-example`](../../../testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md)。
 
 ## 修改文件
 
@@ -243,6 +251,14 @@
 - `templates/socket-protocol/iso8583-standard/`
 - `scripts/build-protocol-package-components.mjs`
 - `src-tauri/crates/package-runtime/tests/repository_components.rs`
+- `examples/protocol-packages/json_pretty/`
+- `docs/testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example/`
+- `docs/testing/evidence/README.md`
+- `src/features/protocol-packages/protocol-package-import-model.ts`
+- `src/features/protocol-packages/protocol-package-model.ts`
+- `src/features/listeners/socket-listener-model.ts`
+- `src/features/shared/protocol-safe-display.tsx`
+- `src-tauri/crates/infrastructure/src/adapters/external_package_registry/views.rs`
 
 ## 附加文件
 
@@ -265,6 +281,8 @@
 - `VERIFIED`：远端 `10.0.28.77` 的 5 个 Socket Wasm、5 条规则命中、4 条 miss、4 条非法 Frame fail-closed、两套 Nuvei 递归嵌套 Display、13 条 Exchange 和 5 条 running Listener 均有可重放证据；AU 71/63 bytes 使用内置公开测试 BDK 完成真实数据面。
 - `NOT_RUN`：远端历史 HTTP 本轮未重跑；WPC-12 因此保持进行中，不把 Socket/Wasm PASS 扩大为 HTTP PASS。
 - `NOT_RUN`：文件系统和出站 HTTP Host capability 按用户明确范围不执行。
+- `VERIFIED`：`json-pretty@1.0.0` 的最终无 Schema 单文件 HTTP Component 为 `161042` bytes、SHA-256 `5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3`；Display 输出编辑器式类型分色，当前正式 Host runtime 实际 Decode/Display/Encode 通过。
+- `VERIFIED`：HTTP nullable Schema 与 `frame: false` 在导入预览/结果、详情、Listener 目录及 Rust ViewModel 统一；Socket 双向 Schema 与 `frame: true` 合同保持严格。用户在当前本地开发 App 实际确认无 Schema HTTP 包可导入、目录可读取并可使用。
 
 ## 测试结果
 
@@ -282,6 +300,9 @@
 - `PASS`：Workspace all-target/all-feature check 与 strict Clippy、Rust fmt、bindings、typecheck、协议包 UI 77 项、Next production build、source-size、diff-check。
 - `PASS`：Windows executable-only CI run 33525227567；Cargo Release、OpenSSL DLL 依赖拒绝门和 artifact upload 均通过，本地下载产物类型、大小与 SHA-256 已核验。
 - `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除。
+- `PASS`：`deno run -A examples/protocol-packages/json_pretty/build.mjs`，Rust 逻辑测试 4/4、`wasm32-wasip2 --release`、严格 Manifest section 校验和产物生成通过。
+- `PASS`：JSON Pretty 包的 rustfmt、Clippy `-D warnings`、`deno check`、SHA-256 校验与当前 Wasmtime Host 加载；最终产物为 `161042` bytes。
+- `PASS`：协议包导入/详情/Display 定向前端测试 20/20，Listener 目录与 HTTP 入口相关前端测试 49/49，`pnpm typecheck`，Rust HTTP Manifest 导入投影定向测试，以及本地 `deno task tauri:dev` 编译启动和用户验收。
 
 ## CI 情况
 
@@ -291,3 +312,4 @@
 ## 完成总结
 
 - `当前 Wasm/规则交付完成`：AU EFTEX 已内置公开测试 BDK，5 个最终 Wasm、两项 Display 修复和远端规则数据面均通过。远端 5 条 Listener 与受控上游保持运行供检查。历史 HTTP 未按本轮范围重跑，完整 CI 的 Windows 冷缓存超时复跑也尚未完成，因此总任务继续保持进行中，不归档。
+- `JSON Pretty 示例包完成`：无 Schema 单文件 HTTP Component、导入/详情/入口目录合同、安全自定义 Display 样式和编辑器式分色已通过定向自动化与本地 App 用户验收。总任务因 WPC-12/WPC-14 仍在进行中而继续保持进行中，不归档。

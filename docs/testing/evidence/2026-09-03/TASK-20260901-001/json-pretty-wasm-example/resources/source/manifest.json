@@ -1,0 +1,14 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "json-pretty",
+    "version": "1.0.0",
+    "name": "JSON Pretty",
+    "description": "Parses HTTP JSON bodies, renders escaped pretty JSON, and pretty-encodes rule changes"
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {}
+  }
+}

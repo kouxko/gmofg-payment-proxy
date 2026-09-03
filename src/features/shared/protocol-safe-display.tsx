@@ -25,6 +25,14 @@ const DISPLAY_CLASSES: Partial<Record<string, string>> = {
   th: "protocol-display-header",
   td: "protocol-display-cell",
 };
+const SAFE_STYLE_PROPERTIES = new Set([
+  "background-color", "border", "border-color", "border-radius", "border-style", "border-width",
+  "color", "font-family", "font-size", "font-style", "font-weight", "letter-spacing", "line-height",
+  "margin", "margin-bottom", "margin-left", "margin-right", "margin-top",
+  "overflow-wrap", "padding", "padding-bottom", "padding-left", "padding-right", "padding-top",
+  "text-align", "text-decoration", "text-transform", "white-space", "word-break",
+]);
+const UNSAFE_STYLE_VALUE = /url\s*\(|expression\s*\(|javascript\s*:|data\s*:|@import|behavior\s*:|-moz-binding/i;
 const CSP = "default-src 'none'; script-src 'none'; connect-src 'none'; img-src 'none'; media-src 'none'; font-src 'none'; object-src 'none'; frame-src 'none'; form-action 'none'; base-uri 'none'; style-src 'unsafe-inline'";
 const HOST_STYLE = `
 :root{color-scheme:light dark;font:14px/1.55 system-ui,sans-serif}body{margin:0;padding:16px;color:#172033;background:transparent}
@@ -52,6 +60,7 @@ function createSafeElement(node: Element, output: Document): HTMLElement | undef
   if (displayClass) element.className = displayClass;
   const title = node.getAttribute("title");
   if (title) element.setAttribute("title", title.slice(0, 512));
+  copySafeInlineStyle(node, element, output);
   if (tag === "td" || tag === "th") {
     for (const name of ["colspan", "rowspan"] as const) {
       const raw = node.getAttribute(name);
@@ -61,6 +70,20 @@ function createSafeElement(node: Element, output: Document): HTMLElement | undef
     }
   }
   return element;
+}
+
+function copySafeInlineStyle(node: Element, element: HTMLElement, output: Document): void {
+  const raw = node.getAttribute("style");
+  if (!raw) return;
+  const parser = output.createElement("span");
+  parser.setAttribute("style", raw);
+  for (let index = 0; index < parser.style.length; index += 1) {
+    const property = parser.style.item(index).toLowerCase();
+    const value = parser.style.getPropertyValue(property).trim();
+    if (SAFE_STYLE_PROPERTIES.has(property) && value && !UNSAFE_STYLE_VALUE.test(value)) {
+      element.style.setProperty(property, value);
+    }
+  }
 }
 
 function sanitizeDisplay(html: string): string | undefined {
