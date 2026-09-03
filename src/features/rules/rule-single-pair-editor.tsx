@@ -19,7 +19,7 @@ type Source = "http" | "document" | "common" | "";
 export function RuleSinglePairEditor(props: {
   actions?: ReactNode;
   input?: RuleDefinitionSaveInput;
-  creation?: { structure: RuleNewDefinitionDraft; name: string; enabled: boolean; priority: number; description: string };
+  creation?: { structure: RuleNewDefinitionDraft; name: string; enabled: boolean; priority?: number; description: string };
   stage?: Stage;
   localTypes: RuleLocalDocumentTypeCapability[];
   conditionPath?: RuleDocumentConditionPathCapability;
@@ -218,6 +218,9 @@ function wrapHttpAction(action: HttpAction): UnifiedAction { return "Terminal" i
 function withSinglePair(input: RuleDefinitionSaveInput, condition: Condition, action: UnifiedAction): RuleDefinitionSaveInput { const content = input.draft.content; return { ...input, draft: { ...input.draft, content: content.type === "http" ? { type: "http", value: { ...content.value, condition, action } } : { type: "socket", value: { ...content.value, condition, action } } } }; }
 function newSaveInput(creation: NonNullable<Parameters<typeof RuleSinglePairEditor>[0]["creation"]>, condition: Condition, action: UnifiedAction): RuleDefinitionSaveInput {
   const { structure } = creation;
+  if (creation.name.trim() === "" || creation.priority == null || !Number.isSafeInteger(creation.priority) || creation.priority < 0) {
+    throw new Error("规则名称和阶段内优先级尚未填写完整。");
+  }
   const content = structure.content.type === "http"
     ? { type: "http" as const, value: { description: creation.description, condition, action } }
     : { type: "socket" as const, value: { package: structure.content.value.package, condition, action } };

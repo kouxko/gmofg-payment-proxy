@@ -1,0 +1,68 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-008",
+  "case_id": "RULE-FORM-IMMEDIATE-001",
+  "executed_at": "2026-09-03 16:20:01 +08:00",
+  "base_commit": "3586ea2",
+  "environment": {
+    "platform": "macOS arm64",
+    "application": "/Applications/Intercept Proxy.app",
+    "application_pid": 15686,
+    "executable_sha256": "3bedde95f2977f333529aa78eddc2ce75699f8fda02f5657d7e104352d5fcec4"
+  },
+  "input": {
+    "listener": "Payment DLL · HTTP",
+    "stage": "Proxy → Server",
+    "name": "",
+    "priority": null
+  },
+  "expected": {
+    "rule_content_visible": true,
+    "condition_visible": true,
+    "action_visible": true,
+    "save_enabled": false
+  },
+  "actual": {
+    "rule_content_visible": true,
+    "condition_visible": true,
+    "action_visible": true,
+    "save_enabled": false
+  },
+  "result": "PASS",
+  "checks": [
+    {
+      "command": "deno task test src/features/rules/rules-view.test.tsx src/features/rules/rule-definition-editor.test.tsx",
+      "result": "PASS",
+      "details": "2 files, 14 tests"
+    },
+    {
+      "command": "deno task typecheck",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task lint",
+      "result": "PASS"
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task tauri build --bundles app",
+      "result": "PASS",
+      "details": "13 static pages and one macOS app bundle"
+    },
+    {
+      "command": "installed app accessibility inspection",
+      "result": "PASS",
+      "details": "Blank name and priority with rule content, condition, action visible and save disabled"
+    }
+  ],
+  "not_applicable": {
+    "runtime_rule_execution": "No rule was saved; runtime contract unchanged",
+    "network_packets": "UI rendering change only",
+    "remote_device": "UI rendering change only",
+    "ci_push_release": "Local delivery only",
+    "adversarial_review": "Skipped by explicit user instruction"
+  }
+}
