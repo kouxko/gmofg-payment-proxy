@@ -372,7 +372,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .expect("new listener defaults to HTTP");
     dll_http.request_body_codec = BodyCodecKind::Utf8;
     dll_http.response_body_codec = BodyCodecKind::ShiftJis;
-    dll_http.fixed_server = Some(FixedServerSettings {
+    let dll_remote = dll_http
+        .remote_server_mut()
+        .expect("new HTTP listener uses remote-server topology");
+    dll_remote.fixed_server = Some(FixedServerSettings {
         upstream_url: format!("http://{dll_upstream_address}"),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -396,7 +399,10 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
         .expect("new listener defaults to HTTP");
     transaction_http.request_body_codec = BodyCodecKind::Utf8;
     transaction_http.response_body_codec = BodyCodecKind::ShiftJis;
-    transaction_http.fixed_server = Some(FixedServerSettings {
+    let transaction_remote = transaction_http
+        .remote_server_mut()
+        .expect("new HTTP listener uses remote-server topology");
+    transaction_remote.fixed_server = Some(FixedServerSettings {
         upstream_url: format!("http://{transaction_upstream_address}"),
         upstream_tls: UpstreamTlsSettings::default(),
     });
@@ -485,7 +491,7 @@ async fn main() -> Result<(), Box<dyn Error + Send + Sync>> {
                 ("content-type".into(), "application/json".into()),
                 ("x-mock-rule".into(), "applied".into()),
             ],
-            body_bytes: b"{\"result\":\"MOCK\"}".to_vec(),
+            body: "{\"result\":\"MOCK\"}".into(),
         }),
     );
     application.rule_definition_save(mock).await?;

@@ -83,6 +83,16 @@ test("full desktop release shares one cached Cargo target across runtime gates",
     verifyJob,
     /test-support\/socket-relay-gate\/Cargo\.toml/u,
   );
+  const runtimeGateStep = verifyJob.slice(
+    verifyJob.indexOf("      - name: Verify independent runtime gates"),
+  );
+  assert.equal(
+    (runtimeGateStep.match(
+      /if \(\$LASTEXITCODE -ne 0\) \{ exit \$LASTEXITCODE \}/gu,
+    ) ?? []).length,
+    4,
+    "each native runtime gate command must fail the workflow immediately",
+  );
 });
 
 test("tagged desktop releases distinguish complete signing from explicit unsigned mode", async () => {

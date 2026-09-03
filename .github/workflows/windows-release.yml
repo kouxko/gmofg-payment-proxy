@@ -172,9 +172,13 @@ jobs:
           CARGO_TARGET_DIR: ${{ github.workspace }}/src-tauri/target
         run: |
           deno task check:rust:windows
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo check --manifest-path test-support/emulator-proxy-gate/Cargo.toml --all-targets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo test --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           cargo clippy --manifest-path test-support/socket-relay-gate/Cargo.toml --all-targets -- -D warnings
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 
   build:
     needs: [android-companion, verify]
