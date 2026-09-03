@@ -134,3 +134,41 @@ fn topology_wire_rejects_unknown_or_cross_mode_fields() {
         assert!(serde_json::from_value::<SocketRelaySettings>(value).is_err());
     }
 }
+
+#[test]
+fn http_topology_round_trips_local_and_reads_legacy_remote_settings() {
+    let local = HttpListenerSettings {
+        topology: HttpTopology::LocalServer,
+        ..HttpListenerSettings::default()
+    };
+    let local_json = serde_json::to_value(&local).unwrap();
+    assert_eq!(local_json["topology"]["mode"], "local_server");
+    assert!(local_json.get("fixed_server").is_none());
+    assert_eq!(
+        serde_json::from_value::<HttpListenerSettings>(local_json).unwrap(),
+        local
+    );
+
+    let mut legacy = serde_json::to_value(HttpListenerSettings::default()).unwrap();
+    legacy.as_object_mut().unwrap().remove("topology");
+    legacy["fixed_server"] = serde_json::json!({
+        "upstream_url": "https://pay.example.test",
+        "upstream_tls": {
+            "verify_hostname": true,
+            "server_trust": null,
+            "client_identity": null
+        }
+    });
+    let migrated: HttpListenerSettings = serde_json::from_value(legacy).unwrap();
+    assert_eq!(
+        migrated.fixed_server().unwrap().upstream_url,
+        "https://pay.example.test"
+    );
+    let migrated_json = serde_json::to_value(migrated).unwrap();
+    assert_eq!(migrated_json["topology"]["mode"], "remote_server");
+    assert!(migrated_json.get("fixed_server").is_none());
+
+    let mut mixed = serde_json::to_value(HttpListenerSettings::default()).unwrap();
+    mixed["fixed_server"] = serde_json::Value::Null;
+    assert!(serde_json::from_value::<HttpListenerSettings>(mixed).is_err());
+}

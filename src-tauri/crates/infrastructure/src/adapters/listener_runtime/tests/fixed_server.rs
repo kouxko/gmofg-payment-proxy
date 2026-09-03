@@ -27,10 +27,10 @@ async fn fixed_server_connect_cannot_escape_to_request_authority() {
         bind_address: bind_address.ip().to_string(),
         port: bind_address.port(),
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: format!("http://{fixed_upstream_address}"),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()
@@ -120,10 +120,10 @@ async fn multiple_fixed_server_listeners_route_to_their_own_upstream_origins() {
         bind_address: bind.ip().to_string(),
         port: bind.port(),
         data_plane: ListenerDataPlane::Http(HttpListenerSettings {
-            fixed_server: Some(FixedServerSettings {
+            topology: HttpTopology::remote(Some(FixedServerSettings {
                 upstream_url: format!("http://{upstream}"),
                 upstream_tls: UpstreamTlsSettings::default(),
-            }),
+            })),
             ..HttpListenerSettings::default()
         }),
         ..ProxyListener::default()

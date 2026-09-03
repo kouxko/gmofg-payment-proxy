@@ -308,11 +308,11 @@ fn domain_terminal_action(action: RuleTerminalAction) -> DomainTerminalAction {
         RuleTerminalAction::MockResponse {
             status,
             headers,
-            body_bytes,
+            body,
         } => DomainTerminalAction::MockResponse {
             status,
             headers,
-            body_bytes,
+            body,
         },
         RuleTerminalAction::InvalidJson { body_bytes } => {
             DomainTerminalAction::InvalidJson { body_bytes }

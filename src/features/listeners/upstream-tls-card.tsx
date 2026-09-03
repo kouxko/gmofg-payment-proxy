@@ -41,7 +41,9 @@ type Props = {
 };
 
 export function UpstreamTlsCard(props: Props) {
-  const fixedServer = props.settings.fixed_server;
+  const fixedServer = props.settings.topology.mode === "remote_server"
+    ? props.settings.topology.settings.fixed_server
+    : null;
   if (!fixedServer) return null;
   const server = fixedServer;
   const identities = props.certificateReferences.filter(
@@ -57,10 +59,10 @@ export function UpstreamTlsCard(props: Props) {
 
   function changeTls(changes: Partial<typeof tls>) {
     props.onChange({
-      fixed_server: {
-        ...server,
-        upstream_tls: { ...tls, ...changes },
-      },
+      topology: { mode: "remote_server", settings: { fixed_server: {
+          ...server,
+          upstream_tls: { ...tls, ...changes },
+        } } },
     });
   }
 

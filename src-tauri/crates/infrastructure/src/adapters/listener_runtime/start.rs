@@ -222,6 +222,11 @@ async fn serve_prepared_listener(
                 .serve_listener_with_epoch(tcp_listener, runtime_epoch, cancellation)
                 .await
         }
+        PreparedListenerRuntime::HttpLocal { service, .. } => {
+            service
+                .serve_listener_with_epoch(tcp_listener, runtime_epoch, cancellation)
+                .await
+        }
         PreparedListenerRuntime::Socket { service, .. }
         | PreparedListenerRuntime::ExternalScriptedSocket { service, .. } => {
             service

@@ -398,7 +398,8 @@ function hasUpstream(listener: ProxyListener) {
   if (listener.data_plane.kind === "socket") {
     return listener.data_plane.settings.topology.mode === "relay";
   }
-  return listener.data_plane.settings.fixed_server !== null;
+  return listener.data_plane.settings.topology.mode === "remote_server"
+    && listener.data_plane.settings.topology.settings.fixed_server !== null;
 }
 
 function listenerKind(listener: ProxyListener) {
@@ -409,7 +410,10 @@ function listenerKind(listener: ProxyListener) {
     if (mode === "local_response") return "Socket · 本地应答";
     return "Socket · 配置不兼容";
   }
-  return listener.data_plane.settings.fixed_server ? "HTTP · 固定 Server" : "HTTP · 按请求目标";
+  if (listener.data_plane.settings.topology.mode === "local_server") return "HTTP · LocalServer";
+  return listener.data_plane.settings.topology.settings.fixed_server
+    ? "HTTP · 固定 Server"
+    : "HTTP · 按请求目标";
 }
 
 function isFieldErrorRecord(value: unknown): value is Record<string, string[]> {

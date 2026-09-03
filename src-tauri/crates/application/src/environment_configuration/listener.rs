@@ -42,7 +42,34 @@ struct HttpListenerTemplate {
     request_body_codec: BodyCodec,
     response_body_codec: BodyCodec,
     body_processing: BodyProcessingTemplate,
+    topology: HttpTopologyTemplate,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(
+    tag = "mode",
+    content = "settings",
+    rename_all = "snake_case",
+    deny_unknown_fields
+)]
+enum HttpTopologyTemplate {
+    RemoteServer(HttpRemoteServerTemplate),
+    LocalServer,
+}
+
+#[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
+#[serde(deny_unknown_fields)]
+struct HttpRemoteServerTemplate {
     fixed_server: Option<FixedServerTemplate>,
+}
+
+impl HttpListenerTemplate {
+    fn fixed_server(&self) -> Option<&FixedServerTemplate> {
+        match &self.topology {
+            HttpTopologyTemplate::RemoteServer(remote) => remote.fixed_server.as_ref(),
+            HttpTopologyTemplate::LocalServer => None,
+        }
+    }
 }
 
 #[derive(Clone, Debug, Deserialize, PartialEq, Serialize)]
@@ -268,7 +295,7 @@ impl ListenerTemplate {
     pub(super) fn network_target(&self) -> AppResult<Option<ListenerNetworkTarget>> {
         match &self.data_plane {
             ListenerDataPlaneTemplate::Http(http) => {
-                let Some(fixed) = http.fixed_server.as_ref() else {
+                let Some(fixed) = http.fixed_server() else {
                     return Ok(None);
                 };
                 let uri = fixed
@@ -345,7 +372,7 @@ impl ListenerTemplate {
             return Err(domain_error());
         }
         if let ListenerDataPlaneTemplate::Http(http) = &self.data_plane
-            && http.fixed_server.as_ref().is_some_and(|fixed| {
+            && http.fixed_server().is_some_and(|fixed| {
                 !intercept_proxy_domain::is_valid_upstream_origin(&fixed.upstream_url)
             })
         {
@@ -390,7 +417,7 @@ impl ListenerTemplate {
                     }
                     ClientAuthenticationTemplate::Disabled => {}
                 }
-                if let Some(fixed) = &http.fixed_server {
+                if let Some(fixed) = http.fixed_server() {
                     if let Some(alias) = &fixed.upstream_tls.server_trust_alias {
                         refs.push((alias.as_str(), "upstream_server_trust", false));
                     }

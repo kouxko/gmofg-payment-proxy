@@ -1,0 +1,3 @@
+Exact Rust byte literal written to TcpStream:
+
+b"POST / HTTP/1.1\r\nHost: local.test\r\nContent-Length: 2\r\nConnection: close\r\n\r\n{}"

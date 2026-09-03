@@ -1,11 +1,12 @@
 use async_trait::async_trait;
+use bytes::Bytes;
 
 use super::{
     AppError, AppMessageStage, CapturePublication, ChannelId, ConnectionContext, ConnectionRuntime,
     DomainMessageStage, FaultAction, HttpRequestMetadata, Message, PipelinePorts, ProxyError,
     ProxyResult, RuntimeEpoch, RuntimePipelineAdapter, SessionStore, UiEventPayload, UiTone,
-    UpstreamSecurityEvidence, Utc, Uuid, mock_response, project_response_for_observation,
-    upstream_security,
+    UpstreamSecurityEvidence, Utc, Uuid, encode_body, mock_response,
+    project_response_for_observation, upstream_security,
 };
 
 #[async_trait]
@@ -122,7 +123,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .prepared_message
             .clone()
             .expect("request evaluation returns a prepared message");
-        let actions = evaluated.fault_actions.clone();
+        let mut actions = evaluated.fault_actions.clone();
+        encode_mock_response_bodies(self, context, &mut actions)?;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         let record = self.update_request(context, message, &evaluated, body_codec.as_ref())?;
@@ -189,7 +191,8 @@ impl PipelinePorts for RuntimePipelineAdapter {
             .prepared_message
             .clone()
             .expect("response evaluation returns a prepared message");
-        let actions = evaluated.fault_actions.clone();
+        let mut actions = evaluated.fault_actions.clone();
+        encode_mock_response_bodies(self, context, &mut actions)?;
         self.rule_runtime
             .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules.clone());
         if let Some(observed) = project_response_for_observation(message.clone(), &actions)? {
@@ -317,6 +320,34 @@ impl PipelinePorts for RuntimePipelineAdapter {
             ),
         );
     }
+}
+
+fn encode_mock_response_bodies(
+    adapter: &RuntimePipelineAdapter,
+    context: &ConnectionContext,
+    actions: &mut [FaultAction],
+) -> ProxyResult<()> {
+    for action in actions {
+        let FaultAction::MockResponse {
+            status,
+            headers,
+            body,
+        } = action
+        else {
+            continue;
+        };
+        let text = std::str::from_utf8(body).map_err(|error| {
+            ProxyError::new(
+                intercept_proxy_runtime::ErrorCode::Internal,
+                format!("MockResponse text was not UTF-8 before wire encoding: {error}"),
+            )
+        })?;
+        let text = text.to_owned();
+        let response = mock_response(*status, headers, Bytes::new());
+        let codec = adapter.codec_for(context, DomainMessageStage::Response, &response)?;
+        *body = Bytes::from(encode_body(codec.as_ref(), &text)?);
+    }
+    Ok(())
 }
 
 #[async_trait]

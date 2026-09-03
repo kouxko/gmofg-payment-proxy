@@ -341,7 +341,7 @@ impl Application {
 
 fn has_fixed_target(listener: &ProxyListener) -> bool {
     match &listener.data_plane {
-        ListenerDataPlane::Http(settings) => settings.fixed_server.is_some(),
+        ListenerDataPlane::Http(settings) => settings.fixed_server().is_some(),
         ListenerDataPlane::Socket(settings) => {
             matches!(settings.topology, SocketTopology::Relay(_))
         }
@@ -389,7 +389,7 @@ fn reject_local_responder_after_revision_check(
 
 fn has_upstream_tls(listener: &ProxyListener) -> bool {
     match &listener.data_plane {
-        ListenerDataPlane::Http(settings) => settings.fixed_server.as_ref().is_some_and(|fixed| {
+        ListenerDataPlane::Http(settings) => settings.fixed_server().is_some_and(|fixed| {
             fixed
                 .upstream_url
                 .get(..8)

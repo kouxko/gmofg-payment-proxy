@@ -260,8 +260,10 @@ fn terminal_compatible(stage: MessageStage, terminal: &TerminalAction) -> bool {
         | TerminalAction::UpstreamWriteTimeout { .. }
         | TerminalAction::UpstreamReadTimeout { .. }
         | TerminalAction::DropUpstreamResponse { .. }
-        | TerminalAction::MockResponse { .. }
         | TerminalAction::DisconnectDuringUpstreamWrite { .. } => stage == MessageStage::Request,
+        TerminalAction::MockResponse { .. } => {
+            matches!(stage, MessageStage::Request | MessageStage::Response)
+        }
         TerminalAction::InvalidJson { .. }
         | TerminalAction::IncorrectContentLength { .. }
         | TerminalAction::TruncateResponse { .. }

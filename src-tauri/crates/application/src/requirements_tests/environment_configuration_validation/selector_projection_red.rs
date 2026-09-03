@@ -258,13 +258,16 @@ async fn existing_http_rule_listener_binding_mismatch_fails_with_exact_code() {
         "client_authentication": {"mode": "disabled"},
     });
     settings["body_processing"] = serde_json::json!({"mode": "plain"});
-    settings["fixed_server"] = serde_json::json!({
-        "upstream_url": "http://pay.example.test",
-        "upstream_tls": {
-            "verify_hostname": false,
-            "server_trust_alias": null,
-            "client_identity_alias": null,
-        },
+    settings["topology"] = serde_json::json!({
+        "mode": "remote_server",
+        "settings": {"fixed_server": {
+            "upstream_url": "http://pay.example.test",
+            "upstream_tls": {
+                "verify_hostname": false,
+                "server_trust_alias": null,
+                "client_identity_alias": null,
+            },
+        }},
     });
     candidate["workspace"]["listeners"]
         .as_array_mut()

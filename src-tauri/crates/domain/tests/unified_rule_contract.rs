@@ -113,6 +113,46 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
 }
 
 #[test]
+fn mock_response_is_textual_and_supported_on_both_http_directions() {
+    let action = TerminalAction::MockResponse {
+        status: 200,
+        headers: Vec::new(),
+        body: "{\"ErrorCode\":\"D48\"}".into(),
+    };
+    let serialized = serde_json::to_value(&action).unwrap();
+    assert_eq!(
+        serialized["MockResponse"]["body"],
+        "{\"ErrorCode\":\"D48\"}"
+    );
+    assert!(serialized["MockResponse"].get("body_bytes").is_none());
+
+    let legacy: TerminalAction = serde_json::from_value(serde_json::json!({
+        "MockResponse": {"status": 200, "headers": [], "body_bytes": [79, 75]}
+    }))
+    .expect("legacy UTF-8 mock bytes remain readable");
+    assert!(matches!(legacy, TerminalAction::MockResponse { body, .. } if body == "OK"));
+
+    for stage in [RuleStage::ProxyToUpstream, RuleStage::ProxyToApp] {
+        RuleDefinition::create(
+            RuleDefinitionDraft {
+                name: "directional mock".into(),
+                enabled: true,
+                priority: 1,
+                listener_id: ListenerId::new(),
+                stage,
+                content: RuleContent::Http(HttpRuleContent {
+                    description: String::new(),
+                    condition: http_condition(),
+                    action: UnifiedAction::Terminal(action.clone()),
+                }),
+            },
+            1,
+        )
+        .expect("MockResponse is valid in both HTTP directions");
+    }
+}
+
+#[test]
 fn http_document_conditions_and_actions_do_not_require_a_duplicate_package_binding() {
     let draft = |condition, action| RuleDefinitionDraft {
         name: "HTTP without Document".into(),
@@ -173,7 +213,7 @@ fn socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_o
         TerminalAction::MockResponse {
             status: 200,
             headers: Vec::new(),
-            body_bytes: Vec::new(),
+            body: String::new(),
         },
         TerminalAction::InvalidJson {
             body_bytes: b"{".to_vec(),

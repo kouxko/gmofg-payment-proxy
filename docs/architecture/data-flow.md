@@ -117,9 +117,12 @@ LocalServer 与 RemoteServer 的差别只有 Endpoint 实现：
 - 容量 1 channel 保持一条在途 Context，不积累第二笔交易。
 - Socket LocalResponder 的响应语义由 downstream 能力产生，而不是在 Exchange 外另建 responder。
 - Direct LocalRawServer 同样属于透明 Exchange 的 Server 端口，每个 chunk 原样回环。
+- HTTP LocalServer 原样回环完整 HTTP Context，不创建真实 `UpstreamConnector`；响应仍执行
+  Proxy → App Pipeline。
 
-HTTP 标准规则的 `MockResponse` 是 request 阶段的终止动作，由 HTTP wire policy 和
-BufferedHttpServer 形成响应；它不是另一套 HTTP LocalServer 生命周期。
+HTTP 标准规则的 `MockResponse` 在 Proxy → Server 和 Proxy → App 两个阶段都可用；公共规则保存文本
+`body`，HTTP wire policy 按最终响应 BodyCodec 编码并重算托管 Header。请求阶段命中时直接形成响应，
+不调用 Remote 或 Local Server Endpoint。
 
 ## 6. Socket 透明转发
 

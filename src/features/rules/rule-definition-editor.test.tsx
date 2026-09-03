@@ -100,7 +100,10 @@ describe("RuleDefinitionEditor single pair", () => {
     const user = userEvent.setup(); render(<Harness initial={input(requestTarget, recordMatch)} />);
     const condition = within(screen.getByTestId("condition-form"));
     expect(condition.getByRole("button", { name: /条件来源/ })).toHaveClass("h-10", "min-h-10", "w-full");
-    expect(condition.getByRole("button", { name: /HTTP 匹配字段/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    const matchField = condition.getByRole("button", { name: /HTTP 匹配字段/ });
+    expect(matchField).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expect(matchField).toHaveTextContent("Path（包含 Query 参数）");
+    expect(within(matchField).getByText("Path（包含 Query 参数）")).toHaveClass("min-w-0", "flex-1", "truncate", "whitespace-nowrap");
     expect(condition.getByRole("textbox", { name: "HTTP 匹配值" })).toHaveClass("h-10", "w-full");
     await selectOption(user, "动作来源", "HTTP");
     const action = within(screen.getByTestId("action-form"));

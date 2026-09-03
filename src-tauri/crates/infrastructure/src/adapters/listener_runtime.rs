@@ -18,6 +18,8 @@ use intercept_proxy_application::{
     AppError, AppResult, EventHub, ListenerId, ListenerRuntimeState, ListenerStatusViewModel,
     ProxyListener, UiTone, WorkspaceId,
 };
+#[cfg(test)]
+use intercept_proxy_domain::HttpTopology;
 use intercept_proxy_domain::{
     CertificateReference, CertificateReferenceId, DownstreamClientAuthentication,
     FixedServerSettings, ProxyWorkspace, normalize_android_network_destination,

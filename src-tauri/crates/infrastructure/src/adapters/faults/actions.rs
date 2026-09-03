@@ -89,7 +89,7 @@ pub(super) fn custom_status(values: &FaultParameters) -> AppResult<(MessageStage
 
 pub(super) fn mock_response(
     values: &FaultParameters,
-    body_codec: &dyn BodyCodec,
+    _body_codec: &dyn BodyCodec,
 ) -> AppResult<(MessageStage, HttpAction)> {
     let status = status_parameter(values)?;
     let body = json_parameter(values, "body")?;
@@ -100,7 +100,7 @@ pub(super) fn mock_response(
         HttpAction::Terminal(TerminalAction::MockResponse {
             status,
             headers: Vec::new(),
-            body_bytes: encode_body(body_codec, body)?,
+            body: body.to_owned(),
         }),
     ))
 }

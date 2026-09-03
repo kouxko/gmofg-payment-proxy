@@ -227,7 +227,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(
-      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_tls.client_identity,
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.topology.settings.fixed_server.upstream_tls.client_identity,
     ).toBe("identity-ref-1");
     expect(JSON.stringify(mocks.listenerSave.mock.calls[0])).not.toContain("p12-secret");
   }, 15_000);
@@ -246,7 +246,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "保存当前监听" }));
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
     expect(
-      mocks.listenerSave.mock.calls[0][2].data_plane.settings.fixed_server.upstream_url,
+      mocks.listenerSave.mock.calls[0][2].data_plane.settings.topology.settings.fixed_server.upstream_url,
     ).toBe("https://dll.test:16127");
     expect(mocks.listenerSave.mock.calls[0][2].id).toBe("dll");
   });
@@ -264,14 +264,14 @@ describe("统一代理监听编辑器", () => {
         dynamic_sni_allowlist: [],
         client_authentication: { mode: "disabled" as const },
       },
-      fixed_server: {
-        upstream_url: "https://transaction.test:16627",
-        upstream_tls: {
-          verify_hostname: true,
-          server_trust: upstreamTrust.id,
-          client_identity: null,
-        },
-      },
+      topology: { mode: "remote_server", settings: { fixed_server: {
+          upstream_url: "https://transaction.test:16627",
+          upstream_tls: {
+            verify_hostname: true,
+            server_trust: upstreamTrust.id,
+            client_identity: null,
+          },
+        } } },
     });
     const dll = withHttpSettings(
       fixedListener("dll", "DLL", 16127, "https://dll.test:16127"),

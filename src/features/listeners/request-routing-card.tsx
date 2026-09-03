@@ -14,27 +14,56 @@ type Props = {
 /**
  * 当前监听的请求去向。
  *
- * 这里仅切换两种已有的 Rust 转发模式：按请求目标转发，或转发到固定 Server。
+ * 这里切换进程内 LocalServer 或真实 Server；真实 Server 再区分请求目标与固定目标。
  * 固定 Server 的 TLS/mTLS 配置仍由同页的“上游 Server 连接安全”卡片负责。
  */
 export function RequestRoutingCard({ settings, onChange }: Props) {
-  const fixedServer = settings.fixed_server;
+  const localServer = settings.topology.mode === "local_server";
+  const fixedServer = settings.topology.mode === "remote_server"
+    ? settings.topology.settings.fixed_server
+    : null;
 
   function changeMode(enabled: boolean) {
-    onChange({ fixed_server: enabled ? defaultFixedServer() : null });
+    onChange({
+      topology: {
+        mode: "remote_server",
+        settings: { fixed_server: enabled ? defaultFixedServer() : null },
+      },
+    });
+  }
+
+  function changeLocalServer(enabled: boolean) {
+    onChange({
+      topology: enabled
+        ? { mode: "local_server" }
+        : { mode: "remote_server", settings: { fixed_server: null } },
+    });
   }
 
   return (
     <Card className="col-span-2 max-[700px]:col-span-1">
       <Card.Header>
-        <Card.Title>请求转发方式</Card.Title>
+        <Card.Title>HTTP Server 模式</Card.Title>
         <Card.Description>
-          关闭时按客户端请求目标转发；开启后仅替换 host/port，原请求 path 与
-          query 保持不变。
+          真实 Server 会转发请求；LocalServer 在进程内原样回环，并继续执行上下行规则。
         </Card.Description>
       </Card.Header>
       <Card.Content className="space-y-5">
         <div className="flex items-center justify-between gap-4 rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3">
+          <div>
+            <p className="font-medium">{localServer ? "Local HTTP Server" : "真实 Server"}</p>
+            <p className="text-sm text-[var(--telemetry-muted)]">
+              {localServer
+                ? "不连接外部 Server；Proxy→Server 与 Proxy→App 仍经过同一套规则。"
+                : "按请求目标或固定 Server 建立真实上游连接。"}
+            </p>
+          </div>
+          <Switch aria-label="使用 Local HTTP Server" isSelected={localServer} onChange={changeLocalServer}>
+            <Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control></Switch.Content>
+          </Switch>
+        </div>
+
+        {!localServer && <div className="flex items-center justify-between gap-4 rounded-xl bg-[var(--telemetry-table-head)] px-4 py-3">
           <div>
             <p className="font-medium">
               {fixedServer ? "转发到固定 Server" : "按原请求目标转发"}
@@ -54,9 +83,9 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
               <Switch.Control><Switch.Thumb /></Switch.Control>
             </Switch.Content>
           </Switch>
-        </div>
+        </div>}
 
-        {fixedServer && (
+        {!localServer && fixedServer && (
           <section className="space-y-3 border-t border-[var(--telemetry-line)] pt-4">
             <div>
               <h3 className="font-semibold">固定 Server 目标</h3>
@@ -70,10 +99,10 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
                 aria-label="固定 Server URL"
                 value={fixedServer.upstream_url}
                 onChange={(event) => onChange({
-                  fixed_server: {
-                    ...fixedServer,
-                    upstream_url: event.target.value,
-                  },
+                  topology: { mode: "remote_server", settings: { fixed_server: {
+                      ...fixedServer,
+                      upstream_url: event.target.value,
+                    } } },
                 })}
                 placeholder="https://api.example.test:443"
               />

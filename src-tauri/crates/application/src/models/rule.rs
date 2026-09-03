@@ -64,7 +64,7 @@ pub enum RuleTerminalAction {
     MockResponse {
         status: u16,
         headers: Vec<(String, String)>,
-        body_bytes: Vec<u8>,
+        body: String,
     },
     InvalidJson {
         body_bytes: Vec<u8>,

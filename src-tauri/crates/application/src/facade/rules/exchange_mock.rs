@@ -111,7 +111,7 @@ impl<'a> MockDraftSource<'a> {
                     action: UnifiedAction::Terminal(TerminalAction::MockResponse {
                         status,
                         headers,
-                        body_bytes: self.response_body.as_bytes().to_vec(),
+                        body: self.response_body.to_owned(),
                     }),
                 }),
             },

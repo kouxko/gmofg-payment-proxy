@@ -92,7 +92,10 @@ function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
         listener.data_plane.settings.downstream_tls.client_authentication,
         referencedIds,
       );
-      collectUpstream(listener.data_plane.settings.fixed_server?.upstream_tls, referencedIds);
+      const topology = listener.data_plane.settings.topology;
+      if (topology.mode === "remote_server") {
+        collectUpstream(topology.settings.fixed_server?.upstream_tls, referencedIds);
+      }
       continue;
     }
     const topology = listener.data_plane.settings.topology;

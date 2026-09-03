@@ -45,7 +45,7 @@ mod admission;
 mod dynamic_identity;
 
 pub use admission::DownstreamTlsAcceptor;
-use admission::ReverseConnectionAcceptor;
+pub(crate) use admission::ReverseConnectionAcceptor;
 use dynamic_identity::{DynamicServerIdentityResolver, certified_key};
 mod config;
 mod endpoint;

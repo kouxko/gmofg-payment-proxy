@@ -214,7 +214,7 @@ const MATCH_FIELD_LABELS = {
   terminal_ip: "终端 IP",
   certificate_fingerprint: "证书指纹",
   method: "Method",
-  request_target: "Request target（路径与查询参数）",
+  request_target: "Path（包含 Query 参数）",
   header: "Header",
 } as const satisfies Record<RuleMatchFieldKind, string>;
 

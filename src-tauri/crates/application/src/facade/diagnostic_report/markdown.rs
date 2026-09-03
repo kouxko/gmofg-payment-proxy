@@ -87,7 +87,7 @@ fn listener_shape(listener: &crate::ProxyListener) -> (String, String, String, S
                     )
                 }
             };
-            let forwarding = settings.fixed_server.as_ref().map_or_else(
+            let forwarding = settings.fixed_server().map_or_else(
                 || "按客户端请求目标动态转发".into(),
                 |server| format!("固定 Server {}", server.upstream_url),
             );

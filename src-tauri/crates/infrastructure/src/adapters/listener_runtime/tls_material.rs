@@ -187,7 +187,7 @@ fn downstream_sni_allowlist(
             .iter()
             .filter_map(|name| normalize_sni_pattern(name)),
     );
-    if let Some(fixed_server) = &http.fixed_server
+    if let Some(fixed_server) = http.fixed_server()
         && let Ok(uri) = fixed_server.upstream_url.parse::<http::Uri>()
         && let Some(host) = uri.host()
         && let Some(host) = normalize_sni_pattern(host.trim_matches(['[', ']']))

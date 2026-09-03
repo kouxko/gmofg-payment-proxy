@@ -51,6 +51,7 @@ pub(crate) use exchange_runtime::{
     HttpExchangeConnection, HttpExchangeRequest, HttpExchangeRuntime,
 };
 mod helpers;
+mod local_server;
 mod raw_http1;
 mod raw_http1_response;
 mod request_service;
@@ -75,6 +76,7 @@ pub use contracts::{
     ForwardRequest, HttpRequestMetadata, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
     UpstreamExchange,
 };
+pub use local_server::{LocalHttpServerConfig, LocalHttpServerService};
 pub use service::{ConnectionAdmission, ConnectionService};
 pub use stream_io::InformationalResponseSink;
 pub use upstream::HyperUpstreamConnector;

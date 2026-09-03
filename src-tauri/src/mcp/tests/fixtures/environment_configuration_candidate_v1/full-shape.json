@@ -50,12 +50,17 @@
                 "version": "1.1.0"
               }
             },
-            "fixed_server": {
-              "upstream_url": "https://pay.example.test",
-              "upstream_tls": {
-                "verify_hostname": true,
-                "server_trust_alias": "upstream-trust",
-                "client_identity_alias": "http-upstream-client"
+            "topology": {
+              "mode": "remote_server",
+              "settings": {
+                "fixed_server": {
+                  "upstream_url": "https://pay.example.test",
+                  "upstream_tls": {
+                    "verify_hostname": true,
+                    "server_trust_alias": "upstream-trust",
+                    "client_identity_alias": "http-upstream-client"
+                  }
+                }
               }
             }
           }
@@ -401,10 +406,7 @@
                       "yes"
                     ]
                   ],
-                  "body_bytes": [
-                    79,
-                    75
-                  ]
+                  "body": "OK"
                 }
               }
             }

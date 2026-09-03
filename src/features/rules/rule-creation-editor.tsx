@@ -26,7 +26,6 @@ export function RuleCreationEditor(props: {
   async function selectListener(listenerId: string) {
     setContext(undefined);
     setStructure(undefined);
-    setName("");
     setEnabled(false);
     setPriority(undefined);
     setDescription("");

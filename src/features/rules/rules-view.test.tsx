@@ -40,7 +40,7 @@ const context: RuleEditorContext = {
     http: { stage: "proxy_to_upstream", match_fields: [
       { kind: "method", operators: ["equals"], selector: null },
       { kind: "request_target", operators: ["equals"], selector: null },
-    ], actions: [] },
+    ], actions: [{ kind: "jitter", terminal: false, traffic_direction: null, parameters_required: true }] },
     package: null, document_fields: [], document_common_actions: ["record_match"],
     new_rule_draft: { listener_id: httpListener.id, stage: "proxy_to_upstream", content: { type: "http", value: { description: "" } } },
   }] } },
@@ -88,16 +88,17 @@ describe("RulesView inline editor", () => {
     render(<RulesView />);
 
     await user.click(await screen.findByRole("button", { name: "新建规则" }));
+    const metadata = screen.getByTestId("rule-metadata-fields");
+    await user.type(within(metadata).getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
     await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
     await user.click(await screen.findByRole("option", { name: "HTTP Listener · HTTP" }));
-    const metadata = screen.getByTestId("rule-metadata-fields");
+    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
     await user.click(within(metadata).getByRole("button", { name: /处理阶段/ }));
     await user.click(await screen.findByRole("option", { name: "Proxy → Server" }));
     const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
     expect(enabled).not.toBeChecked();
     expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /新规则是否启用/ })).not.toBeInTheDocument();
-    await user.type(within(metadata).getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
     await user.type(within(metadata).getByLabelText("阶段内优先级"), "10");
     await user.click(enabled);
     expect(enabled).toBeChecked();
@@ -107,6 +108,11 @@ describe("RulesView inline editor", () => {
     expect(screen.queryByRole("button", { name: "进入规则编辑器" })).not.toBeInTheDocument();
     expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
     expect(await screen.findByRole("heading", { name: "HTTP 规则内容" })).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /条件来源/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP" }));
+    await user.click(screen.getByRole("button", { name: /动作来源/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP" }));
+    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
   });
 
   it("uses the same initially-disabled enable switch for Socket creation", async () => {

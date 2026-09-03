@@ -160,7 +160,7 @@ pub(super) fn build_listener_overview(
 
 fn listener_presentation(listener: &ProxyListener) -> (String, String) {
     match &listener.data_plane {
-        ListenerDataPlane::Http(settings) => settings.fixed_server.as_ref().map_or_else(
+        ListenerDataPlane::Http(settings) => settings.fixed_server().map_or_else(
             || ("HTTP · 动态目标".to_owned(), "请求中的目标地址".to_owned()),
             |fixed| ("HTTP · 固定 Server".to_owned(), fixed.upstream_url.clone()),
         ),

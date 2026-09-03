@@ -9,8 +9,8 @@ use std::sync::{Arc, Mutex};
 use async_trait::async_trait;
 use bytes::Bytes;
 use intercept_proxy_exchange::{
-    Connection, Downstream, Error, Http, HttpContext, Reader, Server, ServerConnection, Upstream,
-    Writer,
+    Connection, Downstream, Error, Http, HttpContext, LocalHttpServer, Reader, Server,
+    ServerConnection, Upstream, Writer,
 };
 use tokio::sync::mpsc;
 use tokio_util::sync::CancellationToken;
@@ -19,10 +19,78 @@ use tokio_util::sync::CancellationToken;
 use super::HttpExchangeCommand;
 use super::{
     Clock, ConnectionContext, FaultAction, ForwardRequest, HttpExchangeInput, HttpExchangeState,
-    InformationalResponseSink, Message, PipelinePorts, ResponseDisposition, UpstreamConnector,
+    InformationalResponseSink, Message, PipelinePorts, ProxyError, ResponseDisposition,
+    UpstreamConnector,
 };
 use crate::fault::project_response_for_observation;
-use crate::http::HttpRequestMetadata;
+use crate::http::{HttpRequestMetadata, UpstreamExchange};
+
+#[derive(Clone, Copy, Debug)]
+pub(crate) struct LocalHttpServerConnector;
+
+#[async_trait]
+impl UpstreamConnector for LocalHttpServerConnector {
+    async fn send(
+        &self,
+        _connection_context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
+        request: ForwardRequest,
+        actions: &[FaultAction],
+        _informational: Option<&InformationalResponseSink>,
+        cancellation: &CancellationToken,
+    ) -> crate::Result<UpstreamExchange> {
+        if cancellation.is_cancelled() {
+            return Err(ProxyError::new(
+                crate::ErrorCode::ProxyStopped,
+                "proxy stopped before LocalHttpServer reply",
+            ));
+        }
+        if actions.iter().any(|action| {
+            !matches!(
+                action,
+                FaultAction::Delay(_) | FaultAction::MockResponse { .. }
+            )
+        }) {
+            return Err(ProxyError::new(
+                crate::ErrorCode::ConfigInvalid,
+                "request-stage upstream transport fault is not applicable to LocalHttpServer",
+            ));
+        }
+
+        let original = message_context(&request.message);
+        let mut server = LocalHttpServer::new();
+        let mut connection = server
+            .connect(&original)
+            .await
+            .map_err(local_server_error)?;
+        connection
+            .writer()
+            .write(original.clone())
+            .await
+            .map_err(local_server_error)?;
+        let echoed = connection
+            .reader()
+            .read()
+            .await
+            .map_err(local_server_error)?
+            .ok_or_else(|| {
+                ProxyError::new(
+                    crate::ErrorCode::Internal,
+                    "LocalHttpServer closed before replying",
+                )
+            })?;
+        connection.shutdown().await.map_err(local_server_error)?;
+
+        let mut response = request.message;
+        apply_context_changes(&mut response, &original, &echoed)
+            .map_err(|error| ProxyError::new(crate::ErrorCode::Internal, error.message))?;
+        Ok(response.into())
+    }
+}
+
+fn local_server_error(error: Error) -> ProxyError {
+    ProxyError::new(crate::ErrorCode::Internal, error.message)
+}
 
 pub(super) struct BufferedApp {
     reader: BufferedAppReader,
