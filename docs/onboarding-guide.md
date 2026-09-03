@@ -537,7 +537,7 @@ Windows 打包，并先运行一个只负责缓存工具链的 Android 环境准
 本地合同测试和 GitLab CI Lint 只证明配置结构有效；Runner 与产物必须由当前 commit 的真实 GitLab
 pipeline 证明。
 
-GitLab Linux Job 使用华为云作为 Ubuntu apt 源，Deno npm 依赖使用
+GitLab Linux Job 使用华为云作为 Ubuntu apt 源，Deno 本体和 npm 依赖分别使用 npmmirror 的二进制镜像和
 `registry.npmmirror.com`，Rust 工具链和 crates 使用 `rsproxy.cn`，Android Gradle 依赖使用阿里云
 Google/Maven Central 镜像，Gradle distribution 使用华为云镜像，Android SDK/NDK 固定版本归档使用
 腾讯云 AndroidSDK 镜像。Android 版本保持 API 36、Build Tools 36.0.0 和 NDK 29；Ubuntu apt 包不能

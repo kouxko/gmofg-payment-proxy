@@ -111,6 +111,10 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   const variables = topLevelBlock(source, "variables");
 
   assert.match(variables, /^[ ]{2}DENO_VERSION: "2\.9\.6"$/mu);
+  assert.match(
+    variables,
+    /^[ ]{2}DENO_DIST_BASE_URL: "https:\/\/cdn\.npmmirror\.com\/binaries\/deno"$/mu,
+  );
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
     variables,
@@ -170,6 +174,8 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
     "scripts/ci/bootstrap-gitlab-windows.ps1",
   );
   assert.match(windowsBootstrap, /replace-with = "rsproxy"/u);
+  assert.match(windowsBootstrap, /DENO_DIST_BASE_URL/u);
+  assert.match(linuxBootstrap, /DENO_DIST_BASE_URL/u);
   assert.doesNotMatch(
     linuxBootstrap,
     /"ndk;\$ANDROID_NDK_VERSION"/u,

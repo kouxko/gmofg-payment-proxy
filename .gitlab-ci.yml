@@ -39,6 +39,7 @@ variables:
   ANDROID_NDK_VERSION: "29.0.14206865"
   ANDROID_NDK_ARCHIVE_URL: "https://mirrors.cloud.tencent.com/AndroidSDK/android-ndk-r29-linux.zip"
   ANDROID_COMMAND_LINE_TOOLS_VERSION: "15859902"
+  DENO_DIST_BASE_URL: "https://cdn.npmmirror.com/binaries/deno"
   CARGO_TERM_COLOR: "always"
   CARGO_INCREMENTAL: "0"
 

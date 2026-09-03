@@ -61,7 +61,7 @@ install_deno() {
   if [[ ! -x "$DENO_INSTALL/bin/deno" ]] ||
     [[ "$("$DENO_INSTALL/bin/deno" --version 2>/dev/null | sed -n '1s/^deno //p')" != "$DENO_VERSION" ]]; then
     curl --fail --show-error --silent --location \
-      "https://github.com/denoland/deno/releases/download/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip" \
+      "$DENO_DIST_BASE_URL/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip" \
       --output "$archive"
     mkdir -p "$DENO_INSTALL/bin"
     unzip -q -o "$archive" -d "$DENO_INSTALL/bin"

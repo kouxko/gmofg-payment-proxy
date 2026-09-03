@@ -49,7 +49,7 @@ $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
 if ($InstalledDenoVersion -ne $env:DENO_VERSION) {
     Invoke-WebRequest `
         -UseBasicParsing `
-        -Uri "https://github.com/denoland/deno/releases/download/v$env:DENO_VERSION/deno-x86_64-pc-windows-msvc.zip" `
+        -Uri "$env:DENO_DIST_BASE_URL/v$env:DENO_VERSION/deno-x86_64-pc-windows-msvc.zip" `
         -OutFile $DenoArchive
     Expand-Archive -Path $DenoArchive -DestinationPath $env:DENO_INSTALL -Force
 }
