@@ -178,6 +178,8 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(linuxBootstrap, /DENO_DIST_BASE_URL/u);
   assert.match(windowsBootstrap, /VersionLine -match '\^deno\\s\+\(\\S\+\)'/u);
   assert.match(linuxBootstrap, /awk 'NR == 1 \{ print \$2; exit \}'/u);
+  assert.match(windowsBootstrap, /Get-Command cl\.exe/u);
+  assert.match(windowsBootstrap, /vcvars64\.bat/u);
   assert.doesNotMatch(
     linuxBootstrap,
     /"ndk;\$ANDROID_NDK_VERSION"/u,

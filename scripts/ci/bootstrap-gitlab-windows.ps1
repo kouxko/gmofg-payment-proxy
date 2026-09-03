@@ -90,18 +90,47 @@ if ($LASTEXITCODE -ne 0) { throw "Rust component installation failed." }
 if ($LASTEXITCODE -ne 0) { throw "Rust target installation failed." }
 
 if ($RequireMsvc) {
-    $VsWhere = Join-Path ${env:ProgramFiles(x86)} "Microsoft Visual Studio/Installer/vswhere.exe"
-    if (-not (Test-Path $VsWhere -PathType Leaf)) {
-        throw "Visual Studio Installer metadata was not found at $VsWhere."
+    $Cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+    $Link = Get-Command link.exe -ErrorAction SilentlyContinue
+    if (-not $Cl -or -not $Link) {
+        $VcVarsCandidates = @()
+        foreach ($ProgramFilesRoot in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+            if (-not [string]::IsNullOrWhiteSpace($ProgramFilesRoot)) {
+                $VcVarsCandidates += Get-ChildItem `
+                    -Path (Join-Path $ProgramFilesRoot "Microsoft Visual Studio/*/*/VC/Auxiliary/Build/vcvars64.bat") `
+                    -File `
+                    -ErrorAction SilentlyContinue
+            }
+        }
+
+        $VcVars = $VcVarsCandidates |
+            Sort-Object FullName -Descending |
+            Select-Object -First 1
+        if (-not $VcVars) {
+            throw "Visual Studio C++ x64 build tools were not found in PATH or standard installation directories."
+        }
+
+        $EnvironmentLines = & cmd.exe /d /s /c "`"$($VcVars.FullName)`" >nul && set"
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to load the MSVC environment from $($VcVars.FullName)."
+        }
+        foreach ($EnvironmentLine in $EnvironmentLines) {
+            $Separator = $EnvironmentLine.IndexOf('=')
+            if ($Separator -gt 0) {
+                $Name = $EnvironmentLine.Substring(0, $Separator)
+                $Value = $EnvironmentLine.Substring($Separator + 1)
+                Set-Item -Path "Env:$Name" -Value $Value
+            }
+        }
+
+        $Cl = Get-Command cl.exe -ErrorAction SilentlyContinue
+        $Link = Get-Command link.exe -ErrorAction SilentlyContinue
     }
-    $Installation = & $VsWhere `
-        -latest `
-        -products * `
-        -requires Microsoft.VisualStudio.Component.VC.Tools.x86.x64 `
-        -property installationPath
-    if ([string]::IsNullOrWhiteSpace($Installation)) {
+    if (-not $Cl -or -not $Link) {
         throw "Visual Studio C++ x64 build tools are required by the Windows GitLab Runner."
     }
+    Write-Host "MSVC compiler: $($Cl.Source)"
+    Write-Host "MSVC linker: $($Link.Source)"
 }
 
 deno --version
