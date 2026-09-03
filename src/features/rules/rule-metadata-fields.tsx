@@ -26,7 +26,7 @@ export function RuleMetadataFields(props: {
         <Label>处理阶段</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.stageOptions.map(({ stage, reason }) => <ListBox.Item id={stage} isDisabled={reason != null} key={stage} textValue={`${ruleStageLabel(stage)}${reason ? ` ${reason}` : ""}`}><span className="block">{ruleStageLabel(stage)}</span>{reason && <span className="block text-xs text-red-600">{reason}</span>}</ListBox.Item>)}</ListBox></Select.Popover>
       </Select>
     </div>
-    <div className="grid items-center gap-3 sm:grid-cols-2">
+    <div className="grid items-end gap-3 sm:grid-cols-2" data-testid="rule-metadata-toggle-priority-row">
       <Switch aria-label="启用规则" isDisabled={props.pending} isSelected={props.enabled} onChange={props.onEnabledChange}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>启用规则</Switch.Content></Switch>
       <NumberField aria-label="阶段内优先级" isDisabled={props.pending} minValue={0} value={props.priority ?? Number.NaN} onChange={props.onPriorityChange}><Label>阶段内优先级</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>
     </div>

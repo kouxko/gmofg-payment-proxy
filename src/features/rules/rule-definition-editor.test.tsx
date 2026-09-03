@@ -147,6 +147,12 @@ describe("RuleDefinitionEditor single pair", () => {
     expect(screen.queryByRole("button", { name: "确认删除" })).not.toBeInTheDocument();
   });
 
+  it("bottom-aligns the enable switch with the priority input group", () => {
+    render(<Harness initial={input(requestTarget, recordMatch)} />);
+
+    expect(screen.getByTestId("rule-metadata-toggle-priority-row")).toHaveClass("items-end");
+  });
+
   it("keeps Socket on the Document boundary and materializes its single pair on Save", async () => {
     const condition: Condition = { source: "document", path: "/amount", predicate: { type: "number", value: { operator: "equal", value: 10 } } };
     const next: Condition = { source: "document", path: "/amount", predicate: { type: "number", value: { operator: "equal", value: 20 } } };
