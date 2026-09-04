@@ -125,7 +125,11 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(
     variables,
-    /^[ ]{2}PERL_MAKETEXT_SIMPLE_URL: "https:\/\/raw\.githubusercontent\.com\/Perl\/perl5\/v5\.38\.2\/cpan\/Locale-Maketext-Simple\/lib\/Locale\/Maketext\/Simple\.pm"$/mu,
+    /^[ ]{2}PERL_MAKETEXT_ARCHIVE_URL: "https:\/\/mirrors\.aliyun\.com\/CPAN\/modules\/by-module\/Locale\/Locale-Maketext-Simple-0\.21\.tar\.gz"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}PERL_MAKEMAKER_ARCHIVE_URL: "https:\/\/mirrors\.aliyun\.com\/CPAN\/authors\/id\/B\/BI\/BINGOS\/ExtUtils-MakeMaker-7\.76\.tar\.gz"$/mu,
   );
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
@@ -206,13 +210,15 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(windowsBootstrap, /usr\/bin\/perl\.exe/u);
   assert.match(
     windowsBootstrap,
-    /-MLocale::Maketext::Simple -e "1"/u,
+    /-MLocale::Maketext::Simple -MExtUtils::MakeMaker -MIPC::Cmd -e "1"/u,
   );
-  assert.match(windowsBootstrap, /PERL_MAKETEXT_SIMPLE_URL/u);
+  assert.match(windowsBootstrap, /PERL_MAKETEXT_ARCHIVE_URL/u);
+  assert.match(windowsBootstrap, /PERL_MAKEMAKER_ARCHIVE_URL/u);
+  assert.match(windowsBootstrap, /Aliyun CPAN mirror/u);
   assert.match(windowsBootstrap, /\$env:PERL5LIB/u);
   assert.match(
     windowsBootstrap,
-    /A complete Perl runtime with Locale::Maketext::Simple is required to build vendored OpenSSL on Windows/u,
+    /A complete Perl runtime with Locale::Maketext::Simple and ExtUtils::MakeMaker is required to build vendored OpenSSL on Windows/u,
   );
   assert.match(
     windowsBootstrap,

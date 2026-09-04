@@ -14,15 +14,23 @@ $env:CARGO_HOME = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $Rep
 $env:RUSTUP_HOME = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $RepositoryRoot ".ci-cache/rustup" }
 $env:DENO_INSTALL = if ($env:DENO_INSTALL) { $env:DENO_INSTALL } else { Join-Path $ToolsRoot "deno" }
 $env:DENO_DIR = if ($env:DENO_DIR) { $env:DENO_DIR } else { Join-Path $RepositoryRoot ".ci-cache/deno-cache" }
+$PerlModulesRoot = Join-Path $ToolsRoot "perl-modules"
 
 @(
     $ToolsRoot,
     $env:CARGO_HOME,
     $env:RUSTUP_HOME,
     $env:DENO_INSTALL,
-    $env:DENO_DIR
+    $env:DENO_DIR,
+    $PerlModulesRoot
 ) | ForEach-Object {
     New-Item -ItemType Directory -Force -Path $_ | Out-Null
+}
+
+if ([string]::IsNullOrWhiteSpace($env:PERL5LIB)) {
+    $env:PERL5LIB = $PerlModulesRoot
+} else {
+    $env:PERL5LIB = "$PerlModulesRoot;$env:PERL5LIB"
 }
 
 $CargoConfig = @"
@@ -105,7 +113,7 @@ function Find-Perl {
 
     foreach ($Candidate in $Candidates | Select-Object -Unique) {
         if (Test-Path $Candidate -PathType Leaf) {
-            & $Candidate -MLocale::Maketext::Simple -e "1" 2>$null
+            & $Candidate -MLocale::Maketext::Simple -MExtUtils::MakeMaker -MIPC::Cmd -e "1" 2>$null
             if ($LASTEXITCODE -eq 0) {
                 $PerlDirectory = Split-Path -Parent $Candidate
                 if (Test-Path (Join-Path $PerlDirectory "link.exe") -PathType Leaf) {
@@ -120,25 +128,37 @@ function Find-Perl {
     return $null
 }
 
-function Install-PerlMaketextSimple {
-    if ([string]::IsNullOrWhiteSpace($env:PERL_MAKETEXT_SIMPLE_URL)) {
-        throw "PERL_MAKETEXT_SIMPLE_URL is required to complete the Git for Windows Perl runtime."
+function Install-PerlModuleArchive(
+    [string]$Name,
+    [string]$Url,
+    [string]$ArchiveDirectory
+) {
+    if ([string]::IsNullOrWhiteSpace($Url)) {
+        throw "$Name archive URL is required to complete the Git for Windows Perl runtime."
     }
 
-    $PerlModulesRoot = Join-Path $ToolsRoot "perl-modules"
-    $ModuleDirectory = Join-Path $PerlModulesRoot "Locale/Maketext"
-    $ModulePath = Join-Path $ModuleDirectory "Simple.pm"
-    New-Item -ItemType Directory -Force -Path $ModuleDirectory | Out-Null
-    Write-Host "Downloading the missing Locale::Maketext::Simple Perl module."
-    Invoke-WebRequest `
-        -UseBasicParsing `
-        -Uri $env:PERL_MAKETEXT_SIMPLE_URL `
-        -OutFile $ModulePath
-    if ([string]::IsNullOrWhiteSpace($env:PERL5LIB)) {
-        $env:PERL5LIB = $PerlModulesRoot
-    } else {
-        $env:PERL5LIB = "$PerlModulesRoot;$env:PERL5LIB"
+    $Archive = Join-Path $ToolsRoot "$ArchiveDirectory.tar.gz"
+    $ExtractRoot = Join-Path $ToolsRoot "$ArchiveDirectory-extracted"
+    $ExtractedLib = Join-Path $ExtractRoot "$ArchiveDirectory/lib"
+    Write-Host "Downloading $Name from the Aliyun CPAN mirror."
+    Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Archive
+    New-Item -ItemType Directory -Force -Path $ExtractRoot | Out-Null
+    & tar.exe -xzf $Archive -C $ExtractRoot
+    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ExtractedLib -PathType Container)) {
+        throw "Failed to extract $Name into the Git for Windows Perl module path."
     }
+    Copy-Item -Path (Join-Path $ExtractedLib "*") -Destination $PerlModulesRoot -Recurse -Force
+}
+
+function Install-PerlCoreModules {
+    Install-PerlModuleArchive `
+        -Name "Locale::Maketext::Simple" `
+        -Url $env:PERL_MAKETEXT_ARCHIVE_URL `
+        -ArchiveDirectory "Locale-Maketext-Simple-0.21"
+    Install-PerlModuleArchive `
+        -Name "ExtUtils::MakeMaker" `
+        -Url $env:PERL_MAKEMAKER_ARCHIVE_URL `
+        -ArchiveDirectory "ExtUtils-MakeMaker-7.76"
 }
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
     Get-DenoVersion $DenoExecutable
@@ -236,11 +256,11 @@ if ($RequireMsvc) {
 
     $Perl = Find-Perl
     if (-not $Perl) {
-        Install-PerlMaketextSimple
+        Install-PerlCoreModules
         $Perl = Find-Perl
     }
     if (-not $Perl) {
-        throw "A complete Perl runtime with Locale::Maketext::Simple is required to build vendored OpenSSL on Windows."
+        throw "A complete Perl runtime with Locale::Maketext::Simple and ExtUtils::MakeMaker is required to build vendored OpenSSL on Windows."
     }
     $LinkAfterPerl = Get-Command link.exe -ErrorAction SilentlyContinue
     if (-not $LinkAfterPerl -or $LinkAfterPerl.Source -ne $Link.Source) {
