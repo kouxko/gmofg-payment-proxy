@@ -123,6 +123,15 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
     variables,
     /^[ ]{2}VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH: 'C:\\BuildTools'$/mu,
   );
+  assert.match(variables, /^[ ]{2}STRAWBERRY_PERL_VERSION: "5\.42\.3\.1"$/mu);
+  assert.match(
+    variables,
+    /^[ ]{2}STRAWBERRY_PERL_MSI_URL: "https:\/\/github\.com\/StrawberryPerl\/Perl-Dist-Strawberry\/releases\/download\/SP_54231_64bit\/strawberry-perl-5\.42\.3\.1-64bit\.msi"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}STRAWBERRY_PERL_INSTALL_PATH: 'C:\\Strawberry'$/mu,
+  );
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
     variables,
@@ -202,11 +211,13 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(windowsBootstrap, /usr\/bin\/perl\.exe/u);
   assert.match(
     windowsBootstrap,
-    /\$env:Path = "\$env:Path;\$\(Split-Path -Parent \$Candidate\)"/u,
+    /-MLocale::Maketext::Simple -e "1"/u,
   );
+  assert.match(windowsBootstrap, /msiexec\.exe/u);
+  assert.match(windowsBootstrap, /STRAWBERRY_PERL_MSI_URL/u);
   assert.match(
     windowsBootstrap,
-    /Perl is required to build the vendored OpenSSL dependency on Windows/u,
+    /A complete Perl runtime with Locale::Maketext::Simple is required to build vendored OpenSSL on Windows/u,
   );
   assert.match(
     windowsBootstrap,

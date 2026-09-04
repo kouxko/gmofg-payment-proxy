@@ -90,28 +90,68 @@ function Import-VcVars64([System.IO.FileInfo]$VcVars) {
 }
 
 function Find-Perl {
-    $Perl = Get-Command perl.exe -ErrorAction SilentlyContinue
-    if ($Perl) {
-        return $Perl
+    $Candidates = @()
+    $PathPerl = Get-Command perl.exe -ErrorAction SilentlyContinue
+    if ($PathPerl) {
+        $Candidates += $PathPerl.Source
     }
-
-    $Candidates = @(
-        "C:\Strawberry\perl\bin\perl.exe",
-        "C:\Perl64\bin\perl.exe"
-    )
+    if (-not [string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_INSTALL_PATH)) {
+        $Candidates += Join-Path $env:STRAWBERRY_PERL_INSTALL_PATH "perl/bin/perl.exe"
+    }
+    $Candidates += "C:\Strawberry\perl\bin\perl.exe"
+    $Candidates += "C:\Perl64\bin\perl.exe"
     $Git = Get-Command git.exe -ErrorAction SilentlyContinue
     if ($Git) {
         $GitRoot = Split-Path -Parent (Split-Path -Parent $Git.Source)
-        $Candidates = @((Join-Path $GitRoot "usr/bin/perl.exe")) + $Candidates
+        $Candidates += Join-Path $GitRoot "usr/bin/perl.exe"
     }
 
-    foreach ($Candidate in $Candidates) {
+    foreach ($Candidate in $Candidates | Select-Object -Unique) {
         if (Test-Path $Candidate -PathType Leaf) {
-            $env:Path = "$env:Path;$(Split-Path -Parent $Candidate)"
-            return Get-Command perl.exe -ErrorAction SilentlyContinue
+            & $Candidate -MLocale::Maketext::Simple -e "1" 2>$null
+            if ($LASTEXITCODE -eq 0) {
+                $PerlDirectory = Split-Path -Parent $Candidate
+                if (Test-Path (Join-Path $PerlDirectory "link.exe") -PathType Leaf) {
+                    $env:Path = "$env:Path;$PerlDirectory"
+                } else {
+                    $env:Path = "$PerlDirectory;$env:Path"
+                }
+                return Get-Command perl.exe -ErrorAction SilentlyContinue
+            }
         }
     }
     return $null
+}
+
+function Install-StrawberryPerl {
+    if ([string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_MSI_URL)) {
+        throw "STRAWBERRY_PERL_MSI_URL is required to install a complete Perl runtime."
+    }
+    if ([string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_INSTALL_PATH)) {
+        throw "STRAWBERRY_PERL_INSTALL_PATH is required to install a complete Perl runtime."
+    }
+
+    $Installer = Join-Path $ToolsRoot "strawberry-perl-$env:STRAWBERRY_PERL_VERSION-64bit.msi"
+    Write-Host "Downloading Strawberry Perl $env:STRAWBERRY_PERL_VERSION."
+    Invoke-WebRequest `
+        -UseBasicParsing `
+        -Uri $env:STRAWBERRY_PERL_MSI_URL `
+        -OutFile $Installer
+
+    Write-Host "Installing Strawberry Perl at $env:STRAWBERRY_PERL_INSTALL_PATH."
+    $InstallProcess = Start-Process `
+        -FilePath "msiexec.exe" `
+        -ArgumentList @(
+            "/i", $Installer,
+            "/qn",
+            "/norestart",
+            "INSTALLDIR=$env:STRAWBERRY_PERL_INSTALL_PATH"
+        ) `
+        -Wait `
+        -PassThru
+    if ($InstallProcess.ExitCode -notin @(0, 3010)) {
+        throw "Strawberry Perl installation failed with exit code $($InstallProcess.ExitCode)."
+    }
 }
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
     Get-DenoVersion $DenoExecutable
@@ -209,7 +249,11 @@ if ($RequireMsvc) {
 
     $Perl = Find-Perl
     if (-not $Perl) {
-        throw "Perl is required to build the vendored OpenSSL dependency on Windows."
+        Install-StrawberryPerl
+        $Perl = Find-Perl
+    }
+    if (-not $Perl) {
+        throw "A complete Perl runtime with Locale::Maketext::Simple is required to build vendored OpenSSL on Windows."
     }
     $LinkAfterPerl = Get-Command link.exe -ErrorAction SilentlyContinue
     if (-not $LinkAfterPerl -or $LinkAfterPerl.Source -ne $Link.Source) {
