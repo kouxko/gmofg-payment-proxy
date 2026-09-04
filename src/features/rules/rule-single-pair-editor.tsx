@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { Button, Input, Label, ListBox, NumberField, Select, Tabs, TextArea, TextField } from "@heroui/react";
+import { Button, Input, Label, ListBox, NumberField, Select, Tabs, TextField } from "@heroui/react";
 import type {
   Condition, DocumentMutation, HttpAction, HttpRuleEditorStageViewModel, RuleActionCapabilityViewModel,
   RuleActionKind, RuleCommonActionCapability, RuleDefinitionSaveInput, RuleDocumentConditionPathCapability,
@@ -12,6 +12,13 @@ import { commands } from "@/generated/rust-types";
 import { callCommand, errorMessage } from "@/lib/ipc/client";
 import { matchFieldLabel, ruleActionKindLabel } from "./rule-definition-model";
 import { documentSchemaFields, type DocumentSchemaField } from "./rule-document-schema";
+import { HttpActionParametersForm } from "./rule-http-action-parameters-form";
+import {
+  httpActionDraft,
+  httpActionParametersJson,
+  newHttpActionDraft,
+  type HttpActionDraft,
+} from "./rule-http-action-parameters";
 
 type Stage = HttpRuleEditorStageViewModel | SocketRuleEditorStageViewModel;
 type Source = "http" | "document" | "common" | "";
@@ -70,7 +77,8 @@ export function RuleSinglePairEditor(props: {
       if (actionSource === "http") {
         if (!httpAction.kind) return;
         const capability = httpStage?.actions.find((item) => item.kind === httpAction.kind);
-        const raw = capability?.parameters_required ? httpAction.parameters : null;
+        const raw = httpActionParametersJson(httpAction, capability);
+        if (raw === undefined) return;
         if (!ruleStage) return;
         action = wrapHttpAction(await callCommand(commands.ruleDefinitionActionDraft({ kind: httpAction.kind, parameters_json: raw }, ruleStage)));
       } else if (actionSource === "common") {
@@ -96,7 +104,7 @@ export function RuleSinglePairEditor(props: {
     ? Boolean(httpCondition.field && httpCondition.operator && (selectedMatchField(httpStage?.match_fields ?? [], httpCondition.field)?.selector == null || httpCondition.selector) && (httpCondition.field !== "method" || httpCondition.value))
     : Boolean(pathReady(conditionDocument) && conditionDocument.type && conditionDocument.predicate && documentValueReady(conditionDocument.type, conditionDocument.value));
   const actionReady = actionSource === "http"
-    ? Boolean(httpAction.kind && (!httpStage?.actions.find((item) => item.kind === httpAction.kind)?.parameters_required || httpAction.parameters.trim()))
+    ? httpActionParametersJson(httpAction, httpStage?.actions.find((item) => item.kind === httpAction.kind)) !== undefined
     : actionSource === "common" ? Boolean(commonAction) : documentActionReady(schemaFields, props.localTypes, actionDocument);
 
   const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={conditionSchemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={conditionLocalTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
@@ -130,7 +138,6 @@ export function RuleSinglePairEditor(props: {
 }
 
 type HttpConditionDraft = { field: RuleMatchFieldKind | ""; operator: RuleMatchOperatorKind | ""; selector: string; value: string };
-type HttpActionDraft = { kind: RuleActionKind | ""; parameters: string };
 type DocumentPathDraft = { path: string; pathSet: boolean; schemaPath: string | null; type: RuleLocalDocumentValueType | "" };
 type DocumentConditionDraft = DocumentPathDraft & { predicate: RuleLocalDocumentPredicateKind | ""; value: string };
 type DocumentActionDraft = DocumentPathDraft & { action: RuleLocalDocumentActionKind | ""; value: string; index: number };
@@ -161,9 +168,9 @@ function ActionForm(props: { source: Source; isHttp: boolean; action: HttpAction
     {props.source === "http" ? <>
       <div className="grid items-end gap-3 sm:grid-cols-2" data-testid="http-action-selector-row">
         <SourceSelect label="动作来源" options={options} source={props.source} onSource={props.onSource} />
-        <Select aria-label="HTTP 动作类型" selectedKey={props.action.kind || null} onSelectionChange={(key) => props.onAction({ kind: String(key) as RuleActionKind, parameters: "" })}><Label>HTTP 动作类型</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.capabilities.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={ruleActionKindLabel(kind)}>{ruleActionKindLabel(kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+        <Select aria-label="HTTP 动作类型" selectedKey={props.action.kind || null} onSelectionChange={(key) => props.onAction(newHttpActionDraft(String(key) as RuleActionKind))}><Label>HTTP 动作类型</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.capabilities.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={ruleActionKindLabel(kind)}>{ruleActionKindLabel(kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
       </div>
-      {capability?.parameters_required && <div className="w-full" data-testid="http-action-parameters-row"><TextField className="w-full"><Label>动作参数 JSON</Label><TextArea aria-label="动作参数 JSON" className="min-h-24 w-full" value={props.action.parameters} onChange={(event) => props.onAction({ ...props.action, parameters: event.target.value })} /></TextField></div>}
+      {capability?.parameters_required && <div className="w-full" data-testid="http-action-parameters-row"><HttpActionParametersForm draft={props.action} onChange={props.onAction} /></div>}
     </> : <SourceSelect label="动作来源" options={options} source={props.source} onSource={props.onSource} />}
     {props.source === "document" && <><DocumentActionPathFields document={props.document} fields={props.fields} localTypes={props.localTypes} onDocument={props.onDocument} /><div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 动作" selectedKey={props.document.action || null} onSelectionChange={(key) => props.onDocument({ ...props.document, action: String(key) as RuleLocalDocumentActionKind })}><Label>Document 动作</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{actions.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={kind}>{kind}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>动作值</Label><Input aria-label="动作值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField>{props.document.action === "insert" && <NumberField aria-label="规则本地 Insert index" minValue={0} value={props.document.index} onChange={(index) => props.onDocument({ ...props.document, index })}><Label>Index</Label><NumberField.Group className="h-10 min-h-10 w-full"><NumberField.Input /></NumberField.Group></NumberField>}</div>{props.document.path.split("/").includes("*") && <p className="text-xs text-[var(--telemetry-muted)]">* 仅展开一层；动作会应用到当前命中的全部节点。</p>}</>}
     {props.source === "common" && <Select aria-label="通用动作" selectedKey={props.commonAction || null} onSelectionChange={(key) => props.onCommonAction(String(key) as RuleCommonActionCapability)}><Label>通用动作</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.commonActions.map((item) => <ListBox.Item id={item} key={item} textValue={item === "record_match" ? "记录命中" : item}>{item === "record_match" ? "记录命中" : item}</ListBox.Item>)}</ListBox></Select.Popover></Select>}
@@ -220,13 +227,6 @@ function predicateDraft(predicate: Extract<Condition, { source: "document" | "do
   if (predicate.type === "number") return { type: "number", kind: predicate.value.operator === "equal" ? "equals" : predicate.value.operator, value: String(predicate.value.value) };
   if (predicate.type === "boolean") return { type: "boolean", kind: "equals", value: String(predicate.value.equal) };
   return { type: "null", kind: "equals", value: "null" };
-}
-function httpActionDraft(action?: UnifiedAction): HttpActionDraft { if (!action || (action.source !== "http" && action.source !== "terminal")) return { kind: "", parameters: "" }; const pair = httpActionKindAndValue(action); return { kind: pair[0], parameters: pair[1] == null ? "" : JSON.stringify(pair[1]) }; }
-function httpActionKindAndValue(action: Extract<UnifiedAction, { source: "http" | "terminal" }>): [RuleActionKind, unknown] {
-  const value: HttpAction = action.source === "terminal" ? { Terminal: action.value } : action.value;
-  if ("SetJsonField" in value) return ["set_json_field", value.SetJsonField]; if ("ReplaceBodyText" in value) return ["replace_body_text", value.ReplaceBodyText]; if ("SetHeader" in value) return ["set_header", value.SetHeader]; if ("Delay" in value) return ["delay", value.Delay]; if ("Jitter" in value) return ["jitter", value.Jitter]; if ("Throttle" in value) return ["throttle", value.Throttle]; if ("Intermittent" in value) return ["intermittent", value.Intermittent]; if ("CustomHttpStatus" in value) return ["custom_http_status", value.CustomHttpStatus];
-  const terminal = value.Terminal; if (terminal === "DisconnectBeforeUpstream") return ["disconnect_before_upstream", null];
-  if ("UpstreamConnectTimeout" in terminal) return ["upstream_connect_timeout", terminal.UpstreamConnectTimeout]; if ("UpstreamWriteTimeout" in terminal) return ["upstream_write_timeout", terminal.UpstreamWriteTimeout]; if ("UpstreamReadTimeout" in terminal) return ["upstream_read_timeout", terminal.UpstreamReadTimeout]; if ("DropUpstreamResponse" in terminal) return ["drop_upstream_response", terminal.DropUpstreamResponse]; if ("MockResponse" in terminal) return ["mock_response", terminal.MockResponse]; if ("InvalidJson" in terminal) return ["invalid_json", terminal.InvalidJson]; if ("IncorrectContentLength" in terminal) return ["incorrect_content_length", terminal.IncorrectContentLength]; if ("TruncateResponse" in terminal) return ["truncate_response", terminal.TruncateResponse]; if ("DisconnectDuringUpstreamWrite" in terminal) return ["disconnect_during_upstream_write", terminal.DisconnectDuringUpstreamWrite]; return ["disconnect_during_downstream_write", terminal.DisconnectDuringDownstreamWrite];
 }
 function mutationType(value?: DocumentMutation): RuleLocalDocumentValueType | "" { if (!value) return ""; const raw = value.type === "clear" ? value.value_type : value.value; if (raw === null) return "null"; if (Array.isArray(raw)) return "array"; return typeof raw as RuleLocalDocumentValueType; }
 function mutationValue(value?: DocumentMutation) { if (!value || value.type === "clear") return ""; return typeof value.value === "string" ? value.value : JSON.stringify(value.value); }

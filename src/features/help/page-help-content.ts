@@ -127,6 +127,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
           "打开“执行动作”Tab，按实际执行顺序添加动作。",
           "Document 动作路径允许完整路径段 * 匹配一层，并把同一动作应用到当前命中的全部节点。",
           "HTTP 动作使用中文名称；结构化字段修改统一选择 Document 动作，HTTP 只保留 Body、延迟、限速和故障类动作。",
+          "HTTP 动作按类型显示参数字段和单位，不需要手写 JSON；无参数动作不会显示参数区域。",
           "使用本机应答时，在 Proxy → App 选择“替换当前 Body”即可生成需要的 Mock Body。",
           "请求阶段和响应阶段支持的动作不同；无效组合会被拒绝。",
           "Shift-JIS Body、非法 JSON、错误长度和截断参数必须通过校验，页面不会静默沿用旧值。",
