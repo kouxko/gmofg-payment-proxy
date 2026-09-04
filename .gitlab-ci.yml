@@ -348,7 +348,15 @@ windows_build_only:
     - >-
         .\scripts\ci\stage-android-companion-windows.ps1
         -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
-    - deno task tauri build -vv --bundles msi,nsis
+    - |
+        deno task tauri build -vv --bundles msi,nsis
+        if ($LASTEXITCODE -ne 0) {
+          $WixTools = Join-Path $env:LOCALAPPDATA "tauri\WixTools314"
+          $WixSource = Get-Item "src-tauri/target/release/wix/x64/main.wxs" -ErrorAction Stop
+          $Application = Get-Item "src-tauri/target/release/intercept-proxy.exe" -ErrorAction Stop
+          & (Join-Path $WixTools "candle.exe") -arch x64 $WixSource.FullName "-dSourceDir=$($Application.FullName)"
+          throw "Tauri Windows bundling failed. Candle diagnostics were printed above."
+        }
     - .\scripts\package-portable.ps1 -SkipBuild
   artifacts:
     name: "Intercept-Proxy-android-windows-build-$CI_COMMIT_SHORT_SHA"

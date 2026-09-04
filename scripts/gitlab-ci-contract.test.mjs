@@ -320,6 +320,9 @@ test("Android and Windows build-only mode packages the Companion without running
   assert.match(buildOnlyJob, /job: android_companion[^]*?artifacts: true/u);
   assert.match(buildOnlyJob, /stage-android-companion-windows\.ps1/u);
   assert.match(buildOnlyJob, /deno task tauri build -vv --bundles msi,nsis/u);
+  assert.match(buildOnlyJob, /WixTools314/u);
+  assert.match(buildOnlyJob, /candle\.exe/u);
+  assert.match(buildOnlyJob, /Candle diagnostics were printed above/u);
   assert.match(buildOnlyJob, /scripts[\\/]package-portable\.ps1 -SkipBuild/u);
   assert.match(
     buildOnlyJob,
