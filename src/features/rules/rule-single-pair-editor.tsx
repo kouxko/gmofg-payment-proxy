@@ -15,6 +15,7 @@ import { documentSchemaFields, type DocumentSchemaField } from "./rule-document-
 
 type Stage = HttpRuleEditorStageViewModel | SocketRuleEditorStageViewModel;
 type Source = "http" | "document" | "common" | "";
+const HTTP_METHOD_OPTIONS = ["GET", "POST", "PUT", "PATCH", "DELETE"] as const;
 
 export function RuleSinglePairEditor(props: {
   actions?: ReactNode;
@@ -43,6 +44,8 @@ export function RuleSinglePairEditor(props: {
   const [commonAction, setCommonAction] = useState<RuleCommonActionCapability | "">(() => initialAction?.source === "record_match" ? "record_match" : "");
   const [error, setError] = useState<string>();
   const schemaFields = documentSchemaFields(documentFields);
+  const conditionSchemaFields = schemaFields.filter((field) => field.predicates.length > 0);
+  const conditionLocalTypes = props.localTypes.filter((type) => type.predicates.length > 0);
 
   async function materialize() {
     setError(undefined);
@@ -90,13 +93,13 @@ export function RuleSinglePairEditor(props: {
   }
 
   const conditionReady = conditionSource === "http"
-    ? Boolean(httpCondition.field && httpCondition.operator && (selectedMatchField(httpStage?.match_fields ?? [], httpCondition.field)?.selector == null || httpCondition.selector))
+    ? Boolean(httpCondition.field && httpCondition.operator && (selectedMatchField(httpStage?.match_fields ?? [], httpCondition.field)?.selector == null || httpCondition.selector) && (httpCondition.field !== "method" || httpCondition.value))
     : Boolean(pathReady(conditionDocument) && conditionDocument.type && conditionDocument.predicate && documentValueReady(conditionDocument.type, conditionDocument.value));
   const actionReady = actionSource === "http"
     ? Boolean(httpAction.kind && (!httpStage?.actions.find((item) => item.kind === httpAction.kind)?.parameters_required || httpAction.parameters.trim()))
     : actionSource === "common" ? Boolean(commonAction) : documentActionReady(schemaFields, props.localTypes, actionDocument);
 
-  const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={schemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={props.localTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
+  const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={conditionSchemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={conditionLocalTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
   const actionForm = <ActionForm action={httpAction} capabilities={httpStage?.actions ?? []} commonAction={commonAction} commonActions={commonActions} document={actionDocument} fields={schemaFields} isHttp={contentType === "http"} localTypes={props.localTypes} onAction={setHttpAction} onCommonAction={setCommonAction} onDocument={setActionDocument} onSource={setActionSource} source={actionSource} />;
   const saveButton = <Button isDisabled={props.pending || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
 
@@ -139,10 +142,10 @@ function ConditionForm(props: { source: Source; isHttp: boolean; http: HttpCondi
   return <fieldset className="space-y-3 rounded-lg border border-[var(--telemetry-line)] p-3" data-testid="condition-form"><legend className="px-1 font-medium">匹配条件</legend>
     {props.isHttp && <SourceSelect label="条件来源" options={["http", "document"]} source={props.source} onSource={props.onSource} />}
     {props.source === "http" && <div className="grid items-end gap-3 sm:grid-cols-2">
-      <Select aria-label="HTTP 匹配字段" selectedKey={props.http.field || null} onSelectionChange={(key) => props.onHttp({ field: String(key) as RuleMatchFieldKind, operator: "", selector: "", value: props.http.value })}><Label>HTTP 匹配字段</Label><Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate whitespace-nowrap" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>{props.httpFields.map((field) => <ListBox.Item id={field.kind} key={field.kind} textValue={matchFieldLabel(field.kind)}>{matchFieldLabel(field.kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+      <Select aria-label="HTTP 匹配字段" selectedKey={props.http.field || null} onSelectionChange={(key) => props.onHttp({ field: String(key) as RuleMatchFieldKind, operator: "", selector: "", value: "" })}><Label>HTTP 匹配字段</Label><Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate whitespace-nowrap" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>{props.httpFields.map((field) => <ListBox.Item id={field.kind} key={field.kind} textValue={matchFieldLabel(field.kind)}>{matchFieldLabel(field.kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
       <Select aria-label="HTTP 匹配操作符" selectedKey={props.http.operator || null} onSelectionChange={(key) => props.onHttp({ ...props.http, operator: String(key) as RuleMatchOperatorKind })}><Label>HTTP 匹配操作符</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{(selectedField?.operators ?? []).map((operator) => <ListBox.Item id={operator} key={operator} textValue={operator}>{operator}</ListBox.Item>)}</ListBox></Select.Popover></Select>
       {selectedField?.selector && <TextField><Label>Header selector（/name）</Label><Input aria-label="Header selector（/name）" className="h-10 w-full py-0" value={props.http.selector} onChange={(event) => props.onHttp({ ...props.http, selector: event.target.value })} /></TextField>}
-      <TextField><Label>HTTP 匹配值</Label><Input aria-label="HTTP 匹配值" className="h-10 w-full py-0" value={props.http.value} onChange={(event) => props.onHttp({ ...props.http, value: event.target.value })} /></TextField>
+      {props.http.field === "method" ? <Select aria-label="HTTP Method" selectedKey={props.http.value || null} onSelectionChange={(key) => props.onHttp({ ...props.http, value: String(key) })}><Label>HTTP Method</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{HTTP_METHOD_OPTIONS.map((method) => <ListBox.Item id={method} key={method} textValue={method}>{method}</ListBox.Item>)}</ListBox></Select.Popover></Select> : <TextField><Label>HTTP 匹配值</Label><Input aria-label="HTTP 匹配值" className="h-10 w-full py-0" value={props.http.value} onChange={(event) => props.onHttp({ ...props.http, value: event.target.value })} /></TextField>}
     </div>}
     {props.source === "document" && <DocumentConditionPathFields document={props.document} fields={props.fields} localTypes={props.localTypes} onDocument={props.onDocument} />}
     {props.source === "document" && <div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 谓词" selectedKey={props.document.predicate || null} onSelectionChange={(key) => props.onDocument({ ...props.document, predicate: String(key) as RuleLocalDocumentPredicateKind })}><Label>Document 谓词</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{predicates.map((item) => <ListBox.Item id={item} key={item} textValue={item}>{item}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>匹配值</Label><Input aria-label="匹配值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField></div>}

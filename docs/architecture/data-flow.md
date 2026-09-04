@@ -120,9 +120,9 @@ LocalServer 与 RemoteServer 的差别只有 Endpoint 实现：
 - HTTP LocalServer 原样回环完整 HTTP Context，不创建真实 `UpstreamConnector`；响应仍执行
   Proxy → App Pipeline。
 
-HTTP 标准规则的 `MockResponse` 在 Proxy → Server 和 Proxy → App 两个阶段都可用；公共规则保存文本
-`body`，HTTP wire policy 按最终响应 BodyCodec 编码并重算托管 Header。请求阶段命中时直接形成响应，
-不调用 Remote 或 Local Server Endpoint。
+新建/编辑不再暴露 `MockResponse`。LocalHttpServer 先产生本机响应 Context，Proxy → App
+`ReplaceBodyText` 再替换其 Body，HTTP wire policy 按最终 BodyCodec 编码并重算托管 Header。底层
+`MockResponse` 类型只用于既有持久化规则兼容，不作为新的响应生成路径。
 
 ## 6. Socket 透明转发
 

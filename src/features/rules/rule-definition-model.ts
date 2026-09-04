@@ -219,15 +219,15 @@ const MATCH_FIELD_LABELS = {
 } as const satisfies Record<RuleMatchFieldKind, string>;
 
 const RULE_ACTION_LABELS = {
-  set_json_field: "Set JSON Field", replace_body_text: "Replace Body", set_header: "Set Header",
-  delay: "Delay", jitter: "Jitter", throttle: "Throttle", intermittent: "Intermittent",
-  custom_http_status: "Custom HTTP Status",
-  disconnect_before_upstream: "Disconnect Before Upstream", upstream_connect_timeout: "Upstream Connect Timeout",
-  upstream_write_timeout: "Upstream Write Timeout", upstream_read_timeout: "Upstream Read Timeout",
-  drop_upstream_response: "Drop Upstream Response", mock_response: "Mock Response", invalid_json: "Invalid JSON",
-  incorrect_content_length: "Incorrect Content Length", truncate_response: "Truncate Response",
-  disconnect_during_upstream_write: "Disconnect During Upstream Write",
-  disconnect_during_downstream_write: "Disconnect During Downstream Write",
+  set_json_field: "设置 JSON 字段", replace_body_text: "替换当前 Body", set_header: "设置 Header",
+  delay: "固定延迟", jitter: "随机延迟", throttle: "限速", intermittent: "间歇网络",
+  custom_http_status: "修改 HTTP 状态码",
+  disconnect_before_upstream: "连接上游前断开", upstream_connect_timeout: "上游连接超时",
+  upstream_write_timeout: "上游写入超时", upstream_read_timeout: "上游读取超时",
+  drop_upstream_response: "丢弃上游响应", mock_response: "模拟响应", invalid_json: "返回无效 JSON",
+  incorrect_content_length: "错误 Content-Length", truncate_response: "截断响应",
+  disconnect_during_upstream_write: "上游写入中断开",
+  disconnect_during_downstream_write: "下游写入中断开",
 } as const satisfies Record<RuleActionKind, string>;
 
 export function matchFieldLabel(kind: RuleMatchFieldKind) {

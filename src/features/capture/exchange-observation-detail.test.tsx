@@ -65,7 +65,7 @@ describe("ExchangeObservationDetail", () => {
     const record = httpExchangeRecord();
     render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={onCreateMockDraft} />);
 
-    const action = screen.getByRole("button", { name: "用此服务器响应创建 Mock 草稿" });
+    const action = screen.getByRole("button", { name: "用此响应 Body 创建替换规则" });
     action.click();
 
     expect(onCreateMockDraft).toHaveBeenCalledWith("exchange-http-1", 3);

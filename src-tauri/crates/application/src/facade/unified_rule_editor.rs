@@ -347,16 +347,12 @@ fn http_stages(
                 .and_then(|value| value.schema.as_ref())
                 .map(document_schema_field_capabilities)
                 .unwrap_or_default();
-            let document_common_actions = document.map_or_else(
-                || vec![RuleCommonActionCapability::RecordMatch],
-                |value| value.common_actions.clone(),
-            );
             HttpRuleEditorStageViewModel {
                 stage,
                 http,
                 package,
                 document_fields,
-                document_common_actions,
+                document_common_actions: Vec::new(),
                 new_rule_draft: RuleNewDefinitionDraft {
                     listener_id,
                     stage,
@@ -384,7 +380,7 @@ fn socket_stages(
                 .as_ref()
                 .map(document_schema_field_capabilities)
                 .unwrap_or_default(),
-            common_actions: catalog.common_actions.clone(),
+            common_actions: Vec::new(),
             new_rule_draft: RuleNewDefinitionDraft {
                 listener_id,
                 stage,
@@ -403,7 +399,6 @@ fn http_capability(stage: RuleStage) -> crate::RuleStageCapabilityViewModel {
 #[derive(Clone)]
 struct DocumentCapability {
     schema: Option<DocumentSchemaNode>,
-    common_actions: Vec<RuleCommonActionCapability>,
 }
 
 fn document_capability(
@@ -416,6 +411,5 @@ fn document_capability(
     };
     DocumentCapability {
         schema: schema.as_ref().map(|schema| schema.root.clone()),
-        common_actions: vec![RuleCommonActionCapability::RecordMatch],
     }
 }

@@ -1,0 +1,43 @@
+TASK-20260904-002 / HTTP-RULE-EDITOR-SIMPLIFICATION-001
+
+RED evidence
+- Rule UI: non-matchable /GBRD_01/* Object option was present before filtering.
+- Capture factory: expected ProxyToApp but received ProxyToUpstream before conversion.
+- Capture UI: new Body replacement label was absent before the UI text change.
+
+PASS evidence
+- cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib
+  417 passed, 0 failed
+- deno task test src/features/capture/exchange-observation-detail.test.tsx src/features/rules/rule-definition-editor.test.tsx
+  2 files, 17 passed
+- deno task test
+  64 files, 554 passed
+- deno task typecheck
+  PASS
+- deno task lint
+  PASS
+- cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+  PASS
+- cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings
+  PASS
+- deno task scan:architecture
+  PASS
+- deno task check:bindings
+  PASS fresh and deterministic
+- deno task tauri build --bundles app
+  PASS, 13 static pages, macOS app bundled
+- codesign --verify --deep --strict /Applications/Intercept Proxy.app
+  PASS
+- built and installed executable SHA-256
+  ff21f80b323c901241db65459d705894b13b825d9b2e129e1b2c2d04dd56d824
+- installed PID
+  87690
+- git diff --check
+  PASS
+
+Known unrelated baseline
+- deno task scan:source-size reports the same 7 pre-existing files over 500 lines; none is modified by this task.
+
+NOT_RUN
+- Installed App click-through: Computer Use getState reports Intercept Proxy running, but attaching to /Applications/Intercept Proxy.app timed out.
+- Real LocalHttpServer business exchange, Windows, Android, CI, push and release.

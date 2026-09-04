@@ -34,8 +34,9 @@ TCP 成功但 TLS 失败时不要继续分析业务字段；TLS 成功但没有�
 - Forward Proxy 验证 absolute-form authority；CONNECT/Upgrade 当前是明确不支持路径，不能当成功隧道。
 - 修改 Body 后检查实际 `Content-Length`；不要保留 `Connection`、`Proxy-Connection`、
   `Transfer-Encoding`、`Upgrade` 等 hop-by-hop Header，`Connection` 点名的扩展 Header 也必须移除。
-- 从抓包响应生成 Mock 草稿时，只选择 Server → Proxy 的完整 HTTP 响应。压缩、二进制、非 UTF-8、
-  证据淘汰或缺少配对请求时停止；草稿默认禁用且未保存，人工检查后再保存。
+- 从抓包响应生成 Body 替换规则时，只选择 Server → Proxy 的完整 HTTP 响应。草稿只保留配对请求的
+  request-target 与 UTF-8 Body，阶段固定为 Proxy → App；status/Header 不复制，需配合 LocalHttpServer。
+  非 UTF-8、证据淘汰或缺少配对请求时停止；草稿默认禁用且未保存，人工检查后再保存。
 - 这类拒绝使用 `HTTP_MOCK_DRAFT_*` 稳定错误码；保留原码，不把失败替换成空草稿。
 - 对 JSON、XML 或文本的规则判断必须以 Listener 实际处理模式为准。未配置协议包时不要假定存在
   Document，也不要把显示文本当作可逆原始字节。

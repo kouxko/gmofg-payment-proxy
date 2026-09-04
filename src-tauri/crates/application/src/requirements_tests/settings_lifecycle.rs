@@ -325,12 +325,10 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
         .find(|capability| capability.stage == RuleStage::ProxyToApp)
         .expect("response capability");
     assert_eq!(capabilities.len(), 2);
-    assert!(
-        request
-            .actions
-            .iter()
-            .any(|action| action.kind == RuleActionKind::MockResponse)
-    );
+    assert!(!request.actions.iter().any(|action| matches!(
+        action.kind,
+        RuleActionKind::SetJsonField | RuleActionKind::SetHeader | RuleActionKind::MockResponse
+    )));
     assert!(
         !request
             .actions
@@ -343,8 +341,8 @@ fn rule_editor_capabilities_are_stage_exact_and_rust_owned() {
             .iter()
             .any(|action| action.kind == RuleActionKind::CustomHttpStatus)
     );
-    assert_eq!(request.actions.len(), 14);
-    assert_eq!(response.actions.len(), 12);
+    assert_eq!(request.actions.len(), 11);
+    assert_eq!(response.actions.len(), 10);
     assert!(
         !response
             .actions

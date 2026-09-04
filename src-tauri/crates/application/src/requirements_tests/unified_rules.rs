@@ -1,7 +1,6 @@
 use super::*;
 use intercept_proxy_domain::{
-    HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator, TerminalAction,
-    UnifiedAction,
+    HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator, UnifiedAction,
 };
 
 #[derive(Debug, Default)]
@@ -134,22 +133,17 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
             operator: MatchOperator::Equals(ref value),
         } if value == "/"
     ));
-    let header = application
-        .rule_definition_http_condition_draft(
-            crate::RuleMatchFieldKind::Header,
-            Some("/content-type"),
-            crate::RuleMatchOperatorKind::Wildcard,
-            "application/*",
-            RuleStage::ProxyToApp,
-        )
-        .unwrap();
-    assert!(matches!(
-        header,
-        Condition::Http {
-            field: MatchField::Header(ref path),
-            operator: MatchOperator::Wildcard(ref value),
-        } if path == "/content-type" && value == "application/*"
-    ));
+    assert!(
+        application
+            .rule_definition_http_condition_draft(
+                crate::RuleMatchFieldKind::Header,
+                Some("/content-type"),
+                crate::RuleMatchOperatorKind::Wildcard,
+                "application/*",
+                RuleStage::ProxyToApp,
+            )
+            .is_err()
+    );
     assert!(
         application
             .rule_definition_http_condition_draft(
@@ -187,19 +181,24 @@ fn unified_http_factories_return_domain_condition_and_action_types() {
         application
             .rule_definition_action_draft(
                 crate::RuleHttpActionDraftInput {
+                    kind: RuleActionKind::ReplaceBodyText,
+                    parameters_json: Some(r#"{"text":"body"}"#.into()),
+                },
+                RuleStage::ProxyToApp,
+            )
+            .unwrap(),
+        DomainRuleAction::ReplaceBodyText("body".into())
+    );
+    assert!(
+        application
+            .rule_definition_action_draft(
+                crate::RuleHttpActionDraftInput {
                     kind: RuleActionKind::MockResponse,
-                    parameters_json: Some(
-                        r#"{"status":201,"headers":[["x-test","explicit"]],"body":"body"}"#.into(),
-                    ),
+                    parameters_json: Some(r#"{"status":201,"headers":[],"body":"body"}"#.into(),),
                 },
                 RuleStage::ProxyToUpstream,
             )
-            .unwrap(),
-        DomainRuleAction::Terminal(intercept_proxy_domain::TerminalAction::MockResponse {
-            status: 201,
-            headers: vec![("x-test".into(), "explicit".into())],
-            body: "body".into(),
-        })
+            .is_err()
     );
 }
 
@@ -225,9 +224,11 @@ async fn plain_http_editor_exposes_schema_free_body_document_capability() {
 
     assert_eq!(stages.len(), 2);
     assert!(stages.iter().all(|stage| stage.document_fields.is_empty()));
-    assert!(stages.iter().all(|stage| {
-        stage.document_common_actions == vec![RuleCommonActionCapability::RecordMatch]
-    }));
+    assert!(
+        stages
+            .iter()
+            .all(|stage| stage.document_common_actions.is_empty())
+    );
 }
 
 #[tokio::test]
@@ -281,28 +282,14 @@ async fn unified_runtime_failure_does_not_persist_or_advance_revision() {
 
 #[tokio::test]
 async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persistence() {
-    let invalid_shapes = [
-        (
-            RuleStage::ProxyToUpstream,
-            Condition::Http {
-                field: MatchField::Method,
-                operator: MatchOperator::Contains("OS".into()),
-            },
-            DomainRuleAction::Delay { milliseconds: 10 },
-        ),
-        (
-            RuleStage::ProxyToApp,
-            Condition::Http {
-                field: MatchField::Method,
-                operator: MatchOperator::Equals("GET".into()),
-            },
-            DomainRuleAction::Terminal(TerminalAction::MockResponse {
-                status: 200,
-                headers: Vec::new(),
-                body: String::new(),
-            }),
-        ),
-    ];
+    let invalid_shapes = [(
+        RuleStage::ProxyToUpstream,
+        Condition::Http {
+            field: MatchField::Method,
+            operator: MatchOperator::Contains("OS".into()),
+        },
+        DomainRuleAction::Delay { milliseconds: 10 },
+    )];
 
     for (stage, condition, action) in invalid_shapes {
         let workspaces = Arc::new(InMemoryWorkspaceStore::default());

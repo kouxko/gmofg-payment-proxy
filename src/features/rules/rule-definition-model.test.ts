@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
-import { ruleDirectionLabel, ruleStageIncompatibility } from "./rule-definition-model";
+import { ruleActionKindLabel, ruleDirectionLabel, ruleStageIncompatibility } from "./rule-definition-model";
 
 const documentAction = (kind: "set" | "clear" | "insert" | "append", target: "string" | "array", operand: "string" | null) => ({
   kind,
@@ -26,6 +26,15 @@ describe("ruleDirectionLabel", () => {
   it("labels the two message directions shown in the unified rule list", () => {
     expect(ruleDirectionLabel("proxy_to_upstream")).toBe("上行");
     expect(ruleDirectionLabel("proxy_to_app")).toBe("下行");
+  });
+});
+
+describe("ruleActionKindLabel", () => {
+  it("uses Chinese labels for HTTP actions", () => {
+    expect(ruleActionKindLabel("replace_body_text")).toBe("替换当前 Body");
+    expect(ruleActionKindLabel("delay")).toBe("固定延迟");
+    expect(ruleActionKindLabel("mock_response")).toBe("模拟响应");
+    expect(ruleActionKindLabel("disconnect_during_downstream_write")).toBe("下游写入中断开");
   });
 });
 

@@ -6,8 +6,8 @@
 use super::Application;
 use crate::{
     RuleActionCapabilityViewModel, RuleActionKind, RuleMatchFieldCapabilityViewModel,
-    RuleMatchFieldKind, RuleMatchOperatorKind, RuleMatchSelectorKind, RuleStage,
-    RuleStageCapabilityViewModel, RuleTrafficDirection,
+    RuleMatchFieldKind, RuleMatchOperatorKind, RuleStage, RuleStageCapabilityViewModel,
+    RuleTrafficDirection,
 };
 
 impl Application {
@@ -49,17 +49,10 @@ pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel
     };
     let match_fields = vec![
         capability(Field::Method, vec![Operator::Equals], None),
-        capability(Field::RequestTarget, string_operators.clone(), None),
-        capability(
-            Field::Header,
-            string_operators,
-            Some(RuleMatchSelectorKind::HeaderNamePointer),
-        ),
+        capability(Field::RequestTarget, string_operators, None),
     ];
     let common = [
-        Action::SetJsonField,
         Action::ReplaceBodyText,
-        Action::SetHeader,
         Action::Delay,
         Action::Jitter,
         Action::Throttle,
@@ -75,7 +68,6 @@ pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel
                 (Action::UpstreamWriteTimeout, true),
                 (Action::UpstreamReadTimeout, true),
                 (Action::DropUpstreamResponse, true),
-                (Action::MockResponse, true),
                 (Action::DisconnectDuringUpstreamWrite, true),
             ])
             .collect(),
@@ -84,7 +76,6 @@ pub(super) fn stage_capability(stage: RuleStage) -> RuleStageCapabilityViewModel
             .map(|kind| (kind, false))
             .chain([
                 (Action::CustomHttpStatus, false),
-                (Action::MockResponse, true),
                 (Action::InvalidJson, true),
                 (Action::IncorrectContentLength, true),
                 (Action::TruncateResponse, true),
@@ -154,9 +145,31 @@ mod tests {
                 vec![
                     RuleMatchFieldKind::Method,
                     RuleMatchFieldKind::RequestTarget,
-                    RuleMatchFieldKind::Header,
                 ]
             );
+        }
+    }
+
+    #[test]
+    fn http_rule_editor_excludes_redundant_manual_actions() {
+        use RuleActionKind as Action;
+
+        let request = stage_capability(RuleStage::ProxyToUpstream)
+            .actions
+            .into_iter()
+            .map(|action| action.kind)
+            .collect::<Vec<_>>();
+        let response = stage_capability(RuleStage::ProxyToApp)
+            .actions
+            .into_iter()
+            .map(|action| action.kind)
+            .collect::<Vec<_>>();
+
+        for actions in [&request, &response] {
+            assert!(!actions.contains(&Action::SetJsonField));
+            assert!(!actions.contains(&Action::SetHeader));
+            assert!(!actions.contains(&Action::MockResponse));
+            assert!(actions.contains(&Action::ReplaceBodyText));
         }
     }
 }
