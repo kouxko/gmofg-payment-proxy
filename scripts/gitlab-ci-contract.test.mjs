@@ -125,11 +125,19 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(
     variables,
-    /^[ ]{2}PERL_MAKETEXT_ARCHIVE_URL: "https:\/\/mirrors\.aliyun\.com\/CPAN\/modules\/by-module\/Locale\/Locale-Maketext-Simple-0\.21\.tar\.gz"$/mu,
+    /^[ ]{2}WINDOWS_PERL_PACKAGE_URL: "https:\/\/mirrors\.tuna\.tsinghua\.edu\.cn\/msys2\/mingw\/mingw64\/mingw-w64-x86_64-perl-5\.38\.5-1-any\.pkg\.tar\.zst"$/mu,
   );
   assert.match(
     variables,
-    /^[ ]{2}PERL_MAKEMAKER_ARCHIVE_URL: "https:\/\/mirrors\.aliyun\.com\/CPAN\/authors\/id\/B\/BI\/BINGOS\/ExtUtils-MakeMaker-7\.76\.tar\.gz"$/mu,
+    /^[ ]{2}WINDOWS_PERL_GCC_LIBS_PACKAGE_URL: "https:\/\/mirrors\.tuna\.tsinghua\.edu\.cn\/msys2\/mingw\/mingw64\/mingw-w64-x86_64-gcc-libs-15\.2\.0-14-any\.pkg\.tar\.zst"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}WINDOWS_PERL_PTHREAD_PACKAGE_URL: "https:\/\/mirrors\.tuna\.tsinghua\.edu\.cn\/msys2\/mingw\/mingw64\/mingw-w64-x86_64-libwinpthread-git-12\.0\.0\.r747\.g1a99f8514-1-any\.pkg\.tar\.zst"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}WINDOWS_PERL_TZDATA_PACKAGE_URL: "https:\/\/mirrors\.tuna\.tsinghua\.edu\.cn\/msys2\/mingw\/mingw64\/mingw-w64-x86_64-tzdata-2026c-1-any\.pkg\.tar\.zst"$/mu,
   );
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
@@ -210,15 +218,19 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(windowsBootstrap, /usr\/bin\/perl\.exe/u);
   assert.match(
     windowsBootstrap,
-    /-MLocale::Maketext::Simple -MExtUtils::MakeMaker -MIPC::Cmd -e "1"/u,
+    /exit\(\$\^O eq "MSWin32" \? 0 : 1\)/u,
   );
-  assert.match(windowsBootstrap, /PERL_MAKETEXT_ARCHIVE_URL/u);
-  assert.match(windowsBootstrap, /PERL_MAKEMAKER_ARCHIVE_URL/u);
-  assert.match(windowsBootstrap, /Aliyun CPAN mirror/u);
+  assert.match(windowsBootstrap, /WINDOWS_PERL_PACKAGE_URL/u);
+  assert.match(windowsBootstrap, /WINDOWS_PERL_GCC_LIBS_PACKAGE_URL/u);
+  assert.match(windowsBootstrap, /WINDOWS_PERL_PTHREAD_PACKAGE_URL/u);
+  assert.match(windowsBootstrap, /WINDOWS_PERL_TZDATA_PACKAGE_URL/u);
+  assert.match(windowsBootstrap, /Tsinghua MSYS2 mirror/u);
+  assert.match(windowsBootstrap, /eval --no-lock/u);
+  assert.match(windowsBootstrap, /npm:fzstd@0\.1\.1/u);
   assert.match(windowsBootstrap, /\$env:PERL5LIB/u);
   assert.match(
     windowsBootstrap,
-    /A complete Perl runtime with Locale::Maketext::Simple and ExtUtils::MakeMaker is required to build vendored OpenSSL on Windows/u,
+    /A native Windows Perl runtime with OpenSSL's required core modules is required to build vendored OpenSSL on Windows/u,
   );
   assert.match(
     windowsBootstrap,

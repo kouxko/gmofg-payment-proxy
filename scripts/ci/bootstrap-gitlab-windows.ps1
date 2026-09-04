@@ -14,7 +14,9 @@ $env:CARGO_HOME = if ($env:CARGO_HOME) { $env:CARGO_HOME } else { Join-Path $Rep
 $env:RUSTUP_HOME = if ($env:RUSTUP_HOME) { $env:RUSTUP_HOME } else { Join-Path $RepositoryRoot ".ci-cache/rustup" }
 $env:DENO_INSTALL = if ($env:DENO_INSTALL) { $env:DENO_INSTALL } else { Join-Path $ToolsRoot "deno" }
 $env:DENO_DIR = if ($env:DENO_DIR) { $env:DENO_DIR } else { Join-Path $RepositoryRoot ".ci-cache/deno-cache" }
-$PerlModulesRoot = Join-Path $ToolsRoot "perl-modules"
+$WindowsPerlRoot = Join-Path $ToolsRoot "windows-perl"
+$WindowsPerlBin = Join-Path $WindowsPerlRoot "mingw64/bin"
+$WindowsPerlLibraryRoot = Join-Path $WindowsPerlRoot "mingw64/lib/perl5"
 
 @(
     $ToolsRoot,
@@ -22,15 +24,22 @@ $PerlModulesRoot = Join-Path $ToolsRoot "perl-modules"
     $env:RUSTUP_HOME,
     $env:DENO_INSTALL,
     $env:DENO_DIR,
-    $PerlModulesRoot
+    $WindowsPerlRoot
 ) | ForEach-Object {
     New-Item -ItemType Directory -Force -Path $_ | Out-Null
 }
 
-if ([string]::IsNullOrWhiteSpace($env:PERL5LIB)) {
-    $env:PERL5LIB = $PerlModulesRoot
-} else {
-    $env:PERL5LIB = "$PerlModulesRoot;$env:PERL5LIB"
+function Enable-NativeWindowsPerlEnvironment {
+    $PerlLibraryPaths = @(
+        (Join-Path $WindowsPerlLibraryRoot "site_perl"),
+        (Join-Path $WindowsPerlLibraryRoot "vendor_perl"),
+        (Join-Path $WindowsPerlLibraryRoot "core_perl")
+    ) -join ";"
+    $env:PERL5LIB = if ([string]::IsNullOrWhiteSpace($env:PERL5LIB)) {
+        $PerlLibraryPaths
+    } else {
+        "$PerlLibraryPaths;$env:PERL5LIB"
+    }
 }
 
 $CargoConfig = @"
@@ -99,6 +108,7 @@ function Import-VcVars64([System.IO.FileInfo]$VcVars) {
 
 function Find-Perl {
     $Candidates = @()
+    $Candidates += Join-Path $WindowsPerlBin "perl.exe"
     $PathPerl = Get-Command perl.exe -ErrorAction SilentlyContinue
     if ($PathPerl) {
         $Candidates += $PathPerl.Source
@@ -113,7 +123,12 @@ function Find-Perl {
 
     foreach ($Candidate in $Candidates | Select-Object -Unique) {
         if (Test-Path $Candidate -PathType Leaf) {
-            & $Candidate -MLocale::Maketext::Simple -MExtUtils::MakeMaker -MIPC::Cmd -e "1" 2>$null
+            & $Candidate `
+                -MLocale::Maketext::Simple `
+                -MExtUtils::MakeMaker `
+                -MIPC::Cmd `
+                -e 'exit($^O eq "MSWin32" ? 0 : 1)' `
+                2>$null
             if ($LASTEXITCODE -eq 0) {
                 $PerlDirectory = Split-Path -Parent $Candidate
                 if (Test-Path (Join-Path $PerlDirectory "link.exe") -PathType Leaf) {
@@ -128,37 +143,41 @@ function Find-Perl {
     return $null
 }
 
-function Install-PerlModuleArchive(
+function Expand-Msys2Package(
     [string]$Name,
-    [string]$Url,
-    [string]$ArchiveDirectory
+    [string]$Url
 ) {
     if ([string]::IsNullOrWhiteSpace($Url)) {
-        throw "$Name archive URL is required to complete the Git for Windows Perl runtime."
+        throw "$Name package URL is required to install native Windows Perl."
     }
 
-    $Archive = Join-Path $ToolsRoot "$ArchiveDirectory.tar.gz"
-    $ExtractRoot = Join-Path $ToolsRoot "$ArchiveDirectory-extracted"
-    $ExtractedLib = Join-Path $ExtractRoot "$ArchiveDirectory/lib"
-    Write-Host "Downloading $Name from the Aliyun CPAN mirror."
+    $Archive = Join-Path $ToolsRoot "$Name.pkg.tar.zst"
+    Write-Host "Downloading $Name from the Tsinghua MSYS2 mirror."
     Invoke-WebRequest -UseBasicParsing -Uri $Url -OutFile $Archive
-    New-Item -ItemType Directory -Force -Path $ExtractRoot | Out-Null
-    & tar.exe -xzf $Archive -C $ExtractRoot
-    if ($LASTEXITCODE -ne 0 -or -not (Test-Path $ExtractedLib -PathType Container)) {
-        throw "Failed to extract $Name into the Git for Windows Perl module path."
+
+    & tar.exe -xf $Archive -C $WindowsPerlRoot
+    if ($LASTEXITCODE -ne 0) {
+        $TarArchive = Join-Path $ToolsRoot "$Name.pkg.tar"
+        & $DenoExecutable eval --no-lock `
+            'import { decompress } from "npm:fzstd@0.1.1"; const source = await Deno.readFile(Deno.args[0]); await Deno.writeFile(Deno.args[1], decompress(source));' `
+            $Archive `
+            $TarArchive
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to decompress the $Name package."
+        }
+        & tar.exe -xf $TarArchive -C $WindowsPerlRoot
+        if ($LASTEXITCODE -ne 0) {
+            throw "Failed to extract the $Name package."
+        }
     }
-    Copy-Item -Path (Join-Path $ExtractedLib "*") -Destination $PerlModulesRoot -Recurse -Force
 }
 
-function Install-PerlCoreModules {
-    Install-PerlModuleArchive `
-        -Name "Locale::Maketext::Simple" `
-        -Url $env:PERL_MAKETEXT_ARCHIVE_URL `
-        -ArchiveDirectory "Locale-Maketext-Simple-0.21"
-    Install-PerlModuleArchive `
-        -Name "ExtUtils::MakeMaker" `
-        -Url $env:PERL_MAKEMAKER_ARCHIVE_URL `
-        -ArchiveDirectory "ExtUtils-MakeMaker-7.76"
+function Install-NativeWindowsPerl {
+    Expand-Msys2Package -Name "windows-perl" -Url $env:WINDOWS_PERL_PACKAGE_URL
+    Expand-Msys2Package -Name "windows-perl-gcc-libs" -Url $env:WINDOWS_PERL_GCC_LIBS_PACKAGE_URL
+    Expand-Msys2Package -Name "windows-perl-pthread" -Url $env:WINDOWS_PERL_PTHREAD_PACKAGE_URL
+    Expand-Msys2Package -Name "windows-perl-tzdata" -Url $env:WINDOWS_PERL_TZDATA_PACKAGE_URL
+    Enable-NativeWindowsPerlEnvironment
 }
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
     Get-DenoVersion $DenoExecutable
@@ -254,13 +273,14 @@ if ($RequireMsvc) {
     Write-Host "MSVC compiler: $($Cl.Source)"
     Write-Host "MSVC linker: $($Link.Source)"
 
+    Enable-NativeWindowsPerlEnvironment
     $Perl = Find-Perl
     if (-not $Perl) {
-        Install-PerlCoreModules
+        Install-NativeWindowsPerl
         $Perl = Find-Perl
     }
     if (-not $Perl) {
-        throw "A complete Perl runtime with Locale::Maketext::Simple and ExtUtils::MakeMaker is required to build vendored OpenSSL on Windows."
+        throw "A native Windows Perl runtime with OpenSSL's required core modules is required to build vendored OpenSSL on Windows."
     }
     $LinkAfterPerl = Get-Command link.exe -ErrorAction SilentlyContinue
     if (-not $LinkAfterPerl -or $LinkAfterPerl.Source -ne $Link.Source) {
