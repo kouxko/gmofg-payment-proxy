@@ -208,7 +208,7 @@ describe("RuleDefinitionEditor single pair", () => {
     expect(action.queryByRole("button", { name: /创建|添加/ })).not.toBeInTheDocument();
   });
 
-  it("reverse-fills an existing HTTP action and saves its edited parameters", async () => {
+  it("reverse-fills an existing HTTP action into explicit fields and saves it", async () => {
     const existingAction = { source: "http", value: { Jitter: { minimum_milliseconds: 1, maximum_milliseconds: 2, scope: "PerChunk" as const } } } as const;
     const nextAction = { Jitter: { minimum_milliseconds: 3, maximum_milliseconds: 5, scope: "PerChunk" as const } };
     mocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(requestTarget);
@@ -219,15 +219,60 @@ describe("RuleDefinitionEditor single pair", () => {
     const selectorRow = screen.getByTestId("http-action-selector-row");
     expect(within(selectorRow).getByRole("button", { name: /动作来源/ })).toHaveTextContent("HTTP");
     expect(within(selectorRow).getByRole("button", { name: /HTTP 动作类型/ })).toHaveTextContent("随机延迟");
-    const parameters = screen.getByRole("textbox", { name: "动作参数 JSON" });
-    expect(selectorRow).not.toContainElement(parameters);
-    expect(parameters.closest("[data-testid='http-action-parameters-row']")).toHaveClass("w-full");
-    expect(parameters).toHaveValue(JSON.stringify(existingAction.value.Jitter));
-    fireEvent.change(parameters, { target: { value: JSON.stringify(nextAction.Jitter) } });
+    expect(screen.queryByRole("textbox", { name: "动作参数 JSON" })).not.toBeInTheDocument();
+    expect(screen.getByTestId("http-action-parameters-row")).toHaveClass("w-full");
+    expect(screen.getByLabelText("最小抖动（毫秒）")).toHaveValue(1);
+    expect(screen.getByLabelText("最大抖动（毫秒）")).toHaveValue(2);
+    expect(screen.getByRole("button", { name: /抖动方式/ })).toHaveTextContent("每个分块");
+    fireEvent.change(screen.getByLabelText("最小抖动（毫秒）"), { target: { value: "3" } });
+    fireEvent.change(screen.getByLabelText("最大抖动（毫秒）"), { target: { value: "5" } });
     await user.click(screen.getByRole("button", { name: "保存规则" }));
 
-    await waitFor(() => expect(mocks.ruleDefinitionActionDraft).toHaveBeenCalledWith({ kind: "jitter", parameters_json: JSON.stringify(nextAction.Jitter) }, "proxy_to_upstream"));
+    await waitFor(() => expect(mocks.ruleDefinitionActionDraft).toHaveBeenCalledWith({
+      kind: "jitter",
+      parameters_json: JSON.stringify({ minimum_milliseconds: 3, maximum_milliseconds: 5, scope: "per_chunk" }),
+    }, "proxy_to_upstream"));
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ action: { source: "http", value: nextAction } }) } }) }));
+  });
+
+  it("uses labeled delay and throttle fields instead of raw JSON", async () => {
+    const editable = structuredClone(context); if (editable.content.type !== "http") throw new Error("HTTP required");
+    editable.content.value.stages[0].http!.actions = [
+      { kind: "delay", terminal: false, traffic_direction: null, parameters_required: true },
+      { kind: "throttle", terminal: false, traffic_direction: "upstream", parameters_required: true },
+    ];
+    const delay = { source: "http", value: { Delay: { milliseconds: 80 } } } as const;
+    const nextAction = { Delay: { milliseconds: 125 } };
+    mocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(requestTarget);
+    mocks.ruleDefinitionActionDraft.mockResolvedValue(nextAction);
+    const user = userEvent.setup(); render(<Harness contextValue={editable} initial={input(requestTarget, delay)} />);
+
+    expect(screen.getByLabelText("延迟时间（毫秒）")).toHaveValue(80);
+    expect(screen.queryByText("动作参数 JSON")).not.toBeInTheDocument();
+    fireEvent.change(screen.getByLabelText("延迟时间（毫秒）"), { target: { value: "125" } });
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(mocks.ruleDefinitionActionDraft).toHaveBeenCalledWith({ kind: "delay", parameters_json: JSON.stringify({ milliseconds: 125 }) }, "proxy_to_upstream"));
+
+    await selectOption(user, "HTTP 动作类型", "限速");
+    expect(screen.getByLabelText("速率（B/s）")).toHaveValue(null);
+    expect(screen.getByLabelText("分块大小（字节）")).toHaveValue(null);
+    expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
+  });
+
+  it("hides the parameter area for parameterless HTTP actions", async () => {
+    const editable = structuredClone(context); if (editable.content.type !== "http") throw new Error("HTTP required");
+    editable.content.value.stages[0].http!.actions = [
+      { kind: "disconnect_before_upstream", terminal: true, traffic_direction: null, parameters_required: false },
+    ];
+    const action = { source: "terminal", value: "DisconnectBeforeUpstream" } as const;
+    mocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(requestTarget);
+    mocks.ruleDefinitionActionDraft.mockResolvedValue({ Terminal: "DisconnectBeforeUpstream" });
+    const user = userEvent.setup(); render(<Harness contextValue={editable} initial={input(requestTarget, action)} />);
+
+    expect(screen.queryByTestId("http-action-parameters-row")).not.toBeInTheDocument();
+    expect(screen.queryByText("动作参数 JSON")).not.toBeInTheDocument();
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(mocks.ruleDefinitionActionDraft).toHaveBeenCalledWith({ kind: "disconnect_before_upstream", parameters_json: null }, "proxy_to_upstream"));
   });
 
   it("deletes an existing rule immediately without a second confirmation", async () => {

@@ -1,0 +1,32 @@
+{
+  "task_id": "TASK-20260904-003",
+  "case_id": "HTTP-ACTION-PARAMETER-FORMS-001",
+  "derived_from": {
+    "task_id": "TASK-20260904-002",
+    "case_id": "HTTP-RULE-EDITOR-SIMPLIFICATION-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-002/HTTP-RULE-EDITOR-SIMPLIFICATION-001"
+  },
+  "environment": {
+    "os": "macOS 27.0 (26A5425a)",
+    "architecture": "arm64",
+    "rust": "1.98.0",
+    "deno": "2.9.6"
+  },
+  "started_at": "2026-09-04 14:02:28 +08:00",
+  "completed_at": "2026-09-04 14:26:46 +08:00",
+  "result": "PASS_WITH_INSTALLED_UI_CONTENT_AUTOMATION_NOT_RUN_AND_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE",
+  "tested_state": "shared worktree with TASK-20260904-003 changes and unrelated certificate test modification preserved",
+  "installed_app": {
+    "path": "/Applications/Intercept Proxy.app",
+    "bundle_id": "com.interceptproxy.desktop",
+    "version": "1.0.0",
+    "executable_sha256": "9c3af992e43472c095bff14e87a747ca0310483bb6618376d8f54c8341967d23",
+    "pid": 62783,
+    "backup_path": "/Users/codin/.Trash/Intercept Proxy.app.codex-old-20260904-142245"
+  },
+  "not_applicable": {
+    "real_fault_data_plane": "Rust runtime semantics unchanged",
+    "windows_android_ci_push_release": "outside current local implementation and installation scope",
+    "installed_webview_click_test": "native app window detected but WebView content was unavailable on the current macOS Space"
+  }
+}

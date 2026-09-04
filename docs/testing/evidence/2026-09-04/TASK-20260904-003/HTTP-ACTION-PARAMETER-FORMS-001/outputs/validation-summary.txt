@@ -1,0 +1,18 @@
+TASK-20260904-003 / HTTP-ACTION-PARAMETER-FORMS-001
+
+RED: rule editor 2 expected failures against the raw JSON implementation
+Targeted frontend: 22/22 PASS
+Full frontend: 65 files, 566/566 PASS
+TypeScript typecheck: PASS
+ESLint: PASS
+Next production build: PASS, 13 static pages
+Application action factory: 1/1 PASS
+Generated bindings freshness and determinism: PASS
+Architecture and frontend Rust-only scans: PASS
+git diff --check: PASS
+Source size: KNOWN UNRELATED FAILURE, 7 pre-existing files over 500 lines
+Tauri app bundle: PASS
+Installed app signature: PASS deep/strict
+Installed executable SHA-256: 9c3af992e43472c095bff14e87a747ca0310483bb6618376d8f54c8341967d23
+Installed process: PID 62783
+Installed WebView content automation: NOT_RUN, current macOS Space did not expose WebView content

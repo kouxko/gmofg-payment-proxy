@@ -1,0 +1,13 @@
+npm test -- --run src/features/rules/rule-http-action-parameters.test.ts src/features/rules/rule-definition-editor.test.tsx
+npm test -- --run
+npm run typecheck
+npm run lint
+npm run build
+deno task check:bindings
+deno task scan:architecture
+deno task scan:source-size
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib requirements_tests::unified_rules::unified_http_factories_return_domain_condition_and_action_types -- --exact --nocapture
+git diff --check
+deno task tauri build --bundles app
+codesign --verify --deep --strict --verbose=2 "/Applications/Intercept Proxy.app"
+shasum -a 256 "/Applications/Intercept Proxy.app/Contents/MacOS/intercept-proxy"
