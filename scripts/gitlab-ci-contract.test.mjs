@@ -117,6 +117,10 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   );
   assert.match(
     variables,
+    /^[ ]{2}TAURI_BUNDLER_TOOLS_GITHUB_MIRROR: "https:\/\/gh-proxy\.com\/"$/mu,
+  );
+  assert.match(
+    variables,
     /^[ ]{2}VISUAL_STUDIO_BUILD_TOOLS_URL: "https:\/\/aka\.ms\/vs\/17\/release\/vs_buildtools\.exe"$/mu,
   );
   assert.match(

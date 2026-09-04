@@ -40,6 +40,7 @@ variables:
   ANDROID_NDK_ARCHIVE_URL: "https://mirrors.cloud.tencent.com/AndroidSDK/android-ndk-r29-linux.zip"
   ANDROID_COMMAND_LINE_TOOLS_VERSION: "15859902"
   DENO_DIST_BASE_URL: "https://cdn.npmmirror.com/binaries/deno"
+  TAURI_BUNDLER_TOOLS_GITHUB_MIRROR: "https://gh-proxy.com/"
   VISUAL_STUDIO_BUILD_TOOLS_URL: "https://aka.ms/vs/17/release/vs_buildtools.exe"
   VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH: 'C:\BuildTools'
   WINDOWS_PERL_PACKAGE_URL: "https://mirrors.tuna.tsinghua.edu.cn/msys2/mingw/mingw64/mingw-w64-x86_64-perl-5.38.5-1-any.pkg.tar.zst"
