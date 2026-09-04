@@ -518,8 +518,11 @@ deno task check
 - `platform=all`：构建 Windows 和 macOS；
 - `v*` tag：正式发布并执行完整验证；三项 Authenticode 配置全部存在时签名 Windows 产物，全部缺失时明确发布 unsigned 产物。
 
-`.github/workflows/windows-quick-build.yml` 是独立的 Windows 快速出包入口，只构建并上传未签名
-`intercept-proxy.exe`，不运行 Android、完整 Verify、installer 或 macOS job，也不能替代完整门禁。
+`.github/workflows/windows-quick-build.yml` 是独立的快速验证包入口，只手动运行 Android Companion
+与未签名 Windows `intercept-proxy.exe` 两个构建 job。Windows 构建嵌入同次 APK，最终 quick-validation
+artifact 包含 `intercept-proxy.exe` 与运行时可解析的 `resources/android-companion.apk`；该流程不运行 Coverage、完整 Verify、installer 或 macOS，也不能替代完整门禁。
+Gradle、Deno、Next.js 与 Windows Cargo 使用跨重复运行的稳定缓存，其中 Next.js 和 Cargo 与完整桌面流程共享相同 key，Cargo 使用
+`desktop-${{ runner.os }}` key 且不加入 job ID；GitHub 自身的分支缓存可见性规则仍然适用。
 
 Windows 产物包括 MSI、NSIS 和 portable ZIP。分支构建明确是 unsigned；正式 tag 在签名配置完整时对主程序、
 MSI、NSIS 的签名、签发者和时间戳执行 fail-closed 检查，在三项配置全部缺失时校验产物确实未签名并使用
