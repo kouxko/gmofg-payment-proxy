@@ -12,7 +12,7 @@ const quickWorkflowPath = path.join(
   "../.github/workflows/windows-quick-build.yml",
 );
 
-test("Windows quick workflow builds only one unsigned executable artifact", async () => {
+test("Windows quick workflow builds Android then one unsigned Windows executable", async () => {
   const source = await readFile(quickWorkflowPath, "utf8");
 
   assert.match(source, /^name: Windows quick executable$/mu);
@@ -22,20 +22,42 @@ test("Windows quick workflow builds only one unsigned executable artifact", asyn
     /group: windows-quick-executable-\$\{\{ github\.ref \}\}/u,
   );
   assert.match(source, /permissions:\s+contents: read/u);
+  assert.match(source, /^  android-companion:$/mu);
   assert.match(source, /^  build-windows-executable:$/mu);
+  assert.match(source, /needs: android-companion/u);
   assert.match(source, /runs-on: windows-latest/u);
+  assert.match(source, /\.\/scripts\/build-android-companion\.sh/u);
+  assert.match(source, /name: intercept-proxy-android-companion/u);
+  assert.match(source, /actions\/download-artifact@/u);
+  assert.match(source, /\.\/scripts\/stage-android-companion\.sh/u);
+  assert.match(source, /path: \.next\/cache/u);
+  assert.match(
+    source,
+    /key: \$\{\{ runner\.os \}\}-next-\$\{\{ hashFiles\('deno\.lock', 'package\.json', 'next\.config\.\*', 'src\/\*\*', 'public\/\*\*'\) \}\}/u,
+  );
   assert.match(
     source,
     /cargo build --manifest-path src-tauri\/Cargo\.toml --release\s+--features tauri\/custom-protocol --bin intercept-proxy/u,
   );
-  assert.match(source, /TAURI_CONFIG: '\{"bundle":\{"resources":\[\]\}\}'/u);
+  assert.doesNotMatch(source, /TAURI_CONFIG/u);
   assert.match(source, /src-tauri\/target\/release\/intercept-proxy\.exe/u);
-  assert.match(source, /name: Intercept-Proxy-unsigned-executable-x64/u);
+  assert.match(source, /quick-artifact\/intercept-proxy\.exe/u);
+  assert.match(
+    source,
+    /quick-artifact\/resources\/android-companion\.apk/u,
+  );
   assert.doesNotMatch(
     source,
-    /android-companion|build-macos|Verify before packaging|pnpm audit|cargo test|cargo clippy|pull_request:|push:/u,
+    /quick-artifact\/intercept-proxy-android-companion\.apk/u,
   );
-  assert.equal((source.match(/^  [a-z][a-z0-9-]+:\s*$/gmu) ?? []).length, 1);
+  assert.match(source, /name: Intercept-Proxy-quick-validation-x64/u);
+  assert.match(source, /shared-key: desktop-\$\{\{ runner\.os \}\}/u);
+  assert.match(source, /add-job-id-key: false/u);
+  assert.doesNotMatch(
+    source,
+    /build-macos|Verify before packaging|Coverage gates|MSI|NSIS|cargo test|cargo clippy|pull_request:|push:/u,
+  );
+  assert.equal((source.match(/^  [a-z][a-z0-9-]+:\s*$/gmu) ?? []).length, 2);
 });
 
 test("full desktop release never exposes the quick-build bypass", async () => {
