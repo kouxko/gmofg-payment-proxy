@@ -40,6 +40,8 @@ variables:
   ANDROID_NDK_ARCHIVE_URL: "https://mirrors.cloud.tencent.com/AndroidSDK/android-ndk-r29-linux.zip"
   ANDROID_COMMAND_LINE_TOOLS_VERSION: "15859902"
   DENO_DIST_BASE_URL: "https://cdn.npmmirror.com/binaries/deno"
+  VISUAL_STUDIO_BUILD_TOOLS_URL: "https://aka.ms/vs/17/release/vs_buildtools.exe"
+  VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH: 'C:\BuildTools'
   CARGO_TERM_COLOR: "always"
   CARGO_INCREMENTAL: "0"
 
@@ -312,7 +314,7 @@ windows_build_only:
   stage: package
   tags:
     - "slave4"
-  timeout: 1h
+  timeout: 2h
   interruptible: true
   variables:
     OPENSSL_STATIC: "1"

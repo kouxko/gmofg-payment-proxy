@@ -48,6 +48,46 @@ function Get-DenoVersion([string]$Executable) {
     }
     return $null
 }
+
+function Find-VcVars64 {
+    $Candidates = @()
+    if (-not [string]::IsNullOrWhiteSpace($env:VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH)) {
+        $ConfiguredVcVars = Join-Path `
+            $env:VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH `
+            "VC/Auxiliary/Build/vcvars64.bat"
+        if (Test-Path $ConfiguredVcVars -PathType Leaf) {
+            $Candidates += Get-Item $ConfiguredVcVars
+        }
+    }
+
+    foreach ($ProgramFilesRoot in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
+        if (-not [string]::IsNullOrWhiteSpace($ProgramFilesRoot)) {
+            $Candidates += Get-ChildItem `
+                -Path (Join-Path $ProgramFilesRoot "Microsoft Visual Studio/*/*/VC/Auxiliary/Build/vcvars64.bat") `
+                -File `
+                -ErrorAction SilentlyContinue
+        }
+    }
+
+    return $Candidates |
+        Sort-Object FullName -Descending -Unique |
+        Select-Object -First 1
+}
+
+function Import-VcVars64([System.IO.FileInfo]$VcVars) {
+    $EnvironmentLines = & cmd.exe /d /s /c "`"$($VcVars.FullName)`" >nul && set"
+    if ($LASTEXITCODE -ne 0) {
+        throw "Failed to load the MSVC environment from $($VcVars.FullName)."
+    }
+    foreach ($EnvironmentLine in $EnvironmentLines) {
+        $Separator = $EnvironmentLine.IndexOf('=')
+        if ($Separator -gt 0) {
+            $Name = $EnvironmentLine.Substring(0, $Separator)
+            $Value = $EnvironmentLine.Substring($Separator + 1)
+            Set-Item -Path "Env:$Name" -Value $Value
+        }
+    }
+}
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
     Get-DenoVersion $DenoExecutable
 } else {
@@ -93,36 +133,46 @@ if ($RequireMsvc) {
     $Cl = Get-Command cl.exe -ErrorAction SilentlyContinue
     $Link = Get-Command link.exe -ErrorAction SilentlyContinue
     if (-not $Cl -or -not $Link) {
-        $VcVarsCandidates = @()
-        foreach ($ProgramFilesRoot in @($env:ProgramFiles, ${env:ProgramFiles(x86)})) {
-            if (-not [string]::IsNullOrWhiteSpace($ProgramFilesRoot)) {
-                $VcVarsCandidates += Get-ChildItem `
-                    -Path (Join-Path $ProgramFilesRoot "Microsoft Visual Studio/*/*/VC/Auxiliary/Build/vcvars64.bat") `
-                    -File `
-                    -ErrorAction SilentlyContinue
-            }
-        }
-
-        $VcVars = $VcVarsCandidates |
-            Sort-Object FullName -Descending |
-            Select-Object -First 1
+        $VcVars = Find-VcVars64
         if (-not $VcVars) {
-            throw "Visual Studio C++ x64 build tools were not found in PATH or standard installation directories."
-        }
+            if ([string]::IsNullOrWhiteSpace($env:VISUAL_STUDIO_BUILD_TOOLS_URL)) {
+                throw "VISUAL_STUDIO_BUILD_TOOLS_URL is required to install the missing MSVC toolchain."
+            }
+            if ([string]::IsNullOrWhiteSpace($env:VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH)) {
+                throw "VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH is required to install the missing MSVC toolchain."
+            }
 
-        $EnvironmentLines = & cmd.exe /d /s /c "`"$($VcVars.FullName)`" >nul && set"
-        if ($LASTEXITCODE -ne 0) {
-            throw "Failed to load the MSVC environment from $($VcVars.FullName)."
-        }
-        foreach ($EnvironmentLine in $EnvironmentLines) {
-            $Separator = $EnvironmentLine.IndexOf('=')
-            if ($Separator -gt 0) {
-                $Name = $EnvironmentLine.Substring(0, $Separator)
-                $Value = $EnvironmentLine.Substring($Separator + 1)
-                Set-Item -Path "Env:$Name" -Value $Value
+            $BuildToolsInstaller = Join-Path $ToolsRoot "vs_buildtools.exe"
+            Write-Host "Downloading Visual Studio 2022 Build Tools bootstrapper."
+            Invoke-WebRequest `
+                -UseBasicParsing `
+                -Uri $env:VISUAL_STUDIO_BUILD_TOOLS_URL `
+                -OutFile $BuildToolsInstaller
+
+            Write-Host "Installing Visual Studio 2022 C++ Build Tools at $env:VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH."
+            $BuildToolsProcess = Start-Process `
+                -FilePath $BuildToolsInstaller `
+                -ArgumentList @(
+                    "--installPath", $env:VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH,
+                    "--add", "Microsoft.VisualStudio.Workload.VCTools",
+                    "--includeRecommended",
+                    "--quiet",
+                    "--wait",
+                    "--norestart",
+                    "--nocache"
+                ) `
+                -Wait `
+                -PassThru
+            if ($BuildToolsProcess.ExitCode -notin @(0, 3010)) {
+                throw "Visual Studio Build Tools installation failed with exit code $($BuildToolsProcess.ExitCode)."
+            }
+
+            $VcVars = Find-VcVars64
+            if (-not $VcVars) {
+                throw "Visual Studio Build Tools installation completed, but vcvars64.bat was not found."
             }
         }
-
+        Import-VcVars64 $VcVars
         $Cl = Get-Command cl.exe -ErrorAction SilentlyContinue
         $Link = Get-Command link.exe -ErrorAction SilentlyContinue
     }

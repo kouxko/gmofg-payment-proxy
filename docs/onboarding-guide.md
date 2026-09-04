@@ -541,7 +541,9 @@ GitLab Linux Job 使用华为云作为 Ubuntu apt 源，Deno 本体和 npm 依�
 `registry.npmmirror.com`，Rust 工具链和 crates 使用 `rsproxy.cn`，Android Gradle 依赖使用阿里云
 Google/Maven Central 镜像，Gradle distribution 使用华为云镜像，Android SDK/NDK 固定版本归档使用
 腾讯云 AndroidSDK 镜像。Android 版本保持 API 36、Build Tools 36.0.0 和 NDK 29；Ubuntu apt 包不能
-替代这些版本。工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。
+替代这些版本。工具版本仍固定，但 CI 不再对下载归档执行 checksum 校验。`slave4` 缺少 MSVC 时，
+Windows 引导脚本会从微软官方 bootstrapper 静默安装 Visual Studio 2022 C++ Build Tools 到
+`C:\BuildTools`，安装后必须实际找到 `vcvars64.bat`、`cl.exe` 和 `link.exe` 才继续构建。
 
 ## 13. 安全红线
 

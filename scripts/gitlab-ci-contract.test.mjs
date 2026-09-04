@@ -115,6 +115,14 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
     variables,
     /^[ ]{2}DENO_DIST_BASE_URL: "https:\/\/cdn\.npmmirror\.com\/binaries\/deno"$/mu,
   );
+  assert.match(
+    variables,
+    /^[ ]{2}VISUAL_STUDIO_BUILD_TOOLS_URL: "https:\/\/aka\.ms\/vs\/17\/release\/vs_buildtools\.exe"$/mu,
+  );
+  assert.match(
+    variables,
+    /^[ ]{2}VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH: 'C:\\BuildTools'$/mu,
+  );
   assert.match(variables, /^[ ]{2}PIPELINE_MODE: "full"$/mu);
   assert.match(
     variables,
@@ -184,6 +192,13 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(linuxBootstrap, /awk 'NR == 1 \{ print \$2; exit \}'/u);
   assert.match(windowsBootstrap, /Get-Command cl\.exe/u);
   assert.match(windowsBootstrap, /vcvars64\.bat/u);
+  assert.match(
+    windowsBootstrap,
+    /Microsoft\.VisualStudio\.Workload\.VCTools/u,
+  );
+  assert.match(windowsBootstrap, /--includeRecommended/u);
+  assert.match(windowsBootstrap, /Start-Process/u);
+  assert.match(windowsBootstrap, /ExitCode -notin @\(0, 3010\)/u);
   assert.doesNotMatch(
     linuxBootstrap,
     /"ndk;\$ANDROID_NDK_VERSION"/u,
@@ -251,6 +266,7 @@ test("Android and Windows build-only mode packages the Companion without running
   }
 
   assert.match(buildOnlyJob, /^[ ]{4}- "slave4"$/mu);
+  assert.match(buildOnlyJob, /^[ ]{2}timeout: 2h$/mu);
   assert.match(
     buildOnlyJob,
     /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,
