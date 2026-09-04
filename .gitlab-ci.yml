@@ -348,7 +348,7 @@ windows_build_only:
     - >-
         .\scripts\ci\stage-android-companion-windows.ps1
         -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
-    - deno task tauri build --bundles msi,nsis
+    - deno task tauri build -vv --bundles msi,nsis
     - .\scripts\package-portable.ps1 -SkipBuild
   artifacts:
     name: "Intercept-Proxy-android-windows-build-$CI_COMMIT_SHORT_SHA"
