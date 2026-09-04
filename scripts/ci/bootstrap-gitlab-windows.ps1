@@ -95,9 +95,6 @@ function Find-Perl {
     if ($PathPerl) {
         $Candidates += $PathPerl.Source
     }
-    if (-not [string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_INSTALL_PATH)) {
-        $Candidates += Join-Path $env:STRAWBERRY_PERL_INSTALL_PATH "perl/bin/perl.exe"
-    }
     $Candidates += "C:\Strawberry\perl\bin\perl.exe"
     $Candidates += "C:\Perl64\bin\perl.exe"
     $Git = Get-Command git.exe -ErrorAction SilentlyContinue
@@ -123,34 +120,24 @@ function Find-Perl {
     return $null
 }
 
-function Install-StrawberryPerl {
-    if ([string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_MSI_URL)) {
-        throw "STRAWBERRY_PERL_MSI_URL is required to install a complete Perl runtime."
-    }
-    if ([string]::IsNullOrWhiteSpace($env:STRAWBERRY_PERL_INSTALL_PATH)) {
-        throw "STRAWBERRY_PERL_INSTALL_PATH is required to install a complete Perl runtime."
+function Install-PerlMaketextSimple {
+    if ([string]::IsNullOrWhiteSpace($env:PERL_MAKETEXT_SIMPLE_URL)) {
+        throw "PERL_MAKETEXT_SIMPLE_URL is required to complete the Git for Windows Perl runtime."
     }
 
-    $Installer = Join-Path $ToolsRoot "strawberry-perl-$env:STRAWBERRY_PERL_VERSION-64bit.msi"
-    Write-Host "Downloading Strawberry Perl $env:STRAWBERRY_PERL_VERSION."
+    $PerlModulesRoot = Join-Path $ToolsRoot "perl-modules"
+    $ModuleDirectory = Join-Path $PerlModulesRoot "Locale/Maketext"
+    $ModulePath = Join-Path $ModuleDirectory "Simple.pm"
+    New-Item -ItemType Directory -Force -Path $ModuleDirectory | Out-Null
+    Write-Host "Downloading the missing Locale::Maketext::Simple Perl module."
     Invoke-WebRequest `
         -UseBasicParsing `
-        -Uri $env:STRAWBERRY_PERL_MSI_URL `
-        -OutFile $Installer
-
-    Write-Host "Installing Strawberry Perl at $env:STRAWBERRY_PERL_INSTALL_PATH."
-    $InstallProcess = Start-Process `
-        -FilePath "msiexec.exe" `
-        -ArgumentList @(
-            "/i", $Installer,
-            "/qn",
-            "/norestart",
-            "INSTALLDIR=$env:STRAWBERRY_PERL_INSTALL_PATH"
-        ) `
-        -Wait `
-        -PassThru
-    if ($InstallProcess.ExitCode -notin @(0, 3010)) {
-        throw "Strawberry Perl installation failed with exit code $($InstallProcess.ExitCode)."
+        -Uri $env:PERL_MAKETEXT_SIMPLE_URL `
+        -OutFile $ModulePath
+    if ([string]::IsNullOrWhiteSpace($env:PERL5LIB)) {
+        $env:PERL5LIB = $PerlModulesRoot
+    } else {
+        $env:PERL5LIB = "$PerlModulesRoot;$env:PERL5LIB"
     }
 }
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
@@ -249,7 +236,7 @@ if ($RequireMsvc) {
 
     $Perl = Find-Perl
     if (-not $Perl) {
-        Install-StrawberryPerl
+        Install-PerlMaketextSimple
         $Perl = Find-Perl
     }
     if (-not $Perl) {

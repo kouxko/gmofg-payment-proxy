@@ -42,9 +42,7 @@ variables:
   DENO_DIST_BASE_URL: "https://cdn.npmmirror.com/binaries/deno"
   VISUAL_STUDIO_BUILD_TOOLS_URL: "https://aka.ms/vs/17/release/vs_buildtools.exe"
   VISUAL_STUDIO_BUILD_TOOLS_INSTALL_PATH: 'C:\BuildTools'
-  STRAWBERRY_PERL_VERSION: "5.42.3.1"
-  STRAWBERRY_PERL_MSI_URL: "https://github.com/StrawberryPerl/Perl-Dist-Strawberry/releases/download/SP_54231_64bit/strawberry-perl-5.42.3.1-64bit.msi"
-  STRAWBERRY_PERL_INSTALL_PATH: 'C:\Strawberry'
+  PERL_MAKETEXT_SIMPLE_URL: "https://raw.githubusercontent.com/Perl/perl5/v5.38.2/cpan/Locale-Maketext-Simple/lib/Locale/Maketext/Simple.pm"
   CARGO_TERM_COLOR: "always"
   CARGO_INCREMENTAL: "0"
 

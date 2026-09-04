@@ -545,7 +545,7 @@ Google/Maven Central 镜像，Gradle distribution 使用华为云镜像，Androi
 Windows 引导脚本会从微软官方 bootstrapper 静默安装 Visual Studio 2022 C++ Build Tools 到
 `C:\BuildTools`，安装后必须实际找到 `vcvars64.bat`、`cl.exe` 和 `link.exe` 才继续构建。Windows
 静态 OpenSSL 编译所需的 Perl 会先验证 `Locale::Maketext::Simple`；Git for Windows 的精简 Perl 不满足
-该条件时，从 Strawberry Perl 官方 GitHub release 静默安装固定版本到 `C:\Strawberry`，安装后再验证。
+该条件时，只从 Perl 官方源码仓库下载缺失模块并通过 `PERL5LIB` 加载，随后再次验证。
 该 Windows job 在 Git 检出清理时保留 `.ci-cache`，避免 Cargo 深层路径触发 Windows 文件名过长，
 失败时也保存缓存供下一次构建复用。
 
