@@ -1,0 +1,34 @@
+{
+  "task_id": "TASK-20260904-004",
+  "case_id": "CERTIFICATE-REVISION-SEMANTICS-001",
+  "environment": {
+    "os": "macOS",
+    "workspace": "/Users/codin/Code/gmofg-payment-proxy",
+    "cargo_manifest": "src-tauri/Cargo.toml"
+  },
+  "executed_at": "2026-09-04 14:16:48 +08:00",
+  "tested_head": "cd7ba24604031b109e4e1093f65deeb178508fff",
+  "tested_state": "HEAD plus TASK-20260904-004 changes; unrelated concurrent TASK-20260904-003 frontend changes preserved",
+  "result": "PASS",
+  "red_result": "Focused regression failed with CERTIFICATE_INVALID before implementation",
+  "green_result": "Focused regression passed after implementation",
+  "test_counts": {
+    "focused": 1,
+    "infrastructure_total": 513,
+    "failed": 0
+  },
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure certificate_status_accepts_unchanged_records_from_older_collection_revision -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure",
+    "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets -- -D warnings",
+    "git diff --check"
+  ],
+  "not_applicable": {
+    "external_resources": "Deterministic in-memory SQLite regression",
+    "network": "No transport behavior changed",
+    "device": "No device behavior changed",
+    "ui": "No UI source changed by this task",
+    "binary_payloads": "No certificate bytes or protocol frames changed"
+  }
+}
