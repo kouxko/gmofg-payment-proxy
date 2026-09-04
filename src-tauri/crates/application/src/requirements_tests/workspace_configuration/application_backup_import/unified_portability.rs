@@ -30,7 +30,7 @@ async fn unified_flat_wildcard_insert_append_rules_pass_portable_binding_preflig
                         }),
                     },
                     action: UnifiedAction::Document(DocumentMutation::Insert {
-                        path: JsonPointer::property("raw"),
+                        path: JsonPointer::property("raw").into(),
                         index: 0,
                         value: DocumentValue::integer(1).unwrap(),
                     }),

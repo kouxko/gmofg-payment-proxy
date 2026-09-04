@@ -70,6 +70,10 @@ describe("RulesView inline editor", () => {
     expect(await screen.findByDisplayValue("HTTP combined")).toBeVisible();
     expect(screen.getAllByTestId("condition-form")).toHaveLength(1);
     expect(screen.getAllByTestId("action-form")).toHaveLength(1);
+    expect(screen.getByTestId("rule-definition-list")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-definition-editor")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-editor-actions")).toContainElement(screen.getByRole("button", { name: "保存规则" }));
+    expect(screen.queryByRole("tab", { name: "基本信息" })).not.toBeInTheDocument();
   });
 
   it("starts rule creation inside the fixed editor without opening a dialog", async () => {
@@ -80,44 +84,71 @@ describe("RulesView inline editor", () => {
 
     expect(screen.queryByRole("dialog", { name: "创建统一规则" })).not.toBeInTheDocument();
     expect(screen.getByRole("heading", { name: "新建规则" })).toBeVisible();
+    const listenerSelect = screen.getByRole("button", { name: /创建规则的 Listener/ });
+    expect(listenerSelect).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expect(listenerSelect.querySelector(".min-w-0.flex-1.truncate.whitespace-nowrap")).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "说明" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "基本信息" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "匹配条件" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "执行动作" })).toBeVisible();
+    const header = screen.getByTestId("rule-creation-header");
+    expect(within(header).getByRole("button", { name: "保存规则" })).toBeDisabled();
+    expect(within(header).getByRole("button", { name: "取消" })).toBeVisible();
+    expect(screen.getByTestId("rule-definition-list")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-creation-editor")).toHaveClass("p-4");
+    expect(screen.queryByTestId("rule-editor-actions")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "匹配条件" }));
+    expect(screen.getByText("请先在基本信息中选择 Listener。")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "基本信息" }));
     expect(screen.getByRole("button", { name: /创建规则的 Listener/ })).toBeVisible();
   });
 
-  it("keeps creation metadata and rule content in one continuous editor without an enter step", async () => {
+  it("separates creation metadata, condition, and action into tabs without an enter step", async () => {
     const user = userEvent.setup();
     render(<RulesView />);
 
     await user.click(await screen.findByRole("button", { name: "新建规则" }));
-    const metadata = screen.getByTestId("rule-metadata-fields");
+    await user.type(screen.getByRole("textbox", { name: "说明" }), "创建前说明");
     await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
     await user.click(await screen.findByRole("option", { name: "HTTP Listener · HTTP" }));
-    await user.click(within(metadata).getByRole("button", { name: /处理阶段/ }));
+    const stageSelect = screen.getByRole("button", { name: /处理阶段/ });
+    expect(stageSelect).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expect(stageSelect.querySelector(".min-w-0.flex-1.truncate.whitespace-nowrap")).not.toBeNull();
+    await user.click(stageSelect);
     await user.click(await screen.findByRole("option", { name: "Proxy → Server" }));
 
-    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("");
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("");
     expect(await screen.findByRole("heading", { name: "HTTP 规则内容" })).toBeVisible();
-    expect(screen.getByTestId("condition-form")).toBeVisible();
-    expect(screen.getByTestId("action-form")).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "说明" })).toHaveValue("创建前说明");
     expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
 
-    await user.type(within(metadata).getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
-    const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
+    await user.type(screen.getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
+    const enabled = screen.getByRole("switch", { name: "启用规则" });
     expect(enabled).not.toBeChecked();
     expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /新规则是否启用/ })).not.toBeInTheDocument();
-    await user.type(within(metadata).getByLabelText("阶段内优先级"), "10");
+    await user.type(screen.getByLabelText("阶段内优先级"), "10");
     await user.click(enabled);
     expect(enabled).toBeChecked();
 
     expect(screen.queryByRole("button", { name: /新规则是否单次/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "进入规则编辑器" })).not.toBeInTheDocument();
-    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+
+    await user.click(screen.getByRole("tab", { name: "匹配条件" }));
+    expect(screen.getByTestId("condition-form")).toBeVisible();
     await user.click(screen.getByRole("button", { name: /条件来源/ }));
     await user.click(await screen.findByRole("option", { name: "HTTP" }));
+
+    await user.click(screen.getByRole("tab", { name: "执行动作" }));
+    expect(screen.getByTestId("action-form")).toBeVisible();
     await user.click(screen.getByRole("button", { name: /动作来源/ }));
     await user.click(await screen.findByRole("option", { name: "HTTP" }));
-    expect(within(metadata).getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+
+    await user.click(screen.getByRole("tab", { name: "基本信息" }));
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
   });
 
   it("uses the same initially-disabled enable switch for Socket creation", async () => {
@@ -142,7 +173,9 @@ describe("RulesView inline editor", () => {
     await user.click(await screen.findByRole("option", { name: "Proxy → App" }));
 
     const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
+    expect(within(metadata).getByTestId("rule-enabled-control")).toHaveClass("h-10", "items-center");
     expect(enabled).not.toBeChecked();
+    expect(screen.queryByRole("textbox", { name: "说明" })).not.toBeInTheDocument();
     expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
     expect(screen.queryByRole("button", { name: /新规则是否启用|新规则是否单次/ })).not.toBeInTheDocument();
     expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();

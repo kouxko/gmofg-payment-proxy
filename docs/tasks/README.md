@@ -2,6 +2,12 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-04
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 11:44:12 +08:00 | [恢复新建规则三段式 Tab 并支持通配符动作](completed/2026-09-04/restore-rule-creation-tabs.md) | 新建规则恢复三段式 Tab、顶部保存/取消、说明首显、布局与 Select 溢出修复；Document Set/Clear/Insert/Append 复用条件的单层 `*`，对动作快照中的全部具体节点原子执行 | PASS_WITH_KNOWN_UNRELATED_BASELINE_FAILURES；Domain 100/100、Application 定向 10/10、HTTP Pipeline 15/15、前端 551/551、UI 303/303、typecheck/lint/Clippy/架构/绑定/构建/签名/安装及实际 App 下拉通过；Application 全量 2 个当前 HEAD 既有不一致、源码尺寸 7 个既有超限如实保留 | 高 | 规则、三段式 Tab、DocumentMatchPath、通配符动作、Set、Clear、Insert、Append、macOS 安装 |
+
 ## 2026-09-03
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

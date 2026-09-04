@@ -82,7 +82,7 @@ async fn document_encode_is_the_only_final_body_write_after_ordered_actions() {
             }),
         },
         UnifiedAction::Document(DocumentMutation::Set {
-            path: JsonPointer::property("value"),
+            path: JsonPointer::property("value").into(),
             value: DocumentValue::String("new".into()),
         }),
     );
@@ -137,7 +137,7 @@ async fn schema_free_http_hot_replace_keeps_root_rule_program() {
             operator: MatchOperator::Equals("POST".into()),
         },
         UnifiedAction::Document(DocumentMutation::Set {
-            path: JsonPointer::root(),
+            path: JsonPointer::root().into(),
             value: DocumentValue::String("root".into()),
         }),
     );
@@ -176,7 +176,7 @@ async fn existing_http_connection_observes_rule_created_after_capabilities() {
             operator: MatchOperator::Equals("POST".into()),
         },
         UnifiedAction::Document(DocumentMutation::Set {
-            path: JsonPointer::property("value"),
+            path: JsonPointer::property("value").into(),
             value: DocumentValue::String("created".into()),
         }),
     );
@@ -272,7 +272,7 @@ async fn plain_http_json_body_matches_manual_pointer_on_request_and_response() {
                     description: String::new(),
                     condition: condition(),
                     action: UnifiedAction::Document(DocumentMutation::Set {
-                        path: JsonPointer::parse("/customer/result").unwrap(),
+                        path: JsonPointer::parse("/customer/result").unwrap().into(),
                         value: DocumentValue::String(value.into()),
                     }),
                 }),
@@ -359,7 +359,7 @@ async fn plain_http_document_rule_rejects_invalid_json_without_fallback() {
             operator: MatchOperator::Equals("POST".into()),
         },
         UnifiedAction::Document(DocumentMutation::Set {
-            path: JsonPointer::root(),
+            path: JsonPointer::root().into(),
             value: DocumentValue::Null(()),
         }),
     );

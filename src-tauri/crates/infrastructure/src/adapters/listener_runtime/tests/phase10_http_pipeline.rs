@@ -67,7 +67,7 @@ fn set_string_rule(
                 description: String::new(),
                 condition,
                 action: UnifiedAction::Document(DocumentMutation::Set {
-                    path: JsonPointer::property(field),
+                    path: JsonPointer::property(field).into(),
                     value: DocumentValue::String(value.into()),
                 }),
             }),

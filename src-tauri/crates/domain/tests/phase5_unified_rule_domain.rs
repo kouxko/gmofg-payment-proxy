@@ -13,6 +13,10 @@ fn path(value: &str) -> JsonPointer {
     JsonPointer::parse(value).expect("valid JSON pointer")
 }
 
+fn action_path(value: &str) -> DocumentMatchPath {
+    DocumentMatchPath::parse(value).expect("valid Document action path")
+}
+
 #[test]
 fn clear_document_value_type_survives_strict_serde_round_trip() {
     let wire = serde_json::json!({
@@ -210,7 +214,7 @@ fn schema_rejects_clear_value_type_that_disagrees_with_declared_path() {
         properties: BTreeMap::from([("name".into(), DocumentSchemaNode::String { title: None })]),
     };
     let action = UnifiedAction::Document(DocumentMutation::Clear {
-        path: path("/name"),
+        path: path("/name").into(),
         value_type: DocumentValueType::Number,
     });
 
@@ -240,7 +244,7 @@ fn schema_enforces_insert_append_array_target_and_nested_item_type() {
 
     validate_unified_action_schema(
         &UnifiedAction::Document(DocumentMutation::Insert {
-            path: path("/name"),
+            path: path("/name").into(),
             index: 0,
             value: DocumentValue::String("invalid target".into()),
         }),
@@ -249,7 +253,7 @@ fn schema_enforces_insert_append_array_target_and_nested_item_type() {
     .expect_err("Insert target declared as a string must be rejected");
     validate_unified_action_schema(
         &UnifiedAction::Document(DocumentMutation::Append {
-            path: path("/name"),
+            path: path("/name").into(),
             value: DocumentValue::String("invalid target".into()),
         }),
         &schema,
@@ -257,7 +261,7 @@ fn schema_enforces_insert_append_array_target_and_nested_item_type() {
     .expect_err("Append target declared as a string must be rejected");
     validate_unified_action_schema(
         &UnifiedAction::Document(DocumentMutation::Append {
-            path: path("/matrix"),
+            path: path("/matrix").into(),
             value: number(),
         }),
         &schema,
@@ -265,7 +269,7 @@ fn schema_enforces_insert_append_array_target_and_nested_item_type() {
     .expect_err("nested array target requires one complete array item operand");
     validate_unified_action_schema(
         &UnifiedAction::Document(DocumentMutation::Append {
-            path: path("/matrix"),
+            path: path("/matrix").into(),
             value: DocumentValue::Array(vec![number()]),
         }),
         &schema,
@@ -281,7 +285,7 @@ fn runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation()
         999,
         string_condition("/state", StringOperator::Equal, "initial"),
         UnifiedAction::Document(DocumentMutation::Set {
-            path: path("/state"),
+            path: path("/state").into(),
             value: DocumentValue::String("changed".into()),
         }),
     );
@@ -291,7 +295,7 @@ fn runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation()
         1,
         string_condition("/state", StringOperator::Equal, "changed"),
         UnifiedAction::Document(DocumentMutation::Set {
-            path: path("/seen"),
+            path: path("/seen").into(),
             value: DocumentValue::Boolean(true),
         }),
     );
@@ -304,6 +308,123 @@ fn runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation()
         result.document().resolve(&path("/seen")).expect("seen"),
         &DocumentValue::Boolean(true)
     );
+}
+
+#[test]
+fn wildcard_set_mutates_every_existing_leaf_and_zero_matches_are_a_noop() {
+    let mut document =
+        Document::parse_json(r#"{"items":[{"state":"old"},{"state":"old"},{"other":true}]}"#)
+            .expect("document");
+    DocumentMutation::Set {
+        path: action_path("/items/*/state"),
+        value: DocumentValue::String("new".into()),
+    }
+    .apply(&mut document)
+    .expect("wildcard set");
+    assert_eq!(
+        serde_json::to_value(&document).unwrap(),
+        serde_json::json!({
+            "items": [
+                {"state": "new"},
+                {"state": "new"},
+                {"other": true}
+            ]
+        })
+    );
+
+    let before = document.clone();
+    DocumentMutation::Set {
+        path: action_path("/missing/*/state"),
+        value: DocumentValue::String("ignored".into()),
+    }
+    .apply(&mut document)
+    .expect("zero matches are a successful no-op");
+    assert_eq!(document, before);
+}
+
+#[test]
+fn wildcard_clear_uses_snapshot_paths_so_array_indices_do_not_shift() {
+    let mut document = Document::parse_json(r#"{"items":["a","b","c"]}"#).unwrap();
+    DocumentMutation::Clear {
+        path: action_path("/items/*"),
+        value_type: DocumentValueType::String,
+    }
+    .apply(&mut document)
+    .expect("wildcard clear");
+
+    assert_eq!(
+        serde_json::to_value(document).unwrap(),
+        serde_json::json!({"items": []})
+    );
+}
+
+#[test]
+fn wildcard_insert_and_append_apply_to_every_matched_array() {
+    let mut document = Document::parse_json(r#"{"groups":[{"items":[2]},{"items":[]}]}"#).unwrap();
+    DocumentMutation::Insert {
+        path: action_path("/groups/*/items"),
+        index: 0,
+        value: DocumentValue::integer(1).unwrap(),
+    }
+    .apply(&mut document)
+    .expect("wildcard insert");
+    DocumentMutation::Append {
+        path: action_path("/groups/*/items"),
+        value: DocumentValue::integer(3).unwrap(),
+    }
+    .apply(&mut document)
+    .expect("wildcard append");
+
+    assert_eq!(
+        serde_json::to_value(document).unwrap(),
+        serde_json::json!({"groups": [{"items": [1.0, 2.0, 3.0]}, {"items": [1.0, 3.0]}]})
+    );
+}
+
+#[test]
+fn wildcard_mutation_failure_does_not_leave_partial_changes() {
+    let mut document = Document::parse_json(r#"{"groups":[{"items":[1]},{"items":[]}]}"#).unwrap();
+    let before = document.clone();
+    DocumentMutation::Insert {
+        path: action_path("/groups/*/items"),
+        index: 1,
+        value: DocumentValue::integer(2).unwrap(),
+    }
+    .apply(&mut document)
+    .expect_err("the second array rejects index 1");
+
+    assert_eq!(document, before);
+}
+
+#[test]
+fn schema_validates_every_node_selected_by_a_wildcard_action() {
+    let schema = DocumentSchemaNode::Object {
+        title: None,
+        properties: BTreeMap::from([(
+            "items".into(),
+            DocumentSchemaNode::Array {
+                title: None,
+                items: Box::new(DocumentSchemaNode::String { title: None }),
+            },
+        )]),
+    };
+
+    validate_unified_action_schema(
+        &UnifiedAction::Document(DocumentMutation::Set {
+            path: action_path("/items/*"),
+            value: DocumentValue::String("valid".into()),
+        }),
+        &schema,
+    )
+    .expect("array item wildcard resolves to its item schema");
+    validate_unified_action_schema(
+        &UnifiedAction::Document(DocumentMutation::Set {
+            path: action_path("/items/*"),
+            value: DocumentValue::integer(1).unwrap(),
+        }),
+        &schema,
+    )
+    .expect_err("every selected schema node must accept the action value");
 }
 
 #[test]
@@ -322,7 +443,7 @@ fn terminal_action_stops_later_rules() {
         2,
         string_condition("/state", StringOperator::Equal, "initial"),
         UnifiedAction::Document(DocumentMutation::Set {
-            path: path("/state"),
+            path: path("/state").into(),
             value: DocumentValue::String("wrong".into()),
         }),
     );
@@ -345,7 +466,7 @@ fn cloned_rule_configuration_is_deeply_independent() {
         1,
         string_condition("/name", StringOperator::Equal, "original"),
         UnifiedAction::Document(DocumentMutation::Set {
-            path: path("/name"),
+            path: path("/name").into(),
             value: DocumentValue::String("changed".into()),
         }),
     );

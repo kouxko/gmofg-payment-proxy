@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260904-001",
+  "case_id": "RULE-CREATION-TABS-LOCAL-INSTALL-001",
+  "executed_at": "2026-09-04 10:52:02 +08:00",
+  "base_commit": "40d273ce3fd2a85b8b8e8674f041e0fb5804c17f",
+  "derived_from": {
+    "task_id": "TASK-20260904-001",
+    "case_id": "RULE-CREATION-TABS-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-001/"
+  },
+  "environment": {
+    "platform": "macOS arm64",
+    "deno": "2.9.6",
+    "vitest": "4.1.11",
+    "nextjs": "16.2.12",
+    "bundle_id": "com.interceptproxy.desktop",
+    "app_version": "1.0.0"
+  },
+  "actual": {
+    "tabs": ["基本信息", "匹配条件", "执行动作"],
+    "header_actions": ["保存规则", "取消"],
+    "bottom_save_button_present": false,
+    "description_visible_before_listener": true,
+    "description_preserved_for_http": true,
+    "description_visible_for_socket": false,
+    "toggle_priority_controls_center_aligned": true,
+    "workspace_headers_aligned": true,
+    "installed_executable_sha256": "21de419b8a46abe734bdfc73661686224af93401e7b6fd1da6ff494a294dc54d",
+    "running_pid": 72494
+  },
+  "result": "PASS",
+  "checks": [
+    { "command": "vitest run rules-view.test.tsx rule-definition-editor.test.tsx", "result": "PASS", "details": "2 files, 15 tests" },
+    { "command": "deno task test:ui-contracts", "result": "PASS", "details": "30 files, 303 tests" },
+    { "command": "deno task typecheck", "result": "PASS" },
+    { "command": "deno task lint", "result": "PASS", "details": "serial rerun after one Vitest temp-file race" },
+    { "command": "deno task tauri build --bundles app", "result": "PASS", "details": "13 static routes and macOS app bundle" },
+    { "command": "codesign --verify --deep --strict", "result": "PASS" },
+    { "command": "git diff --check", "result": "PASS" },
+    { "command": "Computer Use installed-app UI inspection", "result": "PASS", "details": "tabs, header actions, description, control alignment and workspace header alignment visible" }
+  ],
+  "not_applicable": {
+    "runtime_rule_execution": "Frontend creation layout only",
+    "network_packets": "No protocol or runtime change",
+    "remote_device": "Frontend creation layout only",
+    "screenshot_file": "Live Computer Use screenshot inspected; no standalone file generated",
+    "ci_push_release": "Not authorized",
+    "independent_adversarial_review": "Low-priority local UI layout change; leader diff and live UI review used"
+  }
+}

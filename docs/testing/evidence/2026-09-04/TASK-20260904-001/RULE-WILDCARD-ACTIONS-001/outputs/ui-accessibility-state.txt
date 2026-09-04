@@ -1,0 +1,16 @@
+Installed app: /Applications/Intercept Proxy.app
+Bundle: com.interceptproxy.desktop 1.0.0
+PID: 23649
+
+Actual interaction:
+1. 拦截规则 -> 新建规则
+2. Listener: Payment DLL · HTTP
+3. Stage: Proxy → App
+4. 执行动作 -> 动作来源: Document
+5. Document Schema 动作路径: /GBRD_01/*/aid · /GBRD_01/*/aid
+6. Document 动作下拉实际选项: set, clear
+7. 选中动作: set
+8. 可见提示: * 仅展开一层；动作会应用到当前命中的全部节点。
+
+The Save button remained disabled because required basic/condition/value fields were intentionally not completed.
+No rule was saved and workspace rule data was not changed.

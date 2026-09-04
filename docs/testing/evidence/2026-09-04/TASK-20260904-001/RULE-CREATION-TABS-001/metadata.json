@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260904-001",
+  "case_id": "RULE-CREATION-TABS-001",
+  "executed_at": "2026-09-04 10:21:14 +08:00",
+  "base_commit": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+  "environment": {
+    "platform": "macOS arm64",
+    "deno": "2.9.6",
+    "vitest": "4.1.11",
+    "nextjs": "16.2.12"
+  },
+  "input": {
+    "entry": "rules/new",
+    "listener": "HTTP Listener",
+    "stage": "proxy_to_upstream",
+    "tabs": ["基本信息", "匹配条件", "执行动作"]
+  },
+  "expected": {
+    "default_tab": "基本信息",
+    "condition_panel": "匹配条件",
+    "action_panel": "执行动作",
+    "state_preserved_across_tabs": true,
+    "existing_rule_editor_changed": false
+  },
+  "actual": {
+    "default_tab": "基本信息",
+    "condition_panel": "匹配条件",
+    "action_panel": "执行动作",
+    "state_preserved_across_tabs": true,
+    "existing_rule_editor_changed": false
+  },
+  "result": "PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_RUNNING_APP_VISUAL_NOT_RUN",
+  "checks": [
+    { "command": "vitest run rules-view.test.tsx rule-definition-editor.test.tsx", "result": "PASS", "details": "2 files, 15 tests" },
+    { "command": "deno task test:ui-contracts", "result": "PASS", "details": "30 files, 303 tests" },
+    { "command": "deno task typecheck", "result": "PASS" },
+    { "command": "deno task lint", "result": "PASS" },
+    { "command": "deno task build", "result": "PASS", "details": "13 static routes" },
+    { "command": "git diff --check", "result": "PASS" },
+    { "command": "deno task scan:source-size", "result": "KNOWN_UNRELATED_FAILURE", "details": "7 pre-existing files over 500 lines; changed files are 97, 246, and 209 lines" }
+  ],
+  "not_applicable": {
+    "runtime_rule_execution": "Frontend creation layout only",
+    "network_packets": "No protocol or runtime change",
+    "remote_device": "Frontend creation layout only",
+    "screenshot": "Current-source desktop app was not launched",
+    "ci_push_release": "Not authorized",
+    "independent_adversarial_review": "Low-priority local UI layout change; leader diff review used"
+  }
+}

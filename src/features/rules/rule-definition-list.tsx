@@ -13,7 +13,7 @@ export function RuleDefinitionList(props: {
   onSelect: (rule: RuleDefinition_Serialize) => void;
 }) {
   return (
-    <section className="min-w-0 space-y-4 overflow-auto border-r border-[var(--telemetry-line)] p-4 max-[1280px]:border-r-0">
+    <section className="min-w-0 space-y-4 overflow-auto border-r border-[var(--telemetry-line)] p-4 max-[1280px]:border-r-0" data-testid="rule-definition-list">
       <header className="flex items-center gap-2">
         <div>
           <h2 className="text-lg font-semibold">规则</h2>

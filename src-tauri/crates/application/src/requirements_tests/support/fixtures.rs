@@ -317,7 +317,7 @@ fn document_equals(name: &str, value: DocumentValue) -> Condition {
 
 fn document_set(name: &str, value: DocumentValue) -> UnifiedAction {
     UnifiedAction::Document(DocumentMutation::Set {
-        path: JsonPointer::property(name),
+        path: JsonPointer::property(name).into(),
         value,
     })
 }

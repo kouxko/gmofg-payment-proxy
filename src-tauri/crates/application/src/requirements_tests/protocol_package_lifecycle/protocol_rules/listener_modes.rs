@@ -171,7 +171,7 @@ async fn listener_validation_accepts_current_unified_document_rule_shapes() {
                         },
                         action: intercept_proxy_domain::UnifiedAction::Document(
                             intercept_proxy_domain::DocumentMutation::Insert {
-                                path: intercept_proxy_domain::JsonPointer::property("raw"),
+                                path: intercept_proxy_domain::JsonPointer::property("raw").into(),
                                 index: 0,
                                 value: intercept_proxy_domain::DocumentValue::integer(1).unwrap(),
                             },

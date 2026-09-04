@@ -20,7 +20,7 @@ fn equals(name: &str, value: DocumentValue) -> Condition {
 
 fn set(name: &str, value: DocumentValue) -> UnifiedAction {
     UnifiedAction::Document(DocumentMutation::Set {
-        path: field(name),
+        path: field(name).into(),
         value,
     })
 }

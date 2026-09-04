@@ -1,5 +1,5 @@
 import { type ReactNode, useState } from "react";
-import { Button, Input, Label, ListBox, NumberField, Select, TextArea, TextField } from "@heroui/react";
+import { Button, Input, Label, ListBox, NumberField, Select, Tabs, TextArea, TextField } from "@heroui/react";
 import type {
   Condition, DocumentMutation, HttpAction, HttpRuleEditorStageViewModel, RuleActionCapabilityViewModel,
   RuleActionKind, RuleCommonActionCapability, RuleDefinitionSaveInput, RuleDocumentConditionPathCapability,
@@ -18,6 +18,7 @@ type Source = "http" | "document" | "common" | "";
 
 export function RuleSinglePairEditor(props: {
   actions?: ReactNode;
+  creationTabs?: { title: string; cancelAction: ReactNode; basicContent: ReactNode; contentAvailable: boolean; unavailableMessage: string };
   input?: RuleDefinitionSaveInput;
   creation?: { structure: RuleNewDefinitionDraft; name: string; enabled: boolean; priority?: number; description: string };
   stage?: Stage;
@@ -95,11 +96,33 @@ export function RuleSinglePairEditor(props: {
     ? Boolean(httpAction.kind && (!httpStage?.actions.find((item) => item.kind === httpAction.kind)?.parameters_required || httpAction.parameters.trim()))
     : actionSource === "common" ? Boolean(commonAction) : documentActionReady(schemaFields, props.localTypes, actionDocument);
 
+  const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={schemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={props.localTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
+  const actionForm = <ActionForm action={httpAction} capabilities={httpStage?.actions ?? []} commonAction={commonAction} commonActions={commonActions} document={actionDocument} fields={schemaFields} isHttp={contentType === "http"} localTypes={props.localTypes} onAction={setHttpAction} onCommonAction={setCommonAction} onDocument={setActionDocument} onSource={setActionSource} source={actionSource} />;
+  const saveButton = <Button isDisabled={props.pending || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
+
   return <div className="space-y-4">
-    <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={schemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={props.localTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />
-    <ActionForm action={httpAction} capabilities={httpStage?.actions ?? []} commonAction={commonAction} commonActions={commonActions} document={actionDocument} fields={schemaFields} isHttp={contentType === "http"} localTypes={props.localTypes} onAction={setHttpAction} onCommonAction={setCommonAction} onDocument={setActionDocument} onSource={setActionSource} source={actionSource} />
+    {props.creationTabs && <header className="flex items-center gap-2" data-testid="rule-creation-header">
+      <h2 className="text-lg font-semibold">{props.creationTabs.title}</h2>
+      <div className="ml-auto flex items-center gap-2">{saveButton}{props.creationTabs.cancelAction}</div>
+    </header>}
+    {props.creationTabs ? <Tabs defaultSelectedKey="basic">
+      <Tabs.ListContainer>
+        <Tabs.List aria-label="新建规则编辑">
+          <Tabs.Tab id="basic">基本信息<Tabs.Indicator /></Tabs.Tab>
+          <Tabs.Tab id="conditions">匹配条件<Tabs.Indicator /></Tabs.Tab>
+          <Tabs.Tab id="actions">执行动作<Tabs.Indicator /></Tabs.Tab>
+        </Tabs.List>
+      </Tabs.ListContainer>
+      <Tabs.Panel id="basic" className="space-y-4 pt-4">{props.creationTabs.basicContent}</Tabs.Panel>
+      <Tabs.Panel id="conditions" className="pt-4">
+        {props.creationTabs.contentAvailable ? conditionForm : <p className="text-sm text-[var(--telemetry-muted)]">{props.creationTabs.unavailableMessage}</p>}
+      </Tabs.Panel>
+      <Tabs.Panel id="actions" className="pt-4">
+        {props.creationTabs.contentAvailable ? actionForm : <p className="text-sm text-[var(--telemetry-muted)]">{props.creationTabs.unavailableMessage}</p>}
+      </Tabs.Panel>
+    </Tabs> : <>{conditionForm}{actionForm}</>}
     {error && <p className="text-sm text-red-600" role="alert">{error}</p>}
-    <div className="flex flex-wrap items-center gap-2" data-testid="rule-editor-actions"><Button isDisabled={props.pending || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>{props.actions}</div>
+    {!props.creationTabs && <div className="flex flex-wrap items-center gap-2" data-testid="rule-editor-actions">{saveButton}{props.actions}</div>}
   </div>;
 }
 
@@ -117,12 +140,12 @@ function ConditionForm(props: { source: Source; isHttp: boolean; http: HttpCondi
     {props.isHttp && <SourceSelect label="条件来源" options={["http", "document"]} source={props.source} onSource={props.onSource} />}
     {props.source === "http" && <div className="grid items-end gap-3 sm:grid-cols-2">
       <Select aria-label="HTTP 匹配字段" selectedKey={props.http.field || null} onSelectionChange={(key) => props.onHttp({ field: String(key) as RuleMatchFieldKind, operator: "", selector: "", value: props.http.value })}><Label>HTTP 匹配字段</Label><Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate whitespace-nowrap" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>{props.httpFields.map((field) => <ListBox.Item id={field.kind} key={field.kind} textValue={matchFieldLabel(field.kind)}>{matchFieldLabel(field.kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
-      <Select aria-label="HTTP 匹配操作符" selectedKey={props.http.operator || null} onSelectionChange={(key) => props.onHttp({ ...props.http, operator: String(key) as RuleMatchOperatorKind })}><Label>HTTP 匹配操作符</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{(selectedField?.operators ?? []).map((operator) => <ListBox.Item id={operator} key={operator} textValue={operator}>{operator}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+      <Select aria-label="HTTP 匹配操作符" selectedKey={props.http.operator || null} onSelectionChange={(key) => props.onHttp({ ...props.http, operator: String(key) as RuleMatchOperatorKind })}><Label>HTTP 匹配操作符</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{(selectedField?.operators ?? []).map((operator) => <ListBox.Item id={operator} key={operator} textValue={operator}>{operator}</ListBox.Item>)}</ListBox></Select.Popover></Select>
       {selectedField?.selector && <TextField><Label>Header selector（/name）</Label><Input aria-label="Header selector（/name）" className="h-10 w-full py-0" value={props.http.selector} onChange={(event) => props.onHttp({ ...props.http, selector: event.target.value })} /></TextField>}
       <TextField><Label>HTTP 匹配值</Label><Input aria-label="HTTP 匹配值" className="h-10 w-full py-0" value={props.http.value} onChange={(event) => props.onHttp({ ...props.http, value: event.target.value })} /></TextField>
     </div>}
     {props.source === "document" && <DocumentConditionPathFields document={props.document} fields={props.fields} localTypes={props.localTypes} onDocument={props.onDocument} />}
-    {props.source === "document" && <div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 谓词" selectedKey={props.document.predicate || null} onSelectionChange={(key) => props.onDocument({ ...props.document, predicate: String(key) as RuleLocalDocumentPredicateKind })}><Label>Document 谓词</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{predicates.map((item) => <ListBox.Item id={item} key={item} textValue={item}>{item}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>匹配值</Label><Input aria-label="匹配值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField></div>}
+    {props.source === "document" && <div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 谓词" selectedKey={props.document.predicate || null} onSelectionChange={(key) => props.onDocument({ ...props.document, predicate: String(key) as RuleLocalDocumentPredicateKind })}><Label>Document 谓词</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{predicates.map((item) => <ListBox.Item id={item} key={item} textValue={item}>{item}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>匹配值</Label><Input aria-label="匹配值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField></div>}
     {props.source === "document" && props.conditionPath && <p className="text-xs text-[var(--telemetry-muted)]">{props.conditionPath.wildcard_token} 仅匹配一层；展开多个节点时按 ANY 匹配。</p>}
   </fieldset>;
 }
@@ -135,17 +158,21 @@ function ActionForm(props: { source: Source; isHttp: boolean; action: HttpAction
     {props.source === "http" ? <>
       <div className="grid items-end gap-3 sm:grid-cols-2" data-testid="http-action-selector-row">
         <SourceSelect label="动作来源" options={options} source={props.source} onSource={props.onSource} />
-        <Select aria-label="HTTP 动作类型" selectedKey={props.action.kind || null} onSelectionChange={(key) => props.onAction({ kind: String(key) as RuleActionKind, parameters: "" })}><Label>HTTP 动作类型</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.capabilities.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={ruleActionKindLabel(kind)}>{ruleActionKindLabel(kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+        <Select aria-label="HTTP 动作类型" selectedKey={props.action.kind || null} onSelectionChange={(key) => props.onAction({ kind: String(key) as RuleActionKind, parameters: "" })}><Label>HTTP 动作类型</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.capabilities.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={ruleActionKindLabel(kind)}>{ruleActionKindLabel(kind)}</ListBox.Item>)}</ListBox></Select.Popover></Select>
       </div>
       {capability?.parameters_required && <div className="w-full" data-testid="http-action-parameters-row"><TextField className="w-full"><Label>动作参数 JSON</Label><TextArea aria-label="动作参数 JSON" className="min-h-24 w-full" value={props.action.parameters} onChange={(event) => props.onAction({ ...props.action, parameters: event.target.value })} /></TextField></div>}
     </> : <SourceSelect label="动作来源" options={options} source={props.source} onSource={props.onSource} />}
-    {props.source === "document" && <><DocumentActionPathFields document={props.document} fields={props.fields} localTypes={props.localTypes} onDocument={props.onDocument} /><div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 动作" selectedKey={props.document.action || null} onSelectionChange={(key) => props.onDocument({ ...props.document, action: String(key) as RuleLocalDocumentActionKind })}><Label>Document 动作</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{actions.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={kind}>{kind}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>动作值</Label><Input aria-label="动作值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField>{props.document.action === "insert" && <NumberField aria-label="规则本地 Insert index" minValue={0} value={props.document.index} onChange={(index) => props.onDocument({ ...props.document, index })}><Label>Index</Label><NumberField.Group className="h-10 min-h-10 w-full"><NumberField.Input /></NumberField.Group></NumberField>}</div></>}
-    {props.source === "common" && <Select aria-label="通用动作" selectedKey={props.commonAction || null} onSelectionChange={(key) => props.onCommonAction(String(key) as RuleCommonActionCapability)}><Label>通用动作</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.commonActions.map((item) => <ListBox.Item id={item} key={item} textValue={item === "record_match" ? "记录命中" : item}>{item === "record_match" ? "记录命中" : item}</ListBox.Item>)}</ListBox></Select.Popover></Select>}
+    {props.source === "document" && <><DocumentActionPathFields document={props.document} fields={props.fields} localTypes={props.localTypes} onDocument={props.onDocument} /><div className="grid items-end gap-3 sm:grid-cols-2"><Select aria-label="Document 动作" selectedKey={props.document.action || null} onSelectionChange={(key) => props.onDocument({ ...props.document, action: String(key) as RuleLocalDocumentActionKind })}><Label>Document 动作</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{actions.map(({ kind }) => <ListBox.Item id={kind} key={kind} textValue={kind}>{kind}</ListBox.Item>)}</ListBox></Select.Popover></Select><TextField><Label>动作值</Label><Input aria-label="动作值" className="h-10 w-full py-0" value={props.document.value} onChange={(event) => props.onDocument({ ...props.document, value: event.target.value })} /></TextField>{props.document.action === "insert" && <NumberField aria-label="规则本地 Insert index" minValue={0} value={props.document.index} onChange={(index) => props.onDocument({ ...props.document, index })}><Label>Index</Label><NumberField.Group className="h-10 min-h-10 w-full"><NumberField.Input /></NumberField.Group></NumberField>}</div>{props.document.path.split("/").includes("*") && <p className="text-xs text-[var(--telemetry-muted)]">* 仅展开一层；动作会应用到当前命中的全部节点。</p>}</>}
+    {props.source === "common" && <Select aria-label="通用动作" selectedKey={props.commonAction || null} onSelectionChange={(key) => props.onCommonAction(String(key) as RuleCommonActionCapability)}><Label>通用动作</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.commonActions.map((item) => <ListBox.Item id={item} key={item} textValue={item === "record_match" ? "记录命中" : item}>{item === "record_match" ? "记录命中" : item}</ListBox.Item>)}</ListBox></Select.Popover></Select>}
   </fieldset>;
 }
 
 function SourceSelect(props: { label: string; source: Source; options: Source[]; onSource: (value: Source) => void }) {
-  return <Select aria-label={props.label} selectedKey={props.source || null} onSelectionChange={(key) => props.onSource(String(key) as Source)}><Label>{props.label}</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.options.map((item) => { const label = item === "http" ? "HTTP" : item === "document" ? "Document" : "通用"; return <ListBox.Item id={item} key={item} textValue={label}>{label}</ListBox.Item>; })}</ListBox></Select.Popover></Select>;
+  return <Select aria-label={props.label} selectedKey={props.source || null} onSelectionChange={(key) => props.onSource(String(key) as Source)}><Label>{props.label}</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.options.map((item) => { const label = item === "http" ? "HTTP" : item === "document" ? "Document" : "通用"; return <ListBox.Item id={item} key={item} textValue={label}>{label}</ListBox.Item>; })}</ListBox></Select.Popover></Select>;
+}
+
+function ClippedSelectTrigger() {
+  return <Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate whitespace-nowrap" /><Select.Indicator className="shrink-0" /></Select.Trigger>;
 }
 
 function DocumentConditionPathFields(props: { document: DocumentConditionDraft; fields: DocumentSchemaField[]; localTypes: RuleLocalDocumentTypeCapability[]; onDocument: (value: DocumentConditionDraft) => void }) {
@@ -160,9 +187,9 @@ function DocumentPathFields<T extends DocumentPathDraft>(props: { document: T; f
   const schemaAriaLabel = `Document Schema ${props.pathKind}路径`;
   const manualAriaLabel = `手动 Document ${props.pathKind}路径`;
   return <div className="grid items-end gap-3 sm:grid-cols-2">
-    {props.fields.length > 0 && <Select aria-label={schemaAriaLabel} selectedKey={props.document.schemaPath == null ? null : schemaKey(props.document.schemaPath)} onSelectionChange={(key) => { const field = props.fields.find((item) => schemaKey(item.name) === String(key)); if (field) props.onDocument({ path: field.name === "" ? "/" : field.name, pathSet: true, schemaPath: field.name, type: field.type }); }}><Label>{schemaAriaLabel}</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.fields.map((field) => <ListBox.Item id={schemaKey(field.name)} key={schemaKey(field.name)} textValue={schemaLabel(field)}>{schemaLabel(field)}</ListBox.Item>)}</ListBox></Select.Popover></Select>}
+    {props.fields.length > 0 && <Select aria-label={schemaAriaLabel} selectedKey={props.document.schemaPath == null ? null : schemaKey(props.document.schemaPath)} onSelectionChange={(key) => { const field = props.fields.find((item) => schemaKey(item.name) === String(key)); if (field) props.onDocument({ path: field.name === "" ? "/" : field.name, pathSet: true, schemaPath: field.name, type: field.type }); }}><Label>{schemaAriaLabel}</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.fields.map((field) => <ListBox.Item id={schemaKey(field.name)} key={schemaKey(field.name)} textValue={schemaLabel(field)}>{schemaLabel(field)}</ListBox.Item>)}</ListBox></Select.Popover></Select>}
     <TextField><Label>{manualAriaLabel}</Label><Input aria-label={manualAriaLabel} className="h-10 w-full py-0" value={props.document.path} onChange={(event) => props.onDocument({ path: event.target.value, pathSet: true, schemaPath: null, type: "" })} /></TextField>
-    <Select aria-label={`Document ${props.pathKind}值类型`} isDisabled={props.document.schemaPath != null} selectedKey={props.document.type || null} onSelectionChange={(key) => props.onDocument({ ...props.document, type: String(key) as RuleLocalDocumentValueType })}><Label>类型</Label><Select.Trigger className="h-10 min-h-10 w-full"><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.localTypes.map((item) => <ListBox.Item id={item.value_type} key={item.value_type} textValue={item.value_type}>{item.value_type}</ListBox.Item>)}</ListBox></Select.Popover></Select>
+    <Select aria-label={`Document ${props.pathKind}值类型`} isDisabled={props.document.schemaPath != null} selectedKey={props.document.type || null} onSelectionChange={(key) => props.onDocument({ ...props.document, type: String(key) as RuleLocalDocumentValueType })}><Label>类型</Label><ClippedSelectTrigger /><Select.Popover><ListBox>{props.localTypes.map((item) => <ListBox.Item id={item.value_type} key={item.value_type} textValue={item.value_type}>{item.value_type}</ListBox.Item>)}</ListBox></Select.Popover></Select>
   </div>;
 }
 

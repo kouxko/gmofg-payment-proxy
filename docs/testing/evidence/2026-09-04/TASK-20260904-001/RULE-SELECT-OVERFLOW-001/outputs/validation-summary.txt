@@ -1,0 +1,23 @@
+PASS  DENO_NO_UPDATE_CHECK=1 deno run -A npm:vitest@4.1.11 run src/features/rules/rules-view.test.tsx src/features/rules/rule-definition-editor.test.tsx --reporter=dot
+      Test Files 2 passed (2); Tests 15 passed (15)
+
+PASS  deno task test:ui-contracts
+      Test Files 30 passed (30); Tests 303 passed (303)
+
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  git diff --check
+PASS  deno task tauri build --bundles app
+PASS  codesign --verify --deep --strict /Applications/Intercept Proxy.app
+
+PASS  installed application identity
+      bundle_id=com.interceptproxy.desktop
+      version=1.0.0
+      executable_sha256=190b7c16f7f875c7e32240684b9bf2df021be99527576bd7c6b0cdadc2f3c7aa
+      pid=87008
+
+PASS  live long-path UI inspection
+      Condition: /GICC_01/*/tables/*/communication_id
+      Action: /GICC_01/*/tables/*/merchant_type_code
+      Both Schema Select values stayed on one ellipsized line without crossing the trigger border.
+      Manual path inputs preserved the complete paths.

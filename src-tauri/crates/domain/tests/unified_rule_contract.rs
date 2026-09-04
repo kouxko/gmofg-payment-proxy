@@ -31,7 +31,7 @@ fn document_condition() -> Condition {
 
 fn document_action() -> UnifiedAction {
     UnifiedAction::Document(DocumentMutation::Set {
-        path: JsonPointer::parse("/value").expect("pointer"),
+        path: JsonPointer::parse("/value").expect("pointer").into(),
         value: intercept_proxy_domain::DocumentValue::String("y".into()),
     })
 }

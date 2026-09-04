@@ -204,7 +204,7 @@ impl Document {
     pub fn resolve(&self, pointer: &JsonPointer) -> Result<&DocumentValue, DomainError> {
         resolve_tokens(&self.0, pointer.tokens(), pointer.as_str())
     }
-    /// Resolves a condition path. Each wildcard expands exactly one object/array level.
+    /// Resolves a condition or action path. Each wildcard expands one object/array level.
     #[must_use]
     pub fn resolve_match_path(&self, path: &DocumentMatchPath) -> Vec<&DocumentValue> {
         let mut current = vec![&self.0];
@@ -240,6 +240,58 @@ impl Document {
             current = next;
         }
         current
+    }
+    /// Resolves a wildcard path into concrete pointers using the current document snapshot.
+    #[must_use]
+    pub fn resolve_match_pointers(&self, path: &DocumentMatchPath) -> Vec<JsonPointer> {
+        let mut current = vec![(&self.0, Vec::<String>::new())];
+        for token in path.tokens() {
+            let mut next = Vec::new();
+            for (value, tokens) in current {
+                match (token, value) {
+                    (DocumentMatchToken::Wildcard, DocumentValue::Object(values)) => {
+                        next.extend(values.iter().map(|(name, value)| {
+                            let mut child = tokens.clone();
+                            child.push(name.clone());
+                            (value, child)
+                        }));
+                    }
+                    (DocumentMatchToken::Wildcard, DocumentValue::Array(values)) => {
+                        next.extend(values.iter().enumerate().map(|(index, value)| {
+                            let mut child = tokens.clone();
+                            child.push(index.to_string());
+                            (value, child)
+                        }));
+                    }
+                    (DocumentMatchToken::Exact(token), DocumentValue::Object(values)) => {
+                        if let Some(value) = values.get(token) {
+                            let mut child = tokens;
+                            child.push(token.clone());
+                            next.push((value, child));
+                        }
+                    }
+                    (DocumentMatchToken::Exact(token), DocumentValue::Array(values)) => {
+                        if let Ok(index) = token.parse::<usize>()
+                            && token == &index.to_string()
+                            && let Some(value) = values.get(index)
+                        {
+                            let mut child = tokens;
+                            child.push(token.clone());
+                            next.push((value, child));
+                        }
+                    }
+                    (DocumentMatchToken::Wildcard | DocumentMatchToken::Exact(_), _) => {}
+                }
+            }
+            if next.is_empty() {
+                return Vec::new();
+            }
+            current = next;
+        }
+        current
+            .into_iter()
+            .map(|(_, tokens)| JsonPointer::from_tokens(tokens))
+            .collect()
     }
     /// Replaces root/existing node, or adds a final object property when its parent exists.
     pub fn set(&mut self, pointer: &JsonPointer, value: DocumentValue) -> Result<(), DomainError> {

@@ -1,0 +1,39 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260904-001",
+  "case_id": "RULE-SELECT-OVERFLOW-001",
+  "executed_at": "2026-09-04 11:04:55 +08:00",
+  "base_commit": "40d273ce3fd2a85b8b8e8674f041e0fb5804c17f",
+  "derived_from": {
+    "task_id": "TASK-20260904-001",
+    "case_id": "RULE-CREATION-TABS-LOCAL-INSTALL-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-LOCAL-INSTALL-001/"
+  },
+  "environment": {
+    "platform": "macOS arm64",
+    "bundle_id": "com.interceptproxy.desktop",
+    "app_version": "1.0.0"
+  },
+  "actual": {
+    "rule_select_positions_checked": 14,
+    "single_line_truncation": true,
+    "indicator_shrink_disabled": true,
+    "condition_schema_path": "/GICC_01/*/tables/*/communication_id",
+    "action_schema_path": "/GICC_01/*/tables/*/merchant_type_code",
+    "manual_paths_preserved": true,
+    "visual_overflow_present": false,
+    "installed_executable_sha256": "190b7c16f7f875c7e32240684b9bf2df021be99527576bd7c6b0cdadc2f3c7aa",
+    "running_pid": 87008
+  },
+  "result": "PASS",
+  "checks": [
+    { "command": "vitest run rules-view.test.tsx rule-definition-editor.test.tsx", "result": "PASS", "details": "2 files, 15 tests including long condition/action Schema values" },
+    { "command": "deno task test:ui-contracts", "result": "PASS", "details": "30 files, 303 tests" },
+    { "command": "deno task typecheck", "result": "PASS" },
+    { "command": "deno task lint", "result": "PASS" },
+    { "command": "deno task tauri build --bundles app", "result": "PASS" },
+    { "command": "codesign --verify --deep --strict", "result": "PASS" },
+    { "command": "git diff --check", "result": "PASS" },
+    { "command": "Computer Use installed-app long-path inspection", "result": "PASS" }
+  ]
+}

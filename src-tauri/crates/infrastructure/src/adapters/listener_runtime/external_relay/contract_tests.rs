@@ -28,7 +28,7 @@ fn socket_rule(
                     }),
                 },
                 action: UnifiedAction::Document(DocumentMutation::Set {
-                    path: JsonPointer::property("request"),
+                    path: JsonPointer::property("request").into(),
                     value: DocumentValue::String("updated".to_owned()),
                 }),
             }),
