@@ -86,7 +86,7 @@ function Timeline({
           variant="outline"
           onPress={() => onCreateMockDraft(record.exchange_id, index)}
         >
-          用此服务器响应创建 Mock 草稿
+          用此响应 Body 创建替换规则
         </Button>
       )}
     </li>)}

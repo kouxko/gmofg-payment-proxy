@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 12:51:07 +08:00 | [简化 HTTP 规则编辑能力与抓包 Body 替换规则](completed/2026-09-04/add-http-match-value-dropdowns.md) | HTTP 条件收敛为 Method/Path，Method 使用五项有限候选；移除 Header/通用/重复动作并中文化，过滤无谓词的 Document 条件候选；抓包响应改为 Proxy → App ReplaceBodyText 并配合 LocalHttpServer | PASS_WITH_INSTALLED_UI_AUTOMATION_NOT_RUN_AND_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE；Application 417/417、前端 554/554、typecheck/lint/Clippy/架构/绑定/构建/签名/安装通过；Computer Use 连接界面超时，源码尺寸仅 7 个既有无关超限 | 高 | HTTP 规则、Method、LocalHttpServer、ReplaceBodyText、Document predicate、抓包、macOS 安装 |
 | 11:44:12 +08:00 | [恢复新建规则三段式 Tab 并支持通配符动作](completed/2026-09-04/restore-rule-creation-tabs.md) | 新建规则恢复三段式 Tab、顶部保存/取消、说明首显、布局与 Select 溢出修复；Document Set/Clear/Insert/Append 复用条件的单层 `*`，对动作快照中的全部具体节点原子执行 | PASS_WITH_KNOWN_UNRELATED_BASELINE_FAILURES；Domain 100/100、Application 定向 10/10、HTTP Pipeline 15/15、前端 551/551、UI 303/303、typecheck/lint/Clippy/架构/绑定/构建/签名/安装及实际 App 下拉通过；Application 全量 2 个当前 HEAD 既有不一致、源码尺寸 7 个既有超限如实保留 | 高 | 规则、三段式 Tab、DocumentMatchPath、通配符动作、Set、Clear、Insert、Append、macOS 安装 |
 
 ## 2026-09-03

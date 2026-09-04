@@ -65,6 +65,51 @@ describe("RuleDefinitionEditor single pair", () => {
     expect(onSave).toHaveBeenCalledWith(expect.objectContaining({ draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ condition: next, action: recordMatch }) } }) }));
   });
 
+  it("offers common Method values and hides retired rule capabilities", async () => {
+    const reduced = structuredClone(context); if (reduced.content.type !== "http") throw new Error("HTTP required");
+    reduced.content.value.stages[0].http!.match_fields = [
+      { kind: "method", operators: ["equals"], selector: null },
+      { kind: "request_target", operators: ["equals", "contains", "wildcard"], selector: null },
+    ];
+    reduced.content.value.stages[0].http!.actions = [
+      { kind: "replace_body_text", terminal: false, traffic_direction: null, parameters_required: true },
+      { kind: "jitter", terminal: false, traffic_direction: null, parameters_required: true },
+    ];
+    reduced.content.value.stages[0].document_common_actions = [];
+    const currentAction = { source: "http", value: { Jitter: { minimum_milliseconds: 1, maximum_milliseconds: 2, scope: "PerChunk" as const } } } as const;
+    const nextCondition: Condition = { source: "http", field: "Method", operator: { Equals: "POST" } };
+    mocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(nextCondition);
+    mocks.ruleDefinitionActionDraft.mockResolvedValue(currentAction.value);
+    const user = userEvent.setup(); render(<Harness contextValue={reduced} initial={input(requestTarget, currentAction)} />);
+
+    await user.click(screen.getByRole("button", { name: /HTTP 匹配字段/ }));
+    expect(screen.getByRole("option", { name: "Method" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Path（包含 Query 参数）" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "Header" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "Method" }));
+    await selectOption(user, "HTTP 匹配操作符", "equals");
+
+    await user.click(screen.getByRole("button", { name: /HTTP Method/ }));
+    expect(screen.getAllByRole("option").map((option) => option.textContent)).toEqual(["GET", "POST", "PUT", "PATCH", "DELETE"]);
+    await user.click(screen.getByRole("option", { name: "POST" }));
+
+    await user.click(screen.getByRole("button", { name: /动作来源/ }));
+    expect(screen.getByRole("option", { name: "HTTP" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "Document" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "通用" })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "HTTP" }));
+    const actionType = screen.getByRole("button", { name: /HTTP 动作类型/ });
+    expect(actionType).toHaveTextContent("随机延迟");
+    await user.click(actionType);
+    expect(screen.getByRole("option", { name: "替换当前 Body" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "随机延迟" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: /Set JSON Field|Set Header|Mock Response|设置 JSON 字段|设置 Header|模拟响应/ })).not.toBeInTheDocument();
+    await user.click(screen.getByRole("option", { name: "随机延迟" }));
+
+    await user.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(mocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledWith("method", null, "equals", "POST", "proxy_to_upstream"));
+  });
+
   it("materializes schema-free Body manual path only on Save", async () => {
     mocks.ruleDefinitionDocumentConditionDraft.mockResolvedValue({ source: "document", path: "/customer/age", predicate: { type: "number", value: { operator: "equal", value: 18 } } });
     mocks.ruleDefinitionDocumentCommonActionDraft.mockResolvedValue(recordMatch);
@@ -94,6 +139,36 @@ describe("RuleDefinitionEditor single pair", () => {
     await selectOption(user, "Document 谓词", "equals"); await user.type(screen.getByRole("textbox", { name: "匹配值" }), "root");
     await user.click(screen.getByRole("button", { name: "保存规则" }));
     await waitFor(() => expect(mocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("", "string", "equals", "root"));
+  });
+
+  it("hides Document nodes without predicate capability from condition selectors", async () => {
+    const filtered = structuredClone(context); if (filtered.content.type !== "http") throw new Error("HTTP required");
+    filtered.local_document_types.push(
+      { value_type: "object", predicates: [], actions: [{ kind: "set", target_kind: "node", target_value_type: "object", operand_value_type: "object" }] },
+      { value_type: "array", predicates: [], actions: [{ kind: "append", target_kind: "array", target_value_type: "array", operand_value_type: "string" }] },
+    );
+    filtered.content.value.stages[0].document_fields = [
+      { path: "/GBRD_01/*", label: "GBRD item", value_type: "object", item_template: true, predicates: [], actions: [{ kind: "set", target_kind: "node", target_value_type: "object", operand_value_type: "object" }] },
+      { path: "/GBRD_01/*/kid", label: "kid", value_type: "string", item_template: true, predicates: ["equals"], actions: [{ kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" }] },
+    ];
+    const user = userEvent.setup(); render(<Harness contextValue={filtered} initial={input(requestTarget, recordMatch)} />);
+
+    await selectOption(user, "条件来源", "Document");
+    await user.click(screen.getByRole("button", { name: /Document Schema 条件路径/ }));
+    expect(screen.getByRole("option", { name: "kid · /GBRD_01/*/kid" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "GBRD item · /GBRD_01/*" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await user.click(screen.getByRole("button", { name: /Document 条件值类型/ }));
+    expect(screen.getByRole("option", { name: "string" })).toBeVisible();
+    expect(screen.getByRole("option", { name: "number" })).toBeVisible();
+    expect(screen.queryByRole("option", { name: "object" })).not.toBeInTheDocument();
+    expect(screen.queryByRole("option", { name: "array" })).not.toBeInTheDocument();
+    await user.keyboard("{Escape}");
+
+    await selectOption(user, "动作来源", "Document");
+    await user.click(screen.getByRole("button", { name: /Document Schema 动作路径/ }));
+    expect(screen.getByRole("option", { name: "GBRD item · /GBRD_01/*" })).toBeVisible();
   });
 
   it("keeps every rule Select value on one clipped line", async () => {
@@ -143,7 +218,7 @@ describe("RuleDefinitionEditor single pair", () => {
 
     const selectorRow = screen.getByTestId("http-action-selector-row");
     expect(within(selectorRow).getByRole("button", { name: /动作来源/ })).toHaveTextContent("HTTP");
-    expect(within(selectorRow).getByRole("button", { name: /HTTP 动作类型/ })).toHaveTextContent("Jitter");
+    expect(within(selectorRow).getByRole("button", { name: /HTTP 动作类型/ })).toHaveTextContent("随机延迟");
     const parameters = screen.getByRole("textbox", { name: "动作参数 JSON" });
     expect(selectorRow).not.toContainElement(parameters);
     expect(parameters.closest("[data-testid='http-action-parameters-row']")).toHaveClass("w-full");

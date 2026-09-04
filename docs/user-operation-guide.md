@@ -27,16 +27,15 @@ App 断开或 Server 读写失败时，该 Exchange 结束。
 
 App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener，使用带标签的内容区分能力：
 
-- HTTP 内容可以组合 Method、Path、Header 与可选的协议 Document 条件，
-  并执行 HTTP 修改、故障、Mock 或 Document 动作。UI 中的 `Path（包含 Query 参数）` 始终是原始
-  `/path?query`，请求与
-  对应响应阶段读取同一份请求元数据，不包含 scheme、host 或 port。Header 名称使用单层 `/name`
-  手动输入、ASCII 大小写不敏感，重复 Header 任一值命中即成立。
+- HTTP 内容可以组合 Method、Path 与可选的协议 Document 条件，并执行正文修改、故障或 Document
+  动作。UI 中的 `Path（包含 Query 参数）` 始终是原始 `/path?query`，请求与对应响应阶段读取同一份
+  请求元数据，不包含 scheme、host 或 port。Method 从 GET、POST、PUT、PATCH、DELETE 中选择。
 - Socket 内容只处理协议包 Decode 后的类型化 Document 条件与动作，不提供 HTTP 能力。
 
-Method 只支持精确匹配；Path 与 Header 支持精确、包含、前缀、后缀和通配符。Document
-有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。Document
-条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
+Method 只支持精确匹配；Path 支持精确、包含、前缀、后缀和通配符。Document
+有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。条件路径和值类型
+下拉只显示 Rust 声明了谓词能力的节点，不能直接比较的 Object/Array 容器不作为条件候选，但仍可按其
+动作能力出现在动作路径中。Document 条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
 Insert、Append 动作使用相同的单层 `*` 语义，对动作开始时命中的全部具体节点执行；零命中不修改
 Document，也不会自动创建缺失父节点。旧 Path/JSONPath/Regex 匹配合同已删除，
 没有别名、兼容解析或第二执行路径。
@@ -84,9 +83,8 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
 在“1. 响应方式”中选择“本机应答”后，Listener 不创建真实上游连接；另外两个选项分别按原请求
 目标转发或转发到固定 Server。使用本机应答时，请求仍先经过 Proxy → Server
-规则；未被终止动作直接生成响应时，本地 Server 将收到的 HTTP Context 原样回环，再进入
-Proxy → App 规则。两个阶段都可以使用 `Mock Response`；规则参数中的 `body` 直接填写文本，运行时
-按照最终响应 BodyCodec 编码为网络字节。
+规则；本地 Server 将收到的 HTTP Context 原样回环，再进入 Proxy → App 规则。需要 Mock Body 时，
+在 Proxy → App 规则中使用“替换当前 Body”，运行时按照最终响应 BodyCodec 编码为网络字节。
 
 ### 3.4 下游 TLS/mTLS
 
@@ -197,7 +195,8 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“�
 - 先选择单个 Listener，再选择 Rust 返回的可用阶段；规则创建后不能通过更新切换 Listener。
 - HTTP 规则：在同一内容中编辑 HTTP 条件/动作，并在入口绑定协议包时按能力添加可选 Document。
 - Socket 规则：只编辑协议 Document 条件/动作，不显示 HTTP 字段或 HTTP 动作。
-- 从服务器响应创建：生成未保存、默认停用的 HTTP Mock 草稿，确认后再保存。
+- 从服务器响应创建：提取响应 Body，生成未保存、默认停用的 Proxy → App“替换当前 Body”规则；需将
+  Listener 配置为 LocalHttpServer，确认后再保存。
 - 从故障预设创建：模板生成统一 HTTP 规则草稿，并通过同一保存、列表和停用流程管理。
 
 “新建规则”只负责选择 Listener 和阶段；阶段能力加载后，名称和优先级尚未填写时也会立即显示说明、
@@ -213,16 +212,18 @@ Proxy → Server，下行对应 Proxy → App。
 
 | 统一阶段 | 可以配置 | 不能配置 |
 | --- | --- | --- |
-| Proxy → Server | 请求字段、上行延迟/限速、Mock、上游连接/读写故障，以及入口支持时的 Document | HTTP 响应状态、响应损坏、下行限速 |
-| Proxy → App | 响应字段、状态码、下行延迟/限速、截断/错误长度/下行断连，以及入口支持时的 Document | Mock、上游超时、上行断连 |
+| Proxy → Server | Method/Path、请求 Body 替换、上行延迟/限速、上游连接/读写故障，以及入口支持时的 Document | Header、HTTP 响应状态、响应损坏、下行限速 |
+| Proxy → App | Method/Path、响应 Body 替换、状态码、下行延迟/限速、截断/错误长度/下行断连，以及入口支持时的 Document | Header、Mock Response、上游超时、上行断连 |
 
 额外约束：
 
 - 限速与间歇通断方向由阶段固定，界面不允许手工选错；
 - 每条规则必须设置一个条件和一个对应动作，不提供多条件 AND/OR 或动作列表；
 - 终止动作作为该规则唯一动作，命中后结束当前方向的后续规则处理；
-- Header 名称和 HTTP/Socket Document 路径直接使用 `/a/b` 输入，有 Schema 时可以下拉选择或手工
-  输入，无 Schema 时只手工输入；
+- HTTP/Socket Document 路径直接使用 `/a/b` 输入，有 Schema 时可以下拉选择或手工输入，无 Schema
+  时只手工输入；
+- Document 条件路径和值类型只展示具有谓词能力的标量候选；Object/Array 容器仅在支持相应动作时
+  出现在动作路径中；
 - 每条规则读取当前 working Document，命中的唯一 action 立即修改它并对后序规则可见，最终只
   Encode 一次；
 - 终止动作命中后停止后续规则。
@@ -254,10 +255,10 @@ HTTP 和 Socket 同时显示在一个页面，不通过协议 Tab 隐藏另一�
 HTTP 表格显示时间、终端 IP、通道、方向、方法、路径/请求类型、状态码、结果、耗时、规则和大小。
 页面停留时新请求应立即追加，不需要切换页面。
 
-在 Exchange 详情中，服务器返回的完整 HTTP 响应会显示“用此服务器响应创建 Mock 草稿”。该操作
-使用配对请求的完整 request-target，并复制状态码、可保留 Header 与 UTF-8 Body；草稿默认禁用且
-不会自动保存。压缩、二进制、非 UTF-8 或证据不完整的响应会被拒绝。打开规则编辑器后仍需人工
-检查并保存，保存前不会改变代理运行行为。
+在 Exchange 详情中，服务器返回的完整 HTTP 响应会显示“用此响应 Body 创建替换规则”。该操作
+使用配对请求的完整 request-target，只复制 UTF-8 Body，生成 Proxy → App 的 ReplaceBodyText；不会
+复制响应状态码或 Header。草稿默认禁用且不会自动保存，需配合 LocalHttpServer 使用。非 UTF-8 或
+证据不完整的响应会被拒绝。打开规则编辑器后仍需人工检查并保存，保存前不会改变代理运行行为。
 
 ### 7.2 Socket
 

@@ -31,16 +31,22 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
 不能依赖前端隐藏非法选项。需要多个独立行为时创建多条规则，它们分别匹配并按规则顺序执行。
 
-HTTP 条件只有一套当前合同：Method、Path 和 Header。终端 IP 与证书指纹只用于连接诊断和抓包展示，
+HTTP 新建/编辑条件只有一套当前合同：Method 和 Path。终端 IP、证书指纹与 Header 只用于既有数据
+兼容、连接诊断或抓包展示，
 不作为新规则的匹配条件。UI 的
 `Path（包含 Query 参数）` 对应内部 request target，是请求入口捕获的原始 `/path?query`；同一
 transaction 把这份不可变请求元数据传给请求与响应两个阶段，
-响应阶段不得从 status line 重建目标，也不得加入 scheme、host、port 或规范化。Header selector 是
-单层 `/name`，名称按 ASCII 大小写不敏感，重复字段按 ANY 匹配。Method 只支持 Equals；其他字符串
-字段由 Rust capability 声明 Equals、Contains、StartsWith、EndsWith、Wildcard。
+响应阶段不得从 status line 重建目标，也不得加入 scheme、host、port 或规范化。Method 只支持
+Equals，并由 UI 提供 GET、POST、PUT、PATCH、DELETE；Path 由 Rust capability 声明 Equals、Contains、
+StartsWith、EndsWith、Wildcard。
+
+HTTP 编辑能力不再提供 SetJsonField、SetHeader 或 MockResponse：结构化字段修改统一走 Document 动作，
+Header 不参与规则编辑；使用 LocalHttpServer 时，Mock Body 由 Proxy → App 的 ReplaceBodyText 完成。
+这些底层 action 类型仅保留用于读取和运行既有规则。RecordMatch 同样不再作为“通用”动作暴露。
 
 Document 条件路径使用 RFC 6901 扩展：完整 token `*` 只展开一个 object/array 层，多个结果按 ANY
-判断。Schema 只提供递归路径选择能力，手动路径始终由同一 Rust factory 校验；无 Schema 时不生成
+判断。条件路径和 schema-free 类型候选按 Rust capability 的非空 predicate 集合过滤，Object/Array
+等无 predicate 的容器节点不进入条件下拉；动作路径仍消费完整 Schema action capability。手动路径始终由同一 Rust factory 校验；无 Schema 时不生成
 前端默认字段。普通 HTTP Body 使用内建 JSON Decode/Encode 提供 schema-free Document；只有规则实际
 包含 Document 条件或动作时才进入该事务，非法 JSON 按 Decode 失败终止 Exchange，不回退到文本匹配。
 协议模式的精确包只由 Listener 绑定决定，规则不复制包身份。Document mutation 与条件复用同一

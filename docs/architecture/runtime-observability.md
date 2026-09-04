@@ -167,10 +167,10 @@ Rust `EventHub` 发布稳定的 UI 事件，前端 query hook 收到失效信号
 切换页面后重新查询只是恢复视图，不应是看到新数据的必要条件。相关回归测试需要证明事件到达时当前
 列表自动更新，同时暂停列表滚动只影响视图，不影响网络、规则或内存记录。
 
-HTTP 响应生成 Mock 草稿时，Tauri 只把 Exchange ID 与事件索引交给 Application。Application 使用
-同一 `ExchangeObservationRecord` 配对实际送往 Server 的请求和 Server 返回的响应，过滤 hop-by-hop
-Header、重算 `Content-Length`、拒绝编码或非 UTF-8 Body，再调用规则校验端口。前端不解析原始 HTTP，
-也不会自动保存或启用生成的草稿。
+HTTP 响应生成 Body 替换草稿时，Tauri 只把 Exchange ID 与事件索引交给 Application。Application 使用
+同一 `ExchangeObservationRecord` 配对实际送往 Server 的 request-target 和 Server 返回的 UTF-8 Body，
+生成 Proxy → App `ReplaceBodyText` 规则；status/Header 不进入草稿。该规则需配合 LocalHttpServer，
+前端不解析原始 HTTP，也不会自动保存或启用生成的草稿。
 
 ## 8. MCP 查询与环境配置
 

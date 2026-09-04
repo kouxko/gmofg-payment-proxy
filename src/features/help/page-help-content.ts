@@ -126,10 +126,9 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         steps: [
           "打开“执行动作”Tab，按实际执行顺序添加动作。",
           "Document 动作路径允许完整路径段 * 匹配一层，并把同一动作应用到当前命中的全部节点。",
-          "修改 JSON 字段、替换 Body/Header、延迟和暂停可以组合，并会保存每一步轨迹。",
-          "Mock、拒绝、断开、丢弃和截断是终止动作；命中后停止当前规则的后续动作和后续规则。",
+          "HTTP 动作使用中文名称；结构化字段修改统一选择 Document 动作，HTTP 只保留 Body、延迟、限速和故障类动作。",
+          "使用本机应答时，在 Proxy → App 选择“替换当前 Body”即可生成需要的 Mock Body。",
           "请求阶段和响应阶段支持的动作不同；无效组合会被拒绝。",
-          "输入响应 Header 时每行使用 name: value；输入字节时使用 0 到 255 的十进制逗号列表，提交后会解析并规范化。",
           "Shift-JIS Body、非法 JSON、错误长度和截断参数必须通过校验，页面不会静默沿用旧值。",
         ],
       },
@@ -137,7 +136,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         id: "rules-save",
         title: "保存、复制、删除、导入和导出",
         steps: [
-          "点击“保存规则”后等待完整校验字段、阶段、正则、JSON Path、Header、Shift-JIS 和终止动作顺序。",
+          "点击“保存规则”后等待完整校验字段、阶段、Document Path、Shift-JIS 和终止动作。",
           "字段错误会显示在相应控件下；异步草稿仍在等待或无效时保存按钮不可用。",
           "使用“复制”创建当前规则的独立副本，再修改名称、条件或动作后保存。",
           "点击删除规则会立即删除，删除后无法恢复。",
