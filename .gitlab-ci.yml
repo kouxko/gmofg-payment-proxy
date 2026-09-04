@@ -320,7 +320,7 @@ windows_build_only:
   interruptible: true
   variables:
     OPENSSL_STATIC: "1"
-    GIT_CLEAN_FLAGS: "-ffdx -e .ci-cache/"
+    GIT_CLEAN_FLAGS: "-ffdx -e .ci-cache/ -e src-tauri/target/"
   needs:
     - job: android_companion
       artifacts: true
