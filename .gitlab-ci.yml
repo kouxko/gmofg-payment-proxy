@@ -330,6 +330,7 @@ windows_build_only:
         - deno.lock
         - src-tauri/Cargo.lock
       prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    when: always
     paths:
       - .ci-cache/
       - node_modules/

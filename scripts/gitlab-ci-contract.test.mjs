@@ -199,6 +199,11 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(windowsBootstrap, /--includeRecommended/u);
   assert.match(windowsBootstrap, /Start-Process/u);
   assert.match(windowsBootstrap, /ExitCode -notin @\(0, 3010\)/u);
+  assert.match(windowsBootstrap, /usr\/bin\/perl\.exe/u);
+  assert.match(
+    windowsBootstrap,
+    /Perl is required to build the vendored OpenSSL dependency on Windows/u,
+  );
   assert.doesNotMatch(
     linuxBootstrap,
     /"ndk;\$ANDROID_NDK_VERSION"/u,
@@ -267,6 +272,7 @@ test("Android and Windows build-only mode packages the Companion without running
 
   assert.match(buildOnlyJob, /^[ ]{4}- "slave4"$/mu);
   assert.match(buildOnlyJob, /^[ ]{2}timeout: 2h$/mu);
+  assert.match(buildOnlyJob, /^[ ]{4}when: always$/mu);
   assert.match(
     buildOnlyJob,
     /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,

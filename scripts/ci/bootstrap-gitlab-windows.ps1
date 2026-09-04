@@ -88,6 +88,31 @@ function Import-VcVars64([System.IO.FileInfo]$VcVars) {
         }
     }
 }
+
+function Find-Perl {
+    $Perl = Get-Command perl.exe -ErrorAction SilentlyContinue
+    if ($Perl) {
+        return $Perl
+    }
+
+    $Candidates = @(
+        "C:\Strawberry\perl\bin\perl.exe",
+        "C:\Perl64\bin\perl.exe"
+    )
+    $Git = Get-Command git.exe -ErrorAction SilentlyContinue
+    if ($Git) {
+        $GitRoot = Split-Path -Parent (Split-Path -Parent $Git.Source)
+        $Candidates = @((Join-Path $GitRoot "usr/bin/perl.exe")) + $Candidates
+    }
+
+    foreach ($Candidate in $Candidates) {
+        if (Test-Path $Candidate -PathType Leaf) {
+            $env:Path = "$(Split-Path -Parent $Candidate);$env:Path"
+            return Get-Command perl.exe -ErrorAction SilentlyContinue
+        }
+    }
+    return $null
+}
 $InstalledDenoVersion = if (Test-Path $DenoExecutable -PathType Leaf) {
     Get-DenoVersion $DenoExecutable
 } else {
@@ -181,6 +206,12 @@ if ($RequireMsvc) {
     }
     Write-Host "MSVC compiler: $($Cl.Source)"
     Write-Host "MSVC linker: $($Link.Source)"
+
+    $Perl = Find-Perl
+    if (-not $Perl) {
+        throw "Perl is required to build the vendored OpenSSL dependency on Windows."
+    }
+    Write-Host "Perl runtime: $($Perl.Source)"
 }
 
 deno --version
