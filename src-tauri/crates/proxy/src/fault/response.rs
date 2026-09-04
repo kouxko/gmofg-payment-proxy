@@ -67,7 +67,7 @@ pub fn project_response_for_observation(
                 message.body = message.body.slice(..*after_bytes);
                 message.body_modified = true;
             }
-            FaultAction::CustomStatus(status) => message = with_status(message, *status)?,
+            FaultAction::CustomStatus(status) => message = with_status(message, *status),
             FaultAction::MockResponse {
                 status,
                 headers,
@@ -170,7 +170,7 @@ pub async fn apply_response_actions(
                 after_bytes,
                 direction: TrafficDirection::Downstream,
             } => schedule.disconnect_after_bytes = Some(*after_bytes),
-            FaultAction::CustomStatus(status) => message = with_status(message, *status)?,
+            FaultAction::CustomStatus(status) => message = with_status(message, *status),
             FaultAction::MockResponse {
                 status,
                 headers,
@@ -220,12 +220,13 @@ fn validate_prefix(prefix: usize, body_len: usize, message: &'static str) -> Res
     Ok(())
 }
 
-fn with_status(message: Message, status: StatusCode) -> Result<Message> {
-    let headers = message.header_map()?;
-    let mut response = Message::response(status, &headers, message.body);
-    response.body_modified = true;
-    response.set_content_length(response.body.len());
-    Ok(response)
+fn with_status(mut message: Message, status: StatusCode) -> Message {
+    let reason = status.canonical_reason().unwrap_or("");
+    message.start_line = format!("HTTP/1.1 {} {reason}", status.as_u16());
+    if message.uses_transfer_encoding() {
+        message.remove_header("content-length");
+    }
+    message
 }
 
 fn request_stage_fault(stage: &str) -> ProxyError {

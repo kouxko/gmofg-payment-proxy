@@ -245,10 +245,20 @@ impl Message {
     pub fn replace_body(&mut self, body: Bytes) {
         self.body = body;
         self.body_modified = true;
-        self.set_content_length(self.body.len());
+        if self.uses_transfer_encoding() {
+            self.remove_header("content-length");
+        } else {
+            self.set_content_length(self.body.len());
+        }
     }
 
+    /// Selects a fixed-length representation for this buffered message.
+    ///
+    /// HTTP/1.1 forbids sending `Transfer-Encoding` together with
+    /// `Content-Length`, so an explicit fixed-length selection removes the
+    /// transfer-coding metadata first.
     pub fn set_content_length(&mut self, length: usize) {
+        self.remove_header("transfer-encoding");
         self.remove_header("content-length");
         self.headers.push(RawHeader::new(
             Bytes::from_static(b"Content-Length"),
@@ -262,6 +272,38 @@ impl Message {
             .find(|h| h.name.eq_ignore_ascii_case(b"content-length"))
             .and_then(|h| std::str::from_utf8(&h.value).ok())
             .and_then(|value| value.parse().ok())
+    }
+
+    #[must_use]
+    pub fn uses_transfer_encoding(&self) -> bool {
+        self.headers
+            .iter()
+            .any(|header| header.name.eq_ignore_ascii_case(b"transfer-encoding"))
+    }
+
+    pub fn ensure_transfer_encoding_ends_in_chunked(&mut self) {
+        let Some(header) = self
+            .headers
+            .iter_mut()
+            .rfind(|header| header.name.eq_ignore_ascii_case(b"transfer-encoding"))
+        else {
+            return;
+        };
+        let final_coding = header
+            .value
+            .split(|byte| *byte == b',')
+            .next_back()
+            .map(<[u8]>::trim_ascii);
+        if final_coding.is_some_and(|coding| coding.eq_ignore_ascii_case(b"chunked")) {
+            return;
+        }
+        let mut value = Vec::with_capacity(header.value.len().saturating_add(9));
+        value.extend_from_slice(&header.value);
+        if !header.value.is_empty() {
+            value.extend_from_slice(b", ");
+        }
+        value.extend_from_slice(b"chunked");
+        header.value = Bytes::from(value);
     }
 
     pub fn remove_header(&mut self, name: &str) {

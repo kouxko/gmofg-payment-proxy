@@ -1,0 +1,10 @@
+Header contract:
+- Transfer-Encoding: chunked
+- Content-Length: absent
+
+Body wire actually received before connection abort:
+3
+abc
+
+Terminal chunk `0` is absent.
+Connection terminal code: TRUNCATED_RESPONSE.

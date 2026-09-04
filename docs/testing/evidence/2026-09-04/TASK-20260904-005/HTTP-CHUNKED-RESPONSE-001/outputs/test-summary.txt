@@ -1,0 +1,28 @@
+RED
+- keep_alive_request_forwards_chunked_close_response_without_header_conflict: FAILED
+- failure: complete HTTP response head was absent before the production fix
+
+GREEN
+- focused protocol regression: 1 passed, 0 failed
+- proxy full suite: 236 passed, 0 failed
+- cargo fmt --check: PASS
+- cargo clippy -p intercept-proxy-runtime --all-targets --all-features -- -D warnings: PASS
+- deno task lint: PASS
+- git diff --check: PASS
+
+WIRE RESULT
+- status: 404 preserved
+- content-type: application/json preserved
+- connection: close preserved
+- transfer-encoding: chunked preserved
+- content-length: absent
+- chunk wire: 15 data chunk plus 0 terminator
+- body: {"result_code":"T29"}
+- connection callback error: None
+
+ADVERSARIAL BOUNDARIES
+- upstream Transfer-Encoding + Content-Length: downstream removes Content-Length
+- gzip, chunked + CustomStatus: composite Transfer-Encoding preserved
+- chunked TruncateResponse: body wire ends after `3\r\nabc\r\n`; terminal `0\r\n\r\n` absent
+- truncation terminal code: TRUNCATED_RESPONSE
+- upstream `Transfer-Encoding: gzip` + EOF: downstream `gzip, chunked`, exact `7` chunk and `0` terminator

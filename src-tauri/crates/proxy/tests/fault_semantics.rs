@@ -33,6 +33,34 @@ async fn content_length_offset_changes_only_the_declared_length() {
 }
 
 #[tokio::test]
+async fn custom_status_preserves_composite_transfer_encoding_without_content_length() {
+    let source = Message::from_raw_http1_head(
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip, chunked\r\nContent-Length: 99\r\n\r\n",
+        Bytes::from_static(b"encoded body"),
+    )
+    .expect("buffered transfer-coded response");
+
+    let result = apply_response_actions(
+        source,
+        &[FaultAction::CustomStatus(StatusCode::SERVICE_UNAVAILABLE)],
+        &CancellationToken::new(),
+    )
+    .await
+    .expect("custom status fault");
+    let ResponseDisposition::Send { message, .. } = result else {
+        panic!("expected send disposition");
+    };
+
+    assert_eq!(message.http_status(), Some(503));
+    assert!(message.uses_transfer_encoding());
+    assert_eq!(message.declared_content_length(), None);
+    assert!(message.headers.iter().any(|header| {
+        header.name.eq_ignore_ascii_case(b"transfer-encoding")
+            && header.value.eq_ignore_ascii_case(b"gzip, chunked")
+    }));
+}
+
+#[tokio::test]
 async fn truncate_response_preserves_declared_length_and_selects_a_strict_prefix() {
     let mut headers = HeaderMap::new();
     headers.insert("content-length", "4".parse().expect("valid header"));

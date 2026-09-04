@@ -18,6 +18,56 @@ fn preserves_unmodified_raw_body_and_recalculates_modified_length() {
 }
 
 #[test]
+fn setting_content_length_removes_transfer_encoding() {
+    let mut message = Message::from_raw_http1_head(
+        b"HTTP/1.1 404 Not Found\r\nTransfer-Encoding: chunked\r\n\r\n",
+        Bytes::from_static(b"decoded body"),
+    )
+    .expect("buffered chunked response");
+
+    message.set_content_length(message.body.len());
+
+    assert_eq!(message.declared_content_length(), Some(12));
+    assert!(
+        !message
+            .headers
+            .iter()
+            .any(|header| header.name.eq_ignore_ascii_case(b"transfer-encoding"))
+    );
+}
+
+#[test]
+fn replacing_chunked_body_preserves_transfer_encoding_without_content_length() {
+    let mut message = Message::from_raw_http1_head(
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+        Bytes::from_static(b"old"),
+    )
+    .expect("buffered chunked response");
+
+    message.replace_body(Bytes::from_static(b"changed body"));
+
+    assert!(message.uses_transfer_encoding());
+    assert_eq!(message.declared_content_length(), None);
+    assert_eq!(message.body, Bytes::from_static(b"changed body"));
+}
+
+#[test]
+fn close_delimited_transfer_coding_is_extended_with_chunked() {
+    let mut message = Message::from_raw_http1_head(
+        b"HTTP/1.1 200 OK\r\nTransfer-Encoding: gzip\r\n\r\n",
+        Bytes::from_static(b"encoded"),
+    )
+    .expect("close-delimited transfer-coded response");
+
+    message.ensure_transfer_encoding_ends_in_chunked();
+
+    assert!(message.headers.iter().any(|header| {
+        header.name.eq_ignore_ascii_case(b"transfer-encoding")
+            && header.value.eq_ignore_ascii_case(b"gzip, chunked")
+    }));
+}
+
+#[test]
 fn exposes_response_status_without_misclassifying_request_start_lines() {
     let response = Message::response(StatusCode::BAD_GATEWAY, &HeaderMap::new(), Bytes::new());
     let request = Message::request(

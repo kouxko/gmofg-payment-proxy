@@ -8,6 +8,7 @@ use super::{
 pub(super) struct WireBody {
     inner: PacedBody,
     finish_delay: Option<Pin<Box<tokio::time::Sleep>>>,
+    disconnect_delay: Option<Pin<Box<tokio::time::Sleep>>>,
     tracker: Option<Arc<ResponseWriteTracker>>,
 }
 
@@ -49,6 +50,7 @@ impl WireBody {
         Self {
             inner: PacedBody::new(data, claimed_length, schedule, cancellation),
             finish_delay,
+            disconnect_delay: None,
             tracker: None,
         }
     }
@@ -67,8 +69,21 @@ impl Body for WireBody {
         mut self: Pin<&mut Self>,
         context: &mut Context<'_>,
     ) -> Poll<Option<std::result::Result<Frame<Self::Data>, Self::Error>>> {
+        if let Some(delay) = self.disconnect_delay.as_mut() {
+            if delay.as_mut().poll(context).is_pending() {
+                return Poll::Pending;
+            }
+            self.disconnect_delay = None;
+            return Poll::Ready(Some(Err(PacedBodyError::Disconnected)));
+        }
         match Pin::new(&mut self.inner).poll_frame(context) {
             Poll::Ready(None) => {}
+            Poll::Ready(Some(Err(PacedBodyError::Disconnected))) => {
+                self.disconnect_delay =
+                    Some(Box::pin(tokio::time::sleep(Duration::from_millis(1))));
+                context.waker().wake_by_ref();
+                return Poll::Pending;
+            }
             outcome => return outcome,
         }
         if let Some(delay) = self.finish_delay.as_mut() {
