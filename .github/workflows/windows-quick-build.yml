@@ -3,6 +3,10 @@ run-name: Windows quick executable · ${{ github.ref_name }}
 
 on:
   workflow_dispatch:
+  # GitHub 只允许默认分支已注册的 workflow_dispatch；本分支仅用此一次 push 启动快速验证，构建后删除。
+  push:
+    branches:
+      - codex/http-chunked-quick-validation-20260904
 
 concurrency:
   group: windows-quick-executable-${{ github.ref }}
