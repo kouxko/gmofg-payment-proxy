@@ -154,12 +154,6 @@ impl CertificateServiceAdapter {
         for record in snapshot.records {
             let status: MaterialStatus = serde_json::from_value(record.metadata)
                 .map_err(|error| json_error("证书元数据无效", error))?;
-            if status.revision != snapshot.revision {
-                return Err(AppError::new(
-                    "CERTIFICATE_INVALID",
-                    "证书元数据修订号与聚合修订号不一致。",
-                ));
-            }
             statuses.insert(record.kind, status);
         }
 

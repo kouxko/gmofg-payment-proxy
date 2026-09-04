@@ -224,3 +224,67 @@ async fn certificate_status_never_decrypts_private_material() {
         "KEYCHAIN_UNPROTECT_FAILED"
     );
 }
+
+#[tokio::test]
+async fn certificate_status_accepts_unchanged_records_from_older_collection_revision() {
+    let store = Arc::new(SqliteStore::in_memory().expect("store"));
+    let metadata = |revision: u64, subject: &str| {
+        serde_json::json!({
+            "revision": revision,
+            "subject": subject,
+            "fingerprint": "AA:BB:CC",
+            "sans": ["IP:127.0.0.1"],
+            "not_before": "Jan  1 00:00:00 2026 GMT",
+            "not_after": "Jan  1 00:00:00 2036 GMT"
+        })
+    };
+    store
+        .compare_and_swap_certificate_materials(
+            0,
+            &[
+                CertificateMaterialRecord {
+                    kind: ROOT.into(),
+                    protected_blob: vec![1],
+                    metadata: metadata(1, "Test Root"),
+                    updated_at: Utc::now(),
+                },
+                CertificateMaterialRecord {
+                    kind: LEAF.into(),
+                    protected_blob: vec![2],
+                    metadata: metadata(1, "Test Leaf"),
+                    updated_at: Utc::now(),
+                },
+            ],
+        )
+        .expect("seed installation materials");
+    store
+        .compare_and_swap_certificate_materials(
+            1,
+            &[CertificateMaterialRecord {
+                kind: "certificate:environment".into(),
+                protected_blob: vec![3],
+                metadata: metadata(2, "Environment CA"),
+                updated_at: Utc::now(),
+            }],
+        )
+        .expect("advance collection with environment material");
+    let adapter = CertificateServiceAdapter::new(
+        store,
+        Arc::new(FailingUnprotectProtector),
+        Arc::new(QueueDialog {
+            open: ParkingMutex::new(VecDeque::new()),
+        }),
+        Arc::new(InterceptProxyProfile),
+    );
+
+    let status = adapter
+        .status()
+        .await
+        .expect("unchanged installation metadata remains valid");
+
+    assert_eq!(status.revision, 2);
+    assert!(status.ready);
+    assert_eq!(status.items.len(), 2);
+    assert_eq!(status.items[0].subject, "Test Root");
+    assert_eq!(status.items[1].subject, "Test Leaf");
+}

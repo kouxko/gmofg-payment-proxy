@@ -26,7 +26,9 @@ pub(super) struct MaterialSnapshot {
 /// 它刻意不包含证书 DER、私钥或保护后的密文，因此读取该结构不需要访问系统密钥库。
 #[derive(Debug, Clone, Deserialize)]
 pub(super) struct MaterialStatus {
-    pub(super) revision: u64,
+    /// 单条证书记录的修订号；集合修订号推进时，未变化记录不会被重写。
+    #[serde(rename = "revision")]
+    pub(super) _revision: u64,
     pub(super) subject: String,
     pub(super) fingerprint: String,
     pub(super) sans: Vec<String>,

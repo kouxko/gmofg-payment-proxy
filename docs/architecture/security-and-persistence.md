@@ -21,7 +21,8 @@ UI 用户意图
 
 - `settings`：全局设置 JSON 和 revision；
 - `workspaces`、`workspace_state`：完整 Workspace JSON、revision 与当前选择；
-- `certificate_material`、`certificate_state`：受保护的证书材料和集合 revision；
+- `certificate_material`：受保护的证书材料、非敏感元数据和单条记录 revision；
+- `certificate_state`：证书集合 revision；
 - `protected_secrets`：provider/key 对应的受保护 blob；
 - `external_protocol_packages`：统一保存远端注册指纹、本地 Component、启用状态、最近连接和稳定错误；
 - `android_runtime_owners`：最多 8 台设备、按 serial + epoch 隔离的跨进程网络所有权事实；
@@ -57,6 +58,10 @@ Settings、Workspace、规则和证书集合均使用 revision/CAS：
 
 运行时另有 `runtime_epoch`，用于区分一次 Listener 启动。revision 是配置并发身份，epoch 是运行实例
 身份，二者不可混用。
+
+证书集合 revision 用于检测集合级并发写入，不代表每条证书记录都在该代次发生变化。未变化记录保留
+自己的记录 revision；解密材料时必须校验该记录元数据 revision 与同一受保护材料 revision 一致，
+不能把记录 revision 与当前集合 revision 混为一谈，也不能因集合推进而伪造未变化材料的新版本。
 
 ### 3.2 Workspace 是聚合根
 

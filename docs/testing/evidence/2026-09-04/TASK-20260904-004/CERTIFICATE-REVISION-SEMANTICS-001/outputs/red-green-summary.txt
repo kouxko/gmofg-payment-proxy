@@ -1,0 +1,17 @@
+RED
+command: cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure certificate_status_accepts_unchanged_records_from_older_collection_revision -- --nocapture
+result: FAILED
+error code: CERTIFICATE_INVALID
+error message: 证书元数据修订号与聚合修订号不一致。
+
+GREEN
+same focused command result: 1 passed; 0 failed
+
+FULL REGRESSION
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure
+result: 513 passed; 0 failed
+
+STATIC
+cargo fmt --check: PASS
+cargo clippy --all-targets -- -D warnings: PASS
+git diff --check: PASS
