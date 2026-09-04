@@ -156,6 +156,94 @@ Content-Length: 2\r\n\r\n",
     }
 }
 
+async fn serve_chunked_close_upstream(listener: TcpListener) {
+    let (mut stream, _) = listener.accept().await.unwrap();
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while !request.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).await.unwrap();
+        request.push(byte[0]);
+    }
+    assert!(request.starts_with(b"GET /ex-tms/v1/terminal-status HTTP/1.1\r\n"));
+    stream
+        .write_all(
+            b"HTTP/1.1 404 Not Found\r\n\
+Content-Type: application/json\r\n\
+Transfer-Encoding: chunked\r\n\
+Connection: close\r\n\r\n\
+15\r\n{\"result_code\":\"T29\"}\r\n0\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    stream.shutdown().await.unwrap();
+}
+
+async fn serve_chunked_conflicting_length_upstream(listener: TcpListener) {
+    let (mut stream, _) = listener.accept().await.unwrap();
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while !request.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).await.unwrap();
+        request.push(byte[0]);
+    }
+    assert!(request.starts_with(b"GET /conflicting-framing HTTP/1.1\r\n"));
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\n\
+Content-Type: application/json\r\n\
+Transfer-Encoding: chunked\r\n\
+Content-Length: 999\r\n\
+Connection: close\r\n\r\n\
+2\r\n{}\r\n0\r\n\r\n",
+        )
+        .await
+        .unwrap();
+    stream.shutdown().await.unwrap();
+}
+
+async fn serve_close_delimited_gzip_upstream(listener: TcpListener) {
+    let (mut stream, _) = listener.accept().await.unwrap();
+    let mut request = Vec::new();
+    let mut byte = [0u8; 1];
+    while !request.ends_with(b"\r\n\r\n") {
+        stream.read_exact(&mut byte).await.unwrap();
+        request.push(byte[0]);
+    }
+    assert!(request.starts_with(b"GET /gzip-transfer-coding HTTP/1.1\r\n"));
+    stream
+        .write_all(
+            b"HTTP/1.1 200 OK\r\n\
+Transfer-Encoding: gzip\r\n\
+Connection: close\r\n\r\n\
+encoded",
+        )
+        .await
+        .unwrap();
+    stream.shutdown().await.unwrap();
+}
+
+#[derive(Debug)]
+struct RawChunkedResponseConnector;
+
+#[async_trait]
+impl UpstreamConnector for RawChunkedResponseConnector {
+    async fn send(
+        &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
+        _request: ForwardRequest,
+        _actions: &[FaultAction],
+        _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
+        _cancellation: &CancellationToken,
+    ) -> Result<UpstreamExchange> {
+        Message::from_raw_http1_head(
+            b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
+            Bytes::from_static(b"abcdef"),
+        )
+        .map(Into::into)
+    }
+}
+
 #[derive(Debug, Default)]
 struct SequencedRawConnector(AtomicUsize);
 
@@ -199,6 +287,7 @@ impl PipelinePorts for ResponseFaultPorts {
 #[derive(Default)]
 struct ClosedResultPorts {
     request_actions: Vec<FaultAction>,
+    response_actions: Vec<FaultAction>,
     closed_code: Mutex<Option<String>>,
     closed: Notify,
 }
@@ -220,6 +309,15 @@ impl PipelinePorts for ClosedResultPorts {
         _message: &mut Message,
     ) -> Result<Vec<FaultAction>> {
         Ok(self.request_actions.clone())
+    }
+
+    async fn apply_response_policy(
+        &self,
+        _context: &ConnectionContext,
+        _request: &intercept_proxy_runtime::http::HttpRequestMetadata,
+        _message: &mut Message,
+    ) -> Result<Vec<FaultAction>> {
+        Ok(self.response_actions.clone())
     }
 
     async fn connection_closed(&self, _context: &ConnectionContext, result: &Result<()>) {

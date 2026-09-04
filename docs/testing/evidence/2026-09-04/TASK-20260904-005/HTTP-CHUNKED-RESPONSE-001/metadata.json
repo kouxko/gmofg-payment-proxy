@@ -1,0 +1,44 @@
+{
+  "task_id": "TASK-20260904-005",
+  "case_id": "HTTP-CHUNKED-RESPONSE-001",
+  "result": "PASS",
+  "started_at": "2026-09-04 17:34:00 +08:00",
+  "completed_at": "2026-09-04 18:13:45 +08:00",
+  "tested_state": "Git HEAD 68051ebf20ccc406f74922d2ca2f10f44bb50386 plus TASK-20260904-005 changes",
+  "input": {
+    "request_connection": "Keep-Alive",
+    "upstream_status": 404,
+    "upstream_transfer_encoding": "chunked",
+    "upstream_connection": "close",
+    "decoded_body_bytes": 21
+  },
+  "actual": {
+    "downstream_status": 404,
+    "downstream_content_length": null,
+    "downstream_transfer_encoding": "chunked",
+    "downstream_connection": "close",
+    "downstream_chunk_wire": "15 + 21 body bytes + 0 terminator",
+    "body_equal": true,
+    "connection_error": null
+  },
+  "adversarial_boundaries": {
+    "upstream_transfer_encoding_with_content_length": "content-length removed; chunked response forwarded",
+    "custom_status_with_gzip_chunked": "status changed; transfer-encoding preserved; content-length absent",
+    "chunked_truncation": "3-byte chunk written; terminal chunk absent; TRUNCATED_RESPONSE reported",
+    "close_delimited_transfer_coding": "gzip preserved; chunked appended; canonical header matches downstream wire"
+  },
+  "tests": {
+    "red": "FAILED before production fix: complete HTTP response head missing",
+    "focused_green": "1 passed, 0 failed",
+    "proxy_full": "236 passed, 0 failed",
+    "fmt": "PASS",
+    "clippy": "PASS",
+    "eslint": "PASS",
+    "diff_check": "PASS"
+  },
+  "not_applicable": {
+    "tls_and_certificates": "response had already been read successfully",
+    "real_external_service": "real local TCP upstream reproduces the exact HTTP chunk wire without external dependency",
+    "ui_screenshot": "protocol test stores raw input and output"
+  }
+}

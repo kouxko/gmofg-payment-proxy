@@ -97,10 +97,15 @@ pub(super) fn response_from_disposition(
         }
     };
     let status = parse_response_status(&message.start_line)?;
+    let transfer_encoded = message.uses_transfer_encoding();
+    if transfer_encoded {
+        message.remove_header("content-length");
+        message.ensure_transfer_encoding_ends_in_chunked();
+    }
     let claimed_length = message
         .declared_content_length()
         .unwrap_or(message.body.len());
-    let scheduled_abort = if let Some(after_bytes) = schedule.disconnect_after_bytes.take() {
+    let scheduled_abort = if let Some(after_bytes) = schedule.disconnect_after_bytes {
         if after_bytes >= body.len() {
             return Err(ProxyError::new(
                 ErrorCode::ConfigInvalid,
@@ -112,6 +117,11 @@ pub(super) fn response_from_disposition(
     } else {
         None
     };
+    if !transfer_encoded {
+        schedule.disconnect_after_bytes = None;
+    } else if disposition_fault == Some(IntentionalWireFault::TruncatedResponse) {
+        schedule.disconnect_after_bytes = Some(body.len());
+    }
     let disposition_fault = disposition_fault.or(scheduled_abort).or_else(|| {
         (claimed_length != body.len()).then_some(IntentionalWireFault::IncorrectContentLength)
     });
@@ -134,7 +144,7 @@ pub(super) fn response_from_disposition(
             .headers
             .push(crate::message::RawHeader::new("Connection", "close"));
     }
-    if message.declared_content_length().is_none() {
+    if message.declared_content_length().is_none() && !message.uses_transfer_encoding() {
         message.set_content_length(message.body.len());
     }
     canonical_response_head.publish(message_wire_head(&message)?);

@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Transfer-Encoding: gzip
+Connection: close
+
+encoded
+
+说明：真实本地 TCP 上游以 EOF 定界，Body 代表已经过 gzip transfer-coding 的字节。

@@ -65,6 +65,9 @@ Listener 启动时冻结的精确协议包版本。规则快照替换不会更�
 
 固定上游反向代理和普通 HTTP 正向代理都进入同一个 HTTP Exchange。当前连接绑定一个 Endpoint；
 同一 Exchange 不支持在 keep-alive 期间切换目标。CONNECT、Upgrade 和 MITM tunnel fail-closed。
+Hyper 读取分块消息后，Pipeline 中的 Body 已是去除 chunk framing 的完整字节；向下一跳发送时保留
+`Transfer-Encoding: chunked` 并由 Hyper 重新生成合法 chunk framing，不再添加 `Content-Length`。
+没有 Transfer-Encoding 的已缓冲消息使用唯一准确的 `Content-Length`，两个长度字段不得同时发送。
 
 ## 4. Socket 协议转发
 

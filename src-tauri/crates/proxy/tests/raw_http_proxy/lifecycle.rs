@@ -141,6 +141,171 @@ async fn one_http11_connection_processes_two_framed_requests_in_one_exchange() {
 }
 
 #[tokio::test]
+async fn keep_alive_request_forwards_chunked_close_response_without_header_conflict() {
+    let upstream_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let upstream_address = upstream_listener.local_addr().unwrap();
+    let upstream_server = tokio::spawn(serve_chunked_close_upstream(upstream_listener));
+    let connector = HyperUpstreamConnector {
+        address: upstream_address,
+        host: "upstream.test".into(),
+        host_header: "upstream.test".into(),
+        rewrite_host: true,
+        tls: None,
+        connect_timeout: Duration::from_secs(1),
+        write_timeout: Duration::from_secs(1),
+        read_timeout: Duration::from_secs(1),
+        limits: MessageLimits::default(),
+    };
+    let ports = Arc::new(ClosedResultPorts::default());
+    let supervisor = ProxySupervisor::new(
+        Arc::new(TokioListenerBinder),
+        service_with_connector(ports.clone(), Arc::new(connector)),
+    );
+    let started = supervisor.start(config()).await.unwrap();
+
+    let response = exchange_raw(
+        started.listeners[&channel_id("alpha")],
+        b"GET /ex-tms/v1/terminal-status HTTP/1.1\r\nHost: app\r\nConnection: Keep-Alive\r\n\r\n",
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+        .await
+        .expect("connection closed callback");
+
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("complete HTTP response head");
+    assert!(response.starts_with(b"HTTP/1.1 404 Not Found\r\n"));
+    assert!(
+        !response[..split]
+            .windows(b"content-length".len())
+            .any(|window| window.eq_ignore_ascii_case(b"content-length"))
+    );
+    assert!(
+        response[..split]
+            .windows(b"transfer-encoding: chunked".len())
+            .any(|window| window.eq_ignore_ascii_case(b"transfer-encoding: chunked"))
+    );
+    assert_eq!(
+        &response[split + 4..],
+        b"15\r\n{\"result_code\":\"T29\"}\r\n0\r\n\r\n"
+    );
+    assert_eq!(ports.closed_code.lock().unwrap().as_deref(), None);
+
+    supervisor.stop().await.unwrap();
+    upstream_server.await.unwrap();
+}
+
+#[tokio::test]
+async fn conflicting_upstream_length_is_removed_when_transfer_encoding_is_present() {
+    let upstream_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let upstream_address = upstream_listener.local_addr().unwrap();
+    let upstream_server = tokio::spawn(serve_chunked_conflicting_length_upstream(upstream_listener));
+    let connector = HyperUpstreamConnector {
+        address: upstream_address,
+        host: "upstream.test".into(),
+        host_header: "upstream.test".into(),
+        rewrite_host: true,
+        tls: None,
+        connect_timeout: Duration::from_secs(1),
+        write_timeout: Duration::from_secs(1),
+        read_timeout: Duration::from_secs(1),
+        limits: MessageLimits::default(),
+    };
+    let ports = Arc::new(ClosedResultPorts::default());
+    let supervisor = ProxySupervisor::new(
+        Arc::new(TokioListenerBinder),
+        service_with_connector(ports.clone(), Arc::new(connector)),
+    );
+    let started = supervisor.start(config()).await.unwrap();
+
+    let response = exchange_raw(
+        started.listeners[&channel_id("alpha")],
+        b"GET /conflicting-framing HTTP/1.1\r\nHost: app\r\nConnection: Keep-Alive\r\n\r\n",
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+        .await
+        .expect("connection closed callback");
+
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("complete HTTP response head");
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    assert!(
+        !response[..split]
+            .windows(b"content-length".len())
+            .any(|window| window.eq_ignore_ascii_case(b"content-length"))
+    );
+    assert!(
+        response[..split]
+            .windows(b"transfer-encoding: chunked".len())
+            .any(|window| window.eq_ignore_ascii_case(b"transfer-encoding: chunked"))
+    );
+    assert_eq!(&response[split + 4..], b"2\r\n{}\r\n0\r\n\r\n");
+    assert_eq!(ports.closed_code.lock().unwrap().as_deref(), None);
+
+    supervisor.stop().await.unwrap();
+    upstream_server.await.unwrap();
+}
+
+#[tokio::test]
+async fn close_delimited_transfer_coding_is_reframed_as_chunked_downstream() {
+    let upstream_listener = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let upstream_address = upstream_listener.local_addr().unwrap();
+    let upstream_server = tokio::spawn(serve_close_delimited_gzip_upstream(upstream_listener));
+    let connector = HyperUpstreamConnector {
+        address: upstream_address,
+        host: "upstream.test".into(),
+        host_header: "upstream.test".into(),
+        rewrite_host: true,
+        tls: None,
+        connect_timeout: Duration::from_secs(1),
+        write_timeout: Duration::from_secs(1),
+        read_timeout: Duration::from_secs(1),
+        limits: MessageLimits::default(),
+    };
+    let ports = Arc::new(ClosedResultPorts::default());
+    let supervisor = ProxySupervisor::new(
+        Arc::new(TokioListenerBinder),
+        service_with_connector(ports.clone(), Arc::new(connector)),
+    );
+    let started = supervisor.start(config()).await.unwrap();
+
+    let response = exchange_raw(
+        started.listeners[&channel_id("alpha")],
+        b"GET /gzip-transfer-coding HTTP/1.1\r\nHost: app\r\nConnection: Keep-Alive\r\n\r\n",
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+        .await
+        .expect("connection closed callback");
+
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("complete HTTP response head");
+    assert!(response.starts_with(b"HTTP/1.1 200 OK\r\n"));
+    assert!(
+        !response[..split]
+            .windows(b"content-length".len())
+            .any(|window| window.eq_ignore_ascii_case(b"content-length"))
+    );
+    assert!(
+        response[..split]
+            .windows(b"transfer-encoding: gzip, chunked".len())
+            .any(|window| window.eq_ignore_ascii_case(b"transfer-encoding: gzip, chunked"))
+    );
+    assert_eq!(&response[split + 4..], b"7\r\nencoded\r\n0\r\n\r\n");
+    assert_eq!(ports.closed_code.lock().unwrap().as_deref(), None);
+
+    supervisor.stop().await.unwrap();
+    upstream_server.await.unwrap();
+}
+
+#[tokio::test]
 async fn mock_response_writes_arbitrary_body_bytes_without_codec_round_trip() {
     let body = Bytes::from_static(&[0x00, 0x80, 0xff, b'{']);
     let ports = Arc::new(ClosedResultPorts {

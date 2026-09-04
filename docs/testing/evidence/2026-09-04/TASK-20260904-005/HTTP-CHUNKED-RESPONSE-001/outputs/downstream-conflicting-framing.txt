@@ -1,0 +1,10 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: close
+
+2
+{}
+0
+
+比较结果：上游冲突的 Content-Length: 999 已移除；下游仅使用 chunked 分帧，Body 保持为 {}，连接错误为 None。

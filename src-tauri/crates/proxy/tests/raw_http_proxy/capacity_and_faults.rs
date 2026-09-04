@@ -113,6 +113,45 @@ async fn truncation_sends_only_prefix_then_closes() {
 }
 
 #[tokio::test]
+async fn chunked_truncation_closes_without_a_terminal_chunk() {
+    let ports = Arc::new(ClosedResultPorts {
+        response_actions: vec![FaultAction::TruncateResponse(3)],
+        ..ClosedResultPorts::default()
+    });
+    let supervisor = ProxySupervisor::new(
+        Arc::new(TokioListenerBinder),
+        service_with_connector(ports.clone(), Arc::new(RawChunkedResponseConnector)),
+    );
+    let started = supervisor.start(config()).await.unwrap();
+    let response = exchange(
+        started.listeners[&channel_id("alpha")],
+        b"request",
+    )
+    .await;
+    tokio::time::timeout(Duration::from_secs(1), ports.closed.notified())
+        .await
+        .expect("connection closed callback");
+
+    let split = response
+        .windows(4)
+        .position(|window| window == b"\r\n\r\n")
+        .expect("response head");
+    assert!(
+        response[..split]
+            .windows(b"transfer-encoding: chunked".len())
+            .any(|window| window.eq_ignore_ascii_case(b"transfer-encoding: chunked"))
+    );
+    assert_eq!(&response[split + 4..], b"3\r\nabc\r\n");
+    assert!(!response.ends_with(b"0\r\n\r\n"));
+    assert_eq!(
+        ports.closed_code.lock().unwrap().as_deref(),
+        Some(ErrorCode::TruncatedResponse.as_str())
+    );
+
+    supervisor.stop().await.unwrap();
+}
+
+#[tokio::test]
 async fn short_declared_length_still_writes_full_wire_body() {
     let supervisor = ProxySupervisor::new(
         Arc::new(TokioListenerBinder),

@@ -1,0 +1,11 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+Transfer-Encoding: chunked
+Content-Length: 999
+Connection: close
+
+2
+{}
+0
+
+说明：真实本地 TCP 上游故意同时发送 Transfer-Encoding 与 Content-Length，用于验证代理转发前删除冲突 Content-Length。

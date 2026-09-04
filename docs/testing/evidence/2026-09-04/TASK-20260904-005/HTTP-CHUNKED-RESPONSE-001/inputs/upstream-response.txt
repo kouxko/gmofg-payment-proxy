@@ -1,0 +1,10 @@
+HTTP/1.1 404 Not Found
+Content-Type: application/json
+Transfer-Encoding: chunked
+Connection: close
+
+15
+{"result_code":"T29"}
+0
+
+说明：本文件保存真实本地 TCP 上游实际写入的 HTTP/1.1 chunk wire；`15` 为 21 字节 JSON Body 的十六进制长度，`0` 为结束块。
