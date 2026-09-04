@@ -5,7 +5,7 @@
 - 任务日期：`2026-09-04`
 - 创建时间：`2026-09-04 17:43:27 +08:00`
 - 开始时间：`2026-09-04 17:43:27 +08:00`
-- 最后更新时间：`2026-09-04 18:23:11 +08:00`
+- 最后更新时间：`2026-09-04 18:25:09 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-04/github-quick-android-windows-package.md`
 - 归档路径：`docs/tasks/completed/2026-09-04/github-quick-android-windows-package.md`
@@ -62,6 +62,7 @@
 - `2026-09-04 18:16:27 +08:00`：快速 workflow 收敛为 Android 与 Windows 两个 job；Android 产出 APK 供 Windows 下载/stage，Windows 输出 combined artifact；移除空 resource override。合同测试 7/7、Deno fmt、ESLint、Rust fmt/严格 Clippy 和 diff check 均 PASS；待独立审查、commit、push 与远程 run。
 - `2026-09-04 18:20:31 +08:00`：独立审查发现最终 artifact 的 APK 不在 exe 运行时可解析路径；已改为 `resources/android-companion.apk`，并补充与完整 workflow 共享的 Next.js 缓存键，待重跑验证和复审。
 - `2026-09-04 18:23:11 +08:00`：重跑合同 7/7、Deno fmt、ESLint、YAML 解析和 diff check 全部通过；独立复审 APPROVED，P0/P1/P2=0，确认触发、依赖、缓存和 artifact 无阻塞。
+- `2026-09-04 18:25:09 +08:00`：首次 push 新分支不会自动触发任何 workflow；`gh workflow run` 因该 workflow 未在 GitHub 默认分支注册而返回 404，确认无 run 产生。为不修改 main 或触发完整 CI，临时增加仅匹配 `codex/http-chunked-quick-validation-20260904` 的单次 push 触发；构建启动后删除，最终代码恢复为仅手动入口。
 
 修改文件：`.github/workflows/windows-quick-build.yml`、`scripts/windows-build-only-workflow.test.mjs`、`docs/onboarding-guide.md`、本任务文档。
 

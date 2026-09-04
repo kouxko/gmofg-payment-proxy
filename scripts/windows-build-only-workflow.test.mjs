@@ -16,7 +16,10 @@ test("Windows quick workflow builds Android then one unsigned Windows executable
   const source = await readFile(quickWorkflowPath, "utf8");
 
   assert.match(source, /^name: Windows quick executable$/mu);
-  assert.match(source, /^on:\n  workflow_dispatch:\s*$/mu);
+  assert.match(
+    source,
+    /^on:\n  workflow_dispatch:\n(?:  #.*\n)?  push:\n    branches:\n      - codex\/http-chunked-quick-validation-20260904$/mu,
+  );
   assert.match(
     source,
     /group: windows-quick-executable-\$\{\{ github\.ref \}\}/u,
@@ -55,9 +58,13 @@ test("Windows quick workflow builds Android then one unsigned Windows executable
   assert.match(source, /add-job-id-key: false/u);
   assert.doesNotMatch(
     source,
-    /build-macos|Verify before packaging|Coverage gates|MSI|NSIS|cargo test|cargo clippy|pull_request:|push:/u,
+    /build-macos|Verify before packaging|Coverage gates|MSI|NSIS|cargo test|cargo clippy|pull_request:/u,
   );
-  assert.equal((source.match(/^  [a-z][a-z0-9-]+:\s*$/gmu) ?? []).length, 2);
+  const jobsSource = source.slice(source.indexOf("\njobs:\n"));
+  assert.equal(
+    (jobsSource.match(/^  [a-z][a-z0-9-]+:\s*$/gmu) ?? []).length,
+    2,
+  );
 });
 
 test("full desktop release never exposes the quick-build bypass", async () => {
