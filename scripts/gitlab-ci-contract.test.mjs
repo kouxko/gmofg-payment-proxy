@@ -272,6 +272,10 @@ test("Android and Windows build-only mode packages the Companion without running
 
   assert.match(buildOnlyJob, /^[ ]{4}- "slave4"$/mu);
   assert.match(buildOnlyJob, /^[ ]{2}timeout: 2h$/mu);
+  assert.match(
+    buildOnlyJob,
+    /^[ ]{4}GIT_CLEAN_FLAGS: "-ffdx -e \.ci-cache\/"$/mu,
+  );
   assert.match(buildOnlyJob, /^[ ]{4}when: always$/mu);
   assert.match(
     buildOnlyJob,

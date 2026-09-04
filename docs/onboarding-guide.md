@@ -545,6 +545,8 @@ Google/Maven Central 镜像，Gradle distribution 使用华为云镜像，Androi
 Windows 引导脚本会从微软官方 bootstrapper 静默安装 Visual Studio 2022 C++ Build Tools 到
 `C:\BuildTools`，安装后必须实际找到 `vcvars64.bat`、`cl.exe` 和 `link.exe` 才继续构建。Windows
 静态 OpenSSL 编译所需的 Perl 优先复用 Git for Windows 自带运行时，并在进入构建前显式验证。
+该 Windows job 在 Git 检出清理时保留 `.ci-cache`，避免 Cargo 深层路径触发 Windows 文件名过长，
+失败时也保存缓存供下一次构建复用。
 
 ## 13. 安全红线
 
