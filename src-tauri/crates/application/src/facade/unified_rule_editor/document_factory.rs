@@ -69,7 +69,7 @@ pub(super) fn action_draft(
     raw: Option<&str>,
     index: Option<u32>,
 ) -> AppResult<UnifiedAction> {
-    let path = JsonPointer::parse(path)?;
+    let path = DocumentMatchPath::parse(path)?;
     let mutation = match action {
         RuleLocalDocumentActionKind::Clear => DocumentMutation::Clear {
             path,
@@ -248,6 +248,23 @@ mod tests {
         assert_eq!(
             serde_json::to_value(action).unwrap()["value"]["value"],
             "0100"
+        );
+    }
+
+    #[test]
+    fn action_draft_preserves_wildcard_document_path() {
+        let action = action_draft(
+            "/items/*/state",
+            RuleLocalDocumentValueType::String,
+            RuleLocalDocumentActionKind::Set,
+            Some("changed"),
+            None,
+        )
+        .unwrap();
+
+        assert_eq!(
+            serde_json::to_value(action).unwrap()["value"]["path"],
+            "/items/*/state"
         );
     }
 

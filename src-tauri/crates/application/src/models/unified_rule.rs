@@ -259,11 +259,7 @@ fn visit_document_schema(
         value_type,
         item_template,
         predicates: schema_predicates(value_type),
-        actions: if item_template {
-            Vec::new()
-        } else {
-            schema_actions(node, value_type)
-        },
+        actions: schema_actions(node, value_type),
     });
     match node {
         DocumentSchemaNode::Object { properties, .. } => {
@@ -430,6 +426,20 @@ mod tests {
                 Some(RuleLocalDocumentValueType::String)
             );
         }
+        assert_eq!(
+            fields
+                .iter()
+                .find(|field| field.path == "/tags/*")
+                .unwrap()
+                .actions
+                .iter()
+                .map(|action| action.kind)
+                .collect::<Vec<_>>(),
+            vec![
+                RuleLocalDocumentActionKind::Set,
+                RuleLocalDocumentActionKind::Clear
+            ]
+        );
     }
 
     #[test]
@@ -455,14 +465,6 @@ mod tests {
         assert_eq!(
             append.operand_value_type,
             Some(RuleLocalDocumentValueType::Array)
-        );
-        assert!(
-            fields
-                .iter()
-                .find(|field| field.path == "/matrix/*")
-                .unwrap()
-                .actions
-                .is_empty()
         );
     }
 

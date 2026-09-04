@@ -1,0 +1,25 @@
+PASS  DENO_NO_UPDATE_CHECK=1 deno run -A npm:vitest@4.1.11 run src/features/rules/rules-view.test.tsx src/features/rules/rule-definition-editor.test.tsx --reporter=dot
+      Test Files 2 passed (2); Tests 15 passed (15)
+
+PASS  deno task test:ui-contracts
+      Test Files 30 passed (30); Tests 303 passed (303)
+
+PASS  deno task typecheck
+PASS  deno task lint
+      One parallel run raced Vitest temporary config cleanup; serial rerun passed.
+PASS  deno task tauri build --bundles app
+      Next.js generated 13 static routes; Tauri produced Intercept Proxy.app.
+PASS  codesign --verify --deep --strict /Applications/Intercept Proxy.app
+PASS  git diff --check
+
+PASS  installed application identity
+      bundle_id=com.interceptproxy.desktop
+      version=1.0.0
+      executable_sha256=21de419b8a46abe734bdfc73661686224af93401e7b6fd1da6ff494a294dc54d
+      pid=72494
+
+PASS  live installed-app UI inspection
+      Three tabs visible; Save Rule is next to Cancel at the top and absent at the bottom.
+      Description is visible before Listener selection.
+      Enable switch and priority input control are center-aligned.
+      Rule list and creation editor headers/actions share the same top alignment.

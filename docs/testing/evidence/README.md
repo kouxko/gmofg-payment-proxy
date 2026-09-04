@@ -3,6 +3,15 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-04
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260904-001 | RULE-WILDCARD-ACTIONS-001 | 验证 Document 单层 `*` 动作的 Schema 能力、草稿、Set/Clear/Insert/Append 原子执行、wire 兼容、完整回归及正式 App 安装界面 | PASS_WITH_KNOWN_UNRELATED_BASELINE_FAILURES | TASK-20260904-001 | RULE-SELECT-OVERFLOW-001 | [父证据](2026-09-04/TASK-20260904-001/RULE-SELECT-OVERFLOW-001/README.md) | [证据](2026-09-04/TASK-20260904-001/RULE-WILDCARD-ACTIONS-001/README.md) |
+| TASK-20260904-001 | RULE-SELECT-OVERFLOW-001 | 验证规则页全部 Select 单行裁切合同，以及条件/动作超长 Schema 路径在正式安装 App 中不溢出且手动路径保留完整值 | PASS | TASK-20260904-001 | RULE-CREATION-TABS-LOCAL-INSTALL-001 | [父证据](2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-LOCAL-INSTALL-001/README.md) | [证据](2026-09-04/TASK-20260904-001/RULE-SELECT-OVERFLOW-001/README.md) |
+| TASK-20260904-001 | RULE-CREATION-TABS-LOCAL-INSTALL-001 | 验证三段式 Tab、顶部保存/取消、说明首显、两处布局对齐及正式 macOS App 构建、签名、安装和实际界面 | PASS | TASK-20260904-001 | RULE-CREATION-TABS-001 | [父证据](2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-001/README.md) | [证据](2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-LOCAL-INSTALL-001/README.md) |
+| TASK-20260904-001 | RULE-CREATION-TABS-001 | 验证新建规则恢复基本信息、匹配条件、执行动作三段式 Tab，未就绪提示、Tab 状态保持和已有编辑态隔离 | PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_RUNNING_APP_VISUAL_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-04/TASK-20260904-001/RULE-CREATION-TABS-001/README.md) |
+
 ## 2026-09-03
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

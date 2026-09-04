@@ -37,7 +37,8 @@ App 只有一套 `RuleDefinition` 规则。每条规则只绑定一个 Listener�
 Method 只支持精确匹配；Path 与 Header 支持精确、包含、前缀、后缀和通配符。Document
 有 Schema 时可以从递归路径下拉框选择，也可以手动输入；无 Schema 时只允许手动输入。Document
 条件路径使用 RFC 6901，并允许完整路径段 `*` 匹配恰好一层，展开多个值时按 ANY 判断；Set、Clear、
-Insert、Append 等动作始终使用精确路径，不接受通配符。旧 Path/JSONPath/Regex 匹配合同已删除，
+Insert、Append 动作使用相同的单层 `*` 语义，对动作开始时命中的全部具体节点执行；零命中不修改
+Document，也不会自动创建缺失父节点。旧 Path/JSONPath/Regex 匹配合同已删除，
 没有别名、兼容解析或第二执行路径。
 
 规则按固定阶段顺序执行；`priority` 只在同一阶段内排序。保存时由 Rust 使用当前 Listener、阶段、

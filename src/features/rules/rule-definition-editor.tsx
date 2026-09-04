@@ -57,6 +57,6 @@ export function RuleDefinitionEditor(props: {
   </EditorShell>;
 }
 
-function EditorShell({ children }: { children: React.ReactNode }) { return <div className="space-y-5 p-1">{children}</div>; }
+function EditorShell({ children }: { children: React.ReactNode }) { return <div className="space-y-5 p-4" data-testid="rule-definition-editor">{children}</div>; }
 function editorStage(context: RuleEditorContext | undefined, stage: RuleDefinitionSaveInput["draft"]["stage"]): Stage | undefined { return context?.content.value.stages.find((item) => item.stage === stage); }
 function editorKey(input: RuleDefinitionSaveInput) { return `${input.rule_id ?? "new"}:${input.draft.listener_id}:${input.draft.stage}`; }

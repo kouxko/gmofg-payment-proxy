@@ -43,8 +43,9 @@ Document 条件路径使用 RFC 6901 扩展：完整 token `*` 只展开一个 o
 判断。Schema 只提供递归路径选择能力，手动路径始终由同一 Rust factory 校验；无 Schema 时不生成
 前端默认字段。普通 HTTP Body 使用内建 JSON Decode/Encode 提供 schema-free Document；只有规则实际
 包含 Document 条件或动作时才进入该事务，非法 JSON 按 Decode 失败终止 Exchange，不回退到文本匹配。
-协议模式的精确包只由 Listener 绑定决定，规则不复制包身份。Document mutation 继续只接受精确 RFC
-6901 路径。旧 `PathOrRequestType`、HTTP
+协议模式的精确包只由 Listener 绑定决定，规则不复制包身份。Document mutation 与条件复用同一
+RFC 6901 单层 `*` 扩展；动作先从当前 Document 解析全部具体路径快照，再以原子方式执行，零命中
+不修改 Document，也不创建缺失父节点。旧 `PathOrRequestType`、HTTP
 `JsonPath` field 和 Regex operator 已物理删除，不存在 alias、fallback 或双执行路径。
 
 每个 Listener/epoch 使用不可变规则快照，规则排序为：

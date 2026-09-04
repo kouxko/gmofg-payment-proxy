@@ -91,7 +91,7 @@ impl DocumentSchemaNode {
         }
         Ok(current)
     }
-    /// Resolves every schema node selected by a condition-only wildcard path.
+    /// Resolves every schema node selected by a condition or action wildcard path.
     #[must_use]
     pub fn resolve_match_path(&self, path: &DocumentMatchPath) -> Vec<&Self> {
         let mut current = vec![self];

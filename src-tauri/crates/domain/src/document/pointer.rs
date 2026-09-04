@@ -11,9 +11,10 @@ pub struct JsonPointer {
     tokens: Vec<String>,
 }
 
-/// Condition-only RFC 6901 path whose `*` token selects exactly one object/array level.
+/// RFC 6901 path whose complete `*` token selects exactly one object/array level.
 ///
-/// Mutation APIs deliberately continue to accept only [`JsonPointer`].
+/// Conditions and Document mutations share this path contract. A path without `*`
+/// retains the strict [`JsonPointer`] behavior.
 #[derive(Clone, Debug, Eq, Hash, Ord, PartialEq, PartialOrd, Serialize, Type)]
 #[serde(transparent)]
 pub struct DocumentMatchPath {
@@ -80,6 +81,20 @@ impl JsonPointer {
     pub(crate) fn tokens(&self) -> &[String] {
         &self.tokens
     }
+
+    pub(crate) fn from_tokens(tokens: Vec<String>) -> Self {
+        let source = tokens
+            .iter()
+            .map(|token| token.replace('~', "~0").replace('/', "~1"))
+            .collect::<Vec<_>>()
+            .join("/");
+        let source = if tokens.is_empty() {
+            String::new()
+        } else {
+            format!("/{source}")
+        };
+        Self { source, tokens }
+    }
 }
 
 impl DocumentMatchPath {
@@ -103,7 +118,7 @@ impl DocumentMatchPath {
         })
     }
 
-    /// Converts an exact mutation/schema pointer into a condition path.
+    /// Converts an exact pointer into a match path.
     #[must_use]
     pub fn exact(pointer: &JsonPointer) -> Self {
         Self {
@@ -117,13 +132,13 @@ impl DocumentMatchPath {
         }
     }
 
-    /// Returns the stable serialized condition path.
+    /// Returns the stable serialized path.
     #[must_use]
     pub fn as_str(&self) -> &str {
         &self.source
     }
 
-    /// Returns whether this condition path expands any level.
+    /// Returns whether this path expands any level.
     #[must_use]
     pub fn has_wildcard(&self) -> bool {
         self.tokens
@@ -133,6 +148,25 @@ impl DocumentMatchPath {
 
     pub(crate) fn tokens(&self) -> &[DocumentMatchToken] {
         &self.tokens
+    }
+
+    pub(crate) fn exact_pointer(&self) -> Option<JsonPointer> {
+        (!self.has_wildcard()).then(|| {
+            JsonPointer::from_tokens(
+                self.tokens
+                    .iter()
+                    .map(|token| match token {
+                        DocumentMatchToken::Exact(value) => value.clone(),
+                        DocumentMatchToken::Wildcard => unreachable!("checked above"),
+                    })
+                    .collect(),
+            )
+        })
+    }
+}
+impl From<JsonPointer> for DocumentMatchPath {
+    fn from(pointer: JsonPointer) -> Self {
+        Self::exact(&pointer)
     }
 }
 impl<'de> Deserialize<'de> for JsonPointer {

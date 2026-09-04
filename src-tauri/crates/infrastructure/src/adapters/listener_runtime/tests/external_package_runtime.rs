@@ -333,7 +333,7 @@ fn two_stage_rules(
                             }),
                         },
                         action: UnifiedAction::Document(DocumentMutation::Set {
-                            path: field,
+                            path: field.into(),
                             value: DocumentValue::integer(i64::from(value)).unwrap(),
                         }),
                     }),

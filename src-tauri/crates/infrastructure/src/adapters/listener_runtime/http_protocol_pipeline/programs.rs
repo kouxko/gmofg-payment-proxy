@@ -131,7 +131,7 @@ mod tests {
                         }),
                     },
                     action: UnifiedAction::Document(DocumentMutation::Set {
-                        path: JsonPointer::root(),
+                        path: JsonPointer::root().into(),
                         value: DocumentValue::String("after".into()),
                     }),
                 }),

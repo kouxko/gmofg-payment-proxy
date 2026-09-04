@@ -1,0 +1,39 @@
+{
+  "task_id": "TASK-20260904-001",
+  "case_id": "RULE-WILDCARD-ACTIONS-001",
+  "derived_from": {
+    "task_id": "TASK-20260904-001",
+    "case_id": "RULE-SELECT-OVERFLOW-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-001/RULE-SELECT-OVERFLOW-001"
+  },
+  "environment": {
+    "os": "macOS 27.0 (26A5425a)",
+    "architecture": "arm64",
+    "rustc": "1.98.0",
+    "deno": "2.9.6",
+    "installed_app": "/Applications/Intercept Proxy.app",
+    "bundle_id": "com.interceptproxy.desktop",
+    "version": "1.0.0",
+    "executable_sha256": "482084cc5c0515c213e17fe65d344e625722cf8af15baafde72922ab3e09a483",
+    "pid": 23649
+  },
+  "started_at": "2026-09-04 11:11:16 +08:00",
+  "completed_at": "2026-09-04 11:42:06 +08:00",
+  "tested_state": "shared worktree with TASK-20260904-001 changes and unrelated untracked scripts/delete-windows-proxy-data.ps1 preserved",
+  "result": "PASS_WITH_KNOWN_UNRELATED_BASELINE_FAILURES",
+  "counts": {
+    "domain": "100/100",
+    "application_targeted": "10/10",
+    "application_full": "414/416 with 2 HEAD-reproducible unrelated failures",
+    "infrastructure_http_pipeline": "15/15",
+    "infrastructure_external_relay": "4/4",
+    "frontend_targeted": "15/15",
+    "frontend_full": "551/551",
+    "ui_contracts": "303/303"
+  },
+  "not_applicable": {
+    "real_business_exchange": "not authorized or required for this local rule-editor and domain contract change",
+    "windows_android_ci_push_release": "outside user-authorized scope",
+    "ui_screenshot_file": "accessibility state directly records the selected wildcard path, offered actions, selected action and explanatory text"
+  }
+}

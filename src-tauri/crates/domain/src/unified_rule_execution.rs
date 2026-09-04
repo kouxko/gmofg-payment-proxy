@@ -246,25 +246,25 @@ pub fn document_condition_path_types(
 #[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
 #[serde(tag = "type", rename_all = "snake_case")]
 pub enum DocumentMutation {
-    /// Strict Set using [`Document::set`].
+    /// Set every node selected by the path.
     Set {
-        path: JsonPointer,
+        path: DocumentMatchPath,
         value: DocumentValue,
     },
-    /// Strict Clear using [`Document::clear_path`].
+    /// Clear every node selected by the path.
     Clear {
-        path: JsonPointer,
+        path: DocumentMatchPath,
         value_type: DocumentValueType,
     },
-    /// Strict array Insert using [`Document::insert`].
+    /// Insert into every array selected by the path.
     Insert {
-        path: JsonPointer,
+        path: DocumentMatchPath,
         index: usize,
         value: DocumentValue,
     },
-    /// Strict array Append using [`Document::append`].
+    /// Append to every array selected by the path.
     Append {
-        path: JsonPointer,
+        path: DocumentMatchPath,
         value: DocumentValue,
     },
 }

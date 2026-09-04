@@ -96,18 +96,40 @@ describe("RuleDefinitionEditor single pair", () => {
     await waitFor(() => expect(mocks.ruleDefinitionDocumentConditionDraft).toHaveBeenCalledWith("", "string", "equals", "root"));
   });
 
-  it("keeps the single forms aligned without intermediate buttons", async () => {
-    const user = userEvent.setup(); render(<Harness initial={input(requestTarget, recordMatch)} />);
+  it("keeps every rule Select value on one clipped line", async () => {
+    const clipped = structuredClone(context); if (clipped.content.type !== "http") throw new Error("HTTP required");
+    clipped.content.value.stages[0].document_fields = [{ path: "/KCCI_01/*/kid", label: "KCCI_01 item kid", value_type: "string", item_template: true, predicates: ["equals"], actions: [
+      { kind: "set", target_kind: "node", target_value_type: "string", operand_value_type: "string" },
+      { kind: "clear", target_kind: "node", target_value_type: "string", operand_value_type: null },
+    ] }];
+    const user = userEvent.setup(); render(<Harness contextValue={clipped} initial={input(requestTarget, recordMatch)} />);
     const condition = within(screen.getByTestId("condition-form"));
-    expect(condition.getByRole("button", { name: /条件来源/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expectClippedSelect(condition.getByRole("button", { name: /条件来源/ }));
     const matchField = condition.getByRole("button", { name: /HTTP 匹配字段/ });
-    expect(matchField).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expectClippedSelect(matchField);
     expect(matchField).toHaveTextContent("Path（包含 Query 参数）");
-    expect(within(matchField).getByText("Path（包含 Query 参数）")).toHaveClass("min-w-0", "flex-1", "truncate", "whitespace-nowrap");
+    expectClippedSelect(condition.getByRole("button", { name: /HTTP 匹配操作符/ }));
     expect(condition.getByRole("textbox", { name: "HTTP 匹配值" })).toHaveClass("h-10", "w-full");
-    await selectOption(user, "动作来源", "HTTP");
+
+    await selectOption(user, "条件来源", "Document");
+    await selectOption(user, "Document Schema 条件路径", "KCCI_01 item kid · /KCCI_01/*/kid");
+    const conditionPath = screen.getByRole("button", { name: /Document Schema 条件路径/ });
+    expectClippedSelect(conditionPath);
+    expect(conditionPath).toHaveTextContent("KCCI_01 item kid · /KCCI_01/*/kid");
+
+    await selectOption(user, "动作来源", "Document");
     const action = within(screen.getByTestId("action-form"));
-    expect(action.getByRole("button", { name: /HTTP 动作类型/ })).toHaveClass("h-10", "min-h-10", "w-full");
+    expectClippedSelect(action.getByRole("button", { name: /动作来源/ }));
+    await selectOption(user, "Document Schema 动作路径", "KCCI_01 item kid · /KCCI_01/*/kid");
+    const actionPath = action.getByRole("button", { name: /Document Schema 动作路径/ });
+    expectClippedSelect(actionPath);
+    expect(actionPath).toHaveTextContent("KCCI_01 item kid · /KCCI_01/*/kid");
+    expect(action.getByText("* 仅展开一层；动作会应用到当前命中的全部节点。")).toBeInTheDocument();
+    const documentAction = action.getAllByRole("button").find((button) => button.getAttribute("aria-label") === "Document 动作");
+    expect(documentAction).toBeDefined();
+    await user.click(documentAction!);
+    await user.click(await screen.findByRole("option", { name: "set" }));
+    expect(documentAction).toHaveTextContent("set");
     expect(action.queryByRole("button", { name: /创建|添加/ })).not.toBeInTheDocument();
   });
 
@@ -189,4 +211,9 @@ function input(condition: Condition, action: Extract<RuleDefinitionSaveInput["dr
 async function selectOption(user: ReturnType<typeof userEvent.setup>, control: string, option: string) {
   await user.click(screen.getByRole("button", { name: new RegExp(control) }));
   await user.click(await screen.findByRole("option", { name: option }));
+}
+function expectClippedSelect(trigger: HTMLElement) {
+  expect(trigger).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+  expect(trigger.querySelector(".min-w-0.flex-1.truncate.whitespace-nowrap")).not.toBeNull();
+  expect(trigger.querySelector(".shrink-0")).not.toBeNull();
 }

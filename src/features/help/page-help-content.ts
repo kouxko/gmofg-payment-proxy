@@ -105,7 +105,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "新建与基本信息",
         steps: [
           "点击“新建规则”，选择空白 HTTP、HTTP Body、Socket 报文规则或 HTTP 故障预设；所有规则都显示在同一列表中。",
-          "在“基本”Tab 填写规则名称、说明和优先级。",
+          "在“基本信息”Tab 填写规则名称、说明和优先级。",
           "选择目标产品通道，再选择请求阶段或响应阶段；阶段会限制可添加的动作类型。",
           "从抓包页“基于此请求新建规则”进入时，先检查预填的路径、通道和阶段，再补充动作。",
         ],
@@ -125,6 +125,7 @@ export const pageHelpGuides: Record<WorkspacePath, PageHelpGuide> = {
         title: "配置执行动作",
         steps: [
           "打开“执行动作”Tab，按实际执行顺序添加动作。",
+          "Document 动作路径允许完整路径段 * 匹配一层，并把同一动作应用到当前命中的全部节点。",
           "修改 JSON 字段、替换 Body/Header、延迟和暂停可以组合，并会保存每一步轨迹。",
           "Mock、拒绝、断开、丢弃和截断是终止动作；命中后停止当前规则的后续动作和后续规则。",
           "请求阶段和响应阶段支持的动作不同；无效组合会被拒绝。",

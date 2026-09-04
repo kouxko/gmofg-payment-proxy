@@ -693,22 +693,23 @@ export type DisplayParams = {
 export type Document = DocumentValue;
 
 /**
- *  Condition-only RFC 6901 path whose `*` token selects exactly one object/array level.
+ *  RFC 6901 path whose complete `*` token selects exactly one object/array level.
  *
- *  Mutation APIs deliberately continue to accept only [`JsonPointer`].
+ *  Conditions and Document mutations share this path contract. A path without `*`
+ *  retains the strict [`JsonPointer`] behavior.
  */
 export type DocumentMatchPath = string;
 
 /**  Strict Document mutation primitives shared by HTTP and Socket rules. */
 export type DocumentMutation =
-/**  Strict Set using [`Document::set`]. */
-{ type: "set"; path: JsonPointer; value: DocumentValue } |
-/**  Strict Clear using [`Document::clear_path`]. */
-{ type: "clear"; path: JsonPointer; value_type: DocumentValueType } |
-/**  Strict array Insert using [`Document::insert`]. */
-{ type: "insert"; path: JsonPointer; index: number; value: DocumentValue } |
-/**  Strict array Append using [`Document::append`]. */
-{ type: "append"; path: JsonPointer; value: DocumentValue };
+/**  Set every node selected by the path. */
+{ type: "set"; path: DocumentMatchPath; value: DocumentValue } |
+/**  Clear every node selected by the path. */
+{ type: "clear"; path: DocumentMatchPath; value_type: DocumentValueType } |
+/**  Insert into every array selected by the path. */
+{ type: "insert"; path: DocumentMatchPath; index: number; value: DocumentValue } |
+/**  Append to every array selected by the path. */
+{ type: "append"; path: DocumentMatchPath; value: DocumentValue };
 
 /**  JavaScript `Number` compatible finite numeric value. */
 export type DocumentNumber = number;

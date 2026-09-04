@@ -1,0 +1,16 @@
+PASS  DENO_NO_UPDATE_CHECK=1 deno run -A npm:vitest@4.1.11 run src/features/rules/rules-view.test.tsx src/features/rules/rule-definition-editor.test.tsx --reporter=dot
+      Test Files 2 passed (2); Tests 15 passed (15)
+
+PASS  deno task test:ui-contracts
+      Test Files 30 passed (30); Tests 303 passed (303)
+
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  deno task build
+      Next.js compiled successfully; 13 static pages generated
+PASS  git diff --check
+
+KNOWN_UNRELATED_FAILURE  deno task scan:source-size
+      Seven existing files outside this task exceed 500 lines.
+      Modified files: rule-creation-editor.tsx 97 lines;
+      rule-single-pair-editor.tsx 246 lines; rules-view.test.tsx 209 lines.

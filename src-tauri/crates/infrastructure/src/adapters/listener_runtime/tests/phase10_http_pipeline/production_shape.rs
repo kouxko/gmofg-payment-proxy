@@ -61,16 +61,16 @@ async fn production_snapshot_compiles_flat_conditions_with_insert_and_append() {
     };
     let actions = [
         DocumentMutation::Set {
-            path: JsonPointer::property("items"),
+            path: JsonPointer::property("items").into(),
             value: DocumentValue::Array(Vec::new()),
         },
         DocumentMutation::Insert {
-            path: JsonPointer::property("items"),
+            path: JsonPointer::property("items").into(),
             index: 0,
             value: DocumentValue::String("first".into()),
         },
         DocumentMutation::Append {
-            path: JsonPointer::property("items"),
+            path: JsonPointer::property("items").into(),
             value: DocumentValue::String("last".into()),
         },
     ];
@@ -146,7 +146,7 @@ async fn production_http_actor_keeps_rules_enabled_after_commit() {
                     }),
                 },
                 action: UnifiedAction::Document(DocumentMutation::Set {
-                    path: JsonPointer::property("value"),
+                    path: JsonPointer::property("value").into(),
                     value: DocumentValue::String("new".into()),
                 }),
             }),

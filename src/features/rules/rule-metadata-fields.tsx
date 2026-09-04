@@ -23,12 +23,12 @@ export function RuleMetadataFields(props: {
     <div className="grid gap-3 sm:grid-cols-2">
       {props.listenerControl}
       <Select aria-label="处理阶段" isDisabled={props.pending || props.stageOptions.length === 0} selectedKey={props.stage ?? null} onSelectionChange={(key) => props.onStageChange(String(key) as RuleStage)}>
-        <Label>处理阶段</Label><Select.Trigger><Select.Value /><Select.Indicator /></Select.Trigger><Select.Popover><ListBox>{props.stageOptions.map(({ stage, reason }) => <ListBox.Item id={stage} isDisabled={reason != null} key={stage} textValue={`${ruleStageLabel(stage)}${reason ? ` ${reason}` : ""}`}><span className="block">{ruleStageLabel(stage)}</span>{reason && <span className="block text-xs text-red-600">{reason}</span>}</ListBox.Item>)}</ListBox></Select.Popover>
+        <Label>处理阶段</Label><Select.Trigger className="h-10 min-h-10 w-full min-w-0 overflow-hidden"><Select.Value className="min-w-0 flex-1 truncate whitespace-nowrap" /><Select.Indicator className="shrink-0" /></Select.Trigger><Select.Popover><ListBox>{props.stageOptions.map(({ stage, reason }) => <ListBox.Item id={stage} isDisabled={reason != null} key={stage} textValue={`${ruleStageLabel(stage)}${reason ? ` ${reason}` : ""}`}><span className="block">{ruleStageLabel(stage)}</span>{reason && <span className="block text-xs text-red-600">{reason}</span>}</ListBox.Item>)}</ListBox></Select.Popover>
       </Select>
     </div>
     <div className="grid items-end gap-3 sm:grid-cols-2" data-testid="rule-metadata-toggle-priority-row">
-      <Switch aria-label="启用规则" isDisabled={props.pending} isSelected={props.enabled} onChange={props.onEnabledChange}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>启用规则</Switch.Content></Switch>
-      <NumberField aria-label="阶段内优先级" isDisabled={props.pending} minValue={0} value={props.priority ?? Number.NaN} onChange={props.onPriorityChange}><Label>阶段内优先级</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>
+      <div className="flex h-10 items-center" data-testid="rule-enabled-control"><Switch aria-label="启用规则" isDisabled={props.pending} isSelected={props.enabled} onChange={props.onEnabledChange}><Switch.Content><Switch.Control><Switch.Thumb /></Switch.Control>启用规则</Switch.Content></Switch></div>
+      <NumberField aria-label="阶段内优先级" isDisabled={props.pending} minValue={0} value={props.priority ?? Number.NaN} onChange={props.onPriorityChange}><Label>阶段内优先级</Label><NumberField.Group className="h-10 min-h-10"><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group></NumberField>
     </div>
     {props.stage && <p className="text-xs text-[var(--telemetry-muted)]">{ruleStageLabel(props.stage)} · priority 只与此阶段及同一执行作用域中的规则比较。</p>}
   </section>;
