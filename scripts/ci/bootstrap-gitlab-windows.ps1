@@ -107,7 +107,7 @@ function Find-Perl {
 
     foreach ($Candidate in $Candidates) {
         if (Test-Path $Candidate -PathType Leaf) {
-            $env:Path = "$(Split-Path -Parent $Candidate);$env:Path"
+            $env:Path = "$env:Path;$(Split-Path -Parent $Candidate)"
             return Get-Command perl.exe -ErrorAction SilentlyContinue
         }
     }
@@ -210,6 +210,10 @@ if ($RequireMsvc) {
     $Perl = Find-Perl
     if (-not $Perl) {
         throw "Perl is required to build the vendored OpenSSL dependency on Windows."
+    }
+    $LinkAfterPerl = Get-Command link.exe -ErrorAction SilentlyContinue
+    if (-not $LinkAfterPerl -or $LinkAfterPerl.Source -ne $Link.Source) {
+        throw "Adding Perl to PATH replaced the MSVC linker."
     }
     Write-Host "Perl runtime: $($Perl.Source)"
 }

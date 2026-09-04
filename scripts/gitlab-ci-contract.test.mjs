@@ -202,7 +202,15 @@ test("GitLab toolchains are pinned and frontend commands remain Deno-only", asyn
   assert.match(windowsBootstrap, /usr\/bin\/perl\.exe/u);
   assert.match(
     windowsBootstrap,
+    /\$env:Path = "\$env:Path;\$\(Split-Path -Parent \$Candidate\)"/u,
+  );
+  assert.match(
+    windowsBootstrap,
     /Perl is required to build the vendored OpenSSL dependency on Windows/u,
+  );
+  assert.match(
+    windowsBootstrap,
+    /Adding Perl to PATH replaced the MSVC linker/u,
   );
   assert.doesNotMatch(
     linuxBootstrap,
