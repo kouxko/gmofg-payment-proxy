@@ -312,7 +312,7 @@ test("Android and Windows build-only mode packages the Companion without running
     buildOnlyJob,
     /^[ ]{4}GIT_CLEAN_FLAGS: "-ffdx -e \.ci-cache\/ -e src-tauri\/target\/"$/mu,
   );
-  assert.match(buildOnlyJob, /^[ ]{4}when: always$/mu);
+  assert.doesNotMatch(buildOnlyJob, /^[ ]{2}cache:$/mu);
   assert.match(
     buildOnlyJob,
     /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,

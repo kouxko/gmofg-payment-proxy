@@ -330,17 +330,6 @@ windows_build_only:
   rules:
     - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
     - when: never
-  cache:
-    key:
-      files:
-        - deno.lock
-        - src-tauri/Cargo.lock
-      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
-    when: always
-    paths:
-      - .ci-cache/
-      - node_modules/
-      - .next/cache/
   before_script:
     - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
   script:
