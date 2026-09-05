@@ -58,6 +58,7 @@ function renderDeviceControl(
       devicesError={undefined}
       selectedSerial={selectedSerial}
       runtimeOwners={[{ ...ownerA, ...runtimeOwner }]}
+      maxRuntimeOwners={8}
       busySerials={new Set()}
       globalBusy={false}
       onRefreshDevices={vi.fn()}
@@ -77,6 +78,7 @@ function renderProfileActions(
   ownerSerial: string | null,
   runtimeOwnerReady = true,
   runtimeOwnerCount = ownerSerial ? 1 : 0,
+  canStartNewOwner = runtimeOwnerCount < 8,
 ) {
   render(
     <ProfileActions
@@ -84,6 +86,8 @@ function renderProfileActions(
       selectedSerial={selectedSerial}
       runtimeOwner={ownerSerial && ownerSerial === selectedSerial ? { ...ownerA, serial: ownerSerial } : undefined}
       runtimeOwnerCount={runtimeOwnerCount}
+      maxRuntimeOwners={8}
+      canStartNewOwner={canStartNewOwner}
       runtimeOwnerReady={runtimeOwnerReady}
       dangerousConfirmed={false}
       onDangerousConfirmedChange={vi.fn()}
@@ -187,5 +191,12 @@ describe("Android runtime owner controls", () => {
     expect(screen.getByRole("button", { name: "启动" })).toBeDisabled();
     expect(screen.getByRole("button", { name: "应用修改" })).toBeDisabled();
     expect(screen.getByText(/已达到 8 台运行设备上限/)).toBeVisible();
+  });
+
+  it("allows the eighth owner only when the Rust overview reports capacity", () => {
+    renderProfileActions("device-b", null, true, 7, true);
+
+    expect(screen.getByRole("button", { name: "启动" })).toBeEnabled();
+    expect(screen.queryByText(/运行设备上限/)).not.toBeInTheDocument();
   });
 });

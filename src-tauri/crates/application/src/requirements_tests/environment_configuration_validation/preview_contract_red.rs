@@ -236,7 +236,7 @@ async fn real_application_preview_rejects_an_exact_workspace_name_collision() {
             FULL_SHAPE,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
 
@@ -287,7 +287,7 @@ async fn real_application_preview_matches_every_expected_preview_field() {
             FULL_SHAPE,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
     assert_eq!(report.status_code(), None);
@@ -333,7 +333,7 @@ async fn new_target_preview_captures_the_normalized_candidate_workspace_for_appl
             FULL_SHAPE,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
     assert_eq!(report.status_code(), None);
@@ -378,7 +378,7 @@ async fn existing_target_preview_captures_persisted_and_candidate_workspaces_for
             &bytes,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
     assert_eq!(report.status_code(), None);
@@ -419,7 +419,7 @@ async fn preview_and_apply_projection_share_each_non_idempotent_allocation_once(
             FULL_SHAPE,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
     assert_eq!(report.status_code(), None);

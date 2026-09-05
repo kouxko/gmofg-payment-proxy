@@ -42,7 +42,7 @@ async fn unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy()
             destination: "configured.example".into(),
             ports: vec![original.port()],
         }],
-        confirmed_shared_uids: Default::default(),
+        confirmed_shared_uids: std::collections::BTreeSet::default(),
         auto_resume_after_reboot: false,
         stop_vpn_on_control_loss: true,
         weak_network: WeakNetworkProfile::default(),

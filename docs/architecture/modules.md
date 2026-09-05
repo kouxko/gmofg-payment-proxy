@@ -11,6 +11,10 @@ flowchart TB
     HOST --> APP[Application 用例层]
     HOST --> INFRA[Infrastructure 适配层]
     APP --> DOMAIN[Domain 领域层]
+    APP --> ANDROIDWIRE[Android Control Protocol]
+    INFRA --> OBSERVE[Traffic Observation]
+    OBSERVE --> APP
+    OBSERVE --> PROXY
     INFRA --> APP
     INFRA --> EXCHANGE[Exchange 核心]
     INFRA --> PROXY[Proxy Transport]
@@ -29,7 +33,10 @@ flowchart TB
 
 - `domain` 与 `product-api` 位于最内层，不依赖 Tauri、数据库或真实网络。
 - `exchange` 只依赖 `domain`，因此交易顺序可以脱离 transport 做确定性测试。
-- `application` 只依赖领域和产品契约，通过 trait 请求外部能力。
+- `application` 依赖领域、产品和 Android 控制协议契约，通过 trait 请求外部能力。
+- `android-control-protocol` 拥有 Companion v2 wire 和帧编码，不依赖应用层或运行时。
+- `traffic-observation` 是外层纯投影库，依赖应用 DTO 和 runtime 事实，仅供 infrastructure 调用；
+  它不持有存储、事件、规则 actor、epoch 或连接生命周期。
 - `proxy` 依赖 `exchange`，提供 HTTP、Socket、TLS 和连接生命周期适配。
 - `infrastructure` 是外层适配器集合，可以同时理解 application 端口、SQLite、proxy、
   exchange、package-contract、package-runtime 和协议包注册表，并负责把它们接起来。
@@ -43,20 +50,26 @@ flowchart TB
 | --- | --- | --- |
 | `intercept-proxy-domain` | 无 | Workspace、Listener、Document、规则、证书引用、设置和纯校验 |
 | `intercept-proxy-product-api` | 无 | 产品名称、存储命名空间、分类器、Body codec 等稳定策略契约 |
+| `intercept-proxy-android-control-protocol` | 无 | Companion v2 请求/响应、机器状态、4 字节大端长度帧和协议错误 |
+| `intercept-proxy-traffic-observation` | `application`、`runtime` | 已解码流量事实到 Session/Capture 展示模型的纯投影 |
 | `intercept-proxy-android-engine` | `domain` | TUN 数据面、路由、SOCKS5、弱网决策和统计 |
-| `intercept-proxy-application` | `domain`、`product-api` | Use Case、ViewModel、端口、事件、容量和乐观锁 |
+| `intercept-proxy-application` | `android-control-protocol`、`domain`、`product-api` | Use Case、ViewModel、端口、事件、容量和乐观锁 |
 | `intercept-proxy-exchange` | `domain` | `Exchange<P>`、Pipeline、Envelope、端点和透明转发 |
 | `intercept-proxy-package-contract` | `domain` | API 1 Manifest、固定 RPC、FrameResult 与错误 wire |
 | `intercept-proxy-package-runtime` | `domain`、`package-contract` | 单文件 Component 校验、Wasmtime/WASI 与 Host 能力 |
 | `intercept-proxy-runtime` | `exchange` | Tokio/Hyper/rustls transport、HTTP、Socket、TLS 和 supervisor |
-| `intercept-proxy-infrastructure` | `application`、`domain`、`exchange`、`package-contract`、`package-runtime`、`product-api`、`runtime` | SQLite、密钥保护、证书、ADB、Listener、协议包和运行适配 |
+| `intercept-proxy-infrastructure` | `application`、`domain`、`exchange`、`package-contract`、`package-runtime`、`product-api`、`runtime`、`traffic-observation` | SQLite、密钥保护、证书、ADB、Listener、协议包和运行适配 |
 | `intercept-proxy-host` | `application`、`infrastructure`、`product-api`、`runtime` | 无 UI 的完整应用装配与后台任务所有权 |
-| 根 crate `intercept-proxy` | `application`、`domain`、`host`、`infrastructure`、`product-api`、`runtime` | Tauri Command、AppState、日志、MCP 和桌面生命周期 |
+| 根 crate `intercept-proxy` | `application`、`domain`、`host`、`infrastructure`、`package-contract`、`product-api`、`runtime` | Tauri Command、AppState、日志、MCP 和桌面生命周期 |
 
 ```mermaid
 flowchart LR
     DOMAIN[domain] --> APP[application]
     PRODUCT[product-api] --> APP
+    ANDROIDWIRE[android-control-protocol] --> APP
+    APP --> OBSERVE[traffic-observation]
+    RUNTIME --> OBSERVE
+    OBSERVE --> INFRA
     DOMAIN --> EXCHANGE[exchange]
     DOMAIN --> CONTRACT[package-contract]
     DOMAIN --> PACKAGE[package-runtime]
@@ -101,6 +114,15 @@ flowchart LR
 - `ports/`：存储、Listener runtime、证书和 Android 等端口。
 - `events/`：有界回放与实时 `EventHub`。
 - `capacity`、`sessions`：进程级业务协调与资源合同。
+- `environment_configuration`：独立 `EnvironmentConfigurationService` 拥有候选注册、验证、应用调度与关闭排空；门面负责委托。
+- `coordination`：所有配置写入、Android 读取许可和 Environment worker 共用一个配置修改协调器，保持同一读写锁与原有 guard 生命周期。
+- 完整备份恢复/重置使用 `ApplicationBundleReplacementPort`。外部包端口只负责包生命周期；
+  bundle 适配器协调预加载、在线检查、单次 SQLite 事务和成功后的运行时更新。
+
+Android 控制协议与设备运行状态分别归属不同模块：协议 crate 只持有 wire 模型和 1 MiB 帧限制；
+application 转换为中文状态、色调和既有错误码，infrastructure 继续拥有 ADB、租约与恢复。
+`device_network_control_overview` 从同一次 owner 查询返回列表及容量能力；最大保留 owner 数由 Rust
+常量定义，SQLite 原子准入及触发器继续执行最终检查，前端能力不能代替准入事务。
 
 `models/listener_draft/` 与 `facade/listeners/draft.rs` 区分可编辑的 `ListenerDraft` 和严格领域
 `ProxyListener`。草稿允许尚未选择的 Socket 协议包、服务端身份和客户端认证信任为 `None`；
@@ -204,7 +226,10 @@ sequenceDiagram
 - `lib/ipc`：统一调用 Tauri Command 和处理 typed error。
 - `generated/rust-types.ts`：Rust/specta 生成，禁止手工编辑。
 
-`BootstrapProvider` 统一订阅 Rust 事件；feature 使用 `useAppEventRefresh` 失效查询。页面可以
+`BootstrapProvider` 统一订阅 Rust 事件，并组合唯一的已选 Workspace 上下文；该上下文从后端
+`workspaceList` 的 `selected` 和 revision 建立状态，不选择列表首项作为兜底。Shell、Android、
+Listener 和 Rules 消费同一选择，feature 内部仍拥有未保存草稿和冲突。Android 与 Listener 的
+控制器分别管理刷新/设备草稿和编辑会话，视图只负责渲染及转交用户操作。feature 使用 `useAppEventRefresh` 失效查询。页面可以
 保存未提交草稿、选择项和滚动位置，但不能自行决定规则是否合法、Listener 能否启动或证书是否可信。
 
 ## 6. 放置新代码的判断

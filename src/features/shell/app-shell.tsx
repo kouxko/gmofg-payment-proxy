@@ -43,12 +43,15 @@ import {
   useWorkspaceNavigation,
   useWorkspaceQueryInvalidation,
 } from "./workspace-navigation";
+import {
+  SelectedWorkspaceProvider,
+  useSelectedWorkspace,
+} from "./selected-workspace-context";
 import { toneColor } from "@/lib/format";
 import { PageHelp } from "@/features/help/page-help";
 import { commands } from "@/generated/rust-types";
 import type {
   ListenerOverviewViewModel,
-  WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
@@ -120,16 +123,11 @@ function CurrentTime() {
 
 function GlobalStatusBar() {
   const { bootstrap, isLoading } = useBootstrap();
+  const selectedWorkspace = useSelectedWorkspace();
   const productName = bootstrap?.product_name ?? "网络代理工具";
   const { pathname, navigate } = useWorkspaceNavigation();
   const [mobileNavigationOpen, setMobileNavigationOpen] = useState(false);
-  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
-    "shell-workspaces",
-    () => callCommand(commands.workspaceList()),
-  );
-  const workspaceId =
-    workspaces.data?.find((workspace) => workspace.selected)?.id ??
-    workspaces.data?.[0]?.id;
+  const workspaceId = selectedWorkspace.selected?.id;
   const listenerOverview = useIpcQuery<ListenerOverviewViewModel>(
     `shell-listener-overview:${workspaceId ?? "none"}`,
     () => callCommand(commands.listenerOverview(workspaceId!)),
@@ -138,7 +136,7 @@ function GlobalStatusBar() {
   );
   useWorkspaceQueryInvalidation({
     workspaceId,
-    collection: [workspaces],
+    collection: [],
     current: [listenerOverview],
   });
   useAppEventRefresh(
@@ -351,7 +349,9 @@ function ShellContent({ children }: Readonly<{ children: React.ReactNode }>) {
 export function AppShell({ children }: Readonly<{ children: React.ReactNode }>) {
   return (
     <BootstrapProvider>
-      <ShellContent>{children}</ShellContent>
+      <SelectedWorkspaceProvider>
+        <ShellContent>{children}</ShellContent>
+      </SelectedWorkspaceProvider>
     </BootstrapProvider>
   );
 }

@@ -82,7 +82,7 @@ impl EnvironmentPreviewBaselinePort for TokenCapturingPreview<'_> {
     fn domain_projection_port(
         &self,
     ) -> Option<&dyn crate::environment_configuration::EnvironmentDomainProjectionPort> {
-        Some(self.application)
+        Some(self.application.environment_configuration_service())
     }
 
     async fn validate_preview_baseline(
@@ -210,7 +210,7 @@ async fn existing_target_with_the_same_active_listener_id_reaches_preview_ready(
             &bytes,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
 

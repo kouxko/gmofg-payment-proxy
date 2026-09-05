@@ -66,7 +66,8 @@ pub(crate) use environment_configuration_materials::{
 pub(crate) use environment_configuration_validation::EnvironmentConfigurationValidationAdapter;
 pub use exchange_observation::{ExchangeObservationCounters, ExchangeObservationStore};
 pub use external_package_registry::{
-    AcceptedExternalPackageConnection, ExternalPackageConnectionId, ExternalPackageRegistryAdapter,
+    AcceptedExternalPackageConnection, ApplicationBundleReplacementAdapter,
+    ExternalPackageConnectionId, ExternalPackageRegistryAdapter,
     external_package_registration_fingerprint,
 };
 pub use external_package_server::{ExternalPackageServer, ExternalPackageServerConfig};

@@ -214,6 +214,11 @@ function rustViolationCodes(role, source) {
       || includesSegment(parts, "tls"))
       || /\bTls[A-Za-z0-9_]*\b/u.test(inspected)) failures.push("SHARED_CAPABILITY_TLS_DEPENDENCY");
   }
+  if (role === "traffic_projection") {
+    if (/\b(?:EventHub|SessionStore|InMemorySessionStore|CaptureRepositoryAdapter|RuleRuntimeService|JointHttpRuleRuntime|CancellationToken|Mutex|RwLock)\b/u.test(inspected)) failures.push("TRAFFIC_PROJECTION_STATE_OWNER");
+    if (/\b(?:tokio|rusqlite|sqlx|tauri|intercept_proxy_infrastructure)\s*::/u.test(inspected)) failures.push("TRAFFIC_PROJECTION_INFRASTRUCTURE");
+    if (/\bdecode_message_body\s*\(/u.test(inspected)) failures.push("TRAFFIC_PROJECTION_DECODE");
+  }
   if (role === "observation_application") {
     if (hasPath(imports, (parts) => parts[0] === "intercept_proxy_infrastructure")) failures.push("OBSERVATION_APPLICATION_INFRASTRUCTURE");
     if (hasPath(imports, (parts) => parts[0] === "tauri")) failures.push("OBSERVATION_APPLICATION_TAURI");
@@ -452,6 +457,10 @@ function roleForProxyFile(relative) {
 }
 
 const fixtureCases = [
+  ["traffic projection accepts DTO and runtime facts", "traffic_projection", "use intercept_proxy_application::SessionDetailViewModel; use intercept_proxy_runtime::Message;", []],
+  ["traffic projection rejects state ownership", "traffic_projection", "struct Projection { events: EventHub, sessions: InMemorySessionStore, rules: JointHttpRuleRuntime }", ["TRAFFIC_PROJECTION_STATE_OWNER"]],
+  ["traffic projection rejects infrastructure calls", "traffic_projection", "fn project() { intercept_proxy_infrastructure::load(); }", ["TRAFFIC_PROJECTION_INFRASTRUCTURE"]],
+  ["traffic projection receives decoded facts", "traffic_projection", "fn project() { decode_message_body(codec, message); }", ["TRAFFIC_PROJECTION_DECODE"]],
   ["HTTP grouped alias import", "http", "use crate::{socket_relay::{SocketRelayService as Relay, config::SocketRelayConfig as C}, tls::TlsEvidence};", ["HTTP_SOCKET_IMPORT"]],
   ["HTTP grouped aliased domain contract", "http", "use intercept_proxy_domain::{workspace::{SocketTopology as Topology}, WorkspaceId};", ["HTTP_SOCKET_CONTRACT_IMPORT"]],
   ["HTTP fully qualified Socket path", "http", "fn build() { crate::socket_relay::SocketRelayService::build(); }", ["HTTP_SOCKET_IMPORT"]],
@@ -917,6 +926,7 @@ async function scanProduction() {
     for (const code of rustViolationCodes(role, await readFile(absolute, "utf8"))) failures.push(`${path.relative(repositoryRoot, absolute)}: [${code}]`);
   }
   for (const [root, role] of [
+    [path.join(cratesSourceRoot, "traffic-observation/src"), "traffic_projection"],
     [domainDocumentSourceRoot, "domain_document"],
     [domainProtocolPackageSourceRoot, "domain_protocol_package"],
     [exchangeSourceRoot, "exchange"],

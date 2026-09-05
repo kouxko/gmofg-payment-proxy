@@ -158,7 +158,7 @@ impl AndroidAdbAdapter {
         }
         response
             .status
-            .map(intercept_proxy_application::AndroidCompanionStatus::into_view_model)
+            .map(AndroidNetworkStatusViewModel::from)
             .ok_or_else(|| {
                 AppError::new(
                     "ANDROID_PROTOCOL_RESPONSE_INVALID",

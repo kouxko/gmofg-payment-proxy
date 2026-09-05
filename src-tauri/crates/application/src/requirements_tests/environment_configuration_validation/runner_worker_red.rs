@@ -113,7 +113,7 @@ async fn cancellation_at_a_cpu_checkpoint_reports_before_candidate_buffer_drop_r
             FULL_SHAPE,
             CancellationToken::new(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
 
@@ -189,7 +189,7 @@ async fn total_deadline_at_a_cpu_checkpoint_reports_before_candidate_buffer_drop
             &bytes,
             CancellationToken::new(),
             CancellationToken::new(),
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
 

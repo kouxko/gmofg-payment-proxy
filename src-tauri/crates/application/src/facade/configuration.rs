@@ -72,7 +72,7 @@ impl Application {
             certificate_materials: Vec::new(),
             protocol_packages: Vec::new(),
         };
-        self.external_packages
+        self.bundle_replacement
             .reset_application_bundle(document)
             .await?;
         self.android_package_cache.lock().await.clear();
@@ -115,7 +115,7 @@ impl Application {
         let imported_workspaces = document.workspaces.clone();
         let protocol_packages = document.protocol_packages.clone();
         let replacement = self
-            .external_packages
+            .bundle_replacement
             .replace_application_bundle(protocol_packages, document)
             .await;
         if let Err(error) = replacement {

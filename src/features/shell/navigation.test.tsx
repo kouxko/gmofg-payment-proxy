@@ -42,6 +42,14 @@ vi.mock("./bootstrap-context", () => ({
   }),
 }));
 
+vi.mock("./selected-workspace-context", () => ({
+  SelectedWorkspaceProvider: ({ children }: { children: React.ReactNode }) => children,
+  useSelectedWorkspace: () => ({
+    selected: { id: "workspace-1", name: "测试工作区", revision: 1 },
+    summaries: [], isLoading: false, error: undefined, refresh: vi.fn(),
+  }),
+}));
+
 vi.mock("@/lib/ipc/use-ipc-query", () => ({
   useIpcQuery: (queryKey: string) =>
     queryKey === "shell-workspaces"

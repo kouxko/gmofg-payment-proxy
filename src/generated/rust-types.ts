@@ -44,6 +44,7 @@ export const commands = {
 	deviceNetworkStatus: (serial: string) => typedError<AndroidNetworkStatusViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_status", { serial })),
 	deviceNetworkEndpoints: (serial: string, profileId: string | null) => typedError<AndroidNetworkEndpointSnapshotViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_endpoints", { serial, profileId })),
 	deviceNetworkRuntimeOwners: () => typedError<AndroidRuntimeOwnerViewModel[], AppErrorViewModel>(__TAURI_INVOKE("device_network_runtime_owners")),
+	deviceNetworkControlOverview: () => typedError<AndroidNetworkControlOverviewViewModel, AppErrorViewModel>(__TAURI_INVOKE("device_network_control_overview")),
 	workspaceList: () => typedError<WorkspaceSummaryViewModel[], AppErrorViewModel>(__TAURI_INVOKE("workspace_list")),
 	workspaceGet: (workspaceId: WorkspaceId) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("workspace_get", { workspaceId })),
 	workspaceSecretStoreBasic: (username: string, password: string) => typedError<SecretReference, AppErrorViewModel>(__TAURI_INVOKE("workspace_secret_store_basic", { username, password })),
@@ -231,6 +232,13 @@ export type AndroidDeviceViewModel = {
 	device: string | null,
 	transport_id: string | null,
 	selected: boolean,
+};
+
+/**  Read-only owner capacity from one runtime owner snapshot. Admission remains atomic in storage. */
+export type AndroidNetworkControlOverviewViewModel = {
+	owners: AndroidRuntimeOwnerViewModel[],
+	max_runtime_owners: number,
+	can_start_new_owner: boolean,
 };
 
 export type AndroidNetworkEndpointSnapshotViewModel = {

@@ -24,6 +24,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: () => undefined,
   useBootstrap: () => ({ bootstrap }),
 }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({ useSelectedWorkspace: () => ({ selected: { id: "workspace-1", revision: 1 }, summaries: [], isLoading: false, refresh: vi.fn() }) }));
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 
 import { ListenersView } from "./listeners-view";

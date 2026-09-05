@@ -10,7 +10,16 @@ use serde_json::Value;
 use specta::Type;
 use uuid::Uuid;
 
-use crate::{AppError, AppResult, UiTone};
+use crate::UiTone;
+
+pub use intercept_proxy_android_control_protocol::{
+    ANDROID_CONTROL_MAX_FRAME_BYTES, ANDROID_CONTROL_PROTOCOL_VERSION, AndroidCompanionStatus,
+    AndroidControlRequest, AndroidControlResponse, AndroidControlTransport, AndroidNetworkState,
+    decode_android_control_frame, encode_android_control_frame,
+};
+
+#[path = "android/protocol_error.rs"]
+mod protocol_error;
 
 #[path = "android/runtime_owner.rs"]
 mod runtime_owner;
@@ -18,9 +27,6 @@ pub use runtime_owner::*;
 #[path = "android/runtime_endpoint.rs"]
 mod runtime_endpoint;
 pub use runtime_endpoint::*;
-
-pub const ANDROID_CONTROL_PROTOCOL_VERSION: u16 = 2;
-pub const ANDROID_CONTROL_MAX_FRAME_BYTES: usize = 1024 * 1024;
 
 #[derive(Clone, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
 #[serde(deny_unknown_fields)]
@@ -159,26 +165,6 @@ impl From<&AndroidNetworkProfile> for AndroidNetworkProfileSummary {
     }
 }
 
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum AndroidControlTransport {
-    LocalAbstractSocket,
-    RescueActivity,
-    AdbForceStop,
-    Unavailable,
-}
-
-#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize, Deserialize, Type)]
-#[serde(rename_all = "snake_case")]
-pub enum AndroidNetworkState {
-    Unknown,
-    StartRequested,
-    Running,
-    StopRequested,
-    Stopped,
-    Faulted,
-}
-
 #[derive(Clone, Debug, PartialEq, Serialize, Deserialize, Type)]
 pub struct AndroidNetworkStatusViewModel {
     pub serial: String,
@@ -225,145 +211,27 @@ impl AndroidNetworkStatusViewModel {
     }
 }
 
-/// Android Companion 在控制协议中返回的机器状态。
-///
-/// 该结构不包含桌面展示文案或视觉语义；这些字段由 Rust 在协议校验完成后统一生成。
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-#[serde(deny_unknown_fields)]
-pub struct AndroidCompanionStatus {
-    pub serial: String,
-    pub state: AndroidNetworkState,
-    pub verified: bool,
-    pub transport: AndroidControlTransport,
-    pub active_profile_id: Option<String>,
-    pub active_profile_fingerprint: Option<String>,
-    pub active_route_fingerprint: Option<String>,
-    pub active_route_count: usize,
-    pub companion_process_running: Option<bool>,
-    pub message: String,
-    pub unsupported_fields: Vec<String>,
-    pub stats: Option<Value>,
-}
-
-impl AndroidCompanionStatus {
-    #[must_use]
-    pub fn into_view_model(self) -> AndroidNetworkStatusViewModel {
+impl From<AndroidCompanionStatus> for AndroidNetworkStatusViewModel {
+    fn from(status: AndroidCompanionStatus) -> Self {
         AndroidNetworkStatusViewModel {
-            serial: self.serial,
+            serial: status.serial,
             runtime_epoch: None,
-            state: self.state,
+            state: status.state,
             state_text: String::new(),
             ui_tone: UiTone::Neutral,
-            verified: self.verified,
-            transport: self.transport,
-            active_profile_id: self.active_profile_id,
-            active_profile_fingerprint: self.active_profile_fingerprint,
-            active_route_fingerprint: self.active_route_fingerprint,
-            active_route_count: self.active_route_count,
-            companion_process_running: self.companion_process_running,
-            message: self.message,
-            unsupported_fields: self.unsupported_fields,
-            stats: self.stats,
+            verified: status.verified,
+            transport: status.transport,
+            active_profile_id: status.active_profile_id,
+            active_profile_fingerprint: status.active_profile_fingerprint,
+            active_route_fingerprint: status.active_route_fingerprint,
+            active_route_count: status.active_route_count,
+            companion_process_running: status.companion_process_running,
+            message: status.message,
+            unsupported_fields: status.unsupported_fields,
+            stats: status.stats,
         }
         .with_rust_state_text()
     }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AndroidControlRequest {
-    pub version: u16,
-    pub request_id: Uuid,
-    pub operation: String,
-    pub payload: Value,
-}
-
-impl AndroidControlRequest {
-    pub fn new(operation: impl Into<String>, payload: Value) -> AppResult<Self> {
-        let operation = operation.into();
-        if !matches!(
-            operation.as_str(),
-            "profile_list"
-                | "profile_get"
-                | "profile_save"
-                | "profile_delete"
-                | "start"
-                | "apply"
-                | "apply_active"
-                | "stop"
-                | "emergency_restore"
-                | "status"
-                | "heartbeat"
-        ) {
-            return Err(AppError::new(
-                "ANDROID_PROTOCOL_OPERATION_INVALID",
-                "Android 控制操作不在协议白名单中。",
-            ));
-        }
-        let request = Self {
-            version: ANDROID_CONTROL_PROTOCOL_VERSION,
-            request_id: Uuid::new_v4(),
-            operation,
-            payload,
-        };
-        let encoded = serde_json::to_vec(&request)
-            .map_err(|error| AppError::new("ANDROID_PROTOCOL_ENCODE_FAILED", error.to_string()))?;
-        if encoded.len() > ANDROID_CONTROL_MAX_FRAME_BYTES {
-            return Err(AppError::new(
-                "ANDROID_PROTOCOL_FRAME_TOO_LARGE",
-                "Android 控制请求超过 1 MiB 上限。",
-            ));
-        }
-        Ok(request)
-    }
-}
-
-#[derive(Clone, Debug, PartialEq, Serialize, Deserialize)]
-pub struct AndroidControlResponse {
-    pub version: u16,
-    pub request_id: Uuid,
-    pub ok: bool,
-    pub status: Option<AndroidCompanionStatus>,
-    pub error_code: Option<String>,
-    pub error_message: Option<String>,
-}
-
-pub fn encode_android_control_frame<T: Serialize>(value: &T) -> AppResult<Vec<u8>> {
-    let payload = serde_json::to_vec(value)
-        .map_err(|error| AppError::new("ANDROID_PROTOCOL_ENCODE_FAILED", error.to_string()))?;
-    let length = u32::try_from(payload.len()).map_err(|_| {
-        AppError::new(
-            "ANDROID_PROTOCOL_FRAME_TOO_LARGE",
-            "Android 控制帧长度溢出。",
-        )
-    })?;
-    if payload.len() > ANDROID_CONTROL_MAX_FRAME_BYTES {
-        return Err(AppError::new(
-            "ANDROID_PROTOCOL_FRAME_TOO_LARGE",
-            "Android 控制帧超过 1 MiB 上限。",
-        ));
-    }
-    let mut frame = Vec::with_capacity(4 + payload.len());
-    frame.extend_from_slice(&length.to_be_bytes());
-    frame.extend_from_slice(&payload);
-    Ok(frame)
-}
-
-pub fn decode_android_control_frame<T: for<'de> Deserialize<'de>>(frame: &[u8]) -> AppResult<T> {
-    if frame.len() < 4 {
-        return Err(AppError::new(
-            "ANDROID_PROTOCOL_FRAME_INVALID",
-            "Android 控制帧缺少长度前缀。",
-        ));
-    }
-    let declared = u32::from_be_bytes([frame[0], frame[1], frame[2], frame[3]]) as usize;
-    if declared > ANDROID_CONTROL_MAX_FRAME_BYTES || declared != frame.len() - 4 {
-        return Err(AppError::new(
-            "ANDROID_PROTOCOL_FRAME_INVALID",
-            "Android 控制帧长度无效。",
-        ));
-    }
-    serde_json::from_slice(&frame[4..])
-        .map_err(|error| AppError::new("ANDROID_PROTOCOL_JSON_INVALID", error.to_string()))
 }
 
 #[cfg(test)]

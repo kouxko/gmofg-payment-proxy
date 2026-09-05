@@ -21,12 +21,13 @@ use intercept_proxy_product_api::ProductProfile;
 use crate::{InfrastructureError, SecretProtector, SqliteExecutor, SqliteStore};
 
 use super::{
-    AndroidAdbAdapter, BuiltinProtocolPackageAdapter, CaptureRepositoryAdapter,
-    CertificateServiceAdapter, EnvironmentApplyLeaseAdapter, EnvironmentApplyRuntimeAdapter,
-    EnvironmentConfigurationMaterialPreparer, EnvironmentConfigurationValidationAdapter,
-    ExternalPackageRegistryAdapter, ExternalPackageServer, ExternalPackageServerConfig,
-    FaultServiceAdapter, ListenerRuntimeAdapter, ManagedListenerCertificateAdapter,
-    NativeFileDialog, PackageTransportConfig, ProtectedSecretAdapter, ProtocolPackageImportAdapter,
+    AndroidAdbAdapter, ApplicationBundleReplacementAdapter, BuiltinProtocolPackageAdapter,
+    CaptureRepositoryAdapter, CertificateServiceAdapter, EnvironmentApplyLeaseAdapter,
+    EnvironmentApplyRuntimeAdapter, EnvironmentConfigurationMaterialPreparer,
+    EnvironmentConfigurationValidationAdapter, ExternalPackageRegistryAdapter,
+    ExternalPackageServer, ExternalPackageServerConfig, FaultServiceAdapter,
+    ListenerRuntimeAdapter, ManagedListenerCertificateAdapter, NativeFileDialog,
+    PackageTransportConfig, ProtectedSecretAdapter, ProtocolPackageImportAdapter,
     ProtocolPackageUsageQueryAdapter, RuleRepositoryAdapter, RuntimePipelineAdapter,
     RuntimePipelineProductHooks, SettingsRepositoryAdapter, WorkspaceBodyCodecResolver,
     WorkspaceRepositoryAdapter,
@@ -321,11 +322,15 @@ impl InfrastructureServiceBundle {
                 validator: self.environment_validator,
             }
         });
+        let application_bundle = Arc::new(ApplicationBundleReplacementAdapter::new(
+            self.external_packages.clone(),
+        ));
         let protocol_packages = ProtocolPackageApplicationServices {
             importer: self.protocol_package_import,
             builtin: self.builtin_protocol_package,
             usage_query: self.protocol_package_usage,
             external: self.external_packages,
+            application_bundle,
         };
         Ok(Application::new(
             product_name,

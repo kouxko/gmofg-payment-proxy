@@ -1,6 +1,4 @@
-use intercept_proxy_application::{
-    APPLICATION_CONFIGURATION_FORMAT_VERSION, PortableSettings, SettingsDraft,
-};
+use intercept_proxy_application::SettingsDraft;
 use intercept_proxy_domain::{
     AndroidNetworkProfile, AndroidProxyRoute, AndroidTargetApplication, BodyCodecKind,
     CertificateReference, CertificateReferenceId, CertificateReferenceKind, Condition,
@@ -51,7 +49,6 @@ async fn point_lookup_does_not_load_or_decode_unrelated_workspaces() {
 #[tokio::test]
 async fn full_configuration_replaces_workspaces_selection_and_settings_together() {
     let store = Arc::new(SqliteStore::in_memory().expect("in-memory store"));
-    let repository = WorkspaceRepositoryAdapter::new(store.clone());
     let first = ProxyWorkspace {
         name: "First".into(),
         ..ProxyWorkspace::default()
@@ -64,18 +61,13 @@ async fn full_configuration_replaces_workspaces_selection_and_settings_together(
         max_sessions: 777,
         ..SettingsDraft::default()
     };
-    let document = ApplicationConfigurationDocument {
-        format_version: APPLICATION_CONFIGURATION_FORMAT_VERSION,
-        selected_workspace_id: second.id,
-        workspaces: vec![first.clone(), second.clone()],
-        settings: PortableSettings::from(&settings),
-        certificate_materials: Vec::new(),
-        protocol_packages: Vec::new(),
-    };
-
-    repository
-        .replace_all(document)
-        .await
+    let records = vec![
+        WorkspaceRepositoryAdapter::record(&first).unwrap(),
+        WorkspaceRepositoryAdapter::record(&second).unwrap(),
+    ];
+    let settings = crate::adapters::settings::serialize_settings(&settings).unwrap();
+    store
+        .replace_application_configuration(second.id.as_uuid(), &records, &settings)
         .expect("atomic replace");
 
     let snapshot = store.load_workspaces().expect("workspaces");

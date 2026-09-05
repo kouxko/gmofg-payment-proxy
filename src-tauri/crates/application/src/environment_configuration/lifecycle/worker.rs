@@ -11,7 +11,7 @@ use crate::{EventHub, UiEventPayload};
 
 pub(crate) struct EnvironmentApplyWorker {
     registry: EnvironmentCandidateRegistry,
-    mutation_gate: Arc<crate::facade::ApplicationMutationGate>,
+    mutation_gate: Arc<crate::coordination::ConfigurationMutationCoordinator>,
     lease: Arc<dyn EnvironmentApplyLeasePort>,
     prepare: Arc<dyn EnvironmentProtectedMaterialPreparePort>,
     commit: Arc<dyn EnvironmentCommitPort>,
@@ -41,7 +41,7 @@ impl EnvironmentApplyWorker {
     ) -> Self {
         Self::new_with_mutation_gate(
             registry,
-            Arc::new(crate::facade::ApplicationMutationGate::default()),
+            Arc::new(crate::coordination::ConfigurationMutationCoordinator::default()),
             lease,
             prepare,
             commit,
@@ -51,7 +51,7 @@ impl EnvironmentApplyWorker {
 
     pub(crate) fn new_with_mutation_gate(
         registry: EnvironmentCandidateRegistry,
-        mutation_gate: Arc<crate::facade::ApplicationMutationGate>,
+        mutation_gate: Arc<crate::coordination::ConfigurationMutationCoordinator>,
         lease: Arc<dyn EnvironmentApplyLeasePort>,
         prepare: Arc<dyn EnvironmentProtectedMaterialPreparePort>,
         commit: Arc<dyn EnvironmentCommitPort>,

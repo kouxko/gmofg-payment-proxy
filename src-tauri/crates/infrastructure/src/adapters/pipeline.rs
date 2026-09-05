@@ -15,9 +15,8 @@ use std::{
 use async_trait::async_trait;
 use chrono::{DateTime, Utc};
 use intercept_proxy_application::{
-    AppError, AppResult, CaptureRowViewModel, ChannelId as AppChannelId, EventHub,
-    InMemorySessionStore, MessageStage as AppMessageStage, SessionDetailViewModel, SessionRecord,
-    SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone,
+    AppError, AppResult, ChannelId as AppChannelId, EventHub, InMemorySessionStore,
+    MessageStage as AppMessageStage, SessionRecord, SessionStore, UiEventPayload, UiTone,
 };
 use intercept_proxy_domain::{
     ChannelId as DomainChannelId, MessageStage as DomainMessageStage, RuleLifecycleDelta,
@@ -187,7 +186,7 @@ mod ports;
 mod session;
 
 pub(crate) use mapping::app_to_proxy;
-use mapping::{app_channel, domain_channel, fingerprint, result_text, result_tone, tls_summary};
+use mapping::{app_channel, domain_channel, fingerprint, tls_summary};
 
 #[cfg(test)]
 #[path = "pipeline/tests.rs"]

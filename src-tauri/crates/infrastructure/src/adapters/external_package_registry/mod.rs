@@ -25,7 +25,9 @@ use super::{
 };
 use crate::sqlite::external_packages::StoredExternalPackageRegistrationOutcome;
 
+mod application_bundle;
 mod application_port;
+pub use application_bundle::ApplicationBundleReplacementAdapter;
 mod cleanup;
 mod connection;
 mod diagnostics;

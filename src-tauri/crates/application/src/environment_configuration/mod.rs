@@ -12,6 +12,7 @@ mod listener;
 mod materials;
 mod preview;
 mod rules;
+mod service;
 mod terminal;
 mod validation;
 mod workspace_projection;
@@ -62,6 +63,8 @@ use listener::ListenerTemplate;
 use materials::EnvironmentMaterials;
 pub(crate) use preview::candidate_preview_snapshot;
 use rules::RuleTemplate;
+pub use service::EnvironmentConfigurationApplicationServices;
+pub(crate) use service::EnvironmentConfigurationService;
 pub use terminal::{
     DiagnosticSeverity, EnvironmentDiagnostic, EnvironmentDiagnosticScope, EnvironmentStatusCode,
     EnvironmentTerminalResult,

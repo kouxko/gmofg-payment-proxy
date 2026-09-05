@@ -2740,6 +2740,17 @@ dependencies = [
 ]
 
 [[package]]
+name = "intercept-proxy-android-control-protocol"
+version = "1.0.0"
+dependencies = [
+ "serde",
+ "serde_json",
+ "specta",
+ "thiserror 2.0.20",
+ "uuid",
+]
+
+[[package]]
 name = "intercept-proxy-android-engine"
 version = "1.0.0"
 dependencies = [
@@ -2760,6 +2771,7 @@ dependencies = [
  "base64 0.22.1",
  "chrono",
  "http",
+ "intercept-proxy-android-control-protocol",
  "intercept-proxy-domain",
  "intercept-proxy-product-api",
  "parking_lot",
@@ -2848,6 +2860,7 @@ dependencies = [
  "intercept-proxy-package-runtime",
  "intercept-proxy-product-api",
  "intercept-proxy-runtime",
+ "intercept-proxy-traffic-observation",
  "p12-keystore",
  "parking_lot",
  "pkcs8",
@@ -2936,6 +2949,18 @@ dependencies = [
  "uuid",
  "x509-parser",
  "zeroize",
+]
+
+[[package]]
+name = "intercept-proxy-traffic-observation"
+version = "1.0.0"
+dependencies = [
+ "bytes",
+ "chrono",
+ "intercept-proxy-application",
+ "intercept-proxy-runtime",
+ "serde_json",
+ "uuid",
 ]
 
 [[package]]

@@ -32,9 +32,24 @@ const mocks = vi.hoisted(() => ({
   useAppEventRefresh: vi.fn(),
 }));
 
-vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
+vi.mock("@/generated/rust-types", () => ({ commands: {
+  ...mocks,
+  deviceNetworkControlOverview: async () => {
+    const result = await mocks.deviceNetworkRuntimeOwners();
+    return result.status === "error" ? result : { status: "ok", data: {
+      owners: result.data, max_runtime_owners: 8,
+      can_start_new_owner: result.data.length < 8,
+    } };
+  },
+} }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: mocks.useAppEventRefresh,
+}));
+vi.mock("@/features/shell/selected-workspace-context", () => ({
+  useSelectedWorkspace: () => ({
+    selected: { id: "workspace-1", revision: 1 }, summaries: [],
+    isLoading: false, error: undefined, refresh: vi.fn(),
+  }),
 }));
 
 function ok<T>(data: T) {

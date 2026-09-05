@@ -27,10 +27,10 @@ fn application_dependencies_own_all_three_apply_ports() {
 
 #[test]
 fn application_starts_owned_apply_without_caller_supplied_ports() {
-    let facade = source("src/facade/environment_candidates.rs");
-    assert!(facade.contains("fn start_next_environment_apply(&self)"));
+    let service = source("src/environment_configuration/service.rs");
+    assert!(service.contains("fn start_next_environment_apply(&self)"));
     assert!(
-        !facade
+        !service
             .contains("environment_candidate_spawn_owned_apply(\n        &self,\n        prepare:")
     );
 }
@@ -45,8 +45,8 @@ fn preview_completion_captures_baseline_internally_for_a_valid_workspace_aggrega
         .expect("complete_preview_ready signature");
     assert!(signature.contains("ProxyWorkspace"));
     assert!(!signature.contains("EnvironmentValidatedApplyBaseline"));
-    let facade = source("src/facade/environment_candidates.rs");
-    assert!(facade.contains("environment_baseline_capture.capture("));
+    let service = source("src/environment_configuration/service.rs");
+    assert!(service.contains("environment_baseline_capture.capture("));
 }
 
 #[test]
@@ -132,11 +132,11 @@ fn worker_maps_lease_prepare_and_commit_through_typed_phase_outcomes_only() {
 
 #[test]
 fn queue_and_start_is_one_application_owned_production_use_case() {
-    let facade = source("src/facade/environment_candidates.rs");
-    let start = facade
+    let service = source("src/environment_configuration/service.rs");
+    let start = service
         .find("pub fn environment_candidate_queue_and_start_apply(")
         .expect("production queue-and-start use case");
-    let body = &facade[start..];
+    let body = &service[start..];
     let queue = body.find(".queue_apply(").expect("queue transition");
     let spawn = body
         .find("self.start_next_environment_apply()")
@@ -144,18 +144,18 @@ fn queue_and_start_is_one_application_owned_production_use_case() {
 
     assert!(queue < spawn);
     assert!(
-        !facade.contains("fn environment_candidate_queue_apply("),
+        !service.contains("fn environment_candidate_queue_apply("),
         "queue-only Application entry point must not remain callable"
     );
 }
 
 #[test]
 fn application_shutdown_wiring_begins_shutdown_and_waits_for_owned_apply_drain() {
-    let facade = source("src/facade/environment_candidates.rs");
-    let shutdown = facade
+    let service = source("src/environment_configuration/service.rs");
+    let shutdown = service
         .find("fn environment_candidate_shutdown_and_drain(")
         .expect("production shutdown-and-drain use case");
-    let body = &facade[shutdown..];
+    let body = &service[shutdown..];
 
     assert!(body.contains("environment_candidates.begin_shutdown()"));
     assert!(body.contains(".await"));
@@ -183,13 +183,13 @@ fn baseline_contract_owns_typed_diff_classification_and_stable_resource_keys() {
 
 #[test]
 fn preview_capture_uses_validated_candidate_schema_and_engine_versions() {
-    let facade = source("src/facade/environment_candidates.rs");
+    let service = source("src/environment_configuration/service.rs");
 
     assert!(
-        !facade.contains("schema_version: 1,"),
+        !service.contains("schema_version: 1,"),
         "preview capture hard-codes candidate schema instead of carrying validated authority"
     );
-    assert!(facade.contains("validation_engine_version:"));
+    assert!(service.contains("validation_engine_version:"));
 }
 
 #[test]

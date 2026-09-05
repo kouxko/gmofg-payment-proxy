@@ -57,4 +57,6 @@ pub struct ProtocolPackageApplicationServices {
     pub usage_query: std::sync::Arc<dyn ProtocolPackageUsageQueryPort>,
     /// 外部软件包注册表与活动连接端口。
     pub external: std::sync::Arc<dyn crate::ExternalPackageApplicationPort>,
+    /// Complete bundle replacement is deliberately separate from package lifecycle operations.
+    pub application_bundle: std::sync::Arc<dyn crate::ApplicationBundleReplacementPort>,
 }

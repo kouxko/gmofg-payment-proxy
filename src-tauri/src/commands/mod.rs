@@ -97,6 +97,7 @@ pub fn builder() -> Builder<Wry> {
             device_network_status,
             device_network_endpoints,
             device_network_runtime_owners,
+            device_network_control_overview,
             workspace_list,
             workspace_get,
             workspace_secret_store_basic,

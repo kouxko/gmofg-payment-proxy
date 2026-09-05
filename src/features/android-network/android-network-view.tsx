@@ -1,6 +1,6 @@
 "use client";
 
-import { type ReactElement, useCallback, useEffect, useLayoutEffect, useRef, useState } from "react";
+import type { ReactElement } from "react";
 import { Alert, toast } from "@heroui/react";
 import type {
   AndroidNetworkProfile,
@@ -10,8 +10,7 @@ import type {
   WeakNetworkProfile,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
-import { callCommand, errorMessage } from "@/lib/ipc/client";
-import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { callCommand } from "@/lib/ipc/client";
 import { toneColor } from "@/lib/format";
 import { DeviceControlCard } from "./device-control-card";
 import {
@@ -26,151 +25,29 @@ import {
 } from "./profile-cards";
 import { TargetApplicationsCard } from "./target-applications-card";
 import { useCurrentWorkspaceListeners } from "./use-current-workspace-listeners";
-import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
 import { runtimeAlertStatus } from "./android-network-types";
 import {
   clearOwnerConditionally,
-  mergeAndroidDeviceTargets,
   runtimeOwnerQueryKey,
   runtimeResponseMatches,
 } from "./android-runtime-owner-model";
-import { useAndroidOwnerRefresh } from "./use-android-owner-refresh";
+import { useAndroidNetworkController } from "./use-android-network-controller";
 
 /**
  * 页面只展示 Rust ViewModel、收集表单输入并发送用户意图。
  * 设备发现、规则校验、持久化和 VPN 状态判断均由 Rust 完成。
  */
 export function AndroidNetworkView(): ReactElement {
-  const adb = useIpcQuery("android-adb", () => callCommand(commands.androidAdbGet()));
-  const devices = useIpcQuery("android-devices", () => callCommand(commands.androidDeviceList()));
-  const profiles = useIpcQuery(
-    "android-profiles",
-    () => callCommand(commands.deviceNetworkProfileList()),
-    [],
-  );
+  const controller = useAndroidNetworkController();
+  const {
+    adb, devices, profiles, overview, owners, targets, selectedSerial, selectedOwner,
+    runtimeTargetKey, packages, packageFilterDraft, packageFilter, filteredPackages,
+    runtime, displayedRuntime, activeProfileId, draft, setDraft, endpoints,
+    pendingTargets, dangerousConfirmed, selectedSerialRef, runtimeOwnerKeyRef,
+    setSelectedSerialOverride, setPackageFilterDraft, setPackageFilter,
+    setDangerousConfirmed, run,
+  } = controller;
   const workspaceListeners = useCurrentWorkspaceListeners();
-  const runtimeOwners = useIpcQuery(
-    "android-runtime-owners",
-    () => callCommand(commands.deviceNetworkRuntimeOwners()),
-  );
-  const refreshRuntimeOwners = runtimeOwners.refresh;
-  const refreshDevices = devices.refresh;
-  const targets = mergeAndroidDeviceTargets(devices.data ?? [], runtimeOwners.data ?? []);
-  const [selectedSerialOverride, setSelectedSerialOverride] = useState<string>();
-  const selectedSerial = selectedSerialOverride ?? adb.data?.selected_serial ?? undefined;
-  const selectedOwner = (runtimeOwners.data ?? []).find((owner) => owner.serial === selectedSerial);
-  const runtimeTargetKey = runtimeOwnerQueryKey(selectedOwner);
-  const packages = useIpcQuery(
-    `android-packages:${selectedSerial ?? "none"}`,
-    () => callCommand(commands.androidPackageList(selectedSerial!)),
-    [],
-    { enabled: Boolean(selectedSerial) },
-  );
-  const [packageFilterDraft, setPackageFilterDraft] = useState("");
-  const [packageFilter, setPackageFilter] = useState("");
-  const filteredPackages = useIpcQuery(
-    `android-packages:${selectedSerial ?? "none"}:filter:${packageFilter}`,
-    () => callCommand(commands.androidPackageQuery(selectedSerial!, packageFilter)),
-    [],
-    { enabled: Boolean(selectedSerial && packageFilter) },
-  );
-  const runtime = useIpcQuery(
-    `android-runtime:${runtimeTargetKey ?? "none"}`,
-    () => callCommand(commands.deviceNetworkStatus(selectedOwner!.serial)),
-    undefined,
-    { enabled: Boolean(runtimeTargetKey) },
-  );
-  const runtimeData = runtime.data;
-  const refreshRuntime = runtime.refresh;
-  const [drafts, setDrafts] = useState<Record<string, AndroidNetworkProfile | undefined>>({});
-  const draft = selectedSerial ? drafts[selectedSerial] : undefined;
-  const setDraft = useCallback((next: AndroidNetworkProfile | undefined) => {
-    if (!selectedSerial) return;
-    setDrafts((current) => ({ ...current, [selectedSerial]: next }));
-  }, [selectedSerial]);
-  const endpoints = useIpcQuery(
-    `android-endpoints:${selectedSerial ?? "none"}:${draft?.id ?? "none"}:${selectedOwner?.epoch ?? "none"}`,
-    () => callCommand(commands.deviceNetworkEndpoints(selectedSerial!, draft?.id ?? null)),
-    undefined,
-    { enabled: Boolean(selectedSerial) },
-  );
-  const refreshEndpoints = endpoints.refresh;
-  const runtimeRefreshInFlight = useRef<Promise<void> | null>(null);
-  const runtimeRefreshQueued = useRef(false);
-  const refreshRuntimeSerially = useCallback((): Promise<void> => {
-    runtimeRefreshQueued.current = true;
-    if (runtimeRefreshInFlight.current) return runtimeRefreshInFlight.current;
-
-    const task = (async () => {
-      while (runtimeRefreshQueued.current) {
-        runtimeRefreshQueued.current = false;
-        await refreshRuntime();
-      }
-    })().finally(() => {
-      if (runtimeRefreshInFlight.current === task) {
-        runtimeRefreshInFlight.current = null;
-      }
-    });
-    runtimeRefreshInFlight.current = task;
-    return task;
-  }, [refreshRuntime]);
-  useAndroidOwnerRefresh(refreshDevices, refreshRuntimeOwners);
-  const refreshSelectedRuntimeEvent = useCallback(async (): Promise<void> => {
-    await Promise.all([refreshRuntimeSerially(), refreshEndpoints()]);
-  }, [refreshEndpoints, refreshRuntimeSerially]);
-  useAppEventRefresh(
-    ["android_vpn_status_changed"],
-    refreshSelectedRuntimeEvent,
-    {
-      paused: !selectedOwner,
-      entityId: selectedOwner?.serial,
-    },
-  );
-  // 设备切换时查询结果会短暂保留上一台设备的数据。活动方案缓存必须按 serial 隔离，
-  // 否则新设备会错误显示上一台设备正在运行的方案。
-  const lastActiveProfileIds = useRef(new Map<string, string>());
-  const displayedRuntime = runtimeData && selectedOwner && runtimeResponseMatches(selectedOwner, runtimeData)
-    ? runtimeData
-    : undefined;
-  const activeProfileId = displayedRuntime?.active_profile_id
-    ?? (displayedRuntime?.state === "running" && selectedSerial
-      ? lastActiveProfileIds.current.get(selectedSerial)
-      : undefined);
-  useEffect(() => {
-    if (!runtimeTargetKey) return;
-    // Companion 也可能从 Android 通知栏或系统 VPN 设置改变状态。桌面端每秒只向
-    // Rust 查询一次只读 ViewModel，保证这类外部变化也能在页面上及时反映。
-    let disposed = false;
-    let timer: number | undefined;
-    const poll = async () => {
-      await refreshRuntimeSerially();
-      if (!disposed) timer = window.setTimeout(() => void poll(), 1_000);
-    };
-    timer = window.setTimeout(() => void poll(), 1_000);
-    return () => {
-      disposed = true;
-      if (timer !== undefined) window.clearTimeout(timer);
-    };
-  }, [refreshRuntimeSerially, runtimeTargetKey]);
-
-  useEffect(() => {
-    if (!runtimeData || !selectedOwner || !runtimeResponseMatches(selectedOwner, runtimeData)) return;
-    if (runtimeData.state === "stopped" || runtimeData.state === "faulted") {
-      lastActiveProfileIds.current.delete(selectedOwner.serial);
-      return;
-    }
-    if (runtimeData.active_profile_id) {
-      lastActiveProfileIds.current.set(selectedOwner.serial, runtimeData.active_profile_id);
-    }
-  }, [runtimeData, selectedOwner]);
-  const [pendingTargets, setPendingTargets] = useState<Record<string, string | undefined>>({});
-  const [dangerousConfirmed, setDangerousConfirmed] = useState(false);
-  const selectedSerialRef = useRef<string | null | undefined>(selectedSerial);
-  const runtimeOwnerKeyRef = useRef(runtimeTargetKey);
-  useLayoutEffect(() => {
-    selectedSerialRef.current = selectedSerial;
-    runtimeOwnerKeyRef.current = runtimeTargetKey;
-  }, [runtimeTargetKey, selectedSerial]);
 
   const busy = Boolean(selectedSerial && pendingTargets[selectedSerial]);
   const busySerials = new Set(Object.keys(pendingTargets).filter((serial) => pendingTargets[serial]));
@@ -179,27 +56,6 @@ export function AndroidNetworkView(): ReactElement {
     draft?.target_applications.map((item) => item.package_name) ?? [],
   );
   const visiblePackages = packageFilter ? (filteredPackages.data ?? []) : inventory;
-
-  async function run(
-    name: string,
-    action: () => Promise<void>,
-    serial = selectedSerial ?? "global",
-  ): Promise<void> {
-    if (pendingTargets[serial]) return;
-    setPendingTargets((current) => ({ ...current, [serial]: name }));
-    try {
-      await action();
-    } catch (reason) {
-      toast(errorMessage(reason), { variant: "danger" });
-    } finally {
-      setPendingTargets((current) => {
-        if (current[serial] !== name) return current;
-        const next = { ...current };
-        delete next[serial];
-        return next;
-      });
-    }
-  }
 
   async function selectDevice(serial: string): Promise<void> {
     const target = targets.find((candidate) => candidate.serial === serial);
@@ -251,7 +107,7 @@ export function AndroidNetworkView(): ReactElement {
   }
 
   async function activate(operation: "start" | "apply"): Promise<void> {
-    if (runtimeOwners.data === undefined || runtimeOwners.error || !selectedSerial) {
+    if (overview.data === undefined || overview.error || !selectedSerial) {
       throw new Error("运行设备列表尚未确认，请等待读取完成后重试。");
     }
     const selectedAtStart = selectedSerial;
@@ -273,8 +129,8 @@ export function AndroidNetworkView(): ReactElement {
         dangerousConfirmed,
       ));
     if (result.serial === selectedAtStart) runtime.setData(result);
-    runtimeOwners.invalidate();
-    await Promise.all([runtimeOwners.refresh(), endpoints.refresh()]);
+    overview.invalidate();
+    await Promise.all([overview.refresh(), endpoints.refresh()]);
     toast(result.message, { variant: toneColor(result.ui_tone!) });
   }
 
@@ -289,7 +145,7 @@ export function AndroidNetworkView(): ReactElement {
     packages.error,
     filteredPackages.error,
     profiles.error,
-    runtimeOwners.error,
+    overview.error,
     runtime.error,
   ].filter(Boolean).join("；");
 
@@ -322,7 +178,8 @@ export function AndroidNetworkView(): ReactElement {
             devicesReady={devices.data !== undefined}
             devicesError={devices.error}
             selectedSerial={selectedSerial}
-            runtimeOwners={runtimeOwners.data ?? []}
+            runtimeOwners={owners}
+            maxRuntimeOwners={overview.data?.max_runtime_owners}
             busySerials={busySerials}
             globalBusy={Boolean(pendingTargets.global)}
             onRefreshDevices={() => void run("devices", async () => { await devices.refresh(); }, "global")}
@@ -397,8 +254,10 @@ export function AndroidNetworkView(): ReactElement {
                 busy={busy}
                 selectedSerial={selectedSerial}
                 runtimeOwner={selectedOwner}
-                runtimeOwnerCount={(runtimeOwners.data ?? []).length}
-                runtimeOwnerReady={runtimeOwners.data !== undefined && !runtimeOwners.error}
+                runtimeOwnerCount={owners.length}
+                maxRuntimeOwners={overview.data?.max_runtime_owners}
+                canStartNewOwner={overview.data?.can_start_new_owner ?? false}
+                runtimeOwnerReady={overview.data !== undefined && !overview.error}
                 dangerousConfirmed={dangerousConfirmed}
                 onDangerousConfirmedChange={setDangerousConfirmed}
                 onSave={() => void run("save", saveAndNotify)}
@@ -451,9 +310,11 @@ export function AndroidNetworkView(): ReactElement {
       runtime.invalidate(false);
       runtime.setData(result);
     }
-    runtimeOwners.setData((current) => clearOwnerConditionally(current ?? [], owner));
+    overview.setData((current) => current
+      ? { ...current, owners: clearOwnerConditionally(current.owners, owner) }
+      : current);
     await adb.refresh();
-    await Promise.all([runtimeOwners.refresh(), endpoints.refresh()]);
+    await Promise.all([overview.refresh(), endpoints.refresh()]);
   }
 
   async function saveAndNotify(): Promise<void> {
@@ -471,9 +332,11 @@ export function AndroidNetworkView(): ReactElement {
       runtime.invalidate(false);
       runtime.setData(result);
     }
-    runtimeOwners.setData((current) => clearOwnerConditionally(current ?? [], owner));
+    overview.setData((current) => current
+      ? { ...current, owners: clearOwnerConditionally(current.owners, owner) }
+      : current);
     await adb.refresh();
-    await Promise.all([runtimeOwners.refresh(), endpoints.refresh()]);
+    await Promise.all([overview.refresh(), endpoints.refresh()]);
   }
 
   async function refreshOwnerStatus(owner: AndroidRuntimeOwnerViewModel): Promise<void> {

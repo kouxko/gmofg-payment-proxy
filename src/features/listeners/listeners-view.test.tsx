@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 import "@testing-library/jest-dom/vitest";
 import { render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -14,6 +13,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: () => undefined,
   useBootstrap: () => ({ bootstrap }),
 }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({ useSelectedWorkspace: () => ({ selected: { id: "workspace-1", revision: 1 }, summaries: [], isLoading: false, refresh: vi.fn() }) }));
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 import { ListenersView } from "./listeners-view";
 describe("统一代理监听编辑器", () => {

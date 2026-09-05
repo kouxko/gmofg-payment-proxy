@@ -2,9 +2,10 @@
 
 use intercept_proxy_application::{
     AndroidAdbViewModel, AndroidCompanionInstallViewModel, AndroidDeviceViewModel,
-    AndroidNetworkEndpointSnapshotViewModel, AndroidNetworkProfile, AndroidNetworkProfileSummary,
-    AndroidNetworkStatusViewModel, AndroidPackageViewModel, AndroidProfileEditIntent,
-    AndroidRuntimeOwnerViewModel, OperationResultViewModel,
+    AndroidNetworkControlOverviewViewModel, AndroidNetworkEndpointSnapshotViewModel,
+    AndroidNetworkProfile, AndroidNetworkProfileSummary, AndroidNetworkStatusViewModel,
+    AndroidPackageViewModel, AndroidProfileEditIntent, AndroidRuntimeOwnerViewModel,
+    OperationResultViewModel,
 };
 use tauri::State;
 
@@ -319,4 +320,16 @@ pub async fn device_network_runtime_owners(
         .map_err(command_error)?;
     owners.sort_by(|left, right| left.serial.cmp(&right.serial));
     Ok(owners)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn device_network_control_overview(
+    state: State<'_, AppState>,
+) -> CommandResult<AndroidNetworkControlOverviewViewModel> {
+    state
+        .application
+        .device_network_control_overview()
+        .await
+        .map_err(command_error)
 }

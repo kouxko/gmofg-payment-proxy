@@ -53,6 +53,8 @@ flowchart LR
 | 领域模型 | `src-tauri/crates/domain/src/lib.rs` |
 | Exchange 核心 | `src-tauri/crates/exchange/src/lib.rs` |
 | HTTP/Socket/TLS runtime | `src-tauri/crates/proxy/src/lib.rs` |
+| Android 控制协议 | `src-tauri/crates/android-control-protocol/src/lib.rs` |
+| 流量观测投影 | `src-tauri/crates/traffic-observation/src/lib.rs` |
 | 系统与持久化适配器 | `src-tauri/crates/infrastructure/src/lib.rs` |
 | 协议包合同与单文件 Component | `src-tauri/crates/package-contract/src/lib.rs`、`src-tauri/crates/package-runtime/src/lib.rs` |
 | 前端持久外壳 | `src/features/shell/app-runtime.tsx` |

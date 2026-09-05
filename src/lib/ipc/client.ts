@@ -11,6 +11,7 @@
 
 import { Channel } from "@tauri-apps/api/core";
 import type {
+  AndroidNetworkControlOverviewViewModel,
   AppBootstrapViewModel,
   AppErrorViewModel,
   SubscriptionAckViewModel,
@@ -35,6 +36,10 @@ export async function callCommand<T>(
 /** 取得应用启动快照：产品名称、代理状态、证书、设置和事件游标都由 Rust 给出。 */
 export function appBootstrap(): Promise<AppBootstrapViewModel> {
   return callCommand(commands.appBootstrap());
+}
+
+export function androidNetworkControlOverview(): Promise<AndroidNetworkControlOverviewViewModel> {
+  return callCommand(commands.deviceNetworkControlOverview());
 }
 
 export async function subscribeToAppEvents(

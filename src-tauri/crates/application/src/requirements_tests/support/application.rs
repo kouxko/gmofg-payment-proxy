@@ -199,7 +199,7 @@ pub(in crate::requirements_tests) fn application_with_workspace_repository(
 pub(in crate::requirements_tests) fn application_with_configuration_store(
     ports: Arc<FakePorts>,
     workspaces: Arc<InMemoryWorkspaceStore>,
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
 ) -> Application {
     application_with_workspace_configuration_and_packages(ports, workspaces, configuration_store).0
 }
@@ -207,7 +207,7 @@ pub(in crate::requirements_tests) fn application_with_configuration_store(
 pub(in crate::requirements_tests) fn application_with_workspace_configuration_and_packages(
     ports: Arc<FakePorts>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
 ) -> (Application, Arc<FakeProtocolPackagePortability>) {
     application_with_workspace_configuration_packages_and_runtime(
         ports,
@@ -220,7 +220,7 @@ pub(in crate::requirements_tests) fn application_with_workspace_configuration_an
 fn application_with_workspace_configuration_packages_and_runtime(
     ports: Arc<FakePorts>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,
 ) -> (Application, Arc<FakeProtocolPackagePortability>) {
     application_with_workspace_configuration_packages_runtime_and_environment(
@@ -241,7 +241,7 @@ fn application_with_workspace_configuration_packages_and_runtime(
 fn application_with_workspace_configuration_packages_runtime_and_environment(
     ports: Arc<FakePorts>,
     workspaces: Arc<dyn WorkspaceRepositoryPort>,
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
     listener_runtime: Arc<dyn ListenerRuntimePort>,
     environment_baseline_capture: Arc<dyn EnvironmentApplyBaselineCapturePort>,
     environment_identity_allocator: EnvironmentIdentityAllocator,
@@ -293,6 +293,7 @@ pub(in crate::requirements_tests) fn protocol_package_services(
         importer: portability.clone(),
         builtin: portability.clone(),
         usage_query: portability.clone(),
-        external: portability,
+        external: portability.clone(),
+        application_bundle: portability,
     }
 }

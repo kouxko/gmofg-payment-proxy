@@ -1,11 +1,11 @@
 import type {
   ProxyListener,
   ProxyWorkspace,
-  WorkspaceSummaryViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { useSelectedWorkspace } from "@/features/shell/selected-workspace-context";
 
 interface CurrentWorkspaceListeners {
   listeners: ProxyListener[];
@@ -18,13 +18,8 @@ interface CurrentWorkspaceListeners {
  * 页面不能缓存桌面 IP、ADB 端口或其他运行态地址。
  */
 export function useCurrentWorkspaceListeners(): CurrentWorkspaceListeners {
-  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
-    "android-route-workspaces",
-    () => callCommand(commands.workspaceList()),
-    [],
-  );
-  const currentId = workspaces.data?.find((workspace) => workspace.selected)?.id
-    ?? workspaces.data?.[0]?.id;
+  const selectedWorkspace = useSelectedWorkspace();
+  const currentId = selectedWorkspace.selected?.id;
   const workspace = useIpcQuery<ProxyWorkspace>(
     `android-route-workspace:${currentId ?? "none"}`,
     () => callCommand(commands.workspaceGet(currentId!)),
@@ -34,7 +29,7 @@ export function useCurrentWorkspaceListeners(): CurrentWorkspaceListeners {
 
   return {
     listeners: workspace.data?.listeners ?? [],
-    loading: workspaces.isLoading || workspace.isLoading,
-    error: [workspaces.error, workspace.error].filter(Boolean).join("；") || undefined,
+    loading: selectedWorkspace.isLoading || workspace.isLoading,
+    error: [selectedWorkspace.error, workspace.error].filter(Boolean).join("；") || undefined,
   };
 }

@@ -26,6 +26,12 @@ vi.mock("@/lib/ipc/client", () => ({
   errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : "Rust 操作失败",
 }));
 vi.mock("@/features/shell/bootstrap-context", () => ({ useAppEventRefresh: vi.fn() }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({
+  useSelectedWorkspace: () => ({
+    selected: { id: "workspace", name: "Workspace", revision: 1 },
+    summaries: [], isLoading: false, error: undefined, refresh: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
 vi.mock("@/features/shell/workspace-navigation", () => ({
   useWorkspaceQueryInvalidation: vi.fn(),
   useWorkspaceNavigation: () => navigationState,

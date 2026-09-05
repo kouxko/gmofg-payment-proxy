@@ -12,8 +12,7 @@ use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
-    ApplicationConfigurationDocument, ExternalPackageApplicationPort,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline, ExternalPackageApplicationPort,
     ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
     PortableApplicationProtocolPackage, ProtocolPackageDescriptionViewModel,
     ProtocolPackageKindViewModel, ProtocolPackageRef, ProtocolPackageSourceViewModel,
@@ -107,16 +106,6 @@ impl ExternalPackageApplicationPort for ProjectionPorts {
         &self,
         _: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
-        panic!("not requested")
-    }
-    async fn replace_application_bundle(
-        &self,
-        _: Vec<PortableApplicationProtocolPackage>,
-        _: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        panic!("not requested")
-    }
-    async fn reset_application_bundle(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
         panic!("not requested")
     }
 }

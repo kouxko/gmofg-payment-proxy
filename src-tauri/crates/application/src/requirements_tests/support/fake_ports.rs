@@ -104,7 +104,17 @@ pub(in crate::requirements_tests) fn unused<T>() -> AppResult<T> {
 pub(in crate::requirements_tests) struct NoopApplicationConfigurationStore;
 
 #[async_trait]
-impl ApplicationConfigurationStorePort for NoopApplicationConfigurationStore {
+pub(in crate::requirements_tests) trait TestApplicationConfigurationStorePort:
+    Send + Sync + std::fmt::Debug
+{
+    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()>;
+    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
+        self.replace_all(document).await
+    }
+}
+
+#[async_trait]
+impl TestApplicationConfigurationStorePort for NoopApplicationConfigurationStore {
     async fn replace_all(&self, _: ApplicationConfigurationDocument) -> AppResult<()> {
         Ok(())
     }

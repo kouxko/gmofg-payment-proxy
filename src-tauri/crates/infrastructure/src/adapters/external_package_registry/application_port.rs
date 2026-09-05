@@ -3,8 +3,7 @@
 use async_trait::async_trait;
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::{
-    AppError, AppResult, ApplicationBackupProtocolPackageBaseline,
-    ApplicationConfigurationDocument, ExternalPackageApplicationPort,
+    AppError, AppResult, ApplicationBackupProtocolPackageBaseline, ExternalPackageApplicationPort,
     ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel, PORTABLE_COMPONENT_PATH,
     PortableApplicationProtocolPackage, PortableProtocolPackageFile,
     ProtocolPackageDescriptionViewModel, ProtocolPackageVersionViewModel,
@@ -18,10 +17,8 @@ use super::{
     not_found,
     views::{application_description, application_detail, application_summary},
 };
-use crate::adapters::{WorkspaceRepositoryAdapter, settings::serialize_settings};
-use crate::sqlite::external_packages::LocalApplicationPackageRecord;
 
-fn unsupported_remote_backup() -> AppError {
+pub(super) fn unsupported_remote_backup() -> AppError {
     AppError::new(
         "APPLICATION_BACKUP_REMOTE_PACKAGES_UNSUPPORTED",
         "远端调试软件包不属于应用托管资产，不能写入或替换应用备份。",
@@ -47,7 +44,9 @@ fn sort_stored_packages(records: &mut [crate::sqlite::external_packages::StoredE
     });
 }
 
-fn decode_portable_component(package: &PortableApplicationProtocolPackage) -> AppResult<Vec<u8>> {
+pub(super) fn decode_portable_component(
+    package: &PortableApplicationProtocolPackage,
+) -> AppResult<Vec<u8>> {
     let [
         PortableProtocolPackageFile {
             path,
@@ -357,100 +356,5 @@ impl ExternalPackageApplicationPort for ExternalPackageRegistryAdapter {
             descriptions.push(self.describe(package).await?);
         }
         Ok(descriptions)
-    }
-
-    async fn replace_application_bundle(
-        &self,
-        packages: Vec<PortableApplicationProtocolPackage>,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        document.validate()?;
-        let records = document
-            .workspaces
-            .iter()
-            .map(WorkspaceRepositoryAdapter::record)
-            .collect::<AppResult<Vec<_>>>()?;
-        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
-            AppError::new(
-                "APPLICATION_CONFIGURATION_INVALID",
-                format!("完整配置中的 Settings 无法持久化：{error}"),
-            )
-        })?;
-        let selected_id = document.selected_workspace_id.as_uuid();
-
-        let mut stored_packages = Vec::with_capacity(packages.len());
-        let mut enabled_runtimes = Vec::new();
-        for package in packages {
-            let bytes = decode_portable_component(&package)?;
-            let component = read_package_component(&bytes)
-                .map_err(intercept_proxy_application::AppError::from)?;
-            if component.manifest().package().identity() != package.package {
-                return Err(AppError::new(
-                    "PROTOCOL_PACKAGE_IDENTITY_CONFLICT",
-                    "备份声明身份与 component.wasm 内嵌身份不一致。",
-                )
-                .entity(format!(
-                    "{}@{}",
-                    package.package.id.as_str(),
-                    package.package.version.as_str()
-                )));
-            }
-            let runtime = Self::load_local_component(&package.package, &bytes).await?;
-            stored_packages.push(LocalApplicationPackageRecord {
-                registration: component.manifest().clone(),
-                archive: bytes,
-                enabled: package.enabled,
-            });
-            if package.enabled {
-                enabled_runtimes.push((package.package, runtime));
-            }
-        }
-
-        let _bundle_mutation = self.application_bundle_mutation.lock().await;
-        if !self.online.lock().is_empty() {
-            return Err(unsupported_remote_backup());
-        }
-        self.executor
-            .execute(move |store| {
-                store.replace_application_bundle(selected_id, &records, &settings, &stored_packages)
-            })
-            .await
-            .map_err(app_error)?;
-        self.reconcile_local_runtimes(enabled_runtimes);
-        self.publish_service_status();
-        Ok(())
-    }
-
-    async fn reset_application_bundle(
-        &self,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()> {
-        document.validate()?;
-        let records = document
-            .workspaces
-            .iter()
-            .map(WorkspaceRepositoryAdapter::record)
-            .collect::<AppResult<Vec<_>>>()?;
-        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
-            AppError::new(
-                "APPLICATION_CONFIGURATION_INVALID",
-                format!("默认 Settings 无法持久化：{error}"),
-            )
-        })?;
-        let selected_id = document.selected_workspace_id.as_uuid();
-        let _bundle_mutation = self.application_bundle_mutation.lock().await;
-        if !self.online.lock().is_empty() {
-            return Err(AppError::new(
-                "APPLICATION_RESET_REMOTE_PACKAGES_ONLINE",
-                "远端调试软件包仍在线，无法原子清除应用数据。",
-            ));
-        }
-        self.executor
-            .execute(move |store| store.reset_application_data(selected_id, &records, &settings))
-            .await
-            .map_err(app_error)?;
-        self.deactivate_all_local_components();
-        self.publish_service_status();
-        Ok(())
     }
 }

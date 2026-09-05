@@ -273,6 +273,10 @@ impl ExternalPackageApplicationPort for FakeProtocolPackageServices {
         }
         self.preflight(packages, |package| package)
     }
+}
+
+#[async_trait]
+impl ApplicationBundleReplacementPort for FakeProtocolPackageServices {
     async fn replace_application_bundle(
         &self,
         _: Vec<PortableApplicationProtocolPackage>,
@@ -395,7 +399,8 @@ pub(super) fn application_with_proxy_ports(
                 importer: services.clone(),
                 builtin: unused_protocol_package_services().builtin,
                 usage_query: services.clone(),
-                external: services,
+                external: services.clone(),
+                application_bundle: services,
             },
             events: Arc::new(EventHub::default()),
             environment_baseline_capture:

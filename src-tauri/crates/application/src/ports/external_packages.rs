@@ -3,10 +3,9 @@
 use async_trait::async_trait;
 
 use crate::{
-    AppResult, ApplicationBackupProtocolPackageBaseline, ApplicationConfigurationDocument,
-    ExternalPackageDetailViewModel, ExternalPackageServiceStatusViewModel,
-    PortableApplicationProtocolPackage, ProtocolPackageDescriptionViewModel, ProtocolPackageRef,
-    ProtocolPackageVersionViewModel,
+    AppResult, ApplicationBackupProtocolPackageBaseline, ExternalPackageDetailViewModel,
+    ExternalPackageServiceStatusViewModel, PortableApplicationProtocolPackage,
+    ProtocolPackageDescriptionViewModel, ProtocolPackageRef, ProtocolPackageVersionViewModel,
 };
 
 #[async_trait]
@@ -68,13 +67,4 @@ pub trait ExternalPackageApplicationPort: Send + Sync + std::fmt::Debug {
         &self,
         packages: &[ProtocolPackageRef],
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>>;
-    async fn replace_application_bundle(
-        &self,
-        packages: Vec<PortableApplicationProtocolPackage>,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()>;
-    async fn reset_application_bundle(
-        &self,
-        document: ApplicationConfigurationDocument,
-    ) -> AppResult<()>;
 }

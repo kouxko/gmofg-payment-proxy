@@ -134,6 +134,10 @@ impl ExternalPackageApplicationPort for FakeExternalPackages {
     ) -> AppResult<Vec<ProtocolPackageDescriptionViewModel>> {
         unused()
     }
+}
+
+#[async_trait]
+impl ApplicationBundleReplacementPort for FakeExternalPackages {
     async fn replace_application_bundle(
         &self,
         _: Vec<PortableApplicationProtocolPackage>,

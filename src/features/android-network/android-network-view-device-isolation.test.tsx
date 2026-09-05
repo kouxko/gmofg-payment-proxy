@@ -15,7 +15,7 @@ const mocks = vi.hoisted(() => ({
   deviceNetworkProfileList: vi.fn(),
   deviceNetworkProfileNew: vi.fn(),
   deviceNetworkProfileGet: vi.fn(),
-  deviceNetworkRuntimeOwners: vi.fn(),
+  deviceNetworkControlOverview: vi.fn(),
   deviceNetworkEndpoints: vi.fn(),
   workspaceList: vi.fn(),
   workspaceGet: vi.fn(),
@@ -25,10 +25,13 @@ vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
 }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({ useSelectedWorkspace: () => ({ selected: { id: "workspace-1", revision: 1 }, summaries: [], isLoading: false, refresh: vi.fn() }) }));
 
 function ok<T>(data: T) {
   return Promise.resolve({ status: "ok" as const, data });
 }
+
+function overview(owners: unknown[]) { return { owners, max_runtime_owners: 8, can_start_new_owner: owners.length < 8 }; }
 
 const profile = {
   id: "profile-1",
@@ -75,7 +78,7 @@ describe("Android device UI isolation", () => {
     mocks.androidPackageQuery.mockReturnValue(ok([]));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([]));
     mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
-    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([]));
+    mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([])));
     mocks.deviceNetworkEndpoints.mockReturnValue(ok({
       configured_profile_id: null,
       configured: [],

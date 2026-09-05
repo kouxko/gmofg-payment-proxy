@@ -75,7 +75,7 @@ impl SqliteStore {
                 row.get::<_, i64>(0)
             })
             .map_err(database_error)?;
-        if retained_count >= 8 {
+        if retained_count >= i64::from(intercept_proxy_domain::ANDROID_MAX_RUNTIME_OWNERS) {
             return Err(capacity_error());
         }
         insert_record(&transaction, record)?;

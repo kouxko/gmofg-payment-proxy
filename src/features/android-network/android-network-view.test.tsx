@@ -1,5 +1,4 @@
 // @vitest-environment jsdom
-
 import "@testing-library/jest-dom/vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -9,7 +8,7 @@ import { testAndroidNetworkProfile } from "./android-network-test-profile";
 const mocks = vi.hoisted(() => ({
   androidAdbGet: vi.fn(), androidDeviceList: vi.fn(), androidAdbSelect: vi.fn(),
   androidPackageList: vi.fn(), androidPackageRefresh: vi.fn(), androidPackageQuery: vi.fn(), deviceNetworkProfileList: vi.fn(), deviceNetworkStatus: vi.fn(),
-  deviceNetworkRuntimeOwners: vi.fn(),
+  deviceNetworkControlOverview: vi.fn(),
   deviceNetworkEndpoints: vi.fn(),
   deviceNetworkProfileNew: vi.fn(), deviceNetworkProfileGet: vi.fn(), deviceNetworkProfileApplyIntent: vi.fn(), deviceNetworkProfileSave: vi.fn(),
   androidCompanionInstall: vi.fn(), androidCompanionUpdate: vi.fn(), androidVpnOpenConsent: vi.fn(),
@@ -21,8 +20,10 @@ vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 vi.mock("@/features/shell/bootstrap-context", () => ({
   useAppEventRefresh: vi.fn(),
 }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({ useSelectedWorkspace: () => ({ selected: { id: "workspace-1", revision: 1 }, summaries: [], isLoading: false, refresh: vi.fn() }) }));
 function ok<T>(data: T) { return Promise.resolve({ status: "ok" as const, data }); }
 function owner(serial = "device-1") { return { serial, epoch: "11111111-1111-4111-8111-111111111111", mode: "adb_reverse", profile_id: "profile-1", state: "active", source: "start", transition_reason: "activation_confirmed", updated_at: "2026-08-17T00:00:00Z" }; }
+function overview(owners: Array<ReturnType<typeof owner>>) { return { owners, max_runtime_owners: 8, can_start_new_owner: owners.length < 8 }; }
 const profile = testAndroidNetworkProfile;
 describe("Android targeted network page", () => {
   beforeEach(() => {
@@ -43,7 +44,7 @@ describe("Android targeted network page", () => {
       metadata_extractors: [], response_assertions: [], fault_presets: [], certificate_references: [], android_network_profiles: [],
     }));
     mocks.deviceNetworkStatus.mockReturnValue(ok({ serial: "device-1", runtime_epoch: "11111111-1111-4111-8111-111111111111", state: "stopped", state_text: "已停止", ui_tone: "neutral", verified: true, transport: "local_abstract_socket", active_profile_id: null, companion_process_running: true, message: "已停止", unsupported_fields: [], stats: null }));
-    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([]));
+    mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([])));
     mocks.deviceNetworkEndpoints.mockReturnValue(ok({
       configured_profile_id: null,
       configured: [],
@@ -86,7 +87,6 @@ describe("Android targeted network page", () => {
   });
   it("uses compact Chinese labels for the initial operation flow", async () => {
     render(<AndroidNetworkView />);
-
     expect(await screen.findByRole("heading", { name: "应用网络接管" })).toBeVisible();
     expect(screen.getByText(/即可单独运行弱网/)).toBeVisible();
     expect(screen.queryByText(/填写.*Proxy IP/i)).not.toBeInTheDocument();
@@ -117,7 +117,7 @@ describe("Android targeted network page", () => {
     expect(screen.queryByRole("button", { name: "新建设备网络方案" })).not.toBeInTheDocument();
   });
   it("uses a wrapping profile flow and marks the profile currently executed by VPN", async () => {
-    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
+    mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([owner()])));
     mocks.deviceNetworkProfileList.mockReturnValue(ok([
       {
         id: "profile-1",
@@ -158,7 +158,7 @@ describe("Android targeted network page", () => {
   });
 
   it("keeps showing a running profile that belongs to another Workspace", async () => {
-    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
+    mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([owner()])));
     mocks.deviceNetworkStatus.mockReturnValue(ok({
       serial: "device-1",
       runtime_epoch: "11111111-1111-4111-8111-111111111111",
@@ -181,7 +181,7 @@ describe("Android targeted network page", () => {
   });
 
   it("waits for the previous runtime poll before scheduling the next one", async () => {
-    mocks.deviceNetworkRuntimeOwners.mockReturnValue(ok([owner()]));
+    mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([owner()])));
     vi.useFakeTimers();
     let resolvePoll: (() => void) | undefined;
     mocks.deviceNetworkStatus

@@ -1,9 +1,12 @@
 use super::{
-    BTreeMap, BodyCodec, ConnectionContext, ErrorCode, EvaluatedRules, LiveSession, Message,
-    ProxyError, ProxyResult, RuntimeEpoch, RuntimePipelineAdapter, SessionDetailViewModel,
-    SessionRecord, SessionStore, SessionSummaryViewModel, UiEventPayload, UiTone, Utc, Uuid,
-    app_channel, app_to_proxy, classify_request, content_view, fingerprint, header_value,
-    message_method, message_target, tls_summary,
+    BodyCodec, ConnectionContext, ErrorCode, EvaluatedRules, LiveSession, Message, ProxyError,
+    ProxyResult, RuntimeEpoch, RuntimePipelineAdapter, SessionRecord, SessionStore, UiEventPayload,
+    Utc, Uuid, app_channel, app_to_proxy, classify_request, content_view, fingerprint,
+    header_value, message_method, message_target, tls_summary,
+};
+use intercept_proxy_traffic_observation::{
+    RuleOutcomeFacts, SessionStartFacts, project_dropped_response, project_request,
+    project_response, project_started_session,
 };
 
 impl RuntimePipelineAdapter {
@@ -47,40 +50,25 @@ impl RuntimePipelineAdapter {
         let method = message_method(&original.start_line)
             .unwrap_or_default()
             .to_owned();
-        let summary = SessionSummaryViewModel {
-            session_id,
-            request_id: request_id.clone(),
-            started_at: now,
-            completed_at: None,
-            terminal_ip: terminal_ip.clone(),
-            channel: app_channel(&context.channel)?,
-            channel_text: self.channel_label(context.channel.as_str()),
-            method,
-            target,
-            http_status: None,
-            result: "处理中".into(),
-            ui_tone: UiTone::Info,
-            duration_ms: None,
-            matched_rule_ids: Vec::new(),
-            request_size_bytes: original.body.len() as u64,
-            response_size_bytes: 0,
-            revision: 1,
-        };
-        let detail = SessionDetailViewModel {
-            summary,
-            runtime_epoch: context.runtime_epoch,
-            connection_id: context.connection_id.to_string(),
-            certificate_fingerprint: fingerprint.clone(),
-            upstream_host: header_value(original, "host").unwrap_or_default(),
-            app_to_proxy_tls: tls_summary(context),
-            proxy_to_server_tls: "上游安全信息等待传输层上报".into(),
-            final_action: "处理中".into(),
-            timings_ms: BTreeMap::new(),
-            request: Some(request),
-            response: None,
-            rule_trace: Vec::new(),
-        };
-        let record = SessionRecord { detail };
+        let record = project_started_session(
+            SessionStartFacts {
+                session_id,
+                request_id,
+                started_at: now,
+                terminal_ip,
+                channel: app_channel(&context.channel)?,
+                channel_text: self.channel_label(context.channel.as_str()),
+                method,
+                target,
+                runtime_epoch: context.runtime_epoch,
+                connection_id: context.connection_id.to_string(),
+                certificate_fingerprint: fingerprint,
+                upstream_host: header_value(original, "host").unwrap_or_default(),
+                app_to_proxy_tls: tls_summary(context),
+                request_size_bytes: original.body.len() as u64,
+            },
+            request,
+        );
         if let Err(error) = self.sessions.upsert(record.clone()) {
             self.resource_exhausted(context, &error);
             return Err(app_to_proxy(error));
@@ -111,15 +99,17 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
+        let request = content_view(body_codec, effective);
         self.update_live_session(context, move |record| {
-            let summary = &mut record.detail.summary;
-            summary.matched_rule_ids.clone_from(&rules.matched_ids);
-            summary.request_size_bytes = effective.body.len() as u64;
-            summary.result = "请求已处理".into();
-            summary.ui_tone = UiTone::Info;
-            summary.revision = summary.revision.saturating_add(1);
-            record.detail.request = Some(content_view(body_codec, effective));
-            record.detail.rule_trace.clone_from(&rules.traces);
+            project_request(
+                record,
+                request,
+                effective.body.len() as u64,
+                RuleOutcomeFacts {
+                    matched_rule_ids: &rules.matched_ids,
+                    traces: &rules.traces,
+                },
+            );
         })
     }
 
@@ -130,20 +120,17 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
         body_codec: &dyn BodyCodec,
     ) -> ProxyResult<SessionRecord> {
+        let response = content_view(body_codec, effective);
         self.update_live_session(context, move |record| {
-            let summary = &mut record.detail.summary;
-            for id in &rules.matched_ids {
-                if !summary.matched_rule_ids.contains(id) {
-                    summary.matched_rule_ids.push(*id);
-                }
-            }
-            summary.response_size_bytes = effective.body.len() as u64;
-            summary.http_status = effective.http_status();
-            summary.result = "响应已处理".into();
-            summary.ui_tone = UiTone::Info;
-            summary.revision = summary.revision.saturating_add(1);
-            record.detail.response = Some(content_view(body_codec, effective));
-            record.detail.rule_trace.extend(rules.traces.clone());
+            project_response(
+                record,
+                response,
+                effective.body.len() as u64,
+                RuleOutcomeFacts {
+                    matched_rule_ids: &rules.matched_ids,
+                    traces: &rules.traces,
+                },
+            );
         })
     }
 
@@ -153,19 +140,13 @@ impl RuntimePipelineAdapter {
         rules: &EvaluatedRules,
     ) -> ProxyResult<SessionRecord> {
         self.update_live_session(context, move |record| {
-            let summary = &mut record.detail.summary;
-            for id in &rules.matched_ids {
-                if !summary.matched_rule_ids.contains(id) {
-                    summary.matched_rule_ids.push(*id);
-                }
-            }
-            summary.response_size_bytes = 0;
-            summary.http_status = None;
-            summary.result = "响应已丢弃".into();
-            summary.ui_tone = UiTone::Danger;
-            summary.revision = summary.revision.saturating_add(1);
-            record.detail.response = None;
-            record.detail.rule_trace.extend(rules.traces.clone());
+            project_dropped_response(
+                record,
+                RuleOutcomeFacts {
+                    matched_rule_ids: &rules.matched_ids,
+                    traces: &rules.traces,
+                },
+            );
         })
     }
 

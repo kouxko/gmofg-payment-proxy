@@ -3,6 +3,11 @@ import path from "node:path";
 
 const policy = new Map([
   ["intercept-proxy-domain", new Set()],
+  ["intercept-proxy-android-control-protocol", new Set()],
+  ["intercept-proxy-traffic-observation", new Set([
+    "intercept-proxy-application", "intercept-proxy-domain",
+    "intercept-proxy-runtime", "intercept-proxy-product-api",
+  ])],
   ["intercept-proxy-package-contract", new Set(["intercept-proxy-domain"])],
   ["intercept-proxy-package-runtime", new Set([
     "intercept-proxy-domain",
@@ -12,12 +17,14 @@ const policy = new Map([
   ["intercept-proxy-exchange", new Set(["intercept-proxy-domain"])],
   ["intercept-proxy-runtime", new Set(["intercept-proxy-exchange"])],
   ["intercept-proxy-application", new Set([
+    "intercept-proxy-android-control-protocol",
     "intercept-proxy-domain",
     "intercept-proxy-exchange",
     "intercept-proxy-product-api",
   ])],
   ["intercept-proxy-android-engine", new Set(["intercept-proxy-domain"])],
   ["intercept-proxy-infrastructure", new Set([
+    "intercept-proxy-traffic-observation",
     "intercept-proxy-application",
     "intercept-proxy-domain",
     "intercept-proxy-exchange",
@@ -32,6 +39,11 @@ const policy = new Map([
     "intercept-proxy-product-api",
     "intercept-proxy-runtime",
   ])],
+]);
+
+const externalDependencyPolicy = new Map([
+  ["intercept-proxy-android-control-protocol", new Set(["serde", "serde_json", "specta", "thiserror", "uuid"])],
+  ["intercept-proxy-traffic-observation", new Set(["bytes", "chrono", "serde", "serde_json", "uuid"])],
 ]);
 
 function packageName(manifest) {
@@ -64,7 +76,7 @@ function dependencyNames(manifest) {
     const [, key, value] = declaration;
     const alias = value.match(/\bpackage\s*=\s*["'](intercept-proxy-[^"']+)["']/u)?.[1];
     if (alias) names.add(alias);
-    else if (key.startsWith("intercept-proxy-")) names.add(key);
+    else names.add(key);
   }
   return names;
 }
@@ -98,7 +110,14 @@ export async function checkCrateDependencies(root) {
       violations.push(violation("CRATE_UNKNOWN", file, `internal crate ${crate} has no dependency policy`));
       continue;
     }
+    const externalAllowlist = externalDependencyPolicy.get(crate);
     for (const dependency of dependencyNames(manifest)) {
+      if (!dependency.startsWith("intercept-proxy-")) {
+        if (externalAllowlist && !externalAllowlist.has(dependency)) {
+          violations.push(violation("CRATE_EXTERNAL_DIRECTION", file, `${crate} must not depend on ${dependency}`));
+        }
+        continue;
+      }
       if (!policy.has(dependency)) violations.push(violation("CRATE_UNKNOWN_TARGET", file, `internal dependency ${dependency} has no dependency policy`));
       else if (!allowed.has(dependency)) violations.push(violation("CRATE_DIRECTION", file, `${crate} must not depend on ${dependency}`));
     }

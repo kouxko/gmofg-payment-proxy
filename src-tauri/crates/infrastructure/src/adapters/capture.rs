@@ -17,6 +17,7 @@ use intercept_proxy_application::{
     CaptureRepositoryPort, CaptureRowViewModel, CaptureSort, InMemorySessionStore, RuntimeEpoch,
     SessionId, SessionQueryPort, SortDirection,
 };
+use intercept_proxy_traffic_observation::project_capture_detail;
 use parking_lot::RwLock;
 
 #[derive(Debug)]
@@ -168,33 +169,18 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
         session_id: SessionId,
         runtime_epoch: RuntimeEpoch,
     ) -> AppResult<CaptureDetailViewModel> {
-        let session = self.sessions.get(session_id).await?;
+        let mut session = self.sessions.get(session_id).await?;
         if runtime_epoch != session.runtime_epoch {
             return Err(
                 AppError::new("SESSION_NOT_FOUND", "抓包详情不属于当前运行周期。")
                     .entity(session_id.to_string()),
             );
         }
-        let request = session.request.ok_or_else(|| {
+        let request = session.request.take().ok_or_else(|| {
             AppError::new("SESSION_NOT_FOUND", "抓包请求详情尚未生成或已被淘汰。")
                 .entity(session_id.to_string())
         })?;
-        Ok(CaptureDetailViewModel {
-            session_id,
-            request_id: session.summary.request_id,
-            terminal_ip: session.summary.terminal_ip,
-            certificate_fingerprint_suffix: fingerprint_suffix(&session.certificate_fingerprint),
-            upstream_host: session.upstream_host,
-            request,
-            response: session.response,
-            tls_summary: format!(
-                "{}；{}",
-                session.app_to_proxy_tls, session.proxy_to_server_tls
-            ),
-            timings_ms: session.timings_ms,
-            rule_trace: session.rule_trace,
-            revision: session.summary.revision,
-        })
+        Ok(project_capture_detail(session, request))
     }
 
     async fn clear_view(&self, current_cursor: u64) -> AppResult<u64> {
@@ -208,12 +194,6 @@ impl CaptureRepositoryPort for CaptureRepositoryAdapter {
         self.view_floor.store(latest, AtomicOrdering::Release);
         Ok(latest)
     }
-}
-
-fn fingerprint_suffix(fingerprint: &str) -> String {
-    let compact = fingerprint.replace(':', "");
-    let start = compact.len().saturating_sub(8);
-    compact[start..].to_owned()
 }
 
 fn normalized(value: Option<&str>) -> Option<String> {

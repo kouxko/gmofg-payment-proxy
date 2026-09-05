@@ -5,6 +5,7 @@ edition.workspace = true
 rust-version.workspace = true
 
 [dependencies]
+intercept-proxy-traffic-observation = { path = "../traffic-observation" }
 async-trait.workspace = true
 base64.workspace = true
 bytes.workspace = true

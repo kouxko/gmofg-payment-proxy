@@ -126,7 +126,7 @@ async fn validate_existing(
             &bytes,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await
 }

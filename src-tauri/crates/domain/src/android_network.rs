@@ -14,6 +14,9 @@ use specta::Type;
 
 use crate::{DomainError, ErrorCode, ListenerId};
 
+/// Maximum retained device runtime owners, including records awaiting cleanup.
+pub const ANDROID_MAX_RUNTIME_OWNERS: u8 = 8;
+
 pub const ANDROID_COMPANION_PACKAGE: &str = "com.interceptproxy.vpn";
 
 /// 一段相对于弱网引擎启动时刻的断网窗口。

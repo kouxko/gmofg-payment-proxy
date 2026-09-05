@@ -174,6 +174,8 @@ interface ProfileActionsProps {
   selectedSerial?: string | null;
   runtimeOwner?: AndroidRuntimeOwnerViewModel;
   runtimeOwnerCount: number;
+  maxRuntimeOwners?: number;
+  canStartNewOwner: boolean;
   runtimeOwnerReady: boolean;
   dangerousConfirmed: boolean;
   onDangerousConfirmedChange: (confirmed: boolean) => void;
@@ -187,6 +189,8 @@ export function ProfileActions({
   selectedSerial,
   runtimeOwner,
   runtimeOwnerCount,
+  maxRuntimeOwners,
+  canStartNewOwner,
   runtimeOwnerReady,
   dangerousConfirmed,
   onDangerousConfirmedChange,
@@ -194,7 +198,7 @@ export function ProfileActions({
   onStart,
   onApply,
 }: ProfileActionsProps): ReactElement {
-  const ownerCapacityReached = runtimeOwnerCount >= 8 && !runtimeOwner;
+  const ownerCapacityReached = !runtimeOwner && !canStartNewOwner;
   return (
     <div className="flex flex-wrap items-center gap-2 pb-5">
       <Switch isSelected={dangerousConfirmed} onChange={onDangerousConfirmedChange}>
@@ -216,7 +220,7 @@ export function ProfileActions({
       >应用修改</Button>
       {ownerCapacityReached && (
         <p className="basis-full text-xs text-[var(--telemetry-warning)]">
-          已达到 8 台运行设备上限；请先停止一台设备，再启动新的设备。
+          已达到 {maxRuntimeOwners ?? runtimeOwnerCount} 台运行设备上限；请先停止一台设备，再启动新的设备。
         </p>
       )}
       {!runtimeOwnerReady && (

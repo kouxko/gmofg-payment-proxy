@@ -12,6 +12,7 @@ mod backup_export;
 mod backup_import;
 mod capacity;
 mod configuration;
+mod coordination;
 mod document_security;
 mod environment_configuration;
 mod error;
@@ -47,15 +48,15 @@ pub use environment_configuration::{
     EnvironmentCandidateStatusResult, EnvironmentCandidateValidator, EnvironmentCommitFailure,
     EnvironmentCommitPort, EnvironmentCommitReceipt, EnvironmentCommitRequest,
     EnvironmentCommitResult, EnvironmentCommitRollbackOutcome, EnvironmentCommitTarget,
-    EnvironmentConfigurationCandidateV1, EnvironmentConfirmationToken,
-    EnvironmentConsumedCommitRequest, EnvironmentConsumedPreparedMaterials, EnvironmentDiagnostic,
-    EnvironmentDiagnosticScope, EnvironmentDnsTcpTarget, EnvironmentExactPackageBaseline,
-    EnvironmentIdentityAllocator, EnvironmentMaterialInventoryBaseline, EnvironmentMaterialProbe,
-    EnvironmentMaterialProbeKind, EnvironmentPreparedMaterialCapability,
-    EnvironmentPreparedMaterialKind, EnvironmentPreparedMaterialVisitor,
-    EnvironmentPreparedMaterials, EnvironmentProtectedMaterialPreparePort,
-    EnvironmentSelectionPolicy, EnvironmentStatusCode, EnvironmentTerminalResult,
-    EnvironmentTlsMtlsTarget, EnvironmentValidatedApplyBaseline,
+    EnvironmentConfigurationApplicationServices, EnvironmentConfigurationCandidateV1,
+    EnvironmentConfirmationToken, EnvironmentConsumedCommitRequest,
+    EnvironmentConsumedPreparedMaterials, EnvironmentDiagnostic, EnvironmentDiagnosticScope,
+    EnvironmentDnsTcpTarget, EnvironmentExactPackageBaseline, EnvironmentIdentityAllocator,
+    EnvironmentMaterialInventoryBaseline, EnvironmentMaterialProbe, EnvironmentMaterialProbeKind,
+    EnvironmentPreparedMaterialCapability, EnvironmentPreparedMaterialKind,
+    EnvironmentPreparedMaterialVisitor, EnvironmentPreparedMaterials,
+    EnvironmentProtectedMaterialPreparePort, EnvironmentSelectionPolicy, EnvironmentStatusCode,
+    EnvironmentTerminalResult, EnvironmentTlsMtlsTarget, EnvironmentValidatedApplyBaseline,
     EnvironmentValidatedApplyBaselineCollector, EnvironmentValidationLayer,
     EnvironmentValidationLayerPort, EnvironmentValidationLayerRequest,
     EnvironmentValidationLayerResult, EnvironmentValidationReport, EnvironmentValidationResult,
@@ -77,8 +78,8 @@ pub(crate) use environment_configuration::{
 pub use error::{AppError, AppErrorDiagnosticViewModel, AppErrorViewModel, AppResult};
 pub use events::{EventHub, EventReplay, EventSubscription};
 pub use facade::{
-    Application, ApplicationDependencies, EnvironmentConfigurationApplicationServices,
-    ExchangeObservationQueries, parse_protocol_rule_value, validate_portable_protocol_bindings,
+    Application, ApplicationDependencies, ExchangeObservationQueries, parse_protocol_rule_value,
+    validate_portable_protocol_bindings,
 };
 pub use listeners::InMemoryListenerRuntime;
 pub use models::*;

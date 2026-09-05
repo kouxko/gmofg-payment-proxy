@@ -29,6 +29,7 @@ interface DeviceControlCardProps {
   devicesError?: string;
   selectedSerial?: string | null;
   runtimeOwners: AndroidRuntimeOwnerViewModel[];
+  maxRuntimeOwners?: number;
   busySerials: ReadonlySet<string>;
   globalBusy: boolean;
   onRefreshDevices: () => void;
@@ -50,6 +51,7 @@ export function DeviceControlCard({
   devicesError,
   selectedSerial,
   runtimeOwners,
+  maxRuntimeOwners,
   busySerials,
   globalBusy,
   onRefreshDevices,
@@ -201,7 +203,7 @@ export function DeviceControlCard({
           <DeviceAction label="授权网络接管" disabled={!selectedSerial || !selectedOnline || selectedBusy} onPress={onConsent} fullWidth />
         </div>
         <p className="text-xs text-[var(--telemetry-muted)]">
-          已保留 {runtimeOwners.length}/8 个运行设备记录。
+          已保留 {runtimeOwners.length}/{maxRuntimeOwners ?? "—"} 个运行设备记录。
         </p>
       </Card.Content>
     </Card>

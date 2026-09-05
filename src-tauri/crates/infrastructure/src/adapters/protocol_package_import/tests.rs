@@ -8,8 +8,9 @@ use std::{
 
 use base64::{Engine as _, engine::general_purpose::STANDARD};
 use intercept_proxy_application::{
-    APPLICATION_CONFIGURATION_FORMAT_VERSION, AppResult, ApplicationConfigurationDocument,
-    ExternalPackageApplicationPort, PortableSettings, ProtocolPackageImportPort, SettingsDraft,
+    APPLICATION_CONFIGURATION_FORMAT_VERSION, AppResult, ApplicationBundleReplacementPort,
+    ApplicationConfigurationDocument, ExternalPackageApplicationPort, PortableSettings,
+    ProtocolPackageImportPort, SettingsDraft,
 };
 use intercept_proxy_domain::{ProtocolDirection, ProxyWorkspace};
 use intercept_proxy_package_contract::FrameResult;
@@ -21,7 +22,8 @@ use super::*;
 use crate::{
     SqliteStore,
     adapters::{
-        FileSelection, ProtocolPackageRuntime, listener_runtime::ExternalSocketPackageProvider,
+        ApplicationBundleReplacementAdapter, FileSelection, ProtocolPackageRuntime,
+        listener_runtime::ExternalSocketPackageProvider,
     },
 };
 
@@ -365,7 +367,8 @@ async fn application_backup_round_trips_raw_component_and_preserves_stable_runti
         package
     );
 
-    registry
+    let bundle = ApplicationBundleReplacementAdapter::new(registry.clone());
+    bundle
         .replace_application_bundle(exported.clone(), application_document(exported))
         .await
         .unwrap();
@@ -384,7 +387,7 @@ async fn application_backup_round_trips_raw_component_and_preserves_stable_runti
         Some(bytes)
     );
 
-    registry
+    bundle
         .reset_application_bundle(application_document(Vec::new()))
         .await
         .unwrap();

@@ -3,7 +3,7 @@ use std::collections::HashMap;
 
 #[derive(Debug)]
 pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
-    configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+    configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
     pub(in crate::requirements_tests) descriptions:
         parking_lot::Mutex<HashMap<ProtocolPackageRef, ProtocolPackageDescriptionViewModel>>,
     pub(in crate::requirements_tests) application_packages:
@@ -29,7 +29,7 @@ pub(in crate::requirements_tests) struct FakeProtocolPackagePortability {
 
 impl FakeProtocolPackagePortability {
     pub(in crate::requirements_tests) fn new(
-        configuration_store: Arc<dyn ApplicationConfigurationStorePort>,
+        configuration_store: Arc<dyn TestApplicationConfigurationStorePort>,
     ) -> Self {
         Self {
             configuration_store,
@@ -198,6 +198,10 @@ impl ExternalPackageApplicationPort for FakeProtocolPackagePortability {
             .fetch_add(1, Ordering::SeqCst);
         self.descriptions_for(packages, |package| package)
     }
+}
+
+#[async_trait]
+impl ApplicationBundleReplacementPort for FakeProtocolPackagePortability {
     async fn replace_application_bundle(
         &self,
         _: Vec<PortableApplicationProtocolPackage>,

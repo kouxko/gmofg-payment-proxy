@@ -3,6 +3,7 @@ use std::collections::BTreeSet;
 use serde_json::json;
 
 use super::*;
+use crate::AppError;
 
 #[test]
 fn length_prefixed_protocol_rejects_truncation_and_oversize() {
@@ -127,7 +128,7 @@ fn companion_wire_status_is_projected_to_desktop_display_fields() {
     }))
     .expect("Companion machine status should not contain desktop display fields");
 
-    let status = response.status.unwrap().into_view_model();
+    let status = AndroidNetworkStatusViewModel::from(response.status.unwrap());
     assert_eq!(status.state_text, "运行中");
     assert_eq!(status.ui_tone, UiTone::Positive);
 }
@@ -183,5 +184,56 @@ fn nested_edit_defaults_are_owned_by_rust() {
     assert_eq!(
         profile.weak_network.nth_tcp_flag_drops,
         vec![NthTcpFlagDrop::default()]
+    );
+}
+
+#[test]
+fn control_wire_bytes_and_exact_one_mib_boundary_remain_stable() {
+    let request = AndroidControlRequest {
+        version: 2,
+        request_id: Uuid::nil(),
+        operation: "apply_active".into(),
+        payload: json!({"owner_epoch": "epoch"}),
+    };
+    let payload = br#"{"version":2,"request_id":"00000000-0000-0000-0000-000000000000","operation":"apply_active","payload":{"owner_epoch":"epoch"}}"#;
+    let mut expected = u32::try_from(payload.len()).unwrap().to_be_bytes().to_vec();
+    expected.extend_from_slice(payload);
+    assert_eq!(encode_android_control_frame(&request).unwrap(), expected);
+
+    // JSON string quotes are part of the payload limit; the four-byte prefix is not.
+    let exact = "x".repeat(ANDROID_CONTROL_MAX_FRAME_BYTES - 2);
+    let frame = encode_android_control_frame(&exact).unwrap();
+    assert_eq!(frame.len(), ANDROID_CONTROL_MAX_FRAME_BYTES + 4);
+    assert_eq!(
+        decode_android_control_frame::<String>(&frame).unwrap(),
+        exact
+    );
+    assert!(encode_android_control_frame(&(exact + "x")).is_err());
+}
+
+#[test]
+fn control_protocol_errors_keep_public_codes_and_messages() {
+    let error: AppError = AndroidControlRequest::new("unknown", json!({}))
+        .unwrap_err()
+        .into();
+    assert_eq!(error.view_model.code, "ANDROID_PROTOCOL_OPERATION_INVALID");
+    assert_eq!(
+        error.view_model.message,
+        "Android 控制操作不在协议白名单中。"
+    );
+    let error: AppError = decode_android_control_frame::<Value>(&[])
+        .unwrap_err()
+        .into();
+    assert_eq!(error.view_model.code, "ANDROID_PROTOCOL_FRAME_INVALID");
+    assert_eq!(error.view_model.message, "Android 控制帧缺少长度前缀。");
+    let error: AppError = decode_android_control_frame::<Value>(&[0, 0, 0, 1, b'{'])
+        .unwrap_err()
+        .into();
+    assert_eq!(error.view_model.code, "ANDROID_PROTOCOL_JSON_INVALID");
+    assert_eq!(
+        error.view_model.message,
+        serde_json::from_slice::<Value>(b"{")
+            .unwrap_err()
+            .to_string()
     );
 }

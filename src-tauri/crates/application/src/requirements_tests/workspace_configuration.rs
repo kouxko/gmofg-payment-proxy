@@ -11,7 +11,7 @@ struct RecordingConfigurationStore {
 }
 
 #[async_trait]
-impl ApplicationConfigurationStorePort for RecordingConfigurationStore {
+impl TestApplicationConfigurationStorePort for RecordingConfigurationStore {
     async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
         self.replace_calls.fetch_add(1, Ordering::SeqCst);
         if self.fail_replace.load(Ordering::SeqCst) {

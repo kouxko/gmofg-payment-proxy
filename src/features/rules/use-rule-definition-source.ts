@@ -1,18 +1,17 @@
 "use client";
 
 import { useCallback } from "react";
-import type { ProxyWorkspace, RuleDefinition_Serialize, WorkspaceSummaryViewModel } from "@/generated/rust-types";
+import type { ProxyWorkspace, RuleDefinition_Serialize } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { useWorkspaceQueryInvalidation } from "@/features/shell/workspace-navigation";
 import { callCommand } from "@/lib/ipc/client";
 import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+import { useSelectedWorkspace } from "@/features/shell/selected-workspace-context";
 
 export function useRuleDefinitionSource() {
-  const workspaces = useIpcQuery<WorkspaceSummaryViewModel[]>(
-    "rule-workspaces",
-    () => callCommand(commands.workspaceList()),
-  );
-  const workspaceId = workspaces.data?.find((workspace) => workspace.selected)?.id;
+  const selectedWorkspace = useSelectedWorkspace();
+  const workspaceId = selectedWorkspace.selected?.id;
+  const refreshSelectedWorkspace = selectedWorkspace.refresh;
   const workspace = useIpcQuery<ProxyWorkspace>(
     `rule-workspace:${workspaceId ?? "none"}`,
     () => callCommand(commands.workspaceGet(workspaceId!)),
@@ -25,16 +24,15 @@ export function useRuleDefinitionSource() {
     undefined,
     { enabled: Boolean(workspaceId) },
   );
-  const refreshWorkspaces = workspaces.refresh;
   const refreshWorkspace = workspace.refresh;
   const refreshRules = rules.refresh;
   const refresh = useCallback(async () => {
-    await Promise.all([refreshWorkspaces(), refreshWorkspace(), refreshRules()]);
-  }, [refreshRules, refreshWorkspace, refreshWorkspaces]);
+    await Promise.all([refreshSelectedWorkspace(), refreshWorkspace(), refreshRules()]);
+  }, [refreshRules, refreshSelectedWorkspace, refreshWorkspace]);
 
   useWorkspaceQueryInvalidation({
     workspaceId,
-    collection: [workspaces],
+    collection: [],
     current: [workspace, rules],
   });
 
@@ -42,8 +40,8 @@ export function useRuleDefinitionSource() {
     workspaceId,
     listeners: workspace.data?.listeners ?? [],
     rules: rules.data ?? [],
-    error: workspaces.error ?? workspace.error ?? rules.error,
-    isLoading: workspaces.isLoading || workspace.isLoading || rules.isLoading,
+    error: selectedWorkspace.error ?? workspace.error ?? rules.error,
+    isLoading: selectedWorkspace.isLoading || workspace.isLoading || rules.isLoading,
     refresh,
   };
 }

@@ -8,13 +8,14 @@ use std::{collections::BTreeMap, sync::Arc};
 use chrono::Utc;
 
 use crate::{
-    AndroidControlPort, AppError, AppResult, BuiltinProtocolPackagePort,
-    CertificateOverviewViewModel, CertificateServicePort, CertificateValidationViewModel,
-    ChannelPresentationViewModel, EventHub, ExternalPackageApplicationPort, FaultServicePort,
-    ListenerCertificateImportPort, ListenerRuntimePort, OperationResultViewModel,
-    ProtectedSecretPort, ProtocolPackageApplicationServices, ProtocolPackageImportPort,
-    ProtocolPackageUsageQueryPort, SessionQueryPort, SettingsRepositoryPort, SettingsViewModel,
-    UiEventPayload, WorkspaceRepositoryPort,
+    AndroidControlPort, AppError, AppResult, ApplicationBundleReplacementPort,
+    BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
+    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
+    ExternalPackageApplicationPort, FaultServicePort, ListenerCertificateImportPort,
+    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
+    ProtocolPackageApplicationServices, ProtocolPackageImportPort, ProtocolPackageUsageQueryPort,
+    SessionQueryPort, SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
+    WorkspaceRepositoryPort,
 };
 
 mod android;
@@ -71,29 +72,11 @@ pub struct Application {
     protocol_package_builtin: Arc<dyn BuiltinProtocolPackagePort>,
     protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
     external_packages: Arc<dyn ExternalPackageApplicationPort>,
+    bundle_replacement: Arc<dyn ApplicationBundleReplacementPort>,
     protected_secrets: Arc<dyn ProtectedSecretPort>,
     events: Arc<EventHub>,
-    mutation_gate: Arc<ApplicationMutationGate>,
-    environment_candidates: crate::environment_configuration::EnvironmentCandidateRegistry,
-    environment_baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
-    environment_identity_allocator: crate::EnvironmentIdentityAllocator,
-    environment_apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
-    environment_material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
-    environment_commit: Arc<dyn crate::EnvironmentCommitPort>,
-    environment_validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct ApplicationMutationGate(tokio::sync::RwLock<()>);
-
-impl ApplicationMutationGate {
-    pub(crate) async fn lock(&self) -> tokio::sync::RwLockWriteGuard<'_, ()> {
-        self.0.write().await
-    }
-
-    async fn read(&self) -> tokio::sync::RwLockReadGuard<'_, ()> {
-        self.0.read().await
-    }
+    mutation_gate: Arc<crate::coordination::ConfigurationMutationCoordinator>,
+    environment: crate::environment_configuration::EnvironmentConfigurationService,
 }
 
 impl std::fmt::Debug for Application {
@@ -128,29 +111,6 @@ pub struct ApplicationDependencies {
     pub environment_validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
 }
 
-/// Application-owned environment configuration ports supplied by an outer composition root.
-///
-/// Production uses Infrastructure implementations. Tests and embedding hosts may replace the
-/// complete group to exercise the same public candidate lifecycle with controlled boundaries;
-/// the registry and transition methods remain private to Application.
-#[derive(Clone)]
-pub struct EnvironmentConfigurationApplicationServices {
-    pub baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
-    pub identity_allocator: crate::EnvironmentIdentityAllocator,
-    pub apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
-    pub material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
-    pub commit: Arc<dyn crate::EnvironmentCommitPort>,
-    pub validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
-}
-
-impl std::fmt::Debug for EnvironmentConfigurationApplicationServices {
-    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
-        formatter
-            .debug_struct("EnvironmentConfigurationApplicationServices")
-            .finish_non_exhaustive()
-    }
-}
-
 impl std::fmt::Debug for ApplicationDependencies {
     fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         formatter
@@ -166,6 +126,21 @@ impl Application {
         android: Arc<dyn AndroidControlPort>,
         protected_secrets: Arc<dyn ProtectedSecretPort>,
     ) -> Self {
+        let mutation_gate =
+            Arc::new(crate::coordination::ConfigurationMutationCoordinator::default());
+        let environment = crate::environment_configuration::EnvironmentConfigurationService::new(
+            dependencies.workspaces.clone(),
+            dependencies.events.clone(),
+            mutation_gate.clone(),
+            crate::EnvironmentConfigurationApplicationServices {
+                baseline_capture: dependencies.environment_baseline_capture,
+                identity_allocator: dependencies.environment_identity_allocator,
+                apply_lease: dependencies.environment_apply_lease,
+                material_preparer: dependencies.environment_material_preparer,
+                commit: dependencies.environment_commit,
+                validator: dependencies.environment_validator,
+            },
+        );
         Self {
             product_name,
             capture: dependencies.capture,
@@ -182,17 +157,11 @@ impl Application {
             protocol_package_builtin: dependencies.protocol_packages.builtin,
             protocol_package_usage: dependencies.protocol_packages.usage_query,
             external_packages: dependencies.protocol_packages.external,
+            bundle_replacement: dependencies.protocol_packages.application_bundle,
             protected_secrets,
             events: dependencies.events,
-            mutation_gate: Arc::new(ApplicationMutationGate::default()),
-            environment_candidates:
-                crate::environment_configuration::EnvironmentCandidateRegistry::default(),
-            environment_baseline_capture: dependencies.environment_baseline_capture,
-            environment_identity_allocator: dependencies.environment_identity_allocator,
-            environment_apply_lease: dependencies.environment_apply_lease,
-            environment_material_preparer: dependencies.environment_material_preparer,
-            environment_commit: dependencies.environment_commit,
-            environment_validator: dependencies.environment_validator,
+            mutation_gate,
+            environment,
         }
     }
 

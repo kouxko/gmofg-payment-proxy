@@ -7,6 +7,8 @@ use async_trait::async_trait;
 
 mod android;
 pub use android::AndroidControlPort;
+mod application_bundle;
+pub use application_bundle::ApplicationBundleReplacementPort;
 
 mod external_packages;
 pub use external_packages::ExternalPackageApplicationPort;
@@ -18,17 +20,17 @@ pub use protocol_packages::{
 };
 
 use crate::{
-    ActiveFaultViewModel, AppResult, ApplicationConfigurationDocument, CaptureDetailViewModel,
-    CapturePageViewModel, CaptureQuery, CertificateItemViewModel, CertificateOverviewViewModel,
-    CertificateReference, CertificateValidationViewModel, ExchangeObservationPage,
-    ExchangeObservationQuery, ExchangeObservationRecord, FaultConfigurationDraft,
-    FaultTemplateViewModel, ListenerCertificateImportViewModel, ListenerId,
-    ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
-    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, PortableCertificateMaterial,
-    ProxyListener, ProxyWorkspace, RuleDefinition, RuleDefinitionSaveInput, RuntimeEpoch,
-    SecretReference, SessionDetailViewModel, SessionId, SessionListViewModel, SessionQuery,
-    SettingsDraft, SettingsValidationViewModel, SettingsViewModel, WorkspaceCollectionViewModel,
-    WorkspaceId, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
+    ActiveFaultViewModel, AppResult, CaptureDetailViewModel, CapturePageViewModel, CaptureQuery,
+    CertificateItemViewModel, CertificateOverviewViewModel, CertificateReference,
+    CertificateValidationViewModel, ExchangeObservationPage, ExchangeObservationQuery,
+    ExchangeObservationRecord, FaultConfigurationDraft, FaultTemplateViewModel,
+    ListenerCertificateImportViewModel, ListenerId, ListenerStatusViewModel,
+    ListenerUpstreamConnectionTestViewModel, ListenerUpstreamTlsTestViewModel,
+    OperationResultViewModel, PortableCertificateMaterial, ProxyListener, ProxyWorkspace,
+    RuleDefinition, RuleDefinitionSaveInput, RuntimeEpoch, SecretReference, SessionDetailViewModel,
+    SessionId, SessionListViewModel, SessionQuery, SettingsDraft, SettingsValidationViewModel,
+    SettingsViewModel, WorkspaceCollectionViewModel, WorkspaceId, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel,
 };
 /// Read-only access to the bounded in-process Exchange observation timeline.
 ///
@@ -135,23 +137,6 @@ pub trait WorkspaceRepositoryPort: Send + Sync + std::fmt::Debug {
         workspace_id: WorkspaceId,
         expected_revision: u64,
     ) -> AppResult<OperationResultViewModel>;
-}
-
-#[async_trait]
-/// 完整应用配置的原子持久化边界。
-///
-/// 实现必须在同一事务中替换全部 Workspace、当前选择和全局 Settings。调用前文档已由
-/// application 全量校验；实现失败时不得留下任何部分写入。
-pub trait ApplicationConfigurationStorePort: Send + Sync + std::fmt::Debug {
-    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()>;
-
-    /// 原子清除全部用户配置、规则和受保护秘密，再写入干净默认文档。
-    ///
-    /// 默认实现仅替换可移植配置，无状态测试替身可直接复用；生产 `SQLite`
-    /// 适配器必须覆盖并清理其他持久化表。
-    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
-        self.replace_all(document).await
-    }
 }
 
 #[async_trait]

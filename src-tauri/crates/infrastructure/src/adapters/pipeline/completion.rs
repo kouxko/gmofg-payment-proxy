@@ -1,7 +1,9 @@
 use super::{
-    AppError, AppMessageStage, CapturePublication, CaptureRowViewModel, ConnectionContext,
-    Ordering, ProxyResult, RuntimePipelineAdapter, SessionRecord, SessionStore, UiEventPayload,
-    UiTone, Utc, result_text, result_tone,
+    AppError, AppMessageStage, CapturePublication, ConnectionContext, Ordering, ProxyResult,
+    RuntimePipelineAdapter, SessionRecord, SessionStore, UiEventPayload, Utc,
+};
+use intercept_proxy_traffic_observation::{
+    CaptureRowFacts, SessionCompletionOutcome, project_capture_row, project_session_completion,
 };
 
 impl RuntimePipelineAdapter {
@@ -29,30 +31,18 @@ impl RuntimePipelineAdapter {
                 .max(0),
         )
         .unwrap_or(u64::MAX);
-        {
-            let summary = &mut record.detail.summary;
-            summary.completed_at = Some(now);
-            summary.duration_ms = Some(duration_ms);
-            summary.revision = summary.revision.saturating_add(1);
+        project_session_completion(
+            &mut record,
+            now,
+            duration_ms,
             match result {
-                Ok(()) => {
-                    summary.result = "成功".into();
-                    summary.ui_tone = UiTone::Positive;
-                    record.detail.final_action = "响应已返回客户端".into();
-                }
-                Err(error) => {
-                    summary.result = format!(
-                        "{} · {} · {}",
-                        result_text(error.code),
-                        error.code,
-                        error.message
-                    );
-                    summary.ui_tone = result_tone(error.code);
-                    record.detail.final_action.clone_from(&error.message);
-                }
-            }
-        }
-        record.detail.timings_ms.insert("total".into(), duration_ms);
+                Ok(()) => SessionCompletionOutcome::Success,
+                Err(error) => SessionCompletionOutcome::Failure {
+                    code: error.code,
+                    message: &error.message,
+                },
+            },
+        );
         let summary = record.detail.summary.clone();
         if let Err(error) = self.sessions.upsert(record.clone()) {
             self.resource_exhausted(context, &error);
@@ -90,25 +80,19 @@ impl RuntimePipelineAdapter {
             .fetch_add(1, Ordering::Relaxed)
             .saturating_add(1);
         let summary = &record.detail.summary;
-        let row = CaptureRowViewModel {
-            event_id,
-            runtime_epoch: context.runtime_epoch,
-            session_id: summary.session_id,
-            occurred_at: Utc::now(),
-            terminal_ip: summary.terminal_ip.clone(),
-            channel: summary.channel.clone(),
-            channel_text: self.channel_label(summary.channel.as_str()),
-            stage: publication.stage,
-            stage_text: publication.stage.display_zh().into(),
-            method: summary.method.clone(),
-            target: summary.target.clone(),
-            http_status: summary.http_status,
-            result: publication.result.into(),
-            ui_tone: publication.tone,
-            duration_ms: summary.duration_ms,
-            matched_rule_ids: summary.matched_rule_ids.clone(),
-            size_bytes: publication.size_bytes,
-        };
+        let row = project_capture_row(
+            record,
+            CaptureRowFacts {
+                event_id,
+                runtime_epoch: context.runtime_epoch,
+                occurred_at: Utc::now(),
+                channel_text: self.channel_label(summary.channel.as_str()),
+                stage: publication.stage,
+                result: publication.result,
+                ui_tone: publication.tone,
+                size_bytes: publication.size_bytes,
+            },
+        );
         self.captures
             .push_for_epoch(row.clone(), context.runtime_epoch);
         let _ = self

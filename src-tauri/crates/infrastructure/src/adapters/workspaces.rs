@@ -7,18 +7,14 @@
 use async_trait::async_trait;
 use chrono::Utc;
 use intercept_proxy_application::{
-    AppError, AppResult, ApplicationConfigurationDocument, ApplicationConfigurationStorePort,
-    OperationResultViewModel, ProxyWorkspace, UiTone, WorkspaceCollectionViewModel, WorkspaceId,
-    WorkspaceRepositoryPort, WorkspaceSummaryViewModel, WorkspaceValidationViewModel,
-    remap_workspace_identity,
+    AppError, AppResult, OperationResultViewModel, ProxyWorkspace, UiTone,
+    WorkspaceCollectionViewModel, WorkspaceId, WorkspaceRepositoryPort, WorkspaceSummaryViewModel,
+    WorkspaceValidationViewModel, remap_workspace_identity,
 };
 
 use crate::{SqliteExecutor, SqliteStore, WorkspaceRecord};
 
-use super::{
-    common::{app_error, decode_workspace_record, encode_workspace_record},
-    settings::serialize_settings,
-};
+use super::common::{app_error, decode_workspace_record, encode_workspace_record};
 
 #[derive(Debug)]
 pub struct WorkspaceRepositoryAdapter {
@@ -73,51 +69,6 @@ impl WorkspaceRepositoryAdapter {
                 .map_err(|message| AppError::new("PERSISTENCE_FAILED", message))?,
             updated_at: Utc::now(),
         })
-    }
-}
-
-#[async_trait]
-impl ApplicationConfigurationStorePort for WorkspaceRepositoryAdapter {
-    async fn replace_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
-        document.validate()?;
-        let records = document
-            .workspaces
-            .iter()
-            .map(Self::record)
-            .collect::<AppResult<Vec<_>>>()?;
-        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
-            AppError::new(
-                "APPLICATION_CONFIGURATION_INVALID",
-                format!("完整配置中的 Settings 无法持久化：{error}"),
-            )
-        })?;
-        let selected_id = document.selected_workspace_id.as_uuid();
-        self.executor
-            .execute(move |store| {
-                store.replace_application_configuration(selected_id, &records, &settings)
-            })
-            .await
-            .map_err(app_error)
-    }
-
-    async fn reset_all(&self, document: ApplicationConfigurationDocument) -> AppResult<()> {
-        document.validate()?;
-        let records = document
-            .workspaces
-            .iter()
-            .map(Self::record)
-            .collect::<AppResult<Vec<_>>>()?;
-        let settings = serialize_settings(&document.settings.to_draft(None)).map_err(|error| {
-            AppError::new(
-                "APPLICATION_CONFIGURATION_INVALID",
-                format!("默认 Settings 无法持久化：{error}"),
-            )
-        })?;
-        let selected_id = document.selected_workspace_id.as_uuid();
-        self.executor
-            .execute(move |store| store.reset_application_data(selected_id, &records, &settings))
-            .await
-            .map_err(app_error)
     }
 }
 

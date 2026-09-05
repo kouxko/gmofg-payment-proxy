@@ -16,7 +16,16 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
 }));
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
 
+import { SelectedWorkspaceProvider } from "@/features/shell/selected-workspace-context";
 import { ListenersView } from "./listeners-view";
+
+function renderListenersView() {
+  return render(
+    <SelectedWorkspaceProvider>
+      <ListenersView />
+    </SelectedWorkspaceProvider>,
+  );
+}
 
 describe("统一代理监听编辑器", () => {
   beforeEach(setupListenerMocks);
@@ -29,7 +38,7 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     mocks.listenerDraftTransition.mockReturnValue(new Promise(() => undefined));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByLabelText("HTTP 响应方式"));
     await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
@@ -66,7 +75,7 @@ describe("统一代理监听编辑器", () => {
       },
       field_errors: {},
     }));
-    const user = userEvent.setup(); render(<ListenersView />);
+    const user = userEvent.setup(); renderListenersView();
     await user.click(await screen.findByText("交易"));
     await user.click(await screen.findByRole("button", { name: "测试 Server 连接" }));
     await waitFor(() => expect(mocks.listenerDraftValidate).toHaveBeenCalledWith(
@@ -88,7 +97,7 @@ describe("统一代理监听编辑器", () => {
   it("导入 CA 后只把安全引用绑定到当前固定 Server", async () => {
     const fixedWorkspace = { ...workspace, listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")] };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
-    const user = userEvent.setup(); render(<ListenersView />);
+    const user = userEvent.setup(); renderListenersView();
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     expect(screen.getByText(/单个 CA，或选择一个按签发顺序包含多张 CA/)).toBeVisible();
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -108,7 +117,7 @@ describe("统一代理监听编辑器", () => {
     };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
 
@@ -128,7 +137,7 @@ describe("统一代理监听编辑器", () => {
     mocks.workspaceGet.mockReturnValue(ok(socketWorkspace));
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus(socket.id)])));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -163,7 +172,7 @@ describe("统一代理监听编辑器", () => {
       dynamicListener("fixed-1", "交易", 16627),
     ));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -182,7 +191,7 @@ describe("统一代理监听编辑器", () => {
     };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
     const user = userEvent.setup();
-    const { unmount } = render(<ListenersView />);
+    const { unmount } = renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -203,7 +212,7 @@ describe("统一代理监听编辑器", () => {
     let resolveSave!: (result: unknown) => void;
     mocks.listenerSave.mockReturnValue(new Promise<unknown>((resolve) => { resolveSave = resolve; }));
     const user = userEvent.setup();
-    const { unmount } = render(<ListenersView />);
+    const { unmount } = renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -268,7 +277,7 @@ describe("统一代理监听编辑器", () => {
       listenerStatus("listener-b"),
     ])));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByRole("button", { name: "导入 Server CA" }));
     await user.click(screen.getByRole("button", { name: "选择 CA 证书（.cer / .crt / .pem / .der）" }));
@@ -306,7 +315,7 @@ describe("统一代理监听编辑器", () => {
       certificate_references: [trust],
     }));
     const user = userEvent.setup();
-    render(<ListenersView />);
+    renderListenersView();
 
     await user.click(await screen.findByLabelText("HTTP 响应方式"));
     await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));

@@ -28,7 +28,7 @@ async fn public_status(candidate_json: &[u8]) -> serde_json::Value {
             candidate_json,
             cancellation.clone(),
             cancellation,
-            &application,
+            application.environment_configuration_service(),
         )
         .await;
     assert_eq!(report.status_code(), None);
