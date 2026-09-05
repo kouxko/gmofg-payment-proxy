@@ -140,7 +140,7 @@ fn resources_include_authoring_manifest_and_official_component() {
         resource.uri == resources::TOOL_REFERENCE_URI
             && resource.mime_type.as_deref() == Some("text/markdown")
             && resource.title.as_deref()
-                == Some("Complete MCP tool reference: 36 reads and 5 environment tools")
+                == Some("Complete MCP tool reference: 34 reads and 5 environment tools")
     }));
     assert!(resources.iter().any(|resource| {
         resource.uri == resources::VALIDATION_PLAYBOOK_URI

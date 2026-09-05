@@ -14,6 +14,7 @@ const eslintConfig = defineConfig([
     "build/**",
     "next-env.d.ts",
     "src/generated/**",
+    "docs/testing/evidence/**/resources/**",
     "src-tauri/target/**",
     "android-companion/**/build/**",
     "android-companion/.gradle/**",

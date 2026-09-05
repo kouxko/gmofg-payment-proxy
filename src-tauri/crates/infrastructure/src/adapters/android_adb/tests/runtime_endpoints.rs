@@ -94,6 +94,17 @@ async fn lan_address_change_reapplies_only_owner_and_failure_becomes_faulted() {
         ),
         8080,
     );
+    let (_, runtime) = adapter
+        .build_lan_runtime_for_owner(&activation, &owner, "192.168.1.10".parse().unwrap())
+        .await
+        .unwrap();
+    adapter
+        .owner_states
+        .lock()
+        .await
+        .get_mut("OWNER-A")
+        .unwrap()
+        .active_runtime = Some(runtime);
 
     let endpoints = adapter
         .network_runtime_endpoints(

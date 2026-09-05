@@ -47,6 +47,9 @@ pub(in crate::requirements_tests) struct FakePorts {
         parking_lot::Mutex<Option<SettingsValidationViewModel>>,
     pub(in crate::requirements_tests) settings_save_calls: AtomicUsize,
     pub(in crate::requirements_tests) settings_get_calls: AtomicUsize,
+    pub(in crate::requirements_tests) block_capture_query: AtomicBool,
+    pub(in crate::requirements_tests) capture_query_entered: tokio::sync::Notify,
+    pub(in crate::requirements_tests) continue_capture_query: tokio::sync::Notify,
     pub(in crate::requirements_tests) certificate_import_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_status_calls: AtomicUsize,
     pub(in crate::requirements_tests) certificate_overview_calls: AtomicUsize,
@@ -72,6 +75,9 @@ impl Default for FakePorts {
             settings_validation_override: parking_lot::Mutex::new(None),
             settings_save_calls: AtomicUsize::new(0),
             settings_get_calls: AtomicUsize::new(0),
+            block_capture_query: AtomicBool::new(false),
+            capture_query_entered: tokio::sync::Notify::new(),
+            continue_capture_query: tokio::sync::Notify::new(),
             certificate_import_calls: AtomicUsize::new(0),
             certificate_status_calls: AtomicUsize::new(0),
             certificate_overview_calls: AtomicUsize::new(0),
@@ -212,6 +218,10 @@ impl AndroidControlPort for UnusedAndroidControlPort {
 #[async_trait]
 impl CaptureRepositoryPort for FakePorts {
     async fn query(&self, _: CaptureQuery) -> AppResult<CapturePageViewModel> {
+        if self.block_capture_query.load(Ordering::SeqCst) {
+            self.capture_query_entered.notify_one();
+            self.continue_capture_query.notified().await;
+        }
         Ok(CapturePageViewModel {
             rows: Vec::new(),
             total: 0,

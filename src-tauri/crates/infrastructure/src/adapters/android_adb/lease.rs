@@ -82,9 +82,11 @@ impl AndroidAdbAdapter {
         }
     }
 
-    async fn renew_control_lease_target(&self, serial: &str, epoch: uuid::Uuid) -> AppResult<()> {
-        let gate = self.device_operations.gate(serial);
-        let _operation = gate.lock().await;
+    pub(super) async fn renew_control_lease_target(
+        &self,
+        serial: &str,
+        epoch: uuid::Uuid,
+    ) -> AppResult<()> {
         let current = self.owner_state_snapshot_for(serial).await;
         let is_current = current.runtime_owner.as_ref().is_some_and(|owner| {
             owner.epoch == epoch

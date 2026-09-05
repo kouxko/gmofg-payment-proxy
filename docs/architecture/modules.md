@@ -14,9 +14,12 @@ flowchart TB
     INFRA --> APP
     INFRA --> EXCHANGE[Exchange 核心]
     INFRA --> PROXY[Proxy Transport]
-    INFRA --> SCRIPT[Protocol Scripting]
+    INFRA --> PACKAGE[Package Runtime]
+    INFRA --> CONTRACT[Package Contract]
     PROXY --> EXCHANGE
-    SCRIPT --> DOMAIN
+    PACKAGE --> CONTRACT
+    PACKAGE --> DOMAIN
+    CONTRACT --> DOMAIN
     EXCHANGE --> DOMAIN
     ANDROID[Android Companion] --> ENGINE[Android Engine]
     ENGINE --> DOMAIN
@@ -41,7 +44,7 @@ flowchart TB
 | `intercept-proxy-domain` | 无 | Workspace、Listener、Document、规则、证书引用、设置和纯校验 |
 | `intercept-proxy-product-api` | 无 | 产品名称、存储命名空间、分类器、Body codec 等稳定策略契约 |
 | `intercept-proxy-android-engine` | `domain` | TUN 数据面、路由、SOCKS5、弱网决策和统计 |
-| `intercept-proxy-application` | `domain`、`exchange`、`product-api` | Use Case、ViewModel、端口、事件、容量和乐观锁 |
+| `intercept-proxy-application` | `domain`、`product-api` | Use Case、ViewModel、端口、事件、容量和乐观锁 |
 | `intercept-proxy-exchange` | `domain` | `Exchange<P>`、Pipeline、Envelope、端点和透明转发 |
 | `intercept-proxy-package-contract` | `domain` | API 1 Manifest、固定 RPC、FrameResult 与错误 wire |
 | `intercept-proxy-package-runtime` | `domain`、`package-contract` | 单文件 Component 校验、Wasmtime/WASI 与 Host 能力 |
@@ -94,10 +97,16 @@ flowchart LR
 `src-tauri/crates/application/src/` 负责：
 
 - `facade/`：Workspace、Listener、规则、协议包、证书、设备和备份 Use Case。
-- `models/`：前端、MCP 和其他展示适配器共享的 ViewModel。
+- `models/`：应用输入草稿，以及前端、MCP 和其他展示适配器共享的 ViewModel。
 - `ports/`：存储、Listener runtime、证书和 Android 等端口。
 - `events/`：有界回放与实时 `EventHub`。
 - `capacity`、`sessions`：进程级业务协调与资源合同。
+
+`models/listener_draft/` 与 `facade/listeners/draft.rs` 区分可编辑的 `ListenerDraft` 和严格领域
+`ProxyListener`。草稿允许尚未选择的 Socket 协议包、服务端身份和客户端认证信任为 `None`；
+默认构造和模式转换在 Rust 中完成。专用草稿校验先检查 Workspace revision，只有完整且合法时
+才返回严格 Workspace，随后复用原 `listener_save` 事务。前端保留字段编辑、异步响应隔离和草稿
+证书 lease，不新增保存或运行路径。
 
 HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯一 Rust 真相源：
 
@@ -105,7 +114,7 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 - 两个阶段各自暴露合法匹配字段、普通动作和终止动作。
 - Throttle/Intermittent 的方向由阶段固定为 Upstream 或 Downstream。
 - 前端通过 `rule_capabilities`、草稿命令和生成 DTO 渲染选项。
-- `rule_save` 仍调用领域与 application 校验，防止旧客户端或损坏输入绕过矩阵。
+- `rule_definition_save` 仍调用领域与 application 校验，防止旧客户端或损坏输入绕过矩阵。
 
 ### 3.3 Exchange
 

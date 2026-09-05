@@ -17,9 +17,15 @@ Android 系统流量和 ADB 不进入 TUN。
   Companion 只关闭当前 generation 的 VPN/TUN，不停止桌面 Listener 或其他设备。
 - `offline`/`unauthorized` 只是桌面设备清单观测，不会直接触发 stop；只有匹配当前 epoch 的
   heartbeat 实际连续缺失 5 秒才由 Companion 看门狗关闭当前 generation。
+- 开启控制失联保护时，因失联或设备/桌面重启而已经停止的 VPN 不会在重连后自动启动。桌面保留
+  runtime owner 时由用户点击“应用修改”，没有 owner 时点击“启动”；透明路由均由桌面在该次
+  start/apply 中重新准备并下发。
 - start/apply 入队失败会保留旧 generation 与旧租约；若新 Service 已抢先发布状态导致无法回滚，
   则只对新 generation 执行 generation-aware fail-open 停止。
-- Boot 后等待用户解锁和桌面控制端重新建立 USB/ADB 通道；5 分钟内失败 3 次会关闭自动恢复。
+- 关闭控制失联保护的 device-only Profile 保留既有开机自动恢复：Boot 后等待用户解锁，并按
+  `auto_resume_after_reboot` 恢复；5 分钟内失败 3 次会关闭该自动恢复。
+- 已确认仍在运行、owner 与 runtime epoch 匹配的 LAN 实例可以继续协调当前 LAN 端点；该热协调
+  不用于启动已经停止或缺少有效运行事实的 VPN。
 - 用户通过通知停止后保持停止。
 
 ## 数据面与安全边界
@@ -91,7 +97,7 @@ adb shell am start -n com.interceptproxy.vpn/.AdbControlActivity \
   --es command stop
 ```
 
-`configure_and_start` 还需通过 `profile_json` extra 传入完整 JSON。正式桌面控制应使用计划中
-的 `adb forward localabstract:intercept_proxy_vpn` 长度前缀 JSON 协议；该通道已经实现
-`start`、`apply`、`stop`、`emergency_restore`、`status` 和 `heartbeat`，并通过对端 UID 校验只接受
+`configure_and_start` 还需通过 `profile_json` extra 传入完整 JSON。正式桌面控制使用
+`adb forward localabstract:intercept_proxy_vpn` 长度前缀 JSON 协议；该通道已经实现
+`start`、`apply`、`apply_active`、`stop`、`emergency_restore`、`status` 和 `heartbeat`，并通过对端 UID 校验只接受
 shell/root。救援 Activity 仍保留，但不作为最终流式控制通道。

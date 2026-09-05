@@ -238,6 +238,49 @@ fn expired_event_cursor_requires_bootstrap() {
     ));
 }
 
+#[tokio::test]
+async fn bootstrap_cursor_replays_events_published_while_snapshot_is_read() {
+    let ports = Arc::new(FakePorts::default());
+    ports.block_capture_query.store(true, Ordering::SeqCst);
+    let events = Arc::new(EventHub::default());
+    let application = Arc::new(application_with_fake_ports_and_events(
+        Arc::clone(&ports),
+        Arc::clone(&events),
+    ));
+
+    let bootstrap = {
+        let application = Arc::clone(&application);
+        tokio::spawn(async move { application.app_bootstrap().await })
+    };
+    ports.capture_query_entered.notified().await;
+    let published = events.publish(
+        None,
+        timestamp(1),
+        None,
+        None,
+        UiEventPayload::ResourceWarning {
+            message: "快照读取期间发生的事件".into(),
+        },
+    );
+    ports.continue_capture_query.notify_one();
+
+    let snapshot = bootstrap.await.unwrap().unwrap();
+    assert_eq!(snapshot.event_cursor, 0);
+    let mut subscription = application
+        .app_subscribe_events(snapshot.event_cursor)
+        .expect("subscribe from the bootstrap cursor");
+    let mut replayed = Vec::new();
+    subscription
+        .replay
+        .drain_with::<std::convert::Infallible>(|event| {
+            replayed.push(event);
+            Ok(())
+        })
+        .unwrap();
+    assert_eq!(replayed.len(), 1);
+    assert_eq!(replayed[0].event_id, published.event_id);
+}
+
 // NFR-008: all recoverable failures cross the adapter boundary as stable Chinese view models.
 #[test]
 fn app_error_view_model_preserves_stable_contract() {

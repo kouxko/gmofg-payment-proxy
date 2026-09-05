@@ -3,7 +3,7 @@
 import { Alert, Button, Card, Switch } from "@heroui/react";
 import type {
   CertificateReference,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
 } from "@/generated/rust-types";
@@ -27,14 +27,15 @@ const CLIENT_IDENTITY_DESCRIPTION = [
 ].join("");
 
 type Props = {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   busy: boolean;
+  testBlocked: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
   onOpenIdentityImport: () => void;
   onOpenTrustImport: () => void;
   onTest: () => Promise<void>;
@@ -169,7 +170,7 @@ export function UpstreamTlsCard(props: Props) {
         <div className="flex flex-wrap items-center gap-3 border-t border-[var(--telemetry-line)] pt-4">
           <Button
             variant="outline"
-            isDisabled={props.busy}
+            isDisabled={props.busy || props.testBlocked}
             onPress={() => void props.onTest()}
           >
             {props.testing ? "正在连接 Server…" : "测试 Server 连接"}

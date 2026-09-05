@@ -14,6 +14,10 @@ use fixtures::*;
 mod environment_apply_gate_revision16;
 #[path = "tests/forward_control.rs"]
 mod forward_control;
+#[path = "tests/lease_heartbeat.rs"]
+mod lease_heartbeat;
+#[path = "tests/manual_recovery.rs"]
+mod manual_recovery;
 #[path = "tests/multi_device_registry.rs"]
 mod multi_device_registry;
 #[path = "tests/owner_async.rs"]

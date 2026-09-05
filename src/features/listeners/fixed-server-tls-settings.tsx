@@ -11,7 +11,7 @@ import { useState } from "react";
 import type {
   CertificateItemViewModel,
   CertificateReference,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
 } from "@/generated/rust-types";
@@ -24,15 +24,16 @@ import {
 import { UpstreamTlsCard } from "./upstream-tls-card";
 
 type Props = {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
   busy: boolean;
+  testBlocked: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
@@ -106,6 +107,7 @@ export function FixedServerTlsSettings(props: Props) {
         certificateReferences={props.certificateReferences}
         certificateDetails={props.certificateDetails}
         busy={props.busy}
+        testBlocked={props.testBlocked}
         testing={props.testing}
         testResult={props.testResult}
         testError={props.testError}

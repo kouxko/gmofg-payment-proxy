@@ -6,8 +6,7 @@ import userEvent from "@testing-library/user-event";
 import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
 import { ListenerEditor } from "./listener-editor";
-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
-import type { ProxyListener } from "@/generated/rust-types";
+import type { ListenerDraft } from "@/generated/rust-types";
 import {
   dynamicListener,
   localResponderListener,
@@ -15,7 +14,7 @@ import {
 } from "./listeners-view.test-support";
 
 function props(
-  listener: ProxyListener = socketListener(),
+  listener: ListenerDraft = socketListener(),
   overrides: Partial<ComponentProps<typeof ListenerEditor>> = {},
 ): ComponentProps<typeof ListenerEditor> {
   return {
@@ -29,6 +28,7 @@ function props(
     onBasicUsernameChange: vi.fn(),
     onBasicPasswordChange: vi.fn(),
     onChange: vi.fn(),
+    onTransition: vi.fn(),
     onStoreBasicCredential: vi.fn().mockResolvedValue(undefined),
     onImportDownstreamServerIdentity: vi.fn().mockResolvedValue(true),
     onImportDownstreamClientTrust: vi.fn().mockResolvedValue(true),
@@ -49,22 +49,9 @@ describe("Socket listener editor", () => {
     await user.click(screen.getByRole("button", { name: /监听数据平面/ }));
     await user.click(await screen.findByRole("option", { name: "Socket 转发" }));
 
-    expect(editor.onChange).toHaveBeenLastCalledWith({
-      data_plane: {
-        kind: "socket",
-        settings: {
-          topology: {
-            mode: "relay",
-            settings: {
-              upstream: { host: "", port: 0 },
-              security: { mode: "transparent" },
-            },
-          },
-          maximum_connections: 500,
-          runtime_limits: defaultSocketRuntimeLimits(),
-          processing: { mode: "direct" },
-        },
-      },
+    expect(editor.onTransition).toHaveBeenLastCalledWith({
+      type: "data_plane",
+      kind: "socket",
     });
   });
 
@@ -114,7 +101,7 @@ describe("Socket listener editor", () => {
       if (security.mode !== "tls_to_tcp" && security.mode !== "tls_to_tls") {
         throw new Error("downstream TLS fixture expected");
       }
-      const withMtls: ProxyListener = {
+      const withMtls: ListenerDraft = {
         ...listener,
         data_plane: {
           kind: "socket",
@@ -176,7 +163,7 @@ describe("Socket listener editor", () => {
   });
 
   it("LocalResponder 安全渲染且不挂载任何 Server 上游控件", () => {
-    const editor = props(localResponderListener() as ProxyListener);
+    const editor = props(localResponderListener());
     render(<ListenerEditor {...editor} />);
 
     expect(screen.getByText("2. App 接入安全")).toBeVisible();

@@ -1,5 +1,5 @@
 import { Alert, Button, Spinner, Table } from "@heroui/react";
-import type { ProxyListener } from "@/generated/rust-types";
+import type { ListenerDraft } from "@/generated/rust-types";
 
 export function ListenerListPanel({
   listeners,
@@ -11,7 +11,7 @@ export function ListenerListPanel({
   onSelect,
   onNavigate,
 }: {
-  listeners: ProxyListener[];
+  listeners: ListenerDraft[];
   selectedIndex: number;
   loading: boolean;
   error?: string;
@@ -48,7 +48,7 @@ export function ListenerListPanel({
 }
 
 function ListenerTable({ listeners, selectedIndex, onSelect }: {
-  listeners: ProxyListener[];
+  listeners: ListenerDraft[];
   selectedIndex: number;
   onSelect: (index: number) => void;
 }) {
@@ -67,7 +67,7 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
   </Table.Content></Table.ScrollContainer></Table>;
 }
 
-function listenerDestination(listener: ProxyListener) {
+function listenerDestination(listener: ListenerDraft) {
   if (listener.data_plane.kind === "socket") {
     const topology = listener.data_plane.settings.topology;
     if (topology.mode === "local_responder") return "本地应答";

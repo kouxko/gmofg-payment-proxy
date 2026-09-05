@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
-import type { SocketRelaySettings } from "@/generated/rust-types";
+import type { SocketRelayDraftSettings } from "@/generated/rust-types";
 import {
   common,
   local,
@@ -28,9 +28,8 @@ describe("Socket security cards", () => {
     await user.click(screen.getByLabelText("App 接入传输"));
     await user.click(await screen.findByRole("option", { name: "TLS" }));
 
-    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
-      topology: expect.objectContaining({ settings: expect.objectContaining({ security: expect.objectContaining({ mode: "tls_to_tcp" }) }) }),
-    }));
+    expect(props.onTransition).toHaveBeenCalledWith({ type: "app_tls", enabled: true });
+    expect(props.onChange).not.toHaveBeenCalled();
   });
 
   it("changes the App service identity through the certificate Select", async () => {
@@ -42,7 +41,7 @@ describe("Socket security cards", () => {
 
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
       topology: expect.objectContaining({ settings: expect.objectContaining({
-        security: expect.objectContaining({ downstream_tls: expect.objectContaining({ server_identity: "" }) }),
+        security: expect.objectContaining({ downstream_tls: expect.objectContaining({ server_identity: null }) }),
       }) }),
     }));
   });
@@ -107,7 +106,7 @@ describe("Socket security cards", () => {
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
       topology: expect.objectContaining({ settings: expect.objectContaining({
         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
-          client_authentication: { mode: "required", trust: "" },
+          client_authentication: { mode: "required", trust: null },
         }) }),
       }) }),
     }));
@@ -126,13 +125,13 @@ describe("Socket security cards", () => {
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
       topology: expect.objectContaining({ settings: expect.objectContaining({
         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
-          client_authentication: { mode: "optional", trust: "" },
+          client_authentication: { mode: "optional", trust: null },
         }) }),
       }) }),
     }));
   });
 
-  it("uses an empty trust when enabling mTLS without any App CA candidates", async () => {
+  it("uses null trust when enabling mTLS without any App CA candidates", async () => {
     const current = relay();
     if (current.topology.mode !== "relay" || current.topology.settings.security.mode !== "tls_to_tls") throw new Error("expected TLS Relay");
     current.topology.settings.security.downstream_tls.client_authentication = { mode: "disabled" };
@@ -149,7 +148,7 @@ describe("Socket security cards", () => {
     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
       topology: expect.objectContaining({ settings: expect.objectContaining({
         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
-          client_authentication: { mode: "required", trust: "" },
+          client_authentication: { mode: "required", trust: null },
         }) }),
       }) }),
     }));
@@ -244,7 +243,7 @@ describe("Socket security cards", () => {
   it("renders disabled App TLS without a client trust selector", () => {
     const current = relay();
     if (current.topology.mode !== "relay" || current.topology.settings.security.mode !== "tls_to_tls") throw new Error("expected TLS Relay");
-    current.topology.settings.security.downstream_tls.server_identity = "";
+    current.topology.settings.security.downstream_tls.server_identity = null;
     current.topology.settings.security.downstream_tls.client_authentication = { mode: "disabled" };
 
     renderApp(current);
@@ -279,9 +278,8 @@ describe("Socket security cards", () => {
     await user.click(screen.getByLabelText("Server 传输"));
     await user.click(await screen.findByRole("option", { name: "TLS" }));
 
-    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
-      topology: expect.objectContaining({ settings: expect.objectContaining({ security: expect.objectContaining({ mode: "tcp_to_tls" }) }) }),
-    }));
+    expect(props.onTransition).toHaveBeenCalledWith({ type: "server_tls", enabled: true });
+    expect(props.onChange).not.toHaveBeenCalled();
   });
 
   it("updates Server TLS verification and certificate selections", async () => {
@@ -425,9 +423,10 @@ describe("Socket security cards", () => {
   });
 });
 
-function renderlessServerProps(settings: SocketRelaySettings) {
+function renderlessServerProps(settings: SocketRelayDraftSettings) {
   return {
     ...common(settings), testing: false, onImportIdentity: vi.fn().mockResolvedValue(true),
     onImportTrust: vi.fn().mockResolvedValue(true), onTest: vi.fn().mockResolvedValue(undefined),
+    testBlocked: false,
   };
 }

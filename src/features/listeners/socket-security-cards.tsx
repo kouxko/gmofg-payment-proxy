@@ -4,11 +4,12 @@ import { useState } from "react";
 import { Alert, Button, Card, Input, Label, ListBox, NumberField, Select, Switch } from "@heroui/react";
 import type {
   CertificateReference,
-  DownstreamClientAuthentication,
+  DownstreamClientAuthenticationDraft,
+  ListenerDraftTransition,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  SocketDownstreamTlsSettings,
-  SocketRelaySettings,
+  SocketDownstreamTlsDraftSettings,
+  SocketRelayDraftSettings,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 import { CertificateDetailPanel, CertificateReferenceSelect, ConnectionTestResult } from "./fixed-server-tls-fields";
@@ -16,19 +17,18 @@ import { ImportIdentityModal, ImportPemModal, ImportTrustModal } from "./fixed-s
 import { socketUpstreamTls } from "./listener-data-plane";
 import {
   appSecurity,
-  setAppTls,
-  setAppTransport,
-  setServerTls,
-  setServerTransport,
+  updateAppTls,
+  updateServerTls,
 } from "./socket-listener-model";
 
 interface CommonProps {
-  settings: SocketRelaySettings;
+  settings: SocketRelayDraftSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   locked: boolean;
   busy: boolean;
-  onChange: (settings: SocketRelaySettings) => void;
+  onChange: (settings: SocketRelayDraftSettings) => void;
+  onTransition: (transition: ListenerDraftTransition) => void;
 }
 
 export function SocketAppSecurityCard(props: CommonProps & {
@@ -44,10 +44,10 @@ export function SocketAppSecurityCard(props: CommonProps & {
     <Card.Description>入口面向 App 的接入方式；TLS 可选择客户端证书认证。</Card.Description>
   </Card.Header><Card.Content className="space-y-4">
     <TransportSelect label="App 接入传输" value={security.mode} disabled={props.locked}
-      onChange={(mode) => props.onChange(setAppTransport(props.settings, mode))} />
+      onChange={(mode) => props.onTransition({ type: "app_tls", enabled: mode === "tls" })} />
     {tls && <DownstreamTlsFields tls={tls} references={props.certificateReferences}
       details={props.certificateDetails} disabled={props.locked || props.busy}
-      onChange={(next) => props.onChange(setAppTls(props.settings, next))}
+      onChange={(next) => props.onChange(updateAppTls(props.settings, next))}
       onImportIdentity={() => { setLabel("Socket App 服务端身份"); setModal("identity"); }}
       onImportTrust={() => { setLabel("Socket App 客户端 CA"); setModal("trust"); }} />}
     {modal === "identity" && <ImportIdentityModal open busy={props.busy} label={label} password={password}
@@ -71,6 +71,7 @@ export function SocketServerCard(props: CommonProps & {
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
+  testBlocked: boolean;
   onImportIdentity: (label: string, password: string) => Promise<boolean>;
   onImportTrust: (label: string) => Promise<boolean>;
   onTest: () => Promise<void>;
@@ -96,13 +97,13 @@ export function SocketServerCard(props: CommonProps & {
         <Label>Server 端口</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
       </NumberField>
       <TransportSelect label="Server 传输" value={tls ? "tls" : "tcp"} disabled={props.locked}
-        onChange={(mode) => props.onChange(setServerTransport(props.settings, mode))} />
+        onChange={(mode) => props.onTransition({ type: "server_tls", enabled: mode === "tls" })} />
     </div>
     {tls && <UpstreamTlsFields tls={tls} references={props.certificateReferences} details={props.certificateDetails}
-      disabled={props.locked || props.busy} onChange={(next) => props.onChange(setServerTls(props.settings, next))}
+      disabled={props.locked || props.busy} onChange={(next) => props.onChange(updateServerTls(props.settings, next))}
       onImportIdentity={() => { setLabel("Socket Server 客户端身份"); setModal("identity"); }}
       onImportTrust={() => { setLabel("Socket Server CA"); setModal("trust"); }} />}
-    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" isDisabled={props.locked || props.busy} onPress={() => void props.onTest()}>
+    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" isDisabled={props.locked || props.busy || props.testBlocked} onPress={() => void props.onTest()}>
       {props.testing ? "正在探测 Server…" : "测试 Server 连接"}</Button>
       <span className="text-xs text-[var(--telemetry-muted)]">执行 DNS 与 TCP 连接；Server TLS 模式同时验证握手。</span></div>
     {props.testResult && <ConnectionTestResult result={props.testResult} showTlsDetails={Boolean(tls)} />}
@@ -117,8 +118,8 @@ export function SocketServerCard(props: CommonProps & {
 }
 
 function DownstreamTlsFields({ tls, references, details, disabled, onChange, onImportIdentity, onImportTrust }: {
-  tls: SocketDownstreamTlsSettings; references: CertificateReference[]; details: ListenerCertificateDetailViewModel[];
-  disabled: boolean; onChange: (value: SocketDownstreamTlsSettings) => void; onImportIdentity: () => void; onImportTrust: () => void;
+  tls: SocketDownstreamTlsDraftSettings; references: CertificateReference[]; details: ListenerCertificateDetailViewModel[];
+  disabled: boolean; onChange: (value: SocketDownstreamTlsDraftSettings) => void; onImportIdentity: () => void; onImportTrust: () => void;
 }) {
   const identities = references.filter((item) => item.kind === "reverse_server_identity");
   const trusts = references.filter((item) => item.kind === "downstream_client_trust");
@@ -128,13 +129,13 @@ function DownstreamTlsFields({ tls, references, details, disabled, onChange, onI
     <p className="text-xs text-[var(--telemetry-muted)]">App 侧使用 serverAuth 服务端身份；不要选择代理连接上游 Server 时使用的 clientAuth 客户端身份。</p>
     <CertificateRow label="App 侧服务端身份" value={tls.server_identity || null} emptyLabel="请选择服务端 PEM identity"
       references={identities} button="导入服务端身份" disabled={disabled}
-      onChange={(server_identity) => onChange({ ...tls, server_identity: server_identity ?? "" })} onImport={onImportIdentity} />
-    <CertificateDetailPanel reference={identities.find((item) => item.id === tls.server_identity)} detail={detail(details, tls.server_identity)} emptyText="尚未选择 App 侧服务端身份。" />
+      onChange={(server_identity) => onChange({ ...tls, server_identity })} onImport={onImportIdentity} />
+    <CertificateDetailPanel reference={identities.find((item) => item.id === tls.server_identity)} detail={detail(details, tls.server_identity ?? undefined)} emptyText="尚未选择 App 侧服务端身份。" />
     <ClientAuthentication value={authentication} trusts={trusts} disabled={disabled} onChange={(client_authentication) => onChange({ ...tls, client_authentication })} />
     {authentication.mode !== "disabled" && <><CertificateRow label="App 客户端 CA" value={trustId ?? null} emptyLabel="请选择客户端 CA"
       references={trusts} button="导入客户端 CA" disabled={disabled} onImport={onImportTrust}
-      onChange={(trust) => onChange({ ...tls, client_authentication: authentication.mode === "required" ? { mode: "required", trust: trust ?? "" } : { mode: "optional", trust: trust ?? "" } })} />
-      <CertificateDetailPanel reference={trusts.find((item) => item.id === trustId)} detail={detail(details, trustId)} emptyText="尚未选择 App 客户端 CA。" /></>}
+      onChange={(trust) => onChange({ ...tls, client_authentication: authentication.mode === "required" ? { mode: "required", trust } : { mode: "optional", trust } })} />
+      <CertificateDetailPanel reference={trusts.find((item) => item.id === trustId)} detail={detail(details, trustId ?? undefined)} emptyText="尚未选择 App 客户端 CA。" /></>}
   </div>;
 }
 
@@ -176,9 +177,9 @@ function CertificateRow({ label, value, emptyLabel, references, button, disabled
 }
 
 function ClientAuthentication({ value, trusts, disabled, onChange }: {
-  value: DownstreamClientAuthentication; trusts: CertificateReference[]; disabled: boolean; onChange: (value: DownstreamClientAuthentication) => void;
+  value: DownstreamClientAuthenticationDraft; trusts: CertificateReference[]; disabled: boolean; onChange: (value: DownstreamClientAuthenticationDraft) => void;
 }) {
-  const trust = value.mode === "disabled" ? trusts[0]?.id ?? "" : value.trust;
+  const trust = value.mode === "disabled" ? trusts[0]?.id ?? null : value.trust;
   return <Select aria-label="App 客户端证书要求" selectedKey={value.mode} isDisabled={disabled} onSelectionChange={(key) => {
     if (key === "required" || key === "optional") onChange({ mode: key, trust });
     else if (key === "disabled") onChange({ mode: "disabled" });

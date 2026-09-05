@@ -151,6 +151,11 @@ sequenceDiagram
 
 ## 7. 观察与 UI 刷新
 
+启动快照在读取任何业务状态前记录事件游标，后续订阅回放此游标之后的事件，避免异步读取期间的
+变更被游标越过而丢失。事件保留窗口不足时仍通过 `snapshot_required` 重新取得权威快照。
+前端仅在影响 Bootstrap 的事件上作废在途快照，并同时安排替代刷新；页面级 Observation 事件只通知
+对应订阅者，不作废与其无关的全局快照请求。迟到的旧响应不能覆盖更新事件。
+
 ```mermaid
 flowchart LR
     EX[Exchange tracing] --> BRIDGE[Tracing Bridge]
@@ -217,6 +222,14 @@ Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 f
 ### 9.2 Application
 
 - Use Case 执行乐观锁、确认操作、跨仓储引用和当前 Listener/协议包状态校验。
+- Listener 编辑使用独立的 `ListenerDraft`，缺少协议包、Socket 服务端身份或客户端认证信任时
+  保留可编辑草稿；非空但非法的强类型标识仍在输入边界拒绝。`listener_draft_validate` 先执行
+  Workspace 存在性和 revision 检查，再返回字段错误。专用结果满足
+  `valid == normalized.is_some()`；合法结果经原 `listener_save` 再次校验和持久化。
+- `listener_draft_transition` 通过单一意图枚举执行模式转换，`listener_draft_copy` 可复制不完整
+  草稿；新建仍使用 `listener_new`。转换不读写证书材料；连续意图按顺序使用 Rust 返回的中间
+  草稿组合，前端只把当前 Workspace、Listener、草稿版本匹配的最终结果写回编辑器，证书清理
+  继续由可达性和 lease 决定。
 - `rule_editor_context` 按两个统一写出阶段返回合法匹配字段和动作，方向敏感动作带固定方向。
 - 草稿命令只生成矩阵允许的字段/动作；保存时不依赖 Listener 运行状态，再次调用同一阶段能力
   判断和领域校验。

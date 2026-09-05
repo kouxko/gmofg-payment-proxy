@@ -3,9 +3,11 @@ import { useState, type Key } from "react";
 import type {
   ListenerProtocolPackageCatalogViewModel,
   ListenerProtocolPackageOptionViewModel,
-  SocketRelaySettings,
+  ListenerDraftTransition,
+  ProtocolPackageRef,
+  SocketRelayDraftSettings,
 } from "@/generated/rust-types";
-import { bindPackage, exactPackageKey, matchingOption, setProcessingMode, socketCatalogOptions } from "./socket-listener-model";
+import { bindPackage, exactPackageKey, matchingOption, socketCatalogOptions } from "./socket-listener-model";
 import { SocketProtocolPackageDialog } from "./socket-protocol-package-dialog";
 
 export interface ProtocolCatalogState {
@@ -17,24 +19,29 @@ export interface ProtocolCatalogState {
 
 const TRANSPARENT_RELAY_KEY = "__transparent_relay__";
 
-export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
-  settings: SocketRelaySettings;
+export function SocketProcessingCard({ settings, catalog, locked, onChange, onTransition }: {
+  settings: SocketRelayDraftSettings;
   catalog: ProtocolCatalogState;
   locked: boolean;
-  onChange: (settings: SocketRelaySettings) => void;
+  onChange: (settings: SocketRelayDraftSettings) => void;
+  onTransition: (
+    transition: ListenerDraftTransition,
+    recommendedPackage?: ProtocolPackageRef | null,
+  ) => void;
 }) {
   // 包切换可能按能力原子关闭开关，必须通过 live region 告知键盘/读屏用户。
   const [announcement, setAnnouncement] = useState("");
   const processing = settings.processing;
   const scripted = processing.mode === "scripted" ? processing.settings : undefined;
+  const boundPackage = scripted?.package ?? undefined;
   const local = settings.topology.mode === "local_responder";
   // useIpcQuery 刷新时会保留旧 data。加载或错误状态下必须把旧快照视为不可用，
   // 否则用户可能在 Rust 正在重验/已经拒绝目录时继续修改方向开关。
   const selected = catalog.loading || catalog.error
     ? undefined
-    : scripted ? matchingOption(catalog.data, scripted.package) : undefined;
-  const selectedKey = scripted ? exactPackageKey(scripted.package) : TRANSPARENT_RELAY_KEY;
-  const hasBoundPackage = Boolean(scripted && scripted.package.id.length > 0 && scripted.package.version.length > 0);
+    : matchingOption(catalog.data, boundPackage ?? null);
+  const selectedKey = boundPackage ? exactPackageKey(boundPackage) : local ? undefined : TRANSPARENT_RELAY_KEY;
+  const hasBoundPackage = Boolean(boundPackage);
   const missingFromCatalog = hasBoundPackage && !selected;
   const unavailableBound = missingFromCatalog
     && !catalog.loading
@@ -44,19 +51,18 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
 
   function selectPackage(key: Key | null) {
     if (!local && key === TRANSPARENT_RELAY_KEY) {
-      onChange(setProcessingMode(settings, "direct"));
+      onTransition({ type: "processing", mode: "direct" });
       setAnnouncement("已取消协议包；数据将保持原样透明转发。");
       return;
     }
     const option = socketOptions.find((item) => exactPackageKey(item.package) === key);
     if (!option) return;
-    const current = processing.mode === "scripted"
-      ? processing
-      : setProcessingMode(settings, "scripted").processing;
-    if (current.mode !== "scripted") return;
-    const nextProcessing = bindPackage(current, option, local);
     setAnnouncement(`已选择 ${option.name}；完整的分帧、解析、规则、编码和显示处理链将自动应用。`);
-    onChange({ ...settings, processing: nextProcessing });
+    if (processing.mode !== "scripted") {
+      onTransition({ type: "processing", mode: "scripted" }, option.package);
+      return;
+    }
+    onChange({ ...settings, processing: bindPackage(processing, option) });
   }
 
   return (
@@ -89,7 +95,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
         {unavailableBound && <Alert status="warning"><Alert.Indicator /><Alert.Content>
           <Alert.Title>当前处理方案已不可用</Alert.Title>
           <Alert.Description>
-            精确身份 {scripted?.package.id}@{scripted?.package.version} 仍会保留，不会自动替换。
+            精确身份 {boundPackage?.id}@{boundPackage?.version} 仍会保留，不会自动替换。
             该版本可能已停用、校验失败，或其外部进程已离线；恢复可用后刷新目录，或选择新的方案。
           </Alert.Description>
         </Alert.Content></Alert>}
@@ -103,8 +109,8 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
               {!local && <ListBox.Item id={TRANSPARENT_RELAY_KEY} textValue="不使用协议包（透明转发）">
                 不使用协议包（透明转发）
               </ListBox.Item>}
-              {missingFromCatalog && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
-                {scripted?.package.id}@{scripted?.package.version} · 当前选择（不可用）
+              {missingFromCatalog && boundPackage && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
+                {boundPackage.id}@{boundPackage.version} · 当前选择（不可用）
               </ListBox.Item>}
               {(!catalog.loading && !catalog.error ? socketOptions : []).map((option) => (
                 <ListBox.Item key={exactPackageKey(option.package)} id={exactPackageKey(option.package)} textValue={optionLabel(option)}>
@@ -114,12 +120,12 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
             </ListBox></Select.Popover>
           </Select>
         </div>
-        {scripted && hasBoundPackage && <details className="rounded-xl border border-[var(--telemetry-line)] p-3">
+        {boundPackage && <details className="rounded-xl border border-[var(--telemetry-line)] p-3">
           <summary className="cursor-pointer text-sm font-medium">高级技术信息</summary>
           <div className="mt-3 space-y-3">
             {selected && <PackageSummary option={selected} />}
-            {!selected && <Chip variant="soft">{scripted.package.id}@{scripted.package.version}</Chip>}
-            <SocketProtocolPackageDialog packageRef={scripted.package} disabled={locked || catalog.loading || Boolean(catalog.error)} />
+            {!selected && <Chip variant="soft">{boundPackage.id}@{boundPackage.version}</Chip>}
+            <SocketProtocolPackageDialog packageRef={boundPackage} disabled={locked || catalog.loading || Boolean(catalog.error)} />
           </div>
         </details>}
         {announcement && <p role="status" aria-live="polite" className="text-sm text-[var(--telemetry-muted)]">

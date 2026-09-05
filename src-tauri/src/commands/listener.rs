@@ -2,10 +2,10 @@
 
 use intercept_proxy_application::{
     CertificateReference, ListenerCertificateDetailViewModel, ListenerCertificateImportViewModel,
-    ListenerId, ListenerOverviewViewModel, ListenerStatusViewModel,
-    ListenerUpstreamConnectionTestViewModel, ListenerUpstreamTlsTestViewModel,
-    OperationResultViewModel, ProxyListener, ProxyWorkspace, WorkspaceId,
-    WorkspaceValidationViewModel,
+    ListenerDraft, ListenerDraftTransition, ListenerDraftValidationViewModel, ListenerId,
+    ListenerOverviewViewModel, ListenerStatusViewModel, ListenerUpstreamConnectionTestViewModel,
+    ListenerUpstreamTlsTestViewModel, OperationResultViewModel, ProtocolPackageRef, ProxyListener,
+    ProxyWorkspace, WorkspaceId, WorkspaceValidationViewModel,
 };
 use tauri::State;
 
@@ -42,6 +42,55 @@ pub fn listener_copy(
     state
         .application
         .listener_copy(source)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn listener_draft_copy(
+    state: State<'_, AppState>,
+    source: ListenerDraft,
+) -> CommandResult<ListenerDraft> {
+    state
+        .application
+        .listener_draft_copy(source)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+#[allow(clippy::needless_pass_by_value, clippy::result_large_err)]
+pub fn listener_draft_transition(
+    state: State<'_, AppState>,
+    draft: ListenerDraft,
+    transition: ListenerDraftTransition,
+    recommended_package: Option<ProtocolPackageRef>,
+) -> CommandResult<ListenerDraft> {
+    state
+        .application
+        .listener_draft_transition(draft, transition, recommended_package)
+        .map_err(command_error)
+}
+
+#[tauri::command]
+#[specta::specta]
+pub async fn listener_draft_validate(
+    state: State<'_, AppState>,
+    workspace_id: WorkspaceId,
+    expected_workspace_revision: u64,
+    draft: ListenerDraft,
+    certificate_references: Vec<CertificateReference>,
+) -> CommandResult<ListenerDraftValidationViewModel> {
+    state
+        .application
+        .listener_draft_validate(
+            workspace_id,
+            expected_workspace_revision,
+            draft,
+            certificate_references,
+        )
+        .await
         .map_err(command_error)
 }
 
@@ -291,4 +340,27 @@ pub async fn listener_certificate_discard(
         .listener_certificate_discard(reference)
         .await
         .map_err(command_error)
+}
+
+#[cfg(test)]
+mod tests {
+    #[test]
+    fn generated_bindings_expose_only_the_three_draft_commands() {
+        let bindings = include_str!("../../../src/generated/rust-types.ts");
+        for command in [
+            "listenerDraftCopy:",
+            "listenerDraftTransition:",
+            "listenerDraftValidate:",
+        ] {
+            assert!(bindings.contains(command), "missing generated {command}");
+        }
+        assert!(!bindings.contains("listenerDraftNew:"));
+        assert!(!bindings.contains("listenerDraftSave:"));
+        assert!(bindings.contains(
+            "export type ListenerDraftValidationViewModel = {\n\tvalid: boolean,\n\tnormalized: ProxyWorkspace | null,"
+        ));
+        assert!(bindings.contains(
+            "export type ListenerDraftTransition = { type: \"data_plane\"; kind: ListenerDataPlaneKind }"
+        ));
+    }
 }

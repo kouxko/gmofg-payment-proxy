@@ -312,6 +312,18 @@ impl AndroidAdbAdapter {
         observed: Option<AndroidNetworkState>,
     ) -> AppResult<()> {
         self.update_owner(serial, expected_epoch, move |mut owner, state| {
+            if owner.state == AndroidRuntimeOwnerState::Active
+                && matches!(
+                    observed,
+                    Some(AndroidNetworkState::Stopped | AndroidNetworkState::Faulted)
+                )
+            {
+                owner.state = AndroidRuntimeOwnerState::CleanupRequired;
+                owner.transition_reason =
+                    AndroidRuntimeOwnerTransitionReason::ReverseCleanupRequired;
+                owner.updated_at = Utc::now();
+                return (owner, None);
+            }
             if owner.state != AndroidRuntimeOwnerState::WaitingReconnect {
                 return (owner, state.runtime_resume_state);
             }

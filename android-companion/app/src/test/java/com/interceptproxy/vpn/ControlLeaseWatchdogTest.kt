@@ -44,6 +44,17 @@ class ControlLeaseWatchdogTest {
     }
 
     @Test
+    fun heartbeatAfterLeaseClearCannotRenewStoppedGeneration() {
+        val watchdog = ControlLeaseWatchdog(timeoutMillis = 5_000)
+        watchdog.activate(generation = 1, ownerEpoch = "epoch-1", nowMillis = 0)
+
+        watchdog.clear()
+
+        assertFalse(watchdog.renew("epoch-1", nowMillis = 1_000))
+        assertNull(watchdog.expiredGeneration(nowMillis = 10_000))
+    }
+
+    @Test
     fun staleTimeoutCannotStopReplacementGeneration() {
         VpnRuntimeRegistry.resetForTest()
         val runtime = ProxyRuntimeFacts("profile", "routes", 1)

@@ -7,10 +7,10 @@ use std::{
 use async_trait::async_trait;
 use bytes::Bytes;
 use http::{HeaderMap, HeaderValue, Method, Uri};
-use intercept_proxy_runtime::message::{Message, MessageLimits};
 use intercept_proxy_runtime::http::{
     ForwardRequest, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
 };
+use intercept_proxy_runtime::message::{Message, MessageLimits};
 use intercept_proxy_runtime::transport::{
     ConnectionContext, HandshakePolicy, UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
@@ -73,6 +73,18 @@ async fn serve_fidelity_upstream(listener: TcpListener) {
                 .any(|window| window == expected)
         );
     }
+    for forbidden in [
+        b"X-Private-Hop:".as_slice(),
+        b"x-second-hop:".as_slice(),
+        b"Proxy-Connection:".as_slice(),
+    ] {
+        assert!(
+            !request
+                .windows(forbidden.len())
+                .any(|window| window.eq_ignore_ascii_case(forbidden)),
+            "hop-by-hop request field must not reach the upstream"
+        );
+    }
     let exact_custom_headers = b"X-Trace: first\x80\r\n\
 x-Other: middle\xff\r\n\
 x-TRACE: second\r\n\
@@ -133,6 +145,14 @@ async fn upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed(
     );
     message.headers.extend(
         [
+            (
+                b"Connection".as_slice(),
+                b"keep-alive, X-Private-Hop".as_slice(),
+            ),
+            (b"connection".as_slice(), b"X-Second-Hop".as_slice()),
+            (b"X-Private-Hop".as_slice(), b"secret".as_slice()),
+            (b"x-second-hop".as_slice(), b"second".as_slice()),
+            (b"Proxy-Connection".as_slice(), b"keep-alive".as_slice()),
             (b"X-Trace".as_slice(), b"first\x80".as_slice()),
             (b"x-Other".as_slice(), b"middle\xff".as_slice()),
             (b"x-TRACE".as_slice(), b"second".as_slice()),

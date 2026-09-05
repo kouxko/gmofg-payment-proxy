@@ -87,7 +87,8 @@ class CompanionControlServer(private val context: Context) {
     }
 
     private fun dispatch(request: ControlProtocol.Request): ByteArray = when (request.operation) {
-        "start", "apply" -> startOrApply(request)
+        "start", "apply" -> startOrApply(request, requireActiveLease = false)
+        "apply_active" -> startOrApply(request, requireActiveLease = true)
         "stop" -> {
             InterceptVpnService.stopFromExternalControl(context, "VPN 已停止。")
             ControlProtocol.success(request.requestId, statusJson())
@@ -108,7 +109,10 @@ class CompanionControlServer(private val context: Context) {
         )
     }
 
-    private fun startOrApply(request: ControlProtocol.Request): ByteArray {
+    private fun startOrApply(
+        request: ControlProtocol.Request,
+        requireActiveLease: Boolean,
+    ): ByteArray {
         val profileJson = request.payload.optJSONObject("profile")?.toString()
             ?: return ControlProtocol.failure(
                 request.requestId,
@@ -174,6 +178,7 @@ class CompanionControlServer(private val context: Context) {
             runtime,
             ownerEpoch.orEmpty(),
             profile.stopVpnOnControlLoss,
+            requireActiveLease = requireActiveLease,
         ) { generation ->
             AndroidPlatformCompatibility.startVpnService(
                 context,
@@ -192,6 +197,13 @@ class CompanionControlServer(private val context: Context) {
                 ControlProtocol.success(request.requestId, statusJson())
             },
             onFailure = { error ->
+                if (error is ActiveControlLeaseStaleException) {
+                    return@fold ControlProtocol.failure(
+                        request.requestId,
+                        "ANDROID_CONTROL_LEASE_STALE",
+                        error.message ?: "控制租约不存在、已到期或不属于当前运行实例。",
+                    )
+                }
                 ControlProtocol.failure(
                     request.requestId,
                     "ANDROID_VPN_START_FAILED",

@@ -15,6 +15,76 @@ use super::{
 use crate::{DestinationTarget, routing::ProxyRouteTable};
 
 #[tokio::test]
+async fn unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy() {
+    use crate::{
+        InstalledApplication, NetworkProfile, ProxyRoute, ProxyRuntimeConfiguration,
+        ResolvedProxyRoute, TargetApplication, WeakNetworkProfile,
+    };
+
+    let original_server = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let original = original_server.local_addr().unwrap();
+    let proxy_server = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
+    let proxy = proxy_server.local_addr().unwrap();
+    let installed = InstalledApplication {
+        package_name: "com.example.target".into(),
+        uid: 10_001,
+    };
+    let profile = NetworkProfile {
+        id: "strict-domain-route".into(),
+        name: "精确域名路由".into(),
+        target_applications: vec![TargetApplication {
+            package_name: installed.package_name.clone(),
+            uid: installed.uid,
+        }],
+        destination_targets: Vec::new(),
+        proxy_routes: vec![ProxyRoute {
+            listener_id: "proxy".into(),
+            destination: "configured.example".into(),
+            ports: vec![original.port()],
+        }],
+        confirmed_shared_uids: Default::default(),
+        auto_resume_after_reboot: false,
+        stop_vpn_on_control_loss: true,
+        weak_network: WeakNetworkProfile::default(),
+    }
+    .validate_for_start(&[installed])
+    .unwrap();
+    let runtime = ProxyRuntimeConfiguration {
+        routes: vec![ResolvedProxyRoute {
+            listener_id: "proxy".into(),
+            original_destination: "configured.example".into(),
+            original_ports: vec![original.port()],
+            resolved_original_ips: vec!["192.0.2.1".parse().unwrap()],
+            proxy_host: proxy.ip().to_string(),
+            proxy_port: proxy.port(),
+        }],
+    };
+    let routes = std::sync::Arc::new(ProxyRouteTable::compile(&profile, &runtime).await.unwrap());
+    let original_task = tokio::spawn(async move {
+        let (mut stream, _) = original_server.accept().await.unwrap();
+        let mut request = [0; 4];
+        stream.read_exact(&mut request).await.unwrap();
+        assert_eq!(&request, b"PING");
+        eprintln!("strict-routing original={original} received={request:?} response=ORIG");
+        stream.write_all(b"ORIG").await.unwrap();
+    });
+    let proxy_task = tokio::spawn(async move {
+        let (mut stream, _) = proxy_server.accept().await.unwrap();
+        let mut request = [0; 4];
+        stream.read_exact(&mut request).await.unwrap();
+        stream.write_all(b"PROX").await.unwrap();
+    });
+    tokio::time::timeout(
+        std::time::Duration::from_secs(5),
+        assert_relay(original, routes, b"PING", b"ORIG"),
+    )
+    .await
+    .expect("SOCKS5 应直连未匹配的原始目标");
+    original_task.await.unwrap();
+    proxy_task.abort();
+}
+
+#[tokio::test]
 async fn connect_protects_outbound_socket_before_relay() {
     let upstream = TcpListener::bind((Ipv4Addr::LOCALHOST, 0)).await.unwrap();
     let upstream_address = upstream.local_addr().unwrap();

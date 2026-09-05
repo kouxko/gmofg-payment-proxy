@@ -288,6 +288,7 @@ impl AndroidControlRequest {
                 | "profile_delete"
                 | "start"
                 | "apply"
+                | "apply_active"
                 | "stop"
                 | "emergency_restore"
                 | "status"

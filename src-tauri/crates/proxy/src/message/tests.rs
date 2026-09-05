@@ -191,3 +191,29 @@ fn raw_head_parser_preserves_non_standard_reason_phrase() {
             .starts_with(b"HTTP/1.1 299 Vendor Specific Result\r\n")
     );
 }
+
+#[test]
+fn forward_normalization_removes_connection_declared_and_proxy_hop_headers() {
+    let request = b"GET / HTTP/1.1\r\n\
+Host: client.test\r\n\
+Connection: keep-alive, X-Private-Hop\r\n\
+connection:\tX-Second-Hop \t\r\n\
+X-Private-Hop:\t secret \t\r\n\
+x-second-hop: second\r\n\
+Proxy-Connection: keep-alive\r\n\
+X-Preserved:\t exact \t\r\n\r\n";
+
+    let mut message = Message::from_raw_http1_head(request, Bytes::new()).expect("raw request");
+    message.normalize_for_forward("upstream.test", true);
+
+    assert_eq!(
+        message.reconstruct(),
+        Bytes::from_static(
+            b"GET / HTTP/1.1\r\n\
+X-Preserved:\t exact \t\r\n\
+Host: upstream.test\r\n\
+Connection: close\r\n\
+Content-Length: 0\r\n\r\n"
+        )
+    );
+}

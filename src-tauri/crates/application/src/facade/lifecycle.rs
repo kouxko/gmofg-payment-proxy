@@ -9,6 +9,7 @@ use crate::{
 
 impl Application {
     pub async fn app_bootstrap(&self) -> AppResult<AppBootstrapViewModel> {
+        let event_cursor = self.events.current_cursor();
         let recent_capture = self
             .capture_query(CaptureQuery {
                 keyword: None,
@@ -39,7 +40,7 @@ impl Application {
             recent_capture,
             certificate,
             settings,
-            event_cursor: self.events.current_cursor(),
+            event_cursor,
         })
     }
 

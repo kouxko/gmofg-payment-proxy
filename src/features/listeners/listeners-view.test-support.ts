@@ -1,8 +1,15 @@
 import { vi } from "vitest";
 import type { HttpListenerSettings, ProxyListener } from "@/generated/rust-types";
-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
 
 export const navigationMocks = { navigate: vi.fn() };
+
+export function socketRuntimeLimits() {
+  return {
+    read_chunk_bytes: 16 * 1024,
+    diagnostic_event_capacity: 256,
+    diagnostic_memory_bytes: 1024 * 1024,
+  };
+}
 
 export const bootstrap = {
   certificate: {
@@ -32,8 +39,8 @@ export const bootstrap = {
 
 export const mocks = {
   workspaceList: vi.fn(), workspaceGet: vi.fn(), workspaceValidate: vi.fn(), workspaceSave: vi.fn(),
-  listenerValidate: vi.fn(),
-  listenerNew: vi.fn(), listenerCopy: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
+  listenerDraftValidate: vi.fn(), listenerDraftTransition: vi.fn(), listenerDraftCopy: vi.fn(),
+  listenerNew: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
   listenerOverview: vi.fn(), listenerStart: vi.fn(), listenerStop: vi.fn(),
   listenerTestUpstreamConnection: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
   listenerImportDownstreamServerIdentity: vi.fn(), listenerImportDownstreamClientTrust: vi.fn(),
@@ -104,7 +111,7 @@ export function socketListener(
 ) {
   const upstreamTls = { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null };
   const downstreamTls = {
-    server_identity: "",
+    server_identity: null,
     client_authentication: { mode: "disabled" as const },
   };
   const security = mode === "tcp_to_tls"
@@ -127,7 +134,7 @@ export function socketListener(
           },
         },
         maximum_connections: 500,
-        runtime_limits: defaultSocketRuntimeLimits(),
+        runtime_limits: socketRuntimeLimits(),
         processing: { mode: "direct" as const },
       },
     },
@@ -149,7 +156,7 @@ export function localResponderListener(
           settings: { downstream_security: { mode: "tcp" as const } },
         },
         maximum_connections: 100,
-        runtime_limits: defaultSocketRuntimeLimits(),
+        runtime_limits: socketRuntimeLimits(),
         processing: {
           mode: "scripted" as const,
           settings: {
@@ -264,7 +271,7 @@ export function setupListenerMocks() {
     mocks.workspaceList.mockReturnValue(ok([{ id: "workspace-1", name: "API Lab", revision: 1, listener_count: 1, enabled_listener_count: 0, selected: true }]));
     mocks.workspaceGet.mockReturnValue(ok(workspace));
     mocks.workspaceValidate.mockImplementation((draft) => ok({ valid: true, normalized: draft, field_errors: {} }));
-    mocks.listenerValidate.mockImplementation((workspaceId, revision, listener, certificateReferences) => ok({
+    mocks.listenerDraftValidate.mockImplementation((workspaceId, revision, listener, certificateReferences) => ok({
       valid: true,
       normalized: {
         ...workspace,
@@ -284,7 +291,8 @@ export function setupListenerMocks() {
     }));
     mocks.listenerDelete.mockReturnValue(ok({ success: true, cancelled: false, message: "Listener 已删除。", ui_tone: "positive", entity_id: null, revision: 2, requires_restart: false }));
     mocks.listenerNew.mockReturnValue(ok(dynamicListener("listener-new", "新建代理监听", 8081)));
-    mocks.listenerCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
+    mocks.listenerDraftCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
+    mocks.listenerDraftTransition.mockImplementation((source) => ok(source));
     // 页面现在对缺失 runtime 行的持久化 Listener fail-closed 锁定。通用 fixture
     // 覆盖各测试文件常用 id，避免与测试目标无关的“未知状态”误锁表单。
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([

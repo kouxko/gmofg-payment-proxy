@@ -101,7 +101,7 @@ async fn domain_route_matches_desktop_resolved_ip_without_device_dns() {
 }
 
 #[tokio::test]
-async fn unique_domain_route_uses_port_fallback_when_socks_only_reports_an_unknown_ip() {
+async fn unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique() {
     let profile = profile(vec![ProxyRoute {
         listener_id: "payment-dll".into(),
         destination: "https.gmo-fg.net".into(),
@@ -112,8 +112,7 @@ async fn unique_domain_route_uses_port_fallback_when_socks_only_reports_an_unkno
             listener_id: "payment-dll".into(),
             original_destination: "https.gmo-fg.net".into(),
             original_ports: vec![16_127],
-            // 桌面启动时的 DNS 快照可能与应用缓存 IP、DNS 轮询结果或
-            // tun2proxy 暴露的 Fake-IP 不同。此时不能静默直连原 Server。
+            // 仅 DNS 快照中的地址能证明域名归属；旧缓存或未知 Fake-IP 不按端口猜测。
             resolved_original_ips: vec!["153.150.240.65".parse().unwrap()],
             proxy_host: "127.0.0.1".into(),
             proxy_port: 40_127,
@@ -121,9 +120,24 @@ async fn unique_domain_route_uses_port_fallback_when_socks_only_reports_an_unkno
     };
 
     let table = ProxyRouteTable::compile(&profile, &runtime).await.unwrap();
+    for unknown in ["198.18.0.1", "192.0.2.1", "2001:db8::1"] {
+        assert!(table.for_ip(unknown.parse().unwrap(), 16_127).is_none());
+    }
+    let expected = ["127.0.0.1:40127".parse().unwrap()];
     assert_eq!(
-        table.for_ip("198.18.0.1".parse().unwrap(), 16_127),
-        Some(&["127.0.0.1:40127".parse().unwrap()][..])
+        table.for_ip("153.150.240.65".parse().unwrap(), 16_127),
+        Some(expected.as_slice())
+    );
+    assert_eq!(
+        table.for_domain("HTTPS.GMO-FG.NET.", 16_127),
+        Some(expected.as_slice())
+    );
+    assert!(table.for_domain("unrelated.example", 16_127).is_none());
+    assert!(table.for_domain("https.gmo-fg.net", 443).is_none());
+    assert!(
+        table
+            .for_ip("153.150.240.65".parse().unwrap(), 443)
+            .is_none()
     );
 }
 

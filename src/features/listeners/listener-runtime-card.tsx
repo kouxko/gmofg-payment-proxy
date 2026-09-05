@@ -6,11 +6,12 @@ export type ListenerPending = "validate" | "save" | "delete" | "start" | "stop" 
   | "import-downstream-identity" | "import-downstream-trust"
   | "import-upstream-identity" | "import-upstream-trust";
 
-export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggle, onRetry }: {
+export function ListenerRuntimeCard({ status, isLoading, error, pending, startBlocked, onToggle, onRetry }: {
   status?: ListenerMonitorRowViewModel;
   isLoading: boolean;
   error?: string;
   pending?: ListenerPending;
+  startBlocked?: boolean;
   onToggle: () => Promise<void>;
   onRetry: () => Promise<void>;
 }) {
@@ -34,7 +35,7 @@ export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggl
     <div className="flex items-center gap-2">
       {error && <Button size="sm" variant="outline" onPress={() => void onRetry()}>重试状态查询</Button>}
       <Button variant={operation === "stop" ? "danger-soft" : "primary"}
-        isDisabled={Boolean(pending) || unavailable || !operation} onPress={() => void onToggle()}>
+        isDisabled={Boolean(pending) || unavailable || !operation || (operation === "start" && startBlocked)} onPress={() => void onToggle()}>
         {actionText}
       </Button>
     </div>

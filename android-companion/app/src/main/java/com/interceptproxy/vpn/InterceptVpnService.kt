@@ -131,7 +131,7 @@ class InterceptVpnService : VpnService() {
             profileJson = profile.rawJson,
             inventoryJson = inventoryJson,
             proxyRuntimeJson = prepared.proxyRuntimeJson,
-            protector = NativeSocketProtector(this),
+            protector = NativeSocketProtector(this, generation),
         )
         if (!started) {
             return failOpen("Rust 数据面启动失败，TUN 已关闭", generation)
@@ -165,18 +165,38 @@ class InterceptVpnService : VpnService() {
     }
 
     private fun restartSavedProfile() {
-        InterceptVpnServiceControl.restartSavedProfile(
+        val admission = InterceptVpnServiceControl.restartSavedProfile(
             context = this,
             stateStore = stateStore,
             failOpen = { reason -> failOpen(reason) },
             startProfile = ::startProfile,
         )
+        if (admission === RecoveryAdmission.WaitingForDesktopControl) {
+            waitForDesktopControl()
+        }
+    }
+
+    private fun waitForDesktopControl() {
+        val snapshot = VpnRuntimeRegistry.snapshot()
+        val cleaned = VpnRuntimeRegistry.cleanupRejectedRecoveryIfIdle(snapshot.generation) {
+            closeCurrentDataPlane()
+            packageReceiverRegistration.unregister()
+        }
+        if (cleaned) finishStopping()
     }
 
     /** JNI 从后台线程通知故障；真正的 Service/TUN 操作统一回到 Android 主线程。 */
-    internal fun onNativeDataPlaneFailure(reason: String) {
+    internal fun onNativeDataPlaneFailure(generation: Long, reason: String) {
         Handler(Looper.getMainLooper()).post {
-            if (tun.get() != null) failOpen("Rust 数据面异常退出：$reason")
+            if (tun.get() == null) return@post
+            val message = "Rust 数据面异常退出：$reason"
+            NativeDataPlaneFailureCoordinator.failOpenIfCurrent(generation, message) {
+                Log.e(TAG, message)
+                stateStore.recordFailure()
+                closeCurrentDataPlane()
+                packageReceiverRegistration.unregister()
+                finishStopping()
+            }
         }
     }
 
@@ -286,9 +306,6 @@ class InterceptVpnService : VpnService() {
             proxyRuntimeJson,
             generation,
         )
-
-        fun startActivationIntent(context: Context, activation: StoredActivation): Intent =
-            InterceptVpnServiceControl.startActivationIntent(context, activation)
 
         fun stopIntent(context: Context): Intent =
             InterceptVpnServiceControl.stopIntent(context)

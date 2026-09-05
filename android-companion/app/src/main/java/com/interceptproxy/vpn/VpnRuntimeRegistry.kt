@@ -59,6 +59,22 @@ object VpnRuntimeRegistry {
     }
 
     @Synchronized
+    internal fun beginStartIfRunning(
+        expectedGeneration: Long,
+        profileId: String,
+        runtime: ProxyRuntimeFacts,
+    ): StartRequest? {
+        if (
+            !desiredRunning ||
+            snapshot.state != "running" ||
+            snapshot.generation != expectedGeneration
+        ) {
+            return null
+        }
+        return beginStart(profileId, runtime)
+    }
+
+    @Synchronized
     fun startRequested(profileId: String, runtime: ProxyRuntimeFacts): Long =
         beginStart(profileId, runtime).generation
 
@@ -149,6 +165,26 @@ object VpnRuntimeRegistry {
         return true
     }
 
+    /**
+     * 系统恢复入口被准入门禁拒绝时，只清理仍处于同一空闲代次的 Service 资源。
+     * 若桌面端已经发布新的 start，旧 revalidate/null Intent 不得关闭新一代数据面。
+     */
+    @Synchronized
+    internal fun cleanupRejectedRecoveryIfIdle(
+        expectedGeneration: Long,
+        cleanup: () -> Unit,
+    ): Boolean {
+        if (
+            desiredRunning ||
+            snapshot.generation != expectedGeneration ||
+            (snapshot.state != "stopped" && snapshot.state != "faulted")
+        ) {
+            return false
+        }
+        cleanup()
+        return true
+    }
+
     @Synchronized
     fun isStopped(generation: Long): Boolean =
         !desiredRunning && snapshot.state == "stopped" && snapshot.generation == generation
@@ -167,6 +203,24 @@ object VpnRuntimeRegistry {
     fun faultedIfCurrent(generation: Long, message: String): Boolean {
         if (!desiredRunning || snapshot.generation != generation) return false
         faulted(message)
+        return true
+    }
+
+    /** generation 校验、Faulted 发布和 TUN 清理必须原子完成，避免新 start 插入其间。 */
+    @Synchronized
+    internal fun faultCurrentAndTeardown(
+        generation: Long,
+        message: String,
+        teardown: () -> Unit,
+    ): Boolean {
+        if (!desiredRunning || snapshot.generation != generation) return false
+        desiredRunning = false
+        snapshot = snapshot.copy(
+            state = "faulted",
+            message = message,
+            generation = snapshot.generation + 1,
+        )
+        teardown()
         return true
     }
 

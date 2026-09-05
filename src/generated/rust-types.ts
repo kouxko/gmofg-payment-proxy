@@ -72,6 +72,14 @@ export const commands = {
 	listenerList: (workspaceId: WorkspaceId) => typedError<ProxyListener[], AppErrorViewModel>(__TAURI_INVOKE("listener_list", { workspaceId })),
 	listenerNew: () => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_new")),
 	listenerCopy: (source: ProxyListener) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_copy", { source })),
+	listenerDraftCopy: (source: ListenerDraft) => typedError<ListenerDraft, AppErrorViewModel>(__TAURI_INVOKE("listener_draft_copy", { source })),
+	listenerDraftTransition: (draft: ListenerDraft, transition: ListenerDraftTransition, recommendedPackage: {
+	/**  应用级协议包 ID。 */
+	id: ProtocolPackageId,
+	/**  必须精确匹配的协议包版本。 */
+	version: ProtocolPackageVersion,
+} | null) => typedError<ListenerDraft, AppErrorViewModel>(__TAURI_INVOKE("listener_draft_transition", { draft, transition, recommendedPackage })),
+	listenerDraftValidate: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, draft: ListenerDraft, certificateReferences: CertificateReference[]) => typedError<ListenerDraftValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_draft_validate", { workspaceId, expectedWorkspaceRevision, draft, certificateReferences })),
 	listenerGet: (workspaceId: WorkspaceId, listenerId: ListenerId) => typedError<ProxyListener, AppErrorViewModel>(__TAURI_INVOKE("listener_get", { workspaceId, listenerId })),
 	listenerValidate: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<WorkspaceValidationViewModel, AppErrorViewModel>(__TAURI_INVOKE("listener_validate", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
 	listenerSave: (workspaceId: WorkspaceId, expectedWorkspaceRevision: number, listener: ProxyListener, certificateReferences: CertificateReference[]) => typedError<ProxyWorkspace, AppErrorViewModel>(__TAURI_INVOKE("listener_save", { workspaceId, expectedWorkspaceRevision, listener, certificateReferences })),
@@ -814,6 +822,15 @@ export type DocumentValueType =
 
 export type DownstreamClientAuthentication = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId } | { mode: "required"; trust: CertificateReferenceId };
 
+export type DownstreamClientAuthenticationDraft = { mode: "disabled" } | { mode: "optional"; trust: CertificateReferenceId | null } | { mode: "required"; trust: CertificateReferenceId | null };
+
+export type DownstreamTlsDraftSettings = {
+	enabled: boolean,
+	server_identity: CertificateReferenceId | null,
+	dynamic_sni_allowlist: string[],
+	client_authentication: DownstreamClientAuthenticationDraft,
+};
+
 export type DownstreamTlsSettings = {
 	enabled: boolean,
 	server_identity: CertificateReferenceId | null,
@@ -1102,6 +1119,16 @@ export type HttpAction = ({ SetJsonField: {
  */
 export type HttpBodyProcessing = { mode: "plain" } | { mode: "protocol"; package: ProtocolPackageRef };
 
+export type HttpListenerDraftSettings = {
+	authentication: ForwardProxyAuthentication,
+	mitm: MitmSettings,
+	downstream_tls: DownstreamTlsDraftSettings,
+	request_body_codec: BodyCodecKind,
+	response_body_codec: BodyCodecKind,
+	body_processing: HttpBodyProcessing,
+	topology: HttpTopology,
+};
+
 export type HttpListenerSettings = {
 	authentication: ForwardProxyAuthentication,
 	mitm: MitmSettings,
@@ -1151,6 +1178,8 @@ export type HttpProtocolFailureViewModel = {
 export type HttpRemoteServerTopology = {
 	fixed_server: FixedServerSettings | null,
 };
+
+export type HttpResponseMode = "request_target" | "fixed_server" | "local_server";
 
 export type HttpRuleContent = {
 	description: string,
@@ -1210,7 +1239,29 @@ export type ListenerCertificateImportViewModel = {
 
 export type ListenerDataPlane = { kind: "http"; settings: HttpListenerSettings } | { kind: "socket"; settings: SocketRelaySettings };
 
+export type ListenerDataPlaneDraft = { kind: "http"; settings: HttpListenerDraftSettings } | { kind: "socket"; settings: SocketRelayDraftSettings };
+
 export type ListenerDataPlaneKind = "http" | "socket";
+
+export type ListenerDraft = {
+	id: ListenerId,
+	name: string,
+	enabled: boolean,
+	bind_address: string,
+	port: number,
+	connect_timeout_ms: number,
+	read_timeout_ms: number,
+	write_timeout_ms: number,
+	data_plane: ListenerDataPlaneDraft,
+};
+
+export type ListenerDraftTransition = { type: "data_plane"; kind: ListenerDataPlaneKind } | { type: "http_response_mode"; mode: HttpResponseMode } | { type: "socket_topology"; mode: SocketTopologyMode } | { type: "processing"; mode: SocketProcessingMode } | { type: "app_tls"; enabled: boolean } | { type: "server_tls"; enabled: boolean };
+
+export type ListenerDraftValidationViewModel = {
+	valid: boolean,
+	normalized: ProxyWorkspace | null,
+	field_errors: { [key in string]: string[] },
+};
 
 export type ListenerId = string;
 
@@ -2210,6 +2261,10 @@ export type ScriptedSocketProcessing = {
 	package: ProtocolPackageRef,
 };
 
+export type ScriptedSocketProcessingDraft = {
+	package: ProtocolPackageRef | null,
+};
+
 export type SecretReference = {
 	provider: string,
 	key: string,
@@ -2301,6 +2356,13 @@ export type SocketDiagnosticStage = "admission" | "downstream_tls" | "dns" | "co
 /**  `LocalResponder` 只面向连接到 Listener 的 App，因此安全配置只能描述 App 侧传输。 */
 export type SocketDownstreamSecurity = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsSettings };
 
+export type SocketDownstreamSecurityDraft = { mode: "tcp" } | { mode: "tls"; downstream_tls: SocketDownstreamTlsDraftSettings };
+
+export type SocketDownstreamTlsDraftSettings = {
+	server_identity: CertificateReferenceId | null,
+	client_authentication: DownstreamClientAuthenticationDraft,
+};
+
 export type SocketDownstreamTlsSettings = {
 	server_identity: CertificateReferenceId,
 	client_authentication: DownstreamClientAuthentication,
@@ -2324,6 +2386,10 @@ export type SocketLocalResponderTopology = {
 	downstream_security: SocketDownstreamSecurity,
 };
 
+export type SocketLocalResponderTopologyDraft = {
+	downstream_security: SocketDownstreamSecurityDraft,
+};
+
 /**
  *  Socket payload 的处理方式。
  *  `Direct` 保持现有透明字节转发，不加载脚本、不切 Frame、不创建 Document；`Scripted` 按绑定
@@ -2334,6 +2400,17 @@ export type SocketLocalResponderTopology = {
  */
 export type SocketPayloadProcessing = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessing };
 
+export type SocketPayloadProcessingDraft = { mode: "direct" } | { mode: "scripted"; settings: ScriptedSocketProcessingDraft };
+
+export type SocketProcessingMode = "direct" | "scripted";
+
+export type SocketRelayDraftSettings = {
+	topology: SocketTopologyDraft,
+	maximum_connections: number,
+	runtime_limits: SocketRuntimeLimits,
+	processing: SocketPayloadProcessingDraft,
+};
+
 export type SocketRelayRouteEvidenceViewModel = {
 	configured_address: string | null,
 	resolved_address: string | null,
@@ -2343,6 +2420,8 @@ export type SocketRelayRouteEvidenceViewModel = {
 };
 
 export type SocketRelaySecurity = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsSettings; upstream_tls: SocketUpstreamTlsSettings };
+
+export type SocketRelaySecurityDraft = { mode: "transparent" } | { mode: "tcp_to_tls"; upstream_tls: SocketUpstreamTlsSettings } | { mode: "tls_to_tcp"; downstream_tls: SocketDownstreamTlsDraftSettings } | { mode: "tls_to_tls"; downstream_tls: SocketDownstreamTlsDraftSettings; upstream_tls: SocketUpstreamTlsSettings };
 
 export type SocketRelaySettings = {
 	/**  网络拓扑。Relay 才拥有 Server 上游；LocalResponder 只拥有 App 侧安全设置。 */
@@ -2359,6 +2438,11 @@ export type SocketRelaySettings = {
 export type SocketRelayTopology = {
 	upstream: SocketEndpoint,
 	security: SocketRelaySecurity,
+};
+
+export type SocketRelayTopologyDraft = {
+	upstream: SocketEndpoint,
+	security: SocketRelaySecurityDraft,
 };
 
 export type SocketRuleContent = {
@@ -2393,6 +2477,10 @@ export type SocketTlsEvidenceViewModel = {
 
 /**  Socket Listener 的网络拓扑。变体自身拥有且只拥有该模式可用的字段。 */
 export type SocketTopology = { mode: "relay"; settings: SocketRelayTopology } | { mode: "local_responder"; settings: SocketLocalResponderTopology };
+
+export type SocketTopologyDraft = { mode: "relay"; settings: SocketRelayTopologyDraft } | { mode: "local_responder"; settings: SocketLocalResponderTopologyDraft };
+
+export type SocketTopologyMode = "relay" | "local_responder";
 
 export type SocketTransportMode = "transparent" | "tcp_to_tls" | "tls_to_tcp" | "tls_to_tls";
 

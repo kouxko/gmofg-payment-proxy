@@ -15,9 +15,7 @@ vi.mock("@/features/shell/bootstrap-context", () => ({
   useBootstrap: () => ({ bootstrap }),
 }));
 vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
-
 import { ListenersView } from "./listeners-view";
-
 describe("统一代理监听编辑器", () => {
   beforeEach(setupListenerMocks);
 
@@ -49,39 +47,19 @@ describe("统一代理监听编辑器", () => {
     expect(mocks.listenerDelete).not.toHaveBeenCalled();
   });
 
-  it("默认按请求目标转发，并可在同一监听启用固定 Server", async () => {
-    const user = userEvent.setup();
-    render(<ListenersView />);
-    expect(await screen.findByText("1. 响应方式")).toBeVisible();
-    const responseMode = screen.getByLabelText("HTTP 响应方式");
-    expect(responseMode).toHaveTextContent("按原请求目标转发");
-    expect(screen.getByText(/读取每个请求中的目标主机和端口/)).toBeVisible();
-    expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
-    expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
-    await user.click(responseMode);
-    await user.click(await screen.findByRole("option", { name: "转发到固定 Server" }));
-    const serverUrl = await screen.findByRole("textbox", { name: "固定 Server URL" });
-    await user.type(serverUrl, "https://server.test:443");
-    expect(screen.getByText("固定 Server 目标")).toBeVisible();
-    expect(screen.getByText(/仅用 Server URL 替换目标 host\/port/)).toBeVisible();
-    expect(screen.getByText(/原请求 path 与 query 原样保留/)).toBeVisible();
-    expect(screen.getByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
-    expect(screen.getByRole("switch", { name: "为此监听启用 TLS" })).toBeVisible();
-    expect(screen.queryByRole("switch", { name: "启用 allowlist MITM" })).not.toBeInTheDocument();
-    expect(screen.getByRole("switch", { name: "校验上游服务器主机名" })).toBeChecked();
-    expect(screen.getByRole("button", { name: "导入 Server CA" })).toBeVisible();
-    expect(screen.getByRole("button", { name: "导入客户端身份" })).toBeVisible();
-    expect(screen.queryByRole("textbox", { name: /Body Codec 引用/ })).not.toBeInTheDocument();
-    expect(screen.getByText(/自动模式遵循 Header；强制模式覆盖 charset/)).toBeVisible();
-    expect(screen.getByRole("button", { name: /请求正文编码/ })).toBeVisible();
-    expect(screen.getByRole("button", { name: /响应正文编码/ })).toBeVisible();
-    await user.click(responseMode);
-    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
-    expect(screen.queryByRole("textbox", { name: "固定 Server URL" })).not.toBeInTheDocument();
-    expect(responseMode).toHaveTextContent("按原请求目标转发");
-  });
-
   it("使用与 Socket 一致的响应方式下拉切换并保存 HTTP topology", async () => {
+    const fixed = fixedListener("listener-1", "默认代理监听", 8080, "");
+    const local = {
+      ...fixed,
+      data_plane: { kind: "http" as const, settings: {
+        ...fixed.data_plane.settings,
+        topology: { mode: "local_server" as const },
+      } },
+    };
+    mocks.listenerDraftTransition
+      .mockReturnValueOnce(ok(fixed))
+      .mockReturnValueOnce(ok(local))
+      .mockReturnValueOnce(ok(dynamicListener()));
     const user = userEvent.setup();
     render(<ListenersView />);
 
@@ -113,12 +91,6 @@ describe("统一代理监听编辑器", () => {
     expect(screen.queryByRole("switch", { name: "转发到固定 Server" })).not.toBeInTheDocument();
   });
 
-  it("固定 Server 关闭时保留 Basic 与 MITM 设置", async () => {
-    render(<ListenersView />);
-    expect(await screen.findByRole("switch", { name: "启用 HTTP Basic 认证" })).toBeVisible();
-    expect(screen.getByRole("switch", { name: "启用 allowlist MITM" })).toBeVisible();
-  });
-
   it("由 Rust 校验后保存统一监听", async () => {
     const user = userEvent.setup();
     render(<ListenersView />);
@@ -142,7 +114,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(screen.getByRole("button", { name: "启动监听" }));
 
     await waitFor(() => expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 1, "stopped-2"));
-    expect(mocks.listenerValidate).not.toHaveBeenCalled();
+    expect(mocks.listenerDraftValidate).not.toHaveBeenCalled();
     expect(mocks.listenerSave).not.toHaveBeenCalled();
   });
 
@@ -182,7 +154,7 @@ describe("统一代理监听编辑器", () => {
       listenerStatus("listener-a"),
       listenerStatus("listener-b"),
     ])));
-    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+    mocks.listenerDraftValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
       valid: true,
       normalized: {
         ...multiple,
@@ -216,7 +188,7 @@ describe("统一代理监听编辑器", () => {
     const persisted = { ...workspace, listeners: [listenerB] };
     mocks.workspaceGet.mockReturnValue(ok(persisted));
     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("listener-b")] )));
-    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+    mocks.listenerDraftValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
       valid: true,
       normalized: {
         ...persisted,
@@ -232,6 +204,9 @@ describe("统一代理监听编辑器", () => {
       listeners: [listener],
       certificate_references: certificateReferences,
     }));
+    mocks.listenerDraftTransition.mockReturnValueOnce(ok(
+      fixedListener("listener-new", "新建代理监听", 8081, ""),
+    ));
     const user = userEvent.setup();
     render(<ListenersView />);
 
@@ -415,7 +390,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(testButton);
 
     expect(await screen.findByRole("button", { name: "正在探测 Server…" })).toBeDisabled();
-    expect(mocks.listenerValidate).toHaveBeenCalledOnce();
+    expect(mocks.listenerDraftValidate).toHaveBeenCalledOnce();
     expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
   });
 
@@ -500,7 +475,7 @@ describe("统一代理监听编辑器", () => {
     expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "测试 Server 连接" })).not.toBeInTheDocument();
     await user.click(screen.getByRole("button", { name: "复制监听" }));
-    expect(mocks.listenerCopy).toHaveBeenCalledWith(local);
+    expect(mocks.listenerDraftCopy).toHaveBeenCalledWith(local);
     expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
   });
 

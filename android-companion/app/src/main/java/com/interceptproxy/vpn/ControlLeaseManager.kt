@@ -28,6 +28,7 @@ internal object ControlLeaseManager {
         runtime: ProxyRuntimeFacts,
         ownerEpoch: String,
         enabled: Boolean,
+        requireActiveLease: Boolean = false,
         enqueue: (Long) -> Unit,
     ): Result<Long> {
         ensureStarted(context)
@@ -37,11 +38,30 @@ internal object ControlLeaseManager {
             ownerEpoch,
             enabled,
             SystemClock::elapsedRealtime,
+            requireActiveLease = requireActiveLease,
             onRollbackConflict = { stopRequest ->
                 InterceptVpnServiceControl.stopFromExpiredControlLease(context, stopRequest)
             },
             enqueue = enqueue,
         )
+    }
+
+    fun recover(
+        context: Context,
+        profileId: String,
+        runtime: ProxyRuntimeFacts,
+        stopVpnOnControlLoss: Boolean,
+        enqueue: (Long) -> Unit,
+    ): Result<RecoveryAdmission> = coordinator.recover(
+        profileId = profileId,
+        runtime = runtime,
+        stopVpnOnControlLoss = stopVpnOnControlLoss,
+        onRollbackConflict = { stopRequest ->
+            InterceptVpnServiceControl.stopFromExpiredControlLease(context, stopRequest)
+        },
+    ) { generation ->
+        ensureStarted(context)
+        enqueue(generation)
     }
 
     @Synchronized

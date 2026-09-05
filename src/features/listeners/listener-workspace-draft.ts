@@ -1,11 +1,91 @@
 import type {
   CertificateReference,
+  ListenerDraft,
   ListenerCertificateDetailViewModel,
   ProxyListener,
   ProxyWorkspace,
 } from "@/generated/rust-types";
 
-export function sameWorkspace(left: ProxyWorkspace, right: ProxyWorkspace) {
+export type ListenerWorkspaceDraft = Omit<ProxyWorkspace, "listeners"> & {
+  listeners: ListenerDraft[];
+};
+
+export function toListenerWorkspaceDraft(workspace: ProxyWorkspace): ListenerWorkspaceDraft {
+  return workspace;
+}
+
+export function sameWorkspace(left: ListenerWorkspaceDraft, right: ProxyWorkspace) {
+  return JSON.stringify(left) === JSON.stringify(right);
+}
+
+/**
+ * Rebase listener-local drafts onto the newest authoritative workspace.
+ * A workspace revision can advance because a different listener changed, so conflicts are
+ * detected from the listener values themselves instead of the aggregate revision.
+ */
+export function reconcileListenerDraft(
+  draft: ListenerWorkspaceDraft,
+  base: ProxyWorkspace,
+  latest: ProxyWorkspace,
+  existingConflictingListenerIds: readonly string[] = [],
+) {
+  const baseById = new Map(base.listeners.map((listener) => [listener.id, listener]));
+  const latestById = new Map(latest.listeners.map((listener) => [listener.id, listener]));
+  const draftIds = new Set(draft.listeners.map((listener) => listener.id));
+  const conflicts = new Set(existingConflictingListenerIds);
+  const listeners = draft.listeners.flatMap((draftListener) => {
+    const baseListener = baseById.get(draftListener.id);
+    const latestListener = latestById.get(draftListener.id);
+    if (!latestListener) {
+      if (!baseListener) return [draftListener];
+      if (!sameListener(draftListener, baseListener)) {
+        conflicts.add(draftListener.id);
+        return [draftListener];
+      }
+      return [];
+    }
+    if (!baseListener) {
+      if (sameListener(draftListener, latestListener)) {
+        conflicts.delete(draftListener.id);
+        return [latestListener];
+      }
+      conflicts.add(latestListener.id);
+      return [draftListener];
+    }
+    const draftChanged = !sameListener(draftListener, baseListener);
+    const authorityChanged = !sameListener(latestListener, baseListener);
+    if (!draftChanged || sameListener(draftListener, latestListener)) {
+      conflicts.delete(draftListener.id);
+      return [latestListener];
+    }
+    if (authorityChanged) conflicts.add(latestListener.id);
+    return [draftListener];
+  });
+
+  for (const latestListener of latest.listeners) {
+    if (!draftIds.has(latestListener.id)) listeners.push(latestListener);
+  }
+
+  const reachableIds = listenerCertificateReferenceIds(listeners);
+  const references = new Map(
+    latest.certificate_references.map((reference) => [reference.id, reference]),
+  );
+  for (const reference of draft.certificate_references) {
+    if (reachableIds.has(reference.id) && !references.has(reference.id)) {
+      references.set(reference.id, reference);
+    }
+  }
+  return {
+    workspace: {
+      ...latest,
+      listeners,
+      certificate_references: [...references.values()],
+    },
+    conflictingListenerIds: [...conflicts],
+  };
+}
+
+function sameListener(left: ListenerDraft | ProxyListener, right: ListenerDraft | ProxyListener) {
   return JSON.stringify(left) === JSON.stringify(right);
 }
 
@@ -14,7 +94,7 @@ export function sameWorkspace(left: ProxyWorkspace, right: ProxyWorkspace) {
  * 用新的 revision、证书引用和当前监听覆盖本地草稿，避免保存 B 时丢失 A 的输入。
  */
 export function mergePersistedListener(
-  draft: ProxyWorkspace,
+  draft: ListenerWorkspaceDraft,
   persisted: ProxyWorkspace,
   listenerId: string,
 ) {
@@ -31,7 +111,7 @@ export function mergePersistedListener(
 
 /** 保留被删除监听以外的本地草稿与它们尚未保存的托管证书引用。 */
 export function mergePersistedListenerDeletion(
-  draft: ProxyWorkspace,
+  draft: ListenerWorkspaceDraft,
   persisted: ProxyWorkspace,
   deletedListenerId: string,
 ) {
@@ -44,9 +124,9 @@ export function mergePersistedListenerDeletion(
 }
 
 function mergeReachableCertificateReferences(
-  draft: ProxyWorkspace,
+  draft: ListenerWorkspaceDraft,
   persisted: ProxyWorkspace,
-  listeners: ProxyListener[],
+  listeners: ListenerDraft[],
 ) {
   const reachableIds = listenerCertificateReferenceIds(listeners);
   const references = new Map(
@@ -76,14 +156,14 @@ export function mergeCertificateDetails(
 
 /** Listener 级命令只携带当前监听实际可达的安全引用。 */
 export function listenerCertificateReferences(
-  listener: ProxyListener,
+  listener: ListenerDraft | ProxyListener,
   references: ProxyWorkspace["certificate_references"],
 ) {
   const referencedIds = listenerCertificateReferenceIds([listener]);
   return references.filter((reference) => referencedIds.has(reference.id));
 }
 
-function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
+function listenerCertificateReferenceIds(listeners: readonly (ListenerDraft | ProxyListener)[]) {
   const referencedIds = new Set<string>();
   for (const listener of listeners) {
     if (listener.data_plane.kind === "http") {
@@ -123,7 +203,7 @@ function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
 
 function collectDownstream(
   serverIdentity: string | null,
-  authentication: { mode: "disabled" } | { mode: "optional" | "required"; trust: string },
+  authentication: { mode: "disabled" } | { mode: "optional" | "required"; trust: string | null },
   ids: Set<string>,
 ) {
   if (serverIdentity) ids.add(serverIdentity);
@@ -142,8 +222,8 @@ function collectUpstream(
  * 导入命令先把证书写入系统安全存储。若草稿不再引用且尚未持久化，则返回待清理引用。
  */
 export function pruneDetachedDraftCertificates(
-  previous: ProxyWorkspace,
-  next: ProxyWorkspace,
+  previous: ListenerWorkspaceDraft,
+  next: ListenerWorkspaceDraft,
   persistedReferences: CertificateReference[],
 ) {
   const reachableIds = listenerCertificateReferenceIds(next.listeners);

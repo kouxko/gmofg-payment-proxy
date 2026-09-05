@@ -23,6 +23,7 @@ function editorProps(
     onBasicUsernameChange: vi.fn(),
     onBasicPasswordChange: vi.fn(),
     onChange: vi.fn(),
+    onTransition: vi.fn(),
     onStoreBasicCredential: vi.fn().mockResolvedValue(undefined),
     onImportDownstreamServerIdentity: vi.fn().mockResolvedValue(true),
     onImportDownstreamClientTrust: vi.fn().mockResolvedValue(true),
@@ -235,6 +236,19 @@ describe("ListenerEditor", () => {
     expect(screen.queryByRole("switch", { name: "启用 allowlist MITM" })).not.toBeInTheDocument();
     expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toHaveValue("https://server.test:443");
     expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeEnabled();
+  });
+
+  it("数据平面转换在途时只禁用旧平面控件并保留公共编辑与快速切换", () => {
+    const props = editorProps({
+      listener: fixedListener("fixed-1", "固定 Server", 9443, "https://server.test:443"),
+      dataPlanePending: true,
+    });
+    render(<ListenerEditor {...props} />);
+
+    expect(screen.getByLabelText("监听数据平面")).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "代理监听名称" })).toBeEnabled();
+    expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
   });
 
   it("pending 状态禁用所有异步凭据和 TLS 操作", () => {

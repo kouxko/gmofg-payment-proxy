@@ -31,6 +31,19 @@ fn heartbeat_is_a_valid_control_protocol_operation() {
 }
 
 #[test]
+fn active_apply_has_a_distinct_fail_closed_operation() {
+    let request = AndroidControlRequest::new("apply_active", json!({})).unwrap();
+    let frame = encode_android_control_frame(&request).unwrap();
+    assert_eq!(
+        decode_android_control_frame::<AndroidControlRequest>(&frame)
+            .unwrap()
+            .operation,
+        "apply_active"
+    );
+    assert!(AndroidControlRequest::new("apply_unknown", json!({})).is_err());
+}
+
+#[test]
 fn profile_rejects_companion_and_requires_confirmation_for_total_loss() {
     let profile = AndroidNetworkProfile {
         id: "danger".into(),

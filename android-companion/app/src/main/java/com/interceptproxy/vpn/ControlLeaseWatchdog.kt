@@ -23,6 +23,13 @@ internal class ControlLeaseWatchdog(private val timeoutMillis: Long) {
         configure(generation, ownerEpoch, enabled = true, nowMillis)
 
     @Synchronized
+    fun activeGeneration(ownerEpoch: String, nowMillis: Long): Long? {
+        val current = lease ?: return null
+        if (current.ownerEpoch != ownerEpoch || nowMillis >= current.deadlineMillis) return null
+        return current.generation
+    }
+
+    @Synchronized
     fun renew(ownerEpoch: String, nowMillis: Long): Boolean {
         val current = lease ?: return false
         if (current.ownerEpoch != ownerEpoch || nowMillis >= current.deadlineMillis) return false

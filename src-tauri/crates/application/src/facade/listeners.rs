@@ -99,6 +99,22 @@ impl Application {
             .revision
             .verify(DomainRevision::new(expected_workspace_revision))
             .map_err(AppError::from)?;
+        self.listener_validation_from_workspace(
+            workspace,
+            expected_workspace_revision,
+            listener,
+            certificate_references,
+        )
+        .await
+    }
+
+    async fn listener_validation_from_workspace(
+        &self,
+        workspace: ProxyWorkspace,
+        expected_workspace_revision: u64,
+        listener: ProxyListener,
+        certificate_references: Vec<CertificateReference>,
+    ) -> AppResult<WorkspaceValidationViewModel> {
         let listener_id = listener.id;
         let candidate = self
             .listener_draft_workspace(
@@ -405,6 +421,7 @@ fn has_upstream_tls(listener: &ProxyListener) -> bool {
     }
 }
 
+mod draft;
 mod model;
 
 #[cfg(test)]

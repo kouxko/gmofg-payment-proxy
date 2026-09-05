@@ -2,62 +2,29 @@ import type {
   ListenerProtocolPackageCatalogViewModel,
   ListenerProtocolPackageOptionViewModel,
   ProtocolPackageRef,
-  ScriptedSocketProcessing,
-  SocketDownstreamSecurity,
-  SocketDownstreamTlsSettings,
-  SocketPayloadProcessing,
-  SocketRelaySecurity,
-  SocketRelaySettings,
+  SocketDownstreamSecurityDraft,
+  SocketDownstreamTlsDraftSettings,
+  SocketPayloadProcessingDraft,
+  SocketRelayDraftSettings,
   SocketUpstreamTlsSettings,
 } from "@/generated/rust-types";
 import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
 import { isProtocolPackageSource } from "@/features/protocol-packages/protocol-package-source";
-import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
+import { socketDownstreamTls } from "./listener-data-plane";
 
 export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
 
-export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingMode {
-  if (settings.topology.mode === "local_responder") {
-    return "local_response";
-  }
+export function socketWorkingMode(settings: SocketRelayDraftSettings): SocketWorkingMode {
+  if (settings.topology.mode === "local_responder") return "local_response";
   return settings.processing.mode === "scripted" ? "protocol_relay" : "raw_relay";
-}
-
-export function setSocketWorkingMode(
-  settings: SocketRelaySettings,
-  mode: SocketWorkingMode,
-  recommendedPackage?: ProtocolPackageRef | null,
-): SocketRelaySettings {
-  if (socketWorkingMode(settings) === mode) return settings;
-  if (mode === "raw_relay") return setProcessingMode(settings, "direct");
-  if (mode === "protocol_relay") {
-    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted", recommendedPackage);
-  }
-  if (mode === "local_response") {
-    return setSocketTopology(
-      setProcessingMode(settings, "scripted", recommendedPackage),
-      "local_responder",
-    );
-  }
-  return settings;
 }
 
 export function exactPackageKey(value: ProtocolPackageRef): string {
   return `${value.id}\u0000${value.version}`;
 }
 
-export function defaultDownstreamTls(): SocketDownstreamTlsSettings {
-  return { server_identity: "", client_authentication: { mode: "disabled" } };
-}
-
-function emptyScripted(packageRef?: ProtocolPackageRef): ScriptedSocketProcessing {
-  return {
-    package: packageRef ?? { id: "", version: "" },
-  };
-}
-
-export function appSecurity(settings: SocketRelaySettings): SocketDownstreamSecurity {
+export function appSecurity(settings: SocketRelayDraftSettings): SocketDownstreamSecurityDraft {
   if (settings.topology.mode === "local_responder") {
     return settings.topology.settings.downstream_security;
   }
@@ -65,134 +32,61 @@ export function appSecurity(settings: SocketRelaySettings): SocketDownstreamSecu
   return tls ? { mode: "tls", downstream_tls: tls } : { mode: "tcp" };
 }
 
-function relaySecurity(
-  appTls: SocketDownstreamTlsSettings | undefined,
-  upstreamTls: SocketUpstreamTlsSettings | undefined,
-): SocketRelaySecurity {
-  if (appTls && upstreamTls) return { mode: "tls_to_tls", downstream_tls: appTls, upstream_tls: upstreamTls };
-  if (appTls) return { mode: "tls_to_tcp", downstream_tls: appTls };
-  if (upstreamTls) return { mode: "tcp_to_tls", upstream_tls: upstreamTls };
-  return { mode: "transparent" };
-}
-
-export function setAppTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
-  if (mode !== "tcp" && mode !== "tls") return settings;
-  const existing = appSecurity(settings);
-  const appTls = mode === "tls"
-    ? existing.mode === "tls" ? existing.downstream_tls : defaultDownstreamTls()
-    : undefined;
+export function updateAppTls(
+  settings: SocketRelayDraftSettings,
+  tls: SocketDownstreamTlsDraftSettings,
+): SocketRelayDraftSettings {
   if (settings.topology.mode === "local_responder") {
     return {
       ...settings,
-      topology: { mode: "local_responder", settings: {
-        downstream_security: appTls ? { mode: "tls", downstream_tls: appTls } : { mode: "tcp" },
-      } },
+      topology: {
+        mode: "local_responder",
+        settings: { downstream_security: { mode: "tls", downstream_tls: tls } },
+      },
     };
   }
   const relay = settings.topology.settings;
-  return { ...settings, topology: { mode: "relay", settings: {
-    ...relay,
-    security: relaySecurity(appTls, socketUpstreamTls(relay.security)),
-  } } };
-}
-
-export function setAppTls(settings: SocketRelaySettings, tls: SocketDownstreamTlsSettings): SocketRelaySettings {
-  if (settings.topology.mode === "local_responder") {
-    return { ...settings, topology: { mode: "local_responder", settings: {
-      downstream_security: { mode: "tls", downstream_tls: tls },
-    } } };
-  }
-  const relay = settings.topology.settings;
-  return { ...settings, topology: { mode: "relay", settings: {
-    ...relay,
-    security: relaySecurity(tls, socketUpstreamTls(relay.security)),
-  } } };
-}
-
-export function setServerTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
-  if (mode !== "tcp" && mode !== "tls") return settings;
-  if (settings.topology.mode !== "relay") return settings;
-  const relay = settings.topology.settings;
-  const upstreamTls = mode === "tls"
-    ? socketUpstreamTls(relay.security) ?? { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null }
-    : undefined;
-  const downstream = socketDownstreamTls(relay.security);
-  return { ...settings, topology: { mode: "relay", settings: {
-    ...relay,
-    security: relaySecurity(downstream, upstreamTls),
-  } } };
-}
-
-export function setServerTls(settings: SocketRelaySettings, tls: SocketUpstreamTlsSettings): SocketRelaySettings {
-  if (settings.topology.mode !== "relay") return settings;
-  const relay = settings.topology.settings;
-  return { ...settings, topology: { mode: "relay", settings: {
-    ...relay,
-    security: relaySecurity(socketDownstreamTls(relay.security), tls),
-  } } };
-}
-
-export function setSocketTopology(
-  settings: SocketRelaySettings,
-  mode: "relay" | "local_responder",
-  recommendedPackage?: ProtocolPackageRef | null,
-): SocketRelaySettings {
-  if (mode !== "relay" && mode !== "local_responder") return settings;
-  if (settings.topology.mode === mode) return settings;
-  if (mode === "local_responder") {
-    const security = appSecurity(settings);
-    const current = settings.processing.mode === "scripted"
-      ? settings.processing.settings
-      : emptyScripted(recommendedPackage ?? undefined);
-    return {
-      ...settings,
-      topology: { mode: "local_responder", settings: { downstream_security: security } },
-      processing: { mode: "scripted", settings: current },
-    };
-  }
-  const security = appSecurity(settings);
+  const security = relay.security.mode === "tls_to_tls"
+    ? { ...relay.security, downstream_tls: tls }
+    : relay.security.mode === "tls_to_tcp"
+      ? { ...relay.security, downstream_tls: tls }
+      : relay.security;
   return {
     ...settings,
-    topology: { mode: "relay", settings: {
-      upstream: { host: "", port: 0 },
-      security: relaySecurity(security.mode === "tls" ? security.downstream_tls : undefined, undefined),
-    } },
+    topology: { mode: "relay", settings: { ...relay, security } },
   };
 }
 
-export function setProcessingMode(
-  settings: SocketRelaySettings,
-  mode: "direct" | "scripted",
-  recommendedPackage?: ProtocolPackageRef | null,
-): SocketRelaySettings {
-  if (mode !== "direct" && mode !== "scripted") return settings;
-  if (mode === "direct") {
-    const relaySettings = settings.topology.mode === "relay"
-      ? settings
-      : setSocketTopology(settings, "relay");
-    return { ...relaySettings, processing: { mode: "direct" } };
-  }
-  if (settings.processing.mode === "scripted") return settings;
+export function updateServerTls(
+  settings: SocketRelayDraftSettings,
+  tls: SocketUpstreamTlsSettings,
+): SocketRelayDraftSettings {
+  if (settings.topology.mode !== "relay") return settings;
+  const relay = settings.topology.settings;
+  const security = relay.security.mode === "tls_to_tls"
+    ? { ...relay.security, upstream_tls: tls }
+    : relay.security.mode === "tcp_to_tls"
+      ? { ...relay.security, upstream_tls: tls }
+      : relay.security;
   return {
     ...settings,
-    processing: { mode: "scripted", settings: emptyScripted(recommendedPackage ?? undefined) },
+    topology: { mode: "relay", settings: { ...relay, security } },
   };
 }
 
 export function bindPackage(
-  processing: SocketPayloadProcessing,
+  processing: SocketPayloadProcessingDraft,
   option: ListenerProtocolPackageOptionViewModel,
-  local: boolean,
-): SocketPayloadProcessing {
+): SocketPayloadProcessingDraft {
   void processing;
-  void local;
   return { mode: "scripted", settings: { package: option.package } };
 }
 
 export function matchingOption(
   catalog: ListenerProtocolPackageCatalogViewModel | undefined,
-  packageRef: ProtocolPackageRef,
+  packageRef: ProtocolPackageRef | null,
 ): ListenerProtocolPackageOptionViewModel | undefined {
+  if (!packageRef) return undefined;
   const key = exactPackageKey(packageRef);
   return socketCatalogOptions(catalog).find((item) => exactPackageKey(item.package) === key);
 }

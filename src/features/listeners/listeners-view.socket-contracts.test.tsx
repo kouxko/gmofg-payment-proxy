@@ -1,7 +1,7 @@
 import { fireEvent, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { ProxyListener, ProxyWorkspace } from "@/generated/rust-types";
+import type { ListenerDraft, ProxyListener, ProxyWorkspace } from "@/generated/rust-types";
 import {
   bootstrap, certificateReference, commandError, listenerOverview, listenerStatus,
   localResponderListener, mocks, navigationMocks, ok, setupListenerMocks,
@@ -30,7 +30,7 @@ function deferred<T>() {
 }
 
 function scriptedSocketWorkspace(): ProxyWorkspace {
-  const listener: ProxyListener = socketListener("socket-1", "Socket TLS", 9443, "tls_to_tls");
+  const listener: ListenerDraft = socketListener("socket-1", "Socket TLS", 9443, "tls_to_tls");
   if (listener.data_plane.kind !== "socket") throw new Error("expected Socket fixture");
   listener.data_plane.settings.processing = {
     mode: "scripted",
@@ -48,7 +48,7 @@ function scriptedSocketWorkspace(): ProxyWorkspace {
   topology.settings.security.upstream_tls.server_trust = "server-ca";
   return {
     ...workspace,
-    listeners: [listener],
+    listeners: [listener as ProxyListener],
     certificate_references: references,
     android_network_profiles: [],
   };
@@ -164,7 +164,7 @@ describe("Listener Socket integration contracts", () => {
   it("locks the entire Listener editor while validation is pending", async () => {
     setupScriptedSocket();
     const request = deferred<unknown>();
-    mocks.listenerValidate.mockReturnValue(request.promise as never);
+    mocks.listenerDraftValidate.mockReturnValue(request.promise as never);
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByRole("button", { name: "校验当前监听" }));
     expect(await screen.findByRole("button", { name: "校验中…" })).toBeDisabled();

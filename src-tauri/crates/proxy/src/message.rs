@@ -313,18 +313,34 @@ impl Message {
 
     /// Removes hop-by-hop fields and rewrites Host (`MESSAGE-005`).
     pub fn normalize_for_forward(&mut self, upstream_host: &str, rewrite_host: bool) {
-        for name in [
-            "connection",
-            "keep-alive",
-            "proxy-authenticate",
-            "proxy-authorization",
-            "te",
-            "trailer",
-            "transfer-encoding",
-            "upgrade",
-        ] {
-            self.remove_header(name);
-        }
+        let connection_options = self
+            .headers
+            .iter()
+            .filter(|header| header.name.eq_ignore_ascii_case(b"connection"))
+            .flat_map(|header| header.value.split(|byte| *byte == b','))
+            .map(<[u8]>::trim_ascii)
+            .filter(|name| !name.is_empty())
+            .map(Bytes::copy_from_slice)
+            .collect::<Vec<_>>();
+        let fixed_hop_headers = [
+            b"connection".as_slice(),
+            b"keep-alive".as_slice(),
+            b"proxy-authenticate".as_slice(),
+            b"proxy-authorization".as_slice(),
+            b"proxy-connection".as_slice(),
+            b"te".as_slice(),
+            b"trailer".as_slice(),
+            b"transfer-encoding".as_slice(),
+            b"upgrade".as_slice(),
+        ];
+        self.headers.retain(|header| {
+            !fixed_hop_headers
+                .iter()
+                .any(|name| header.name.eq_ignore_ascii_case(name))
+                && !connection_options
+                    .iter()
+                    .any(|name| header.name.eq_ignore_ascii_case(name))
+        });
         if rewrite_host {
             self.remove_header("host");
             self.headers.push(RawHeader::new(

@@ -4,30 +4,34 @@ import { useState, type ReactNode } from "react";
 import { Alert, Card, Label, ListBox, NumberField, Select } from "@heroui/react";
 import type {
   CertificateReference,
+  ListenerDraftTransition,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  SocketRelaySettings,
+  ProtocolPackageRef,
+  SocketRelayDraftSettings,
 } from "@/generated/rust-types";
-import {
-  bindPackage,
-  matchingOption,
-  setSocketTopology,
-} from "./socket-listener-model";
 import { SocketProcessingCard, type ProtocolCatalogState } from "./socket-processing-card";
 import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
 
 type Props = {
-  settings: SocketRelaySettings;
+  settings: SocketRelayDraftSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   protocolCatalog: ProtocolCatalogState;
   locked: boolean;
+  planeTransitionPending: boolean;
   fieldErrors?: Record<string, string[]>;
   busy: boolean;
+  transitionPending: boolean;
+  serverControlsBlocked: boolean;
   testing: boolean;
   testResult?: ListenerUpstreamConnectionTestViewModel;
   testError?: string;
-  onChange: (changes: Partial<SocketRelaySettings>) => void;
+  onChange: (changes: Partial<SocketRelayDraftSettings>) => void;
+  onTransition: (
+    transition: ListenerDraftTransition,
+    recommendedPackage?: ProtocolPackageRef | null,
+  ) => void;
   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
@@ -37,8 +41,9 @@ type Props = {
 
 export function SocketListenerSettings(props: Props): ReactNode {
   const [announcement, setAnnouncement] = useState("");
-  const apply = (settings: SocketRelaySettings) => props.onChange(settings);
+  const apply = (settings: SocketRelayDraftSettings) => props.onChange(settings);
   const topologyMode = props.settings.topology.mode;
+  const controlsLocked = props.locked || props.planeTransitionPending;
   return (
     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
       {props.locked && (
@@ -53,19 +58,13 @@ export function SocketListenerSettings(props: Props): ReactNode {
           <Card.Description>选择把数据转发到上游服务，还是由本机直接生成应答。</Card.Description>
         </Card.Header>
         <Card.Content className="grid gap-4 md:grid-cols-2">
-          <Select aria-label="Socket 响应方式" selectedKey={topologyMode} isDisabled={props.locked}
+          <Select aria-label="Socket 响应方式" selectedKey={topologyMode} isDisabled={controlsLocked}
             onSelectionChange={(key) => {
               if (key !== "relay" && key !== "local_responder") return;
-              let next = setSocketTopology(
-                props.settings,
-                key,
+              props.onTransition(
+                { type: "socket_topology", mode: key },
                 props.protocolCatalog.data?.recommended_package,
               );
-              if (next.processing.mode === "scripted") {
-                const option = matchingOption(props.protocolCatalog.data, next.processing.settings.package);
-                if (option) next = { ...next, processing: bindPackage(next.processing, option, key === "local_responder") };
-              }
-              apply(next);
               setAnnouncement(key === "relay"
                 ? "已切换为转发到上游；不选择协议包时将透明转发。"
                 : "已切换为本机应答；Server 地址和安全设置已清除。");
@@ -77,7 +76,7 @@ export function SocketListenerSettings(props: Props): ReactNode {
             </ListBox></Select.Popover>
           </Select>
           <NumberField aria-label="Socket 最大并发连接" minValue={1} maxValue={5000}
-            value={props.settings.maximum_connections} isDisabled={props.locked}
+            value={props.settings.maximum_connections} isDisabled={controlsLocked}
             onChange={(maximum_connections) => props.onChange({ maximum_connections })}>
             <Label>最大并发连接</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
           </NumberField>
@@ -87,17 +86,18 @@ export function SocketListenerSettings(props: Props): ReactNode {
         {announcement}
       </p>}
       {/* 锁状态变化时重建证书卡，可立即关闭已打开的导入 Dialog，防止运行快照锁被绕过。 */}
-      <SocketAppSecurityCard key={`app-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
-        certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
-        onChange={apply} onImportIdentity={props.onImportDownstreamServerIdentity}
+      <SocketAppSecurityCard key={`app-security-${controlsLocked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+        certificateDetails={props.certificateDetails} locked={controlsLocked} busy={props.busy}
+        onChange={apply} onTransition={props.onTransition} onImportIdentity={props.onImportDownstreamServerIdentity}
         onImportTrust={props.onImportDownstreamClientTrust} />
-      {topologyMode === "relay" && <SocketServerCard key={`server-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
-        certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
+      {topologyMode === "relay" && <SocketServerCard key={`server-security-${controlsLocked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+        certificateDetails={props.certificateDetails} locked={controlsLocked || props.serverControlsBlocked} busy={props.busy}
         testing={props.testing} testResult={props.testResult} testError={props.testError}
-        onChange={apply} onImportIdentity={props.onImportClientIdentity}
+        testBlocked={props.transitionPending}
+        onChange={apply} onTransition={props.onTransition} onImportIdentity={props.onImportClientIdentity}
         onImportTrust={props.onImportServerTrust} onTest={props.onTest} />}
       <SocketProcessingCard settings={props.settings} catalog={props.protocolCatalog}
-        locked={props.locked} onChange={apply} />
+        locked={controlsLocked} onChange={apply} onTransition={props.onTransition} />
     </div>
   );
 }

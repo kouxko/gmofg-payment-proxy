@@ -21,6 +21,30 @@ import { ListenersView } from "./listeners-view";
 describe("统一代理监听编辑器", () => {
   beforeEach(setupListenerMocks);
 
+  it("结构转换未完成时阻止保存、启动和 TLS 探测", async () => {
+    const fixedWorkspace = {
+      ...workspace,
+      listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
+    };
+    mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
+    mocks.listenerDraftTransition.mockReturnValue(new Promise(() => undefined));
+    const user = userEvent.setup();
+    render(<ListenersView />);
+
+    await user.click(await screen.findByLabelText("HTTP 响应方式"));
+    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
+
+    expect(await screen.findByText("正在切换模式…")).toBeVisible();
+    expect(screen.getByRole("button", { name: "保存当前监听" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "校验当前监听" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "启动监听" })).toBeDisabled();
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
+    expect(mocks.listenerSave).not.toHaveBeenCalled();
+    expect(mocks.listenerDraftValidate).not.toHaveBeenCalled();
+    expect(mocks.listenerStart).not.toHaveBeenCalled();
+    expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
+  });
+
   it("其他监听运行时仍可使用当前草稿测试固定 Server TLS", async () => {
     const fixedWorkspace = {
       ...workspace,
@@ -33,7 +57,7 @@ describe("统一代理监听编辑器", () => {
     mocks.listenerOverview.mockReturnValue(
       ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("fixed-1")])),
     );
-    mocks.listenerValidate.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
+    mocks.listenerDraftValidate.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
       valid: true,
       normalized: {
         ...fixedWorkspace,
@@ -45,7 +69,7 @@ describe("统一代理监听编辑器", () => {
     const user = userEvent.setup(); render(<ListenersView />);
     await user.click(await screen.findByText("交易"));
     await user.click(await screen.findByRole("button", { name: "测试 Server 连接" }));
-    await waitFor(() => expect(mocks.listenerValidate).toHaveBeenCalledWith(
+    await waitFor(() => expect(mocks.listenerDraftValidate).toHaveBeenCalledWith(
       fixedWorkspace.id,
       fixedWorkspace.revision,
       fixedWorkspace.listeners[1],
@@ -135,6 +159,9 @@ describe("统一代理监听编辑器", () => {
       listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
     };
     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
+    mocks.listenerDraftTransition.mockReturnValueOnce(ok(
+      dynamicListener("fixed-1", "交易", 16627),
+    ));
     const user = userEvent.setup();
     render(<ListenersView />);
 

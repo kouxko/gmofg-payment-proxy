@@ -5,7 +5,7 @@ import { useState, type Key } from "react";
 import type {
   ListenerProtocolPackageCatalogViewModel,
   ListenerProtocolPackageOptionViewModel,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
 } from "@/generated/rust-types";
 import {
   exactPackageKey,
@@ -22,10 +22,10 @@ interface ProtocolCatalogState {
 const PLAIN_KEY = "__plain_body__";
 
 export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange }: {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   catalog: ProtocolCatalogState;
   locked: boolean;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
 }) {
   const [announcement, setAnnouncement] = useState("");
   const body = settings.body_processing;

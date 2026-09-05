@@ -92,8 +92,6 @@ export function BootstrapProvider({
     };
     const handleEvent = (event: UiEventEnvelope) => {
       if (!active) return;
-      refreshGeneration.current += 1;
-      setIsLoading(false);
       listeners.current.forEach((listener) => listener(event));
       if (event.payload.type === "certificate_status_changed") {
         const certificate = event.payload.data;
@@ -109,10 +107,6 @@ export function BootstrapProvider({
           current ? { ...current, settings } : current,
         );
       }
-      if (event.payload.type === "snapshot_required") {
-        // Rust 明确要求重取时，以完整快照为最终事实来源。
-        scheduleSnapshotRefresh();
-      }
       if (event.payload.type === "operation_failed") {
         setError(event.payload.data.message);
       }
@@ -121,11 +115,17 @@ export function BootstrapProvider({
       }
       if (
         [
+          "workspace_changed",
+          "snapshot_required",
           "session_updated",
           "certificate_status_changed",
           "settings_changed",
         ].includes(event.payload.type)
       ) {
+        // 会改变全局快照的事件撤销当前请求的写回权，并保证随后补取完整快照。
+        // 页面级观测、诊断等事件不影响 bootstrap，不能让无关事件丢弃在途结果。
+        refreshGeneration.current += 1;
+        setIsLoading(false);
         scheduleSnapshotRefresh();
       }
     };

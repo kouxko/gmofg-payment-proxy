@@ -294,7 +294,7 @@ describe("统一代理监听编辑器", () => {
     await user.click(await screen.findByRole("button", { name: "保存当前监听" }));
 
     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
-    expect(mocks.listenerValidate.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
+    expect(mocks.listenerDraftValidate.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
       downstreamIdentity.id,
       upstreamTrust.id,
     ]);

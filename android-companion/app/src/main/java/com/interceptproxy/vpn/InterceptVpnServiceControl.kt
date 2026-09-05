@@ -42,26 +42,39 @@ internal object InterceptVpnServiceControl {
         .putExtra(EXTRA_PROXY_RUNTIME_JSON, proxyRuntimeJson)
         .putExtra(EXTRA_GENERATION, generation)
 
-    fun startActivationIntent(context: Context, activation: StoredActivation): Intent {
-        val profile = CompanionProfileParser.parse(activation.profileJson)
-        val runtime = ProxyRuntimeParser.parse(
-            activation.profileJson,
-            activation.proxyRuntimeJson,
-        )
-        val generation = VpnRuntimeRegistry.startRequested(
-            JSONObject(profile.rawJson).getString("id"),
-            runtime,
-        )
-        ControlLeaseManager.configureUnmanagedRecovery(
-            context,
-            generation,
-            profile.stopVpnOnControlLoss,
-        )
-        return startIntent(
-            context,
-            activation.profileJson,
-            activation.proxyRuntimeJson,
-            generation,
+    fun recoverSavedActivation(
+        context: Context,
+        activation: StoredActivation,
+        enqueue: (Long) -> Unit,
+    ): Result<RecoveryAdmission> {
+        val profile = runCatching { CompanionProfileParser.parse(activation.profileJson) }
+            .getOrElse { error ->
+                return Result.failure(
+                    IllegalArgumentException("Profile JSON 无效：${error.message}", error),
+                )
+            }
+        val profileId = runCatching { JSONObject(profile.rawJson).getString("id") }
+            .getOrElse { error ->
+                return Result.failure(
+                    IllegalArgumentException("Profile JSON 无效：${error.message}", error),
+                )
+            }
+        val runtime = runCatching {
+            ProxyRuntimeParser.parse(
+                activation.profileJson,
+                activation.proxyRuntimeJson,
+            )
+        }.getOrElse { error ->
+            return Result.failure(
+                IllegalArgumentException("代理路由运行配置无效：${error.message}", error),
+            )
+        }
+        return ControlLeaseManager.recover(
+            context = context,
+            profileId = profileId,
+            runtime = runtime,
+            stopVpnOnControlLoss = profile.stopVpnOnControlLoss,
+            enqueue = enqueue,
         )
     }
 
@@ -73,24 +86,15 @@ internal object InterceptVpnServiceControl {
         stateStore: RuntimeStateStore,
         failOpen: (String) -> Unit,
         startProfile: (String, String, Long) -> Unit,
-    ) {
+    ): RecoveryAdmission? {
         val activation = stateStore.activation
-            ?: return failOpen("没有可恢复的 VPN activation")
-        val profile = runCatching { CompanionProfileParser.parse(activation.profileJson) }
-            .getOrElse { return failOpen("Profile JSON 无效：${it.message}") }
-        val runtime = runCatching {
-            ProxyRuntimeParser.parse(activation.profileJson, activation.proxyRuntimeJson)
-        }.getOrElse { return failOpen("代理路由运行配置无效：${it.message}") }
-        val generation = VpnRuntimeRegistry.startRequested(
-            JSONObject(profile.rawJson).getString("id"),
-            runtime,
-        )
-        ControlLeaseManager.configureUnmanagedRecovery(
-            context,
-            generation,
-            profile.stopVpnOnControlLoss,
-        )
-        startProfile(activation.profileJson, activation.proxyRuntimeJson, generation)
+            ?: return failOpen("没有可恢复的 VPN activation").let { null }
+        return recoverSavedActivation(context, activation) { generation ->
+            startProfile(activation.profileJson, activation.proxyRuntimeJson, generation)
+        }.getOrElse { error ->
+            failOpen(error.message ?: "保存的 VPN activation 无效")
+            return null
+        }
     }
 
     /**

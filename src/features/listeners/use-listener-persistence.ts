@@ -1,14 +1,18 @@
 import { toast } from "@heroui/react";
 import type {
   ListenerMonitorRowViewModel,
-  ProxyListener,
+  ListenerDraft,
+  ListenerDraftValidationViewModel,
   ProxyWorkspace,
-  WorkspaceValidationViewModel,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
 import type { ListenerPending } from "./listener-runtime-card";
-import { listenerCertificateReferences, mergePersistedListener } from "./listener-workspace-draft";
+import {
+  type ListenerWorkspaceDraft,
+  listenerCertificateReferences,
+  mergePersistedListener,
+} from "./listener-workspace-draft";
 import type { useDraftCertificateLeases } from "./use-draft-certificate-leases";
 
 type RunPending = (
@@ -25,6 +29,8 @@ export function useListenerPersistence({
   snapshotLocked,
   pending,
   hasUnsavedChanges,
+  hasDraftConflict,
+  transitionPending,
   leases,
   setWorkspace,
   setPersistedWorkspace,
@@ -33,23 +39,25 @@ export function useListenerPersistence({
   refreshWorkspaces,
   runPending,
 }: {
-  workspace?: ProxyWorkspace;
-  selected?: ProxyListener;
+  workspace?: ListenerWorkspaceDraft;
+  selected?: ListenerDraft;
   status?: ListenerMonitorRowViewModel;
   statusKnown: boolean;
   snapshotLocked: boolean;
   pending?: ListenerPending;
   hasUnsavedChanges: boolean;
+  hasDraftConflict: boolean;
+  transitionPending: () => boolean;
   leases: ReturnType<typeof useDraftCertificateLeases>;
-  setWorkspace: (workspace: ProxyWorkspace) => void;
+  setWorkspace: (workspace: ListenerWorkspaceDraft) => void;
   setPersistedWorkspace: (workspace: ProxyWorkspace) => void;
-  setValidation: (validation: WorkspaceValidationViewModel) => void;
+  setValidation: (validation: ListenerDraftValidationViewModel) => void;
   refreshOverview: () => Promise<void>;
   refreshWorkspaces: () => Promise<void>;
   runPending: RunPending;
 }) {
   async function validate() {
-    if (!workspace || !selected || pending) return;
+    if (!workspace || !selected || pending || transitionPending()) return;
     await runPending("validate", async () => {
       const result = await validateListener(workspace, selected);
       setValidation(result);
@@ -58,18 +66,18 @@ export function useListenerPersistence({
   }
 
   async function save() {
-    if (!workspace || !selected || snapshotLocked || pending) return;
+    if (!workspace || !selected || snapshotLocked || pending || hasDraftConflict || transitionPending()) return;
     await runPending("save", async () => {
       const result = await validateListener(workspace, selected);
       setValidation(result);
-      if (!result.valid) return;
+      if (!result.valid || !result.normalized) return;
       await persist(result.normalized, workspace, selected.id);
       toast("当前代理监听已保存。", { variant: "success" });
       await refreshWorkspaces();
     });
   }
 
-  async function persist(normalized: ProxyWorkspace, localDraft: ProxyWorkspace, listenerId: string) {
+  async function persist(normalized: ProxyWorkspace, localDraft: ListenerWorkspaceDraft, listenerId: string) {
     const listener = normalized.listeners.find((item) => item.id === listenerId);
     if (!listener) throw new Error("当前代理监听已被删除，请刷新后重试。");
     const references = listenerCertificateReferences(listener, normalized.certificate_references);
@@ -94,16 +102,17 @@ export function useListenerPersistence({
   }
 
   async function toggleRuntime() {
-    if (!workspace || !selected || !statusKnown || pending) return;
+    if (!workspace || !selected || !statusKnown || pending || transitionPending()) return;
     const operation = status?.can_stop ? "stop" : status?.can_start ? "start" : undefined;
     if (!operation) return;
+    if (operation === "start" && hasDraftConflict) return;
     await runPending(operation, async () => {
       let revision = workspace.revision;
       let draftSnapshot = workspace;
       if (operation === "start" && hasUnsavedChanges) {
         const result = await validateListener(workspace, selected);
         setValidation(result);
-        if (!result.valid) return;
+        if (!result.valid || !result.normalized) return;
         draftSnapshot = await persist(result.normalized, workspace, selected.id);
         revision = draftSnapshot.revision;
       }
@@ -124,8 +133,8 @@ export function useListenerPersistence({
   return { validate, save, toggleRuntime };
 }
 
-function validateListener(workspace: ProxyWorkspace, listener: ProxyListener) {
-  return callCommand(commands.listenerValidate(
+function validateListener(workspace: ListenerWorkspaceDraft, listener: ListenerDraft) {
+  return callCommand(commands.listenerDraftValidate(
     workspace.id,
     workspace.revision,
     listener,

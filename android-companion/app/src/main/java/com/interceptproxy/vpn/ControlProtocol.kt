@@ -67,6 +67,7 @@ object ControlProtocol {
     private val SUPPORTED_OPERATIONS = setOf(
         "start",
         "apply",
+        "apply_active",
         "stop",
         "emergency_restore",
         "status",

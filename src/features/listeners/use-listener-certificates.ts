@@ -3,12 +3,15 @@ import { toast } from "@heroui/react";
 import type {
   ListenerCertificateDetailViewModel,
   ListenerCertificateImportViewModel,
-  ProxyListener,
-  ProxyWorkspace,
+  ListenerDraft,
 } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
 import { callCommand } from "@/lib/ipc/client";
-import { mergeCertificateDetails, pruneDetachedDraftCertificates } from "./listener-workspace-draft";
+import {
+  type ListenerWorkspaceDraft,
+  mergeCertificateDetails,
+  pruneDetachedDraftCertificates,
+} from "./listener-workspace-draft";
 import type { ListenerPending } from "./listener-runtime-card";
 import { useDraftCertificateLeases } from "./use-draft-certificate-leases";
 import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
@@ -32,12 +35,12 @@ export function useListenerCertificates({
   runPending,
 }: {
   currentId?: string;
-  workspace?: ProxyWorkspace;
-  selected?: ProxyListener;
+  workspace?: ListenerWorkspaceDraft;
+  selected?: ListenerDraft;
   selectedIndex: number;
   pending?: ListenerPending;
-  persistedReferences: ProxyWorkspace["certificate_references"];
-  setWorkspace: Dispatch<SetStateAction<ProxyWorkspace | undefined>>;
+  persistedReferences: ListenerWorkspaceDraft["certificate_references"];
+  setWorkspace: Dispatch<SetStateAction<ListenerWorkspaceDraft | undefined>>;
   clearDerivedResults: () => void;
   runPending: RunPending;
 }) {
@@ -55,23 +58,24 @@ export function useListenerCertificates({
     return () => { mounted.current = false; };
   }, []);
 
-  function applyDraftWorkspace(next: ProxyWorkspace, previous: ProxyWorkspace) {
+  function applyDraftWorkspace(next: ListenerWorkspaceDraft, previous: ListenerWorkspaceDraft) {
     const { workspace: pruned, detached } = pruneDetachedDraftCertificates(
       previous,
       next,
       persistedReferences,
     );
     setWorkspace(pruned);
-    if (detached.length === 0) return;
+    if (detached.length === 0) return pruned;
     const detachedIds = new Set(detached.map((reference) => reference.id));
     setImportedDetails((current) => current.filter((detail) => !detachedIds.has(detail.reference_id)));
     for (const reference of detached) leases.discard(reference);
+    return pruned;
   }
 
   async function importCertificate(
     kind: ImportPending,
     load: () => Promise<ListenerCertificateImportViewModel | null>,
-    bind: (listener: ProxyListener, referenceId: string) => ProxyListener,
+    bind: (listener: ListenerDraft, referenceId: string) => ListenerDraft,
   ) {
     if (!workspace || !selected || pending) return false;
     const context = {
@@ -137,7 +141,7 @@ export function useListenerCertificates({
   };
 }
 
-function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): ProxyListener {
+function bindDownstreamIdentity(listener: ListenerDraft, referenceId: string): ListenerDraft {
   if (listener.data_plane.kind === "http") {
     const settings = listener.data_plane.settings;
     return { ...listener, data_plane: { kind: "http", settings: {
@@ -173,7 +177,7 @@ function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): P
   } } };
 }
 
-function bindDownstreamTrust(listener: ProxyListener, referenceId: string): ProxyListener {
+function bindDownstreamTrust(listener: ListenerDraft, referenceId: string): ListenerDraft {
   if (listener.data_plane.kind === "http") {
     const settings = listener.data_plane.settings;
     const current = settings.downstream_tls.client_authentication;
@@ -224,9 +228,9 @@ function bindDownstreamTrust(listener: ProxyListener, referenceId: string): Prox
 }
 
 function bindUpstream(
-  listener: ProxyListener,
+  listener: ListenerDraft,
   changes: { client_identity?: string; server_trust?: string },
-): ProxyListener {
+): ListenerDraft {
   if (listener.data_plane.kind === "http") {
     const settings = listener.data_plane.settings;
     if (settings.topology.mode === "local_server") return listener;

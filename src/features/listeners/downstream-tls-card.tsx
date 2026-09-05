@@ -4,7 +4,7 @@ import { Button, Card, Input, Label, ListBox, Select, Switch } from "@heroui/rea
 import type {
   CertificateItemViewModel,
   CertificateReference,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
   ListenerCertificateDetailViewModel,
 } from "@/generated/rust-types";
 import {
@@ -13,12 +13,12 @@ import {
 } from "./fixed-server-tls-fields";
 
 type Props = {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   certificateReferences: CertificateReference[];
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
   busy: boolean;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
   onOpenIdentityImport: () => void;
   onOpenTrustImport: () => void;
 };
@@ -58,7 +58,7 @@ export function DownstreamTlsCard({
     : findReference(trusts, authentication.trust);
 
   function changeAuthentication(mode: string) {
-    const trust = trusts[0]?.id ?? "";
+    const trust = trusts[0]?.id ?? null;
     onChange({
       downstream_tls: {
         ...tls,
@@ -178,8 +178,8 @@ export function DownstreamTlsCard({
                         downstream_tls: {
                           ...tls,
                           client_authentication: authentication.mode === "required"
-                            ? { mode: "required", trust: trust ?? "" }
-                            : { mode: "optional", trust: trust ?? "" },
+                            ? { mode: "required", trust }
+                            : { mode: "optional", trust },
                         },
                       })}
                     />

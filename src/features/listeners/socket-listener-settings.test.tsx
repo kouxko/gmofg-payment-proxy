@@ -1,10 +1,10 @@
 import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { useState } from "react";
+import type { ComponentProps } from "react";
 import { describe, expect, it, vi } from "vitest";
-import type { CertificateReference, SocketRelaySettings } from "@/generated/rust-types";
+import type { CertificateReference, SocketRelayDraftSettings } from "@/generated/rust-types";
 import { SocketListenerSettings } from "./socket-listener-settings";
-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
+import { socketRuntimeLimits } from "./listeners-view.test-support";
 import type { ProtocolCatalogState } from "./socket-processing-card";
 
 const certificates: CertificateReference[] = [
@@ -14,7 +14,7 @@ const certificates: CertificateReference[] = [
   { id: "client-identity", label: "Client Identity", kind: "upstream_client_identity", reference: "managed:client-identity" },
 ];
 
-function relayTlsSettings(): SocketRelaySettings {
+function relayTlsSettings(): SocketRelayDraftSettings {
   return {
     topology: {
       mode: "relay",
@@ -36,12 +36,12 @@ function relayTlsSettings(): SocketRelaySettings {
       },
     },
     maximum_connections: 100,
-    runtime_limits: defaultSocketRuntimeLimits(),
+    runtime_limits: socketRuntimeLimits(),
     processing: { mode: "direct" },
   };
 }
 
-function localTlsSettings(): SocketRelaySettings {
+function localTlsSettings(): SocketRelayDraftSettings {
   return {
     ...relayTlsSettings(),
     topology: {
@@ -65,19 +65,21 @@ function localTlsSettings(): SocketRelaySettings {
   };
 }
 
-function protocolRelaySettings(): SocketRelaySettings {
+function protocolRelaySettings(): SocketRelayDraftSettings {
   return {
     ...localTlsSettings(),
     topology: relayTlsSettings().topology,
   };
 }
 
-function renderSettings(settings: SocketRelaySettings, locked = false, overrides: {
-  onChange?: (changes: Partial<SocketRelaySettings>) => void;
+function renderSettings(settings: SocketRelayDraftSettings, locked = false, overrides: {
+  onChange?: (changes: Partial<SocketRelayDraftSettings>) => void;
   fieldErrors?: Record<string, string[]>;
   protocolCatalog?: ProtocolCatalogState;
+  serverControlsBlocked?: boolean;
 } = {}) {
-  const onChange = overrides.onChange ?? vi.fn<(changes: Partial<SocketRelaySettings>) => void>();
+  const onChange = overrides.onChange ?? vi.fn<(changes: Partial<SocketRelayDraftSettings>) => void>();
+  const onTransition = vi.fn<ComponentProps<typeof SocketListenerSettings>["onTransition"]>();
   const view = render(
     <SocketListenerSettings
       settings={settings}
@@ -89,10 +91,14 @@ function renderSettings(settings: SocketRelaySettings, locked = false, overrides
         data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null },
       }}
       locked={locked}
+      planeTransitionPending={false}
       fieldErrors={overrides.fieldErrors}
       busy={false}
+      transitionPending={false}
+      serverControlsBlocked={overrides.serverControlsBlocked ?? false}
       testing={false}
       onChange={onChange}
+      onTransition={onTransition}
       onImportDownstreamServerIdentity={vi.fn().mockResolvedValue(true)}
       onImportDownstreamClientTrust={vi.fn().mockResolvedValue(true)}
       onImportClientIdentity={vi.fn().mockResolvedValue(true)}
@@ -100,26 +106,7 @@ function renderSettings(settings: SocketRelaySettings, locked = false, overrides
       onTest={vi.fn().mockResolvedValue(undefined)}
     />,
   );
-  return { ...view, onChange };
-}
-
-function SettingsHarness() {
-  const [settings, setSettings] = useState(relayTlsSettings());
-  return <SocketListenerSettings
-    settings={settings}
-    certificateReferences={certificates}
-    certificateDetails={[]}
-    protocolCatalog={{ loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null } }}
-    locked={false}
-    busy={false}
-    testing={false}
-    onChange={(changes) => setSettings((current) => ({ ...current, ...changes }))}
-    onImportDownstreamServerIdentity={vi.fn().mockResolvedValue(true)}
-    onImportDownstreamClientTrust={vi.fn().mockResolvedValue(true)}
-    onImportClientIdentity={vi.fn().mockResolvedValue(true)}
-    onImportServerTrust={vi.fn().mockResolvedValue(true)}
-    onTest={vi.fn().mockResolvedValue(undefined)}
-  />;
+  return { ...view, onChange, onTransition };
 }
 
 describe("SocketListenerSettings", () => {
@@ -166,22 +153,27 @@ describe("SocketListenerSettings", () => {
     expect(screen.getByLabelText("Server 传输")).toBeEnabled();
   });
 
-  it("switches protocol relay to local response and back without hook-order errors or stale Server fields", async () => {
-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
+  it("blocks only stale Server controls while LocalResponder topology is pending", () => {
+    renderSettings(relayTlsSettings(), false, { serverControlsBlocked: true });
+
+    expect(screen.getByLabelText("Socket 响应方式")).toBeEnabled();
+    expect(screen.getByLabelText("App 接入传输")).toBeEnabled();
+    expect(screen.getByLabelText("Server 传输")).toBeDisabled();
+    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
+  });
+
+  it("requests topology changes without constructing the replacement settings locally", async () => {
     const user = userEvent.setup();
-    render(<SettingsHarness />);
+    const { onChange, onTransition } = renderSettings(relayTlsSettings());
 
     await user.click(screen.getByLabelText("Socket 响应方式"));
     await user.click(await screen.findByRole("option", { name: "本机应答" }));
-    expect(screen.queryByLabelText("Socket Server 主机")).not.toBeInTheDocument();
-    expect(screen.queryByLabelText("Server 传输")).not.toBeInTheDocument();
 
-    await user.click(screen.getByLabelText("Socket 响应方式"));
-    await user.click(await screen.findByRole("option", { name: "转发到上游" }));
-    expect(screen.getByLabelText("Socket Server 主机")).toHaveValue("");
-    expect(screen.getByLabelText("Socket Server 端口")).toHaveValue("0");
-    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/order of Hooks|Rendered (?:more|fewer) hooks/);
-    consoleError.mockRestore();
+    expect(onTransition).toHaveBeenCalledWith(
+      { type: "socket_topology", mode: "local_responder" },
+      null,
+    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("selects a protocol package through HeroUI as the full processing chain", async () => {
@@ -213,7 +205,7 @@ describe("SocketListenerSettings", () => {
         root: { type: "object" as const, title: "ISO 8583 Response", properties: { response_code: { type: "string" as const, title: "Response" } } },
       },
     };
-    const { onChange } = renderSettings(relayTlsSettings(), false, {
+    const { onChange, onTransition } = renderSettings(relayTlsSettings(), false, {
       protocolCatalog: {
         loading: false,
         refresh: vi.fn().mockResolvedValue(undefined),
@@ -230,23 +222,23 @@ describe("SocketListenerSettings", () => {
     await user.click(screen.getByLabelText("Socket 响应方式"));
     await user.click(await screen.findByRole("option", { name: "本机应答" }));
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
-      processing: expect.objectContaining({
-        mode: "scripted",
-        settings: expect.objectContaining({ package: recommended }),
-      }),
-    }));
+    expect(onTransition).toHaveBeenCalledWith(
+      { type: "socket_topology", mode: "local_responder" },
+      recommended,
+    );
+    expect(onChange).not.toHaveBeenCalled();
   });
 
   it("selects raw relay through HeroUI and announces that protocol processing was cleared", async () => {
     const scripted = protocolRelaySettings();
-    const { onChange } = renderSettings(scripted);
+    const { onChange, onTransition } = renderSettings(scripted);
     const user = userEvent.setup();
 
     await user.click(screen.getByLabelText("Socket 协议处理方案"));
     await user.click(await screen.findByRole("option", { name: /不使用协议包/ }));
 
-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ processing: { mode: "direct" } }));
+    expect(onTransition).toHaveBeenCalledWith({ type: "processing", mode: "direct" });
+    expect(onChange).not.toHaveBeenCalled();
     expect(screen.getByRole("status")).toHaveTextContent("已取消协议包；数据将保持原样透明转发。");
   });
 

@@ -2,13 +2,14 @@
 
 import { Card, Input, Label, ListBox, Select } from "@heroui/react";
 import type {
-  FixedServerSettings,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
+  ListenerDraftTransition,
 } from "@/generated/rust-types";
 
 type Props = {
-  settings: HttpListenerSettings;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  settings: HttpListenerDraftSettings;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+  onTransition: (transition: ListenerDraftTransition) => void;
 };
 
 /**
@@ -17,7 +18,7 @@ type Props = {
  * 这里切换进程内 LocalServer 或真实 Server；真实 Server 再区分请求目标与固定目标。
  * 固定 Server 的 TLS/mTLS 配置仍由同页的“上游 Server 连接安全”卡片负责。
  */
-export function RequestRoutingCard({ settings, onChange }: Props) {
+export function RequestRoutingCard({ settings, onChange, onTransition }: Props) {
   const localServer = settings.topology.mode === "local_server";
   const fixedServer = settings.topology.mode === "remote_server"
     ? settings.topology.settings.fixed_server
@@ -27,19 +28,6 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
     : fixedServer
       ? "fixed_server"
       : "request_target";
-
-  function changeResponseMode(mode: "request_target" | "fixed_server" | "local_server") {
-    onChange({
-      topology: mode === "local_server"
-        ? { mode: "local_server" }
-        : {
-            mode: "remote_server",
-            settings: {
-              fixed_server: mode === "fixed_server" ? defaultFixedServer() : null,
-            },
-          },
-    });
-  }
 
   return (
     <Card className="col-span-2 max-[700px]:col-span-1">
@@ -56,7 +44,7 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
             selectedKey={responseMode}
             onSelectionChange={(key) => {
               if (key === "request_target" || key === "fixed_server" || key === "local_server") {
-                changeResponseMode(key);
+                onTransition({ type: "http_response_mode", mode: key });
               }
             }}
           >
@@ -113,15 +101,4 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
       </Card.Content>
     </Card>
   );
-}
-
-function defaultFixedServer(): FixedServerSettings {
-  return {
-    upstream_url: "",
-    upstream_tls: {
-      verify_hostname: true,
-      server_trust: null,
-      client_identity: null,
-    },
-  };
 }

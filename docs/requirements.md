@@ -356,10 +356,18 @@ Selected App → VpnService TUN → Rust ImpairedTun
 
 - Android 通知、VPN 设置和桌面 ADB 都能停止。
 - Rust/JNI/TUN 失败立即关闭 TUN并 fail-open。
-- 5 分钟失败 3 次后禁止自动恢复。
+- `stop_vpn_on_control_loss` 默认开启；桌面每秒续订当前 serial + runtime epoch 的控制租约，连续
+  5 秒未续租时 Companion 只关闭匹配 generation 的 VPN/TUN。
+- 开启控制失联保护时，失联或设备/桌面重启后已经停止的 VPN 必须等待用户从桌面显式恢复：仍有
+  runtime owner 时使用“应用修改”，没有 owner 时使用“启动”。重连、状态查询和 owner 恢复不得
+  自动发送 start/apply。
+- 桌面只在显式 start/apply 时重新解析透明路由、准备 LAN/ADB reverse 端点并建立新的 runtime
+  epoch 与控制租约。已确认仍在运行且 owner、active runtime 和 epoch 匹配的 LAN 实例可以继续
+  协调当前 LAN 端点；不得用该热协调启动已停止或缺少有效运行事实的 VPN。
+- 关闭控制失联保护的 device-only Profile 保留 `auto_resume_after_reboot` 的既有开机自动恢复；
+  5 分钟内失败 3 次后禁止该自动恢复。
 - 用户主动停止后保持停止。
-- 重启后等待用户解锁及桌面 USB/ADB 控制通道恢复，再等待 30 秒恢复；不把 Android
-  Wi-Fi/蜂窝网络可用作为透明代理启动前提。
+- 不把 Android Wi-Fi/蜂窝网络可用作为透明代理启动前提。
 - 不启用 lockdown kill switch。
 - 100% 丢包和全黑洞必须二次确认。
 - 发现作用域越界立即关闭 TUN。

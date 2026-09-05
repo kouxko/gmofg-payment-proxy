@@ -3,10 +3,10 @@ import { vi } from "vitest";
 import type {
   CertificateReference,
   ListenerUpstreamConnectionTestViewModel,
-  SocketRelaySettings,
+  SocketRelayDraftSettings,
 } from "@/generated/rust-types";
 import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
+import { socketRuntimeLimits } from "./listeners-view.test-support";
 
 export const references: CertificateReference[] = [
   { id: "app-id", label: "App Identity", kind: "reverse_server_identity", reference: "managed:app-id" },
@@ -15,7 +15,7 @@ export const references: CertificateReference[] = [
   { id: "client-id", label: "Client Identity", kind: "upstream_client_identity", reference: "managed:client-id" },
 ];
 
-export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): SocketRelaySettings {
+export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): SocketRelayDraftSettings {
   return {
     topology: {
       mode: "relay",
@@ -37,19 +37,19 @@ export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): So
       },
     },
     maximum_connections: 32,
-    runtime_limits: defaultSocketRuntimeLimits(),
+    runtime_limits: socketRuntimeLimits(),
     processing: { mode: "direct" },
   };
 }
 
-export function local(): SocketRelaySettings {
+export function local(): SocketRelayDraftSettings {
   return {
     ...relay(),
     topology: { mode: "local_responder", settings: { downstream_security: { mode: "tcp" } } },
   };
 }
 
-export function common(settings: SocketRelaySettings, overrides: { locked?: boolean; busy?: boolean } = {}) {
+export function common(settings: SocketRelayDraftSettings, overrides: { locked?: boolean; busy?: boolean } = {}) {
   return {
     settings,
     certificateReferences: references,
@@ -59,6 +59,7 @@ export function common(settings: SocketRelaySettings, overrides: { locked?: bool
     locked: overrides.locked ?? false,
     busy: overrides.busy ?? false,
     onChange: vi.fn(),
+    onTransition: vi.fn(),
   };
 }
 
@@ -84,6 +85,7 @@ export function renderServer(settings = relay(), overrides: {
     testing: overrides.testing ?? false,
     testResult: overrides.testResult,
     testError: overrides.testError,
+    testBlocked: false,
     onImportIdentity: vi.fn().mockResolvedValue(true),
     onImportTrust: vi.fn().mockResolvedValue(true),
     onTest: vi.fn().mockResolvedValue(undefined),

@@ -1,11 +1,9 @@
+use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload};
 use intercept_proxy_application::{
     AndroidNetworkActivation, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
     AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
     AndroidRuntimeOwnerViewModel, AppError, AppResult,
 };
-use serde_json::json;
-
-use super::AndroidAdbAdapter;
 
 pub(super) fn is_owner_unreachable(error: &AppError) -> bool {
     matches!(
@@ -40,6 +38,18 @@ impl AndroidAdbAdapter {
         if owner.mode != AndroidRuntimeOwnerMode::Lan {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
+        let has_active_runtime = owner_state
+            .active_runtime
+            .as_ref()
+            .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
+        if owner.state != AndroidRuntimeOwnerState::Active || !has_active_runtime {
+            let state = if owner.state == AndroidRuntimeOwnerState::Active {
+                AndroidRuntimeOwnerState::Faulted
+            } else {
+                owner.state
+            };
+            return Ok(endpoints_with_owner_health(persisted, state));
+        }
         let Some(activation) = activation.filter(|activation| {
             activation.profile.id == owner.profile_id
                 && persisted.iter().all(|endpoint| {
@@ -67,15 +77,7 @@ impl AndroidAdbAdapter {
             Ok(None) | Err(_) => return self.fault_lan_endpoints(owner, persisted).await,
         };
         let host = lan_host.to_string();
-        let has_active_runtime = owner_state
-            .active_runtime
-            .as_ref()
-            .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
-        if owner.state == AndroidRuntimeOwnerState::Active
-            && has_active_runtime
-            && !persisted.is_empty()
-            && persisted.iter().all(|endpoint| endpoint.proxy_host == host)
-        {
+        if !persisted.is_empty() && persisted.iter().all(|endpoint| endpoint.proxy_host == host) {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
 
@@ -85,14 +87,30 @@ impl AndroidAdbAdapter {
         else {
             return self.fault_lan_endpoints(owner, persisted).await;
         };
-        let payload = json!({"profile": activation.profile, "proxy_runtime": proxy_runtime});
-        let refreshed = match self.protocol_request(&owner.serial, "apply", payload).await {
+        let payload = control_request_payload(&activation.profile, &proxy_runtime, owner.epoch);
+        let operation = if activation.profile.stop_vpn_on_control_loss {
+            "apply_active"
+        } else {
+            "apply"
+        };
+        let refreshed = match self
+            .protocol_request(&owner.serial, operation, payload)
+            .await
+        {
             Ok(status) => self.confirm_network_running(&runtime, status).await,
             Err(error) => Err(error),
         };
         if refreshed.is_err() {
             return self.fault_lan_endpoints(owner, runtime.endpoints).await;
         }
+        self.commit_lan_runtime(owner, runtime).await
+    }
+
+    async fn commit_lan_runtime(
+        &self,
+        owner: AndroidRuntimeOwnerViewModel,
+        runtime: ActiveRuntimeFacts,
+    ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
         let mut active_owner = owner;
         active_owner.state = AndroidRuntimeOwnerState::Active;
         active_owner.transition_reason = AndroidRuntimeOwnerTransitionReason::LanEndpointReapplied;

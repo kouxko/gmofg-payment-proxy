@@ -5,16 +5,17 @@ import type { ReactNode } from "react";
 import type {
   CertificateItemViewModel,
   CertificateReference,
-  HttpListenerSettings,
+  HttpListenerDraftSettings,
   ListenerCertificateDetailViewModel,
   ListenerUpstreamConnectionTestViewModel,
-  ProxyListener,
+  ListenerDraft,
+  ListenerDraftTransition,
+  ProtocolPackageRef,
 } from "@/generated/rust-types";
 import { BodyCodecSettings } from "./body-codec-settings";
 import { FixedServerTlsSettings } from "./fixed-server-tls-settings";
 import { HttpProtocolProcessingCard } from "./http-protocol-processing-card";
 import {
-  changeDataPlaneKind,
   changeHttpSettings,
   changeSocketSettings,
 } from "./listener-data-plane";
@@ -29,7 +30,7 @@ const timeoutFields = [
 ] as const;
 
 type Props = {
-  listener: ProxyListener;
+  listener: ListenerDraft;
   protocolCatalog?: ProtocolCatalogState;
   locked?: boolean;
   fieldErrors?: Record<string, string[]>;
@@ -37,13 +38,20 @@ type Props = {
   certificateDetails: ListenerCertificateDetailViewModel[];
   installationRoot?: CertificateItemViewModel;
   pending?: string;
+  transitionPending?: boolean;
+  dataPlanePending?: boolean;
+  serverControlsBlocked?: boolean;
   tlsTest?: ListenerUpstreamConnectionTestViewModel;
   tlsTestError?: string;
   basicUsername: string;
   basicPassword: string;
   onBasicUsernameChange: (value: string) => void;
   onBasicPasswordChange: (value: string) => void;
-  onChange: (changes: Partial<ProxyListener>) => void;
+  onChange: (changes: Partial<ListenerDraft>) => void;
+  onTransition: (
+    transition: ListenerDraftTransition,
+    recommendedPackage?: ProtocolPackageRef | null,
+  ) => void;
   onStoreBasicCredential: () => Promise<void>;
   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
@@ -61,7 +69,7 @@ export function ListenerEditor(props: Props): ReactNode {
   };
   const http = listener.data_plane.kind === "http" ? listener.data_plane.settings : undefined;
   const socket = listener.data_plane.kind === "socket" ? listener.data_plane.settings : undefined;
-  const changeHttp = (changes: Partial<HttpListenerSettings>) => {
+  const changeHttp = (changes: Partial<HttpListenerDraftSettings>) => {
     if (http) props.onChange(changeHttpSettings(http, changes));
   };
 
@@ -75,7 +83,7 @@ export function ListenerEditor(props: Props): ReactNode {
           selectedKey={listener.data_plane.kind}
           onSelectionChange={(key) => {
             if (key === "http" || key === "socket") {
-              props.onChange(changeDataPlaneKind(listener, key));
+              props.onTransition({ type: "data_plane", kind: key });
             }
           }}
         >
@@ -86,7 +94,7 @@ export function ListenerEditor(props: Props): ReactNode {
             <ListBox.Item id="socket" textValue="Socket 转发">Socket 转发</ListBox.Item>
           </ListBox></Select.Popover>
         </Select>
-        {http && <fieldset disabled={locked} className="contents">
+        {http && <fieldset disabled={locked || props.dataPlanePending} className="contents">
           <HttpSettings
             {...props}
             settings={http}
@@ -101,12 +109,16 @@ export function ListenerEditor(props: Props): ReactNode {
             certificateDetails={props.certificateDetails}
             protocolCatalog={protocolCatalog}
             locked={locked}
+            planeTransitionPending={Boolean(props.dataPlanePending)}
             fieldErrors={props.fieldErrors}
             busy={Boolean(props.pending)}
+            transitionPending={Boolean(props.transitionPending)}
+            serverControlsBlocked={Boolean(props.serverControlsBlocked)}
             testing={props.pending === "tls-test"}
             testResult={props.tlsTest}
             testError={props.tlsTestError}
             onChange={(changes) => props.onChange(changeSocketSettings(socket, changes))}
+            onTransition={props.onTransition}
             onImportDownstreamServerIdentity={props.onImportDownstreamServerIdentity}
             onImportDownstreamClientTrust={props.onImportDownstreamClientTrust}
             onImportClientIdentity={props.onImportClientIdentity}
@@ -167,16 +179,20 @@ function CommonFields({ listener, locked = false, onChange }: Pick<Props, "liste
 }
 
 function HttpSettings(props: Props & {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   protocolCatalog: ProtocolCatalogState;
-  onSettingsChange: (changes: Partial<HttpListenerSettings>) => void;
+  onSettingsChange: (changes: Partial<HttpListenerDraftSettings>) => void;
 }): ReactNode {
   const { settings, onSettingsChange } = props;
   const credential = settings.authentication.mode === "basic"
     ? settings.authentication.credential
     : undefined;
   return <>
-    <RequestRoutingCard settings={settings} onChange={onSettingsChange} />
+    <RequestRoutingCard
+      settings={settings}
+      onChange={onSettingsChange}
+      onTransition={props.onTransition}
+    />
     <HttpAuthentication
       settings={settings}
       pending={props.pending}
@@ -207,6 +223,7 @@ function HttpSettings(props: Props & {
       certificateDetails={props.certificateDetails}
       installationRoot={props.installationRoot}
       busy={Boolean(props.pending)}
+      testBlocked={Boolean(props.transitionPending)}
       testing={props.pending === "tls-test"}
       testResult={props.tlsTest}
       testError={props.tlsTestError}
@@ -232,7 +249,7 @@ function HttpAuthentication({
   onChange,
   onStore,
 }: {
-  settings: HttpListenerSettings;
+  settings: HttpListenerDraftSettings;
   pending?: string;
   username: string;
   password: string;
@@ -240,7 +257,7 @@ function HttpAuthentication({
   credentialProvider?: string;
   onUsernameChange: (value: string) => void;
   onPasswordChange: (value: string) => void;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
   onStore: () => Promise<void>;
 }): ReactNode {
   return <div className={[
@@ -298,8 +315,8 @@ function HttpAuthentication({
 }
 
 function MitmSwitch({ settings, onChange }: {
-  settings: HttpListenerSettings;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  settings: HttpListenerDraftSettings;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
 }): ReactNode {
   return <Switch isSelected={settings.mitm.enabled} onChange={(enabled) => onChange({
     mitm: { ...settings.mitm, enabled },
@@ -310,8 +327,8 @@ function MitmSwitch({ settings, onChange }: {
 }
 
 function MitmFields({ settings, onChange }: {
-  settings: HttpListenerSettings;
-  onChange: (changes: Partial<HttpListenerSettings>) => void;
+  settings: HttpListenerDraftSettings;
+  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
 }): ReactNode {
   return <>
     <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">

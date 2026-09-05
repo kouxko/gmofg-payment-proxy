@@ -100,8 +100,10 @@ TUN 把 DNS 指向本地基准地址，tun2proxy 使用 Virtual/Fake-IP DNS 在�
 
 1. IP/CIDR；
 2. 桌面下发的域名解析 IP 快照；
-3. 若同一端口只有唯一一条域名路由，可按端口补偿匹配；
-4. 同端口多条域名路由时不猜测，保持未命中。
+3. 均不匹配时保持未命中，连接原始目标；即使同一端口只有一条域名路由，也不按端口猜测。
+
+未知 Fake-IP、过期 DNS 缓存地址或桌面快照之外的新 IP，不能单凭端口证明属于配置域名。
+SOCKS5 携带原始域名时仍按域名和端口精确匹配，不需要端口补偿。
 
 运行路由必须与 Profile 中 Listener/destination/ports 集合完全一致，否则数据面拒绝启动。
 
@@ -134,19 +136,32 @@ adb forward tcp:<desktop-temporary-port> localabstract:intercept_proxy_vpn
 ```
 
 控制帧是 4 字节大端长度 + JSON，协议版本为 2，最大 1 MiB，request/response 必须匹配 UUID。
-操作白名单包含 start/apply/stop/emergency_restore/status/heartbeat。启用控制失联保护时，
+操作白名单包含 start/apply/apply_active/stop/emergency_restore/status/heartbeat。启用控制失联保护时，
 start/apply 携带当前桌面 runtime epoch 和固定 5000 ms 租约；桌面后台每秒按 serial + epoch 续租，
-不依赖 Android 页面是否打开。不同设备的续租以最多八路并发独立执行，单个设备的 gate、ADB 或
-完整响应读取最多占用本设备续租两秒；失败日志固定携带 serial、runtime epoch、错误码和错误消息，
-不能阻塞或停止其他设备。设备 LocalSocket 服务仅接受
-shell/root peer UID。
+不依赖 Android 页面是否打开。不同设备的续租以最多八路并发独立执行，单次续租的 ADB、读写与响应
+处理共用两秒上限。heartbeat 不等待同 serial 的业务操作 gate，避免长时间安装、查询或配置操作
+阻塞续租；start/apply/stop/status/endpoints 等业务操作仍保持既定锁顺序与同设备串行。
+续租读取 owner/runtime 的短快照，只发送匹配 epoch 的控制帧，不提交持久 owner、reverse 或 endpoint
+状态。每个请求仍独立预留临时端口并创建 ADB forward；其所有权按 serial + port 精确清理，取消时
+沿用既有清理路径。失败日志固定携带 serial、runtime epoch、错误码和错误消息，不阻塞或停止其他设备。
+设备 LocalSocket 服务仅接受 shell/root peer UID。
 
 Companion 只允许匹配当前 owner epoch 的 heartbeat 延长当前 generation；旧 epoch 心跳、已经到期的
-心跳和旧 generation 的超时回调都不能续租或停止新实例。目标 serial 从 `adb devices` 列表消失后，
+心跳和旧 generation 的超时回调都不能续租或停止新实例。原生故障回调绑定创建数据面时的 generation，
+在主线程执行时原子校验代次并关闭对应数据面，旧回调不得影响替代实例。目标 serial 从 `adb devices` 列表消失后，
 桌面不再续租，由设备端自然到期关闭 TUN；列表中仍存在的 offline/unauthorized 条目不会被桌面直接
 标记为“设备缺失”，也不会仅凭该标签发送 stop/force-stop。若该状态确实使控制请求无法送达，真正
 触发关闭的是 Companion 连续五秒没有收到匹配 epoch 的 heartbeat，而不是 ADB 状态字符串本身。
-关闭 Profile 开关时不建立租约，保持既有持续运行行为。
+开启保护且看门狗已经关闭 VPN 后，设备重连、桌面重启后的 owner 恢复和状态查询只恢复观测事实，
+不发送 start/apply。仍保留 owner 时用户从桌面点击“应用修改”，没有 owner 时点击“启动”；两条显式
+路径都重新准备透明路由，并建立新的 runtime epoch 和控制租约。关闭 Profile 开关时不建立租约；
+device-only Profile 保留 `auto_resume_after_reboot` 的既有开机自动恢复。
+
+受保护的自动 LAN 热更新使用 `apply_active` operation 和当前 owner 租约；设备在控制协调锁内
+校验租约尚未到期、epoch 匹配及对应 generation 正在运行，才允许替换。
+缺失或过期时请求失败，不创建新 generation，不重试为普通 apply。显式 start/apply 不携带该自动
+更新前置条件，因此用户可以手动重新启动。旧 Companion 拒绝未知 operation，不回退普通 apply；
+该控制操作不改变 v2 信封、Profile 或持久化 Schema。
 
 start/apply 在 `startForegroundService` 成功入队前保留旧 generation、运行状态和旧租约；同步入队失败
 会回滚新 generation。若入队结果已与新 generation 的 Service 执行发生竞态、无法安全回滚，则只为
@@ -165,7 +180,9 @@ USB 模式为每条 Listener 路由建立：
 ```
 
 LAN 模式使用当前可达桌面地址和 Listener 端口，不创建 reverse。桌面会检查 Listener 正在运行、
-bind 地址和端点健康。
+bind 地址和端点健康。对于已确认仍在运行、owner 为 Active 且 active runtime 与 epoch 匹配的 LAN
+实例，桌面可以在 LAN 地址或端点变化时协调当前运行端点。恢复态、非 Active owner 或缺少匹配
+active runtime 时只报告不健康状态，等待用户显式 start/apply，不通过端点查询启动 VPN。
 
 ## 8. ADB reverse 两阶段更新
 
@@ -204,7 +221,8 @@ bind 地址和端点健康。
 SQLite 的 `android_runtime_owners` 以设备 serial 为主键，最多保留 8 个 owner。每条记录保存模式
 （device-only/LAN/ADB reverse）、Profile、状态、来源、reverse ports、runtime endpoints、epoch 和
 transition reason。进程重启或设备重连时按 serial 排序恢复全部 owner；任一设备失败不得阻断其他设备
-继续清理或恢复，也不能猜测 ADB 当前端口属于哪个运行实例。
+继续清理或恢复，也不能猜测 ADB 当前端口属于哪个运行实例。持久 owner 只能证明桌面仍需跟踪和
+清理该 epoch，不能证明 VPN 仍在运行；缺少匹配 active runtime 时不得据此自动 start/apply。
 
 ## 10. Fail-open 与停止顺序
 
