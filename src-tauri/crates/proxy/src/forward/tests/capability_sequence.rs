@@ -18,9 +18,9 @@ impl SequencedHttpCapabilities {
     fn direction<D: intercept_proxy_exchange::Direction>(
         &self,
         capabilities: crate::http::HttpDirectionCapabilities<D>,
-        events: [&'static str; 4],
+        events: [&'static str; 3],
     ) -> crate::http::HttpDirectionCapabilities<D> {
-        crate::http::HttpDirectionCapabilities::new(
+        crate::http::HttpDirectionCapabilities::prepared(
             Box::new(SequencedDecode {
                 inner: capabilities.decode,
                 events: Arc::clone(&self.events),
@@ -31,15 +31,10 @@ impl SequencedHttpCapabilities {
                 events: Arc::clone(&self.events),
                 event: events[1],
             }),
-            Box::new(SequencedRules {
-                inner: capabilities.rules,
+            Box::new(SequencedPrepare {
+                inner: capabilities.prepare,
                 events: Arc::clone(&self.events),
                 event: events[2],
-            }),
-            Box::new(SequencedEncode {
-                inner: capabilities.encode,
-                events: Arc::clone(&self.events),
-                event: events[3],
             }),
         )
     }
@@ -60,12 +55,7 @@ impl crate::http::HttpProtocolCapabilityFactory for SequencedHttpCapabilities {
         let capabilities = self.inner.create_upstream(connection)?;
         Ok(self.direction(
             capabilities,
-            [
-                "upstream.decode",
-                "upstream.display",
-                "upstream.rules",
-                "upstream.encode",
-            ],
+            ["upstream.decode", "upstream.display", "upstream.prepare"],
         ))
     }
 
@@ -82,8 +72,7 @@ impl crate::http::HttpProtocolCapabilityFactory for SequencedHttpCapabilities {
             [
                 "downstream.decode",
                 "downstream.display",
-                "downstream.rules",
-                "downstream.encode",
+                "downstream.prepare",
             ],
         ))
     }
@@ -126,42 +115,29 @@ impl intercept_proxy_exchange::Display for SequencedDisplay {
     }
 }
 
-struct SequencedRules {
-    inner: Box<dyn intercept_proxy_exchange::Rules>,
+struct SequencedPrepare<D: intercept_proxy_exchange::Direction> {
+    inner: Box<dyn crate::http::HttpMessagePrepare<D>>,
     events: Arc<StdMutex<Vec<&'static str>>>,
     event: &'static str,
 }
 
 #[async_trait::async_trait]
-impl intercept_proxy_exchange::Rules for SequencedRules {
-    async fn apply(
-        &mut self,
-        document: intercept_proxy_exchange::Document,
-    ) -> std::result::Result<intercept_proxy_exchange::Document, intercept_proxy_exchange::Error>
-    {
-        self.events.lock().unwrap().push(self.event);
-        self.inner.apply(document).await
-    }
-}
-
-struct SequencedEncode<D: intercept_proxy_exchange::Direction> {
-    inner: Box<dyn intercept_proxy_exchange::Encode<intercept_proxy_exchange::Http, D>>,
-    events: Arc<StdMutex<Vec<&'static str>>>,
-    event: &'static str,
-}
-
-#[async_trait::async_trait]
-impl<D: intercept_proxy_exchange::Direction>
-    intercept_proxy_exchange::Encode<intercept_proxy_exchange::Http, D> for SequencedEncode<D>
+impl<D: intercept_proxy_exchange::Direction> crate::http::HttpMessagePrepare<D>
+    for SequencedPrepare<D>
 {
-    async fn encode(
+    async fn prepare(
         &mut self,
+        connection: &crate::http::ConnectionContext,
+        request: &crate::http::HttpRequestMetadata,
+        message: &mut crate::Message,
         original: &intercept_proxy_exchange::HttpContext,
         document: &intercept_proxy_exchange::Document,
-    ) -> std::result::Result<intercept_proxy_exchange::HttpContext, intercept_proxy_exchange::Error>
-    {
+        ports: &dyn crate::http::PipelinePorts,
+    ) -> std::result::Result<Vec<crate::FaultAction>, intercept_proxy_exchange::Error> {
         self.events.lock().unwrap().push(self.event);
-        self.inner.encode(original, document).await
+        self.inner
+            .prepare(connection, request, message, original, document, ports)
+            .await
     }
 }
 
@@ -227,13 +203,11 @@ async fn real_http_exchange_runs_capabilities_in_pipeline_order() {
         [
             "upstream.decode",
             "upstream.display",
-            "upstream.rules",
-            "upstream.encode",
+            "upstream.prepare",
             "server.received",
             "downstream.decode",
             "downstream.display",
-            "downstream.rules",
-            "downstream.encode",
+            "downstream.prepare",
             "app.received",
         ]
     );

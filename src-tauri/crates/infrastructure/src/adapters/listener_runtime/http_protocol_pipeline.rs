@@ -1,8 +1,8 @@
-//! HTTP 协议包到 Exchange 四项 capability 的生产装配。
+//! HTTP 协议包到 Exchange 读阶段与写准备阶段的生产装配。
 //!
 //! 本模块不再实现 `PipelinePorts`：通用 HTTP action/session 仍由原端口负责，而协议包的
-//! Decode、Display、Rules、Encode 由 Exchange Pipeline 按固定顺序分别调用。每个 capability
-//! 只进入协议包运行时的一个固定阶段方法，避免旧组合 processor 隐藏或重复执行阶段。
+//! Decode、Display 与联合 Rules/Encode 写准备由 Exchange Pipeline 按固定顺序调用。每条消息
+//! 在 Decode 时冻结规则代次，并由同一写准备事务消费，避免跨消息暂存和重复执行阶段。
 
 use std::{fmt, sync::Arc};
 
@@ -23,7 +23,7 @@ use super::{ListenerRuntimeAdapter, external_relay::RuntimeExternalSocketPackage
 mod external_http;
 mod plain_json;
 mod programs;
-pub(super) use super::{JointDocumentEvaluation, JointHttpRuleRuntime};
+pub(super) use super::JointDocumentEvaluation;
 #[cfg(test)]
 pub(super) use external_http::decode_http_body_for_package;
 use programs::{HttpDocumentRulePrograms, compile_programs};
@@ -31,7 +31,7 @@ use programs::{HttpDocumentRulePrograms, compile_programs};
 /// Listener 启动时冻结的协议包与规则集合。
 ///
 /// 精确协议包版本在 Listener 生命周期内不可变；规则集合可原子替换。upstream/downstream
-/// capability 共享该版本对应的运行时实例，连接级 Document 只在 joint runtime 暂存。
+/// capability 共享该版本对应的运行时实例；消息级 Document 与规则快照由对应 capability 独占。
 #[derive(Clone)]
 pub(super) struct HttpProtocolRuntimeSnapshot {
     external: Option<RuntimeExternalSocketPackageBinding>,
@@ -39,7 +39,6 @@ pub(super) struct HttpProtocolRuntimeSnapshot {
     response_codec: BodyCodecKind,
     programs: Arc<RwLock<HttpDocumentRulePrograms>>,
     metadata: HttpObservationMetadata,
-    joint_rules: Arc<JointHttpRuleRuntime>,
     listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
@@ -60,11 +59,6 @@ impl fmt::Debug for HttpProtocolRuntimeSnapshot {
 }
 
 impl HttpProtocolRuntimeSnapshot {
-    #[cfg(test)]
-    pub(super) fn joint_runtime(&self) -> Arc<JointHttpRuleRuntime> {
-        Arc::clone(&self.joint_rules)
-    }
-
     #[cfg(test)]
     pub(super) fn rule_count(&self, direction: ProtocolDirection) -> usize {
         self.programs.read().program(direction).rules().len()
@@ -144,7 +138,6 @@ impl HttpProtocolRuntimeSnapshot {
                 workspace_id: workspace.id.to_string(),
                 listener_id: listener.id.to_string(),
             },
-            joint_rules: Arc::clone(&adapter.joint_http_rules),
             listener_transaction: adapter.environment_apply_resource_gates.gate(
                 &super::super::environment_configuration_lease::EnvironmentApplyLeaseResourceKey::Listener(
                     listener.id.as_uuid(),
@@ -208,16 +201,13 @@ impl HttpProtocolRuntimeSnapshot {
 
     fn build<D: Direction>(
         &self,
-        connection: &HttpConnectionIdentity,
+        _connection: &HttpConnectionIdentity,
         direction: ProtocolDirection,
         response: bool,
     ) -> HttpDirectionCapabilities<D> {
         if let Some(binding) = &self.external {
             return external_http::build_capabilities(
-                Arc::clone(&self.joint_rules),
-                connection,
                 direction,
-                response,
                 if response {
                     self.response_codec
                 } else {
@@ -229,10 +219,7 @@ impl HttpProtocolRuntimeSnapshot {
             );
         }
         plain_json::build_capabilities(
-            Arc::clone(&self.joint_rules),
-            connection,
             direction,
-            response,
             Arc::clone(&self.programs),
             Arc::clone(&self.listener_transaction),
         )
@@ -248,13 +235,6 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Upstream>, Error> {
-        if self.external.is_none() && !self.programs.read().has_rules(ProtocolDirection::Upstream) {
-            return intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
-                self.metadata.workspace_id.clone(),
-                self.metadata.listener_id.clone(),
-            )
-            .create_upstream(connection);
-        }
         Ok(self.build(&connection, ProtocolDirection::Upstream, false))
     }
 
@@ -262,18 +242,6 @@ impl HttpProtocolCapabilityFactory for HttpProtocolRuntimeSnapshot {
         &self,
         connection: HttpConnectionIdentity,
     ) -> Result<HttpDirectionCapabilities<Downstream>, Error> {
-        if self.external.is_none()
-            && !self
-                .programs
-                .read()
-                .has_rules(ProtocolDirection::Downstream)
-        {
-            return intercept_proxy_runtime::PlainHttpCapabilityFactory::new(
-                self.metadata.workspace_id.clone(),
-                self.metadata.listener_id.clone(),
-            )
-            .create_downstream(connection);
-        }
         Ok(self.build(&connection, ProtocolDirection::Downstream, true))
     }
 }

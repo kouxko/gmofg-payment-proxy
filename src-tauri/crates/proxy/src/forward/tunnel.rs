@@ -1,10 +1,11 @@
 //! 正向 HTTP 目标连接与可取消超时工具。
 
-use std::{future::Future, time::Duration};
+use std::time::Duration;
 
 use tokio::net::TcpStream;
 use tokio_util::sync::CancellationToken;
 
+pub(super) use crate::http::timeout_stage as timeout_or_cancel;
 use crate::{ErrorCode, ProxyError, Result};
 
 pub(super) async fn connect_target(
@@ -24,25 +25,4 @@ pub(super) async fn connect_target(
         .set_nodelay(true)
         .map_err(|error| ProxyError::io("configure forward proxy target", &error))?;
     Ok(stream)
-}
-
-pub(super) async fn timeout_or_cancel<F, T>(
-    duration: Duration,
-    cancellation: &CancellationToken,
-    future: F,
-    timeout_code: ErrorCode,
-) -> Result<T>
-where
-    F: Future<Output = T>,
-{
-    tokio::select! {
-        () = cancellation.cancelled() => Err(ProxyError::new(
-            ErrorCode::ProxyStopped,
-            "forward proxy operation cancelled",
-        )),
-        result = tokio::time::timeout(duration, future) => result.map_err(|_| ProxyError::new(
-            timeout_code,
-            format!("forward proxy operation timed out after {} ms", duration.as_millis()),
-        )),
-    }
 }

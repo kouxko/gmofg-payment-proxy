@@ -45,6 +45,7 @@ async fn backpressured_request_body_timeout_releases_connection() {
             &NoopPipelinePorts,
             request,
             &[],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         )
@@ -93,6 +94,7 @@ async fn upstream_mid_body_disconnect_writes_exact_prefix_and_is_classified() {
                 after_bytes: 3,
                 direction: TrafficDirection::Upstream,
             }],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         )

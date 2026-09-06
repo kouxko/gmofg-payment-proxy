@@ -9,6 +9,7 @@ use bytes::Bytes;
 use http::{HeaderMap, HeaderValue, Method, Uri};
 use intercept_proxy_runtime::http::{
     ForwardRequest, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+    UpstreamWriteReceipt,
 };
 use intercept_proxy_runtime::message::{Message, MessageLimits};
 use intercept_proxy_runtime::transport::{
@@ -178,6 +179,7 @@ async fn upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed(
             &ports,
             request,
             &[],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         )

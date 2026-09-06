@@ -2,11 +2,10 @@
 
 use super::{
     CancellationToken, ConnectionContext, ConnectionTaskScope, ErrorCode, ForwardPipelineRuntime,
-    ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming, ProxyBody, ProxyError, Request,
-    Response, Result, TokioIo, Uri, absolute_http_target, absolute_uri_to_origin_form,
-    client_http1, collect_pipeline_body, config_error, connect_target, incoming_body,
-    is_websocket_upgrade, spawn_connection_task, strip_hop_by_hop_headers, text_response,
-    timeout_or_cancel,
+    ForwardProxyService, HOST, HeaderValue, HttpTarget, Incoming, ProxyError, Request, Response,
+    Result, TokioIo, Uri, absolute_http_target, absolute_uri_to_origin_form, client_http1,
+    collect_pipeline_body, config_error, connect_target, incoming_body, is_websocket_upgrade,
+    spawn_connection_task, strip_hop_by_hop_headers, text_response, timeout_or_cancel,
 };
 
 impl ForwardProxyService {
@@ -17,12 +16,13 @@ impl ForwardProxyService {
         cancellation: CancellationToken,
         task_scope: &ConnectionTaskScope,
         exchange: &super::SharedForwardExchange,
-    ) -> Result<Response<ProxyBody>> {
+    ) -> Result<super::ForwardResponse> {
         if is_websocket_upgrade(&request) {
             return Ok(text_response(
                 http::StatusCode::NOT_IMPLEMENTED,
                 "HTTP Upgrade is not supported by the Exchange runtime",
-            ));
+            )
+            .into());
         }
         let (mut parts, body) = request.into_parts();
         let captured_uri = parts.uri.clone();
@@ -95,7 +95,7 @@ impl ForwardProxyService {
         })?;
         let (mut parts, body) = response.into_parts();
         strip_hop_by_hop_headers(&mut parts.headers);
-        Ok(Response::from_parts(parts, incoming_body(body)))
+        Ok(Response::from_parts(parts, incoming_body(body)).into())
     }
 }
 
@@ -114,7 +114,7 @@ impl ForwardProxyService {
         cancellation: &CancellationToken,
         task_scope: &ConnectionTaskScope,
         connection_exchange: &super::SharedForwardExchange,
-    ) -> Result<Response<ProxyBody>> {
+    ) -> Result<super::ForwardResponse> {
         let body = collect_pipeline_body(
             body,
             pipeline.limits,
@@ -138,7 +138,6 @@ impl ForwardProxyService {
                     write_timeout: self.config.write_timeout,
                     read_timeout: self.config.read_timeout,
                     limits: pipeline.limits,
-                    task_scope: task_scope.clone(),
                 };
                 let exchange = std::sync::Arc::new(
                     crate::http::HttpExchangeRuntime {
@@ -169,8 +168,29 @@ impl ForwardProxyService {
                 },
             )
             .await?;
-        super::response_from_pipeline_disposition(output.disposition, cancellation)?.ok_or_else(
-            || ProxyError::new(ErrorCode::ClientDisconnected, "forward response dropped"),
-        )
+        let terminal_write = match &output.disposition {
+            crate::fault::ResponseDisposition::Send { message, schedule } => {
+                schedule.disconnect_after_bytes.is_some()
+                    || message
+                        .declared_content_length()
+                        .is_some_and(|length| length != message.body.len())
+            }
+            crate::fault::ResponseDisposition::Drop
+            | crate::fault::ResponseDisposition::Truncate { .. } => true,
+        };
+        match super::response_from_pipeline_disposition(output.disposition, cancellation) {
+            Ok(Some(response)) => Ok(super::ForwardResponse {
+                response,
+                completed: Some(output.write_completed),
+                terminal_write,
+            }),
+            result => {
+                let error = result.err().unwrap_or_else(|| {
+                    ProxyError::new(ErrorCode::ClientDisconnected, "forward response dropped")
+                });
+                let _ = output.write_completed.send(Err(error.clone()));
+                Err(error)
+            }
+        }
     }
 }

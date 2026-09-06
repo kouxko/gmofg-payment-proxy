@@ -4,17 +4,8 @@ use std::time::Duration;
 
 use bytes::Bytes;
 use http::Response;
-use http_body_util::BodyExt;
 use hyper::body::Incoming;
 use tokio_util::sync::CancellationToken;
-
-#[path = "pipeline/drop_response.rs"]
-mod drop_response;
-
-pub(super) use drop_response::{
-    DropResponseMode, completion_body, drain_upstream_body, drop_response_mode,
-    intentional_drop_error, intentional_response_drop, send_request_then_drop_after_write,
-};
 
 use super::body::{ProxyBody, scheduled_body};
 use super::headers::strip_hop_by_hop_headers;
@@ -29,26 +20,13 @@ pub(super) async fn collect_pipeline_body(
     cancellation: &CancellationToken,
     read_timeout: Duration,
 ) -> Result<Bytes> {
-    let collected = timeout_or_cancel(
+    timeout_or_cancel(
         read_timeout,
         cancellation,
-        body.collect(),
+        crate::http::collect_limited(body, limits.max_body_bytes),
         ErrorCode::UpstreamReadTimeout,
     )
     .await?
-    .map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?
-    .to_bytes();
-    if collected.len() > limits.max_body_bytes {
-        return Err(ProxyError::new(
-            ErrorCode::BodyTooLarge,
-            format!(
-                "forward proxy body is {} bytes; limit is {}",
-                collected.len(),
-                limits.max_body_bytes
-            ),
-        ));
-    }
-    Ok(collected)
 }
 
 pub(super) fn response_from_pipeline_disposition(

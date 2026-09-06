@@ -181,16 +181,16 @@ impl<D: Direction> Rules for TestRules<D> {
                 }
                 Ok(document)
             }
-            ProcessorOutcome::Fail => Err(Error::new(format!(
-                "{:?}|{}: injected integration-test Rules failure",
-                D::KIND,
-                SocketProcessingFailureKind::ProcessingFailed.as_str()
-            ))),
-            ProcessorOutcome::Panic => Err(Error::new(format!(
-                "{:?}|{}: injected integration-test capability panic",
-                D::KIND,
-                SocketProcessingFailureKind::ProcessorPanicked.as_str()
-            ))),
+            ProcessorOutcome::Fail => Err(Error::coded(
+                SocketProcessingFailureKind::ProcessingFailed.as_str(),
+                "injected integration-test Rules failure",
+            )
+            .with_direction(D::KIND)),
+            ProcessorOutcome::Panic => Err(Error::coded(
+                SocketProcessingFailureKind::ProcessorPanicked.as_str(),
+                "injected integration-test capability panic",
+            )
+            .with_direction(D::KIND)),
         }
     }
 }

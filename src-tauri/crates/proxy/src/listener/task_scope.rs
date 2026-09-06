@@ -18,6 +18,9 @@ pub(crate) struct ChildTaskId(u64);
 pub(crate) struct ChildTaskError {
     pub(crate) code: &'static str,
     pub(crate) message: String,
+    pub(crate) exchange_code: Option<String>,
+    pub(crate) stage: Option<intercept_proxy_exchange::ErrorStage>,
+    pub(crate) direction: Option<intercept_proxy_exchange::DirectionKind>,
     pub(crate) external_package_call:
         Option<Box<intercept_proxy_exchange::ExternalPackageCallFailure>>,
 }
@@ -27,6 +30,9 @@ impl ChildTaskError {
         Self {
             code,
             message: message.into(),
+            exchange_code: None,
+            stage: None,
+            direction: None,
             external_package_call: None,
         }
     }
@@ -35,6 +41,9 @@ impl ChildTaskError {
         Self {
             code: error.code,
             message: error.message,
+            exchange_code: error.exchange_code,
+            stage: error.stage,
+            direction: error.direction,
             external_package_call: error.external_package_call,
         }
     }

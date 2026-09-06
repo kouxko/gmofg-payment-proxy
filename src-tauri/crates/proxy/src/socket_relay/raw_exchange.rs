@@ -14,23 +14,18 @@ use intercept_proxy_exchange::{
     Error, Exchange, ExchangeId, LocalRawServer, RawConnection, RawReader, RawServer, RawWriter,
     Socket, TransparentExchange,
 };
-use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
+use tokio::io::{AsyncRead, AsyncWrite};
 use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use crate::transport::BoxIo;
-use crate::transport::relay::{
-    RelayBytes, RelayDirection, RelayFailure, RelayOperation, RelayProgress, timeout_cancel_first,
-};
-use crate::{ErrorCode, ProxyError};
+use crate::transport::relay::{RelayBytes, RelayDirection, RelayFailure, RelayProgress};
 
 use super::connector::{PreparedSocketSecurity, SocketPreparationFailure};
-use super::{
-    SocketConnectionIdentity, SocketObservationMetadata, SocketOpenedEvidence, SocketRelayConfig,
-};
+use super::io as socket_io;
+use super::{SocketConnectionIdentity, SocketObservationMetadata, SocketRelayConfig};
 
-type OpenCallback = Box<dyn FnOnce(SocketOpenedEvidence) + Send>;
-type SharedPreparation = Arc<Mutex<Option<SocketPreparationFailure>>>;
+use super::remote_endpoint::{OpenCallback, SharedPreparationFailure, connect_remote_endpoint};
 type SharedRelayFailure = Arc<Mutex<Option<RelayFailure>>>;
 
 pub(super) enum RawExchangeOutcome {
@@ -67,6 +62,7 @@ pub(super) async fn run_remote_raw_exchange(
         RelayDirection::ClientToServer,
         RelayDirection::ServerToClient,
     );
+    let notify_opened = Arc::clone(&opened);
     let server = RemoteSocketRawServer {
         downstream_tls_peer,
         security,
@@ -75,8 +71,10 @@ pub(super) async fn run_remote_raw_exchange(
         progress: Arc::clone(&progress),
         preparation: Arc::clone(&preparation),
         relay_failure: Arc::clone(&relay_failure),
-        opened: Arc::clone(&opened),
-        on_open: Some(on_open),
+        on_open: Some(Box::new(move |evidence| {
+            notify_opened.store(true, Ordering::Relaxed);
+            on_open(evidence);
+        })),
     };
     execute_raw_exchange(
         Box::new(app),
@@ -137,7 +135,7 @@ async fn execute_raw_exchange(
     metadata: SocketObservationMetadata,
     endpoint: &str,
     progress: Arc<RelayProgress>,
-    preparation: SharedPreparation,
+    preparation: SharedPreparationFailure,
     relay_failure: SharedRelayFailure,
     opened: Arc<AtomicBool>,
 ) -> RawExchangeOutcome {
@@ -177,45 +175,25 @@ struct RemoteSocketRawServer {
     config: SocketRelayConfig,
     cancellation: CancellationToken,
     progress: Arc<RelayProgress>,
-    preparation: SharedPreparation,
+    preparation: SharedPreparationFailure,
     relay_failure: SharedRelayFailure,
-    opened: Arc<AtomicBool>,
     on_open: Option<OpenCallback>,
 }
 
 #[async_trait]
 impl RawServer for RemoteSocketRawServer {
     async fn connect(&mut self, _first_app_bytes: &[u8]) -> Result<Box<dyn RawConnection>, Error> {
-        let connected = self
-            .security
-            .connect_upstream_endpoint(
-                &self.config.upstream,
-                self.config.connect_timeout,
-                &self.cancellation,
-            )
-            .await;
-        let connected = match connected {
-            Ok(connected) => connected,
-            Err(failure) => {
-                let error =
-                    Error::new(format!("{}: {}", failure.error.code, failure.error.message));
-                *self
-                    .preparation
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
-                return Err(error);
-            }
-        };
-        self.opened.store(true, Ordering::Relaxed);
-        if let Some(on_open) = self.on_open.take() {
-            on_open(SocketOpenedEvidence::Relay {
-                resolved_address: connected.resolved_address,
-                downstream_tls_peer: self.downstream_tls_peer.clone(),
-                upstream_tls: connected.upstream_tls,
-            });
-        }
+        let upstream = connect_remote_endpoint(
+            &self.security,
+            &self.config,
+            &self.cancellation,
+            &self.preparation,
+            self.downstream_tls_peer.clone(),
+            &mut self.on_open,
+        )
+        .await?;
         Ok(Box::new(SocketRawConnection::new(
-            connected.upstream,
+            upstream,
             self.config.read_timeout,
             self.config.write_timeout,
             self.config.read_chunk_bytes,
@@ -305,41 +283,23 @@ struct SocketRawReader<R> {
 #[async_trait]
 impl<R: AsyncRead + Send + Unpin> RawReader for SocketRawReader<R> {
     async fn read(&mut self) -> Result<Option<Vec<u8>>, Error> {
-        let mut bytes = vec![0_u8; self.read_chunk_bytes];
-        let result = tokio::select! {
-            biased;
-            () = self.cancellation.cancelled() => Err(ProxyError::new(
-                ErrorCode::ProxyStopped,
-                "socket raw Exchange cancelled while reading",
-            )),
-            result = tokio::time::timeout(self.timeout, self.reader.read(&mut bytes)) => match result {
-                Err(_) => Err(ProxyError::new(ErrorCode::SocketReadTimeout, "socket raw read timed out")),
-                Ok(Err(error)) => Err(ProxyError::io("socket raw read", &error)),
-                Ok(Ok(read)) => Ok(read),
-            },
-        };
-        let read = result.map_err(|error| self.fail(error, RelayOperation::Read))?;
-        if read == 0 {
-            return Ok(None);
-        }
-        bytes.truncate(read);
-        self.progress.add_read(self.direction, read);
-        Ok(Some(bytes))
+        socket_io::read(
+            &mut self.reader,
+            self.read_chunk_bytes,
+            self.timeout,
+            &self.cancellation,
+            self.direction,
+            &self.progress,
+        )
+        .await
+        .map_err(|failure| self.fail(failure))
     }
 }
 
 impl<R> SocketRawReader<R> {
-    fn fail(&self, error: ProxyError, operation: RelayOperation) -> Error {
-        let exchange_error = Error::new(format!("{}: {}", error.code, error.message));
-        record_failure(
-            &self.failure,
-            RelayFailure {
-                error,
-                direction: self.direction,
-                operation,
-                bytes: self.progress.snapshot(),
-            },
-        );
+    fn fail(&self, failure: RelayFailure) -> Error {
+        let exchange_error = socket_io::exchange_error(&failure);
+        record_failure(&self.failure, failure);
         exchange_error
     }
 }
@@ -356,86 +316,35 @@ struct SocketRawWriter<W> {
 #[async_trait]
 impl<W: AsyncWrite + Send + Unpin> RawWriter for SocketRawWriter<W> {
     async fn write(&mut self, bytes: &[u8]) -> Result<(), Error> {
-        let mut offset = 0;
-        while offset < bytes.len() {
-            let result = tokio::select! {
-                biased;
-                () = self.cancellation.cancelled() => Err(ProxyError::new(
-                    ErrorCode::ProxyStopped,
-                    "socket raw Exchange cancelled while writing",
-                )),
-                result = tokio::time::timeout(self.timeout, self.writer.write(&bytes[offset..])) => match result {
-                    Err(_) => Err(ProxyError::new(ErrorCode::SocketWriteTimeout, "socket raw write timed out")),
-                    Ok(Err(error)) => Err(ProxyError::io("socket raw write", &error)),
-                    Ok(Ok(written)) => Ok(written),
-                },
-            };
-            let written = result.map_err(|error| self.fail(error, RelayOperation::Write))?;
-            if written == 0 {
-                return Err(self.fail(
-                    ProxyError::new(ErrorCode::Io, "socket raw write returned zero"),
-                    RelayOperation::Write,
-                ));
-            }
-            offset += written;
-            self.progress.add(self.direction, written);
-        }
-        self.flush().await
+        socket_io::write_all_and_flush(
+            &mut self.writer,
+            bytes,
+            self.timeout,
+            &self.cancellation,
+            self.direction,
+            &self.progress,
+        )
+        .await
+        .map_err(|failure| self.fail(failure))
     }
 
     async fn finish(&mut self) -> Result<(), Error> {
-        let result = timeout_cancel_first(
+        socket_io::shutdown(
+            &mut self.writer,
             self.timeout,
             &self.cancellation,
-            self.writer.shutdown(),
-            ErrorCode::SocketWriteTimeout,
-            "socket raw Exchange cancelled while half-closing",
-            "socket raw half-close",
+            self.direction,
+            &self.progress,
         )
-        .await;
-        match result {
-            Err(error) => Err(self.fail(error, RelayOperation::HalfClose)),
-            Ok(Err(error)) => Err(self.fail(
-                ProxyError::io("socket raw half-close", &error),
-                RelayOperation::HalfClose,
-            )),
-            Ok(Ok(())) => Ok(()),
-        }
+        .await
+        .map_err(|failure| self.fail(failure))
     }
 }
 
 impl<W: AsyncWrite + Send + Unpin> SocketRawWriter<W> {
-    async fn flush(&mut self) -> Result<(), Error> {
-        let result = timeout_cancel_first(
-            self.timeout,
-            &self.cancellation,
-            self.writer.flush(),
-            ErrorCode::SocketWriteTimeout,
-            "socket raw Exchange cancelled while flushing",
-            "socket raw flush",
-        )
-        .await;
-        match result {
-            Err(error) => Err(self.fail(error, RelayOperation::Flush)),
-            Ok(Err(error)) => Err(self.fail(
-                ProxyError::io("socket raw flush", &error),
-                RelayOperation::Flush,
-            )),
-            Ok(Ok(())) => Ok(()),
-        }
-    }
-
-    fn fail(&self, error: ProxyError, operation: RelayOperation) -> Error {
-        let exchange_error = Error::new(format!("{}: {}", error.code, error.message));
-        record_failure(
-            &self.failure,
-            RelayFailure {
-                error,
-                direction: self.direction,
-                operation,
-                bytes: self.progress.snapshot(),
-            },
-        );
+    fn fail(&self, failure: RelayFailure) -> Error {
+        let exchange_error = socket_io::exchange_error(&failure);
+        record_failure(&self.failure, failure);
         exchange_error
     }
 }

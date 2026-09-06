@@ -8,15 +8,15 @@ use intercept_proxy_domain::{
     Condition, Document, ListenerId, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef,
     ProtocolPackageVersion, RuleId, RuleProgramEntry, UnifiedAction, UnifiedRuleProgram,
 };
-use intercept_proxy_exchange::{Rules, SocketContext};
+use intercept_proxy_exchange::{SocketContext, Upstream};
 use intercept_proxy_runtime::{
     ConnectionContext, HandshakePolicy, JointRuleConditionEvaluation, PipelinePorts,
-    Result as ProxyResult, SocketJointEvaluation, SocketPayloadDirection,
+    Result as ProxyResult, SocketJointEvaluation, SocketPayloadDirection, SocketPipelineLimits,
 };
 use parking_lot::Mutex;
 use uuid::Uuid;
 
-use super::{ExternalSocketObserved, JointSocketRules};
+use super::{ExternalSocketObserved, JointSocketPrepare};
 use crate::adapters::listener_runtime::{
     DocumentProgramFactory, external_relay::ExternalPackageRpc,
 };
@@ -94,7 +94,7 @@ async fn socket_frame_waits_for_listener_gate_before_reading_rule_generation() {
     let transaction = Arc::new(tokio::sync::Mutex::new(()));
     let transaction_guard = Arc::clone(&transaction).lock_owned().await;
     let document: Document = serde_json::from_value(serde_json::json!({})).unwrap();
-    let mut rules = JointSocketRules::new(
+    let mut prepare = JointSocketPrepare::<Upstream>::new(
         pipeline.clone(),
         intercept_proxy_runtime::SocketConnectionIdentity {
             runtime_epoch: Uuid::new_v4(),
@@ -108,12 +108,12 @@ async fn socket_frame_waits_for_listener_gate_before_reading_rule_generation() {
             document: document.clone(),
             input: b"old".to_vec(),
         }))),
-        Arc::new(Mutex::new(None)),
         programs.clone(),
         package,
         transaction,
+        SocketPipelineLimits::new(1_024, 1_024, 64).unwrap(),
     );
-    let mut applying = Box::pin(rules.apply(document));
+    let mut applying = Box::pin(prepare.prepare_document(&document));
     assert!(matches!(
         std::future::poll_fn(|context| { std::task::Poll::Ready(applying.as_mut().poll(context)) })
             .await,

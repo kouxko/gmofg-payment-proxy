@@ -77,32 +77,57 @@ impl ForwardProxyService {
         let handler_task_scope = task_scope;
         let exchange = Arc::new(tokio::sync::Mutex::new(None));
         let handler_exchange = Arc::clone(&exchange);
+        let write_tracker = Arc::new(crate::http::ResponseWriteTracker::default());
+        let handler_write_tracker = Arc::clone(&write_tracker);
         let handler = service_fn(move |request| {
             let service = service.clone();
             let context = handler_context.clone();
             let cancellation = handler_cancellation.clone();
             let task_scope = handler_task_scope.clone();
             let exchange = Arc::clone(&handler_exchange);
+            let write_tracker = Arc::clone(&handler_write_tracker);
             async move {
                 service
-                    .handle(request, peer, context, cancellation, task_scope, exchange)
+                    .handle(
+                        request,
+                        peer,
+                        context,
+                        cancellation,
+                        task_scope,
+                        exchange,
+                        write_tracker,
+                    )
                     .await
             }
         });
-        let connection =
-            server_http1::Builder::new().serve_connection(TokioIo::new(accepted.io), handler);
-        let result = tokio::select! {
-            () = cancellation.cancelled() => Err(ProxyError::new(
-                ErrorCode::ProxyStopped,
-                "forward proxy stopped while a client connection was active",
+        let connection = server_http1::Builder::new().serve_connection(
+            TokioIo::new(crate::http::ResponseIo::new(
+                accepted.io,
+                Arc::clone(&write_tracker),
             )),
-            result = connection => result.map_err(|error| {
+            handler,
+        );
+        let connection: std::pin::Pin<
+            Box<dyn std::future::Future<Output = hyper::Result<()>> + Send>,
+        > = Box::pin(connection);
+        let result = crate::http::drive_http1(
+            connection,
+            &write_tracker,
+            &cancellation,
+            self.config.write_timeout,
+        )
+        .await
+        .and_then(|result| {
+            result.map_err(|error| {
                 ProxyError::new(
                     ErrorCode::Io,
                     format!("forward proxy HTTP/1 connection failed: {error}"),
                 )
-            }),
-        };
+            })
+        });
+        if let Err(error) = &result {
+            write_tracker.fail(error);
+        }
         let exchange_result = if let Some(exchange) = exchange.lock().await.take() {
             exchange.exchange.shutdown();
             Ok(())

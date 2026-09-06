@@ -14,6 +14,8 @@ const paths = {
   productionTest: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
   requestMetadataTest: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/request_metadata.rs",
   exchangePipeline: "src-tauri/crates/exchange/src/pipeline.rs",
+  plain: "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+  capabilities: "src-tauri/crates/proxy/src/http/capabilities.rs",
 };
 const source = Object.fromEntries(await Promise.all(Object.entries(paths).map(async ([key, file]) => [key, await readFile(file, "utf8")])));
 source.test = `${source.test}\n${source.productionTest}\n${source.requestMetadataTest}`;
@@ -21,22 +23,37 @@ const failures = [];
 const requireText = (key, text, message) => { if (!source[key].includes(text)) failures.push(message); };
 const forbid = (key, pattern, message) => { if (pattern.test(source[key])) failures.push(message); };
 
+requireText("exchangePipeline", "PrepareWrite", "write preparation must have an explicit shared port");
+for (const key of ["plain", "external"]) {
+  requireText(key, "HttpMessagePrepare", "HTTP rules and Encode must use explicit message preparation");
+  forbid(key, /PreserveHttpContext|struct HttpEncode|JointHttpRuleRuntime/u, "HTTP preparation must not restore hidden stage or no-op Encode adapters");
+}
+requireText("plain", "lock_owned().await", "Plain HTTP must freeze one rule generation per message");
+forbid("joint", /JointHttpRuleRuntime|struct PendingKey/u, "HTTP joint evaluation must not own a global pending message map");
 requireText("context", "wire_body", "HTTP Context must retain original wire body bytes");
 requireText("endpoints", "wire_body: message.body.to_vec()", "HTTP endpoint must preserve authoritative body bytes");
 requireText("pipeline", "external_package_provider", "HTTP pipeline must resolve the shared online package provider");
 requireText("pipeline", "PackageKind::Http", "HTTP pipeline must reject a non-HTTP package registration");
 if (source.pipeline.includes("legacy_http") || existsSync("src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/legacy_http.rs")) failures.push("legacy HTTP runtime must remain removed after Phase 13");
-requireText("actor", ".with_external_package_call(error.external_package_call)", "joint actor must preserve typed package failure");
+requireText("actor", "ProxyError::from_exchange_error(", "joint actor must preserve typed package failure through shared conversion");
+for (const text of ["mapped.exchange_code = error.code", "mapped.stage = error.stage", "mapped.direction = error.direction", "mapped.external_package_call = error.external_package_call"])
+  requireText("proxy", text, `shared Exchange conversion must preserve typed detail ${text}`);
+requireText("capabilities", "error.into_exchange_error()", "HTTP capabilities must use shared typed Proxy conversion");
+if (!/Error::coded\(\s*"HTTP_DOCUMENT_INVALID"/u.test(source.capabilities))
+  failures.push("HTTP document failures must have structured error codes");
 requireText("actor", "ErrorCode::ExternalPackageCallFailed", "joint actor must preserve the top-level external package error code");
 requireText("proxy", "ExternalPackageCallFailed => \"EXTERNAL_PACKAGE_CALL_FAILED\"", "proxy error code must expose the external package failure classification");
 requireText("exchangePipeline", "failed_with_context::<Http, D>(\"display\"", "HTTP Display fail-open must emit typed observation evidence");
 requireText("exchangePipeline", "failed_with_context::<Socket, D>(\"display\"", "Socket Display fail-open must emit typed observation evidence");
-requireText("endpoints", "with_external_package_call(*failure)", "HTTP endpoint must preserve typed Proxy error details into Exchange");
-for (const text of ["ExternalPackageRpc", "DecodeParams", "DisplayParams", "decode_http_body_for_package"])
-  requireText("external", text, `HTTP shared RPC pipeline missing ${text}`);
+requireText("endpoints", "error.into_exchange_error()", "HTTP endpoint must use the shared typed Proxy error conversion");
+requireText("plain", "error.into_exchange_error()", "HTTP prepare must use the shared typed Proxy error conversion");
+for (const text of ["mapped.stage = self.stage", "mapped.direction = self.direction", "mapped.external_package_call = self.external_package_call"])
+  requireText("proxy", text, `shared Proxy conversion must preserve typed detail ${text}`);
+for (const text of ["ProtocolPackageRuntime", ".decode_http(self.direction, input.clone())", ".display(self.direction, document.clone())", "decode_http_body_for_package"])
+  requireText("external", text, `HTTP shared package pipeline missing ${text}`);
 requireText("external", "HTTP_CONTENT_ENCODING_UNSUPPORTED", "non-identity Content-Encoding gate missing");
 requireText("external", "HTTP_BODY_CHARSET_UNSUPPORTED", "strict HTTP charset gate missing");
-for (const text of ["original_document", "self.document == self.original_document", ".encode(", "EncodeParams"])
+for (const text of ["original_document", "self.document == self.original_document", ".encode_http(direction, original_input, self.document)"])
   requireText("joint", text, `unchanged/changed Document wire contract missing ${text}`);
 forbid("external", /ProtocolDirectionExecutor|DirectionExecutionPlan|LocalSidecarRuntime/u, "HTTP production pipeline must use only the shared package RPC");
 forbid("external", /retry|replay|rpc_timeout|max_in_flight|queue_capacity/u, "HTTP package path must not add timeout, queue, retry or replay policy");

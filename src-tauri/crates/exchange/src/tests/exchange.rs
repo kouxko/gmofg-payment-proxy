@@ -51,12 +51,12 @@ struct AppWriter {
 
 #[async_trait]
 impl Writer<Http, Downstream> for AppWriter {
-    async fn write(&mut self, context: HttpContext) -> Result<HttpContext, Error> {
+    async fn write(&mut self, context: HttpContext) -> Result<WriteOutcome<HttpContext>, Error> {
         self.events
             .lock()
             .push(format!("app_write:{}", context.body));
         self.responses.lock().push(context.clone());
-        Ok(context)
+        Ok(WriteOutcome::Committed(context))
     }
 }
 
@@ -140,12 +140,12 @@ struct EchoServerWriter {
 
 #[async_trait]
 impl Writer<Http, Upstream> for EchoServerWriter {
-    async fn write(&mut self, context: HttpContext) -> Result<HttpContext, Error> {
+    async fn write(&mut self, context: HttpContext) -> Result<WriteOutcome<HttpContext>, Error> {
         self.events
             .lock()
             .push(format!("server_write:{}", context.body));
         self.responses.lock().push_back(context.clone());
-        Ok(context)
+        Ok(WriteOutcome::Committed(context))
     }
 }
 
@@ -438,7 +438,10 @@ async fn capability_factory_error_is_a_complete_exchange_timeline() {
     clear_observation_events(id);
     let result = Exchange::<Http>::protocol_with(id, || Err(Error::new("factory failed"))).await;
 
-    assert_eq!(result.unwrap_err().message, "factory failed");
+    let error = result.unwrap_err();
+    assert_eq!(error.message, "factory failed");
+    assert_eq!(error.stage, Some(crate::ErrorStage::CapabilityFactory));
+    assert_eq!(error.direction, None);
     assert_eq!(
         take_observation_events(id),
         &[
@@ -456,12 +459,10 @@ async fn capability_factory_panic_is_caught_in_the_same_exchange() {
     let result =
         Exchange::<Http>::protocol_with(id, || panic!("factory panic must not escape")).await;
 
-    assert!(
-        result
-            .unwrap_err()
-            .message
-            .contains("CAPABILITY_FACTORY_PANICKED")
-    );
+    let error = result.unwrap_err();
+    assert_eq!(error.code.as_deref(), Some("CAPABILITY_FACTORY_PANICKED"));
+    assert_eq!(error.stage, Some(crate::ErrorStage::CapabilityFactory));
+    assert_eq!(error.direction, None);
     let events = take_observation_events(id);
     assert_eq!(events[0].0, "opened");
     assert_eq!(events[1].1.as_deref(), Some("capability_factory"));

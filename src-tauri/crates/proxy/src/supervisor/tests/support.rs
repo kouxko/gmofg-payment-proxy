@@ -36,6 +36,7 @@ impl UpstreamConnector for UnusedUpstream {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        _write_receipt: crate::http::UpstreamWriteReceipt,
         _informational: Option<&crate::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<crate::http::UpstreamExchange> {

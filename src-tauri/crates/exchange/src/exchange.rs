@@ -6,7 +6,7 @@ use tracing::Instrument;
 
 use crate::{
     AppConnection, Direction, DirectionKind, Downstream, Envelope, Error, Pipeline, Protocol,
-    ServerSlot, Socket, Upstream,
+    ServerSlot, Socket, Upstream, WriteOutcome,
 };
 use crate::{ObservedProtocol, observation};
 
@@ -88,8 +88,10 @@ impl<P: ObservedProtocol> ProtocolExchange<P> {
             };
             record_received(&request);
 
-            let sent = self.upstream.write(&mut self.server, &request).await?;
-            record_sent::<P, Upstream>(&sent);
+            match self.upstream.write(&mut self.server, &request).await? {
+                WriteOutcome::Committed(sent) => record_sent::<P, Upstream>(&sent),
+                WriteOutcome::ReadReady(_) => {}
+            }
 
             let Some(response) = self.downstream.read(self.server.reader()?).await? else {
                 return fail(
@@ -100,8 +102,10 @@ impl<P: ObservedProtocol> ProtocolExchange<P> {
             };
             record_received(&response);
 
-            let sent = self.downstream.write(self.app.writer(), &response).await?;
-            record_sent::<P, Downstream>(&sent);
+            match self.downstream.write(self.app.writer(), &response).await? {
+                WriteOutcome::Committed(sent) => record_sent::<P, Downstream>(&sent),
+                WriteOutcome::ReadReady(_) => {}
+            }
         }
     }
 }
@@ -175,12 +179,14 @@ impl<P: ObservedProtocol> Exchange<P> {
             let protocol = match std::panic::catch_unwind(AssertUnwindSafe(build)) {
                 Ok(Ok(protocol)) => protocol,
                 Ok(Err(error)) => {
+                    let error = error.with_stage(crate::ErrorStage::CapabilityFactory);
                     capability_factory_failed(&error);
                     return Err(error);
                 }
                 Err(_) => {
                     let error =
-                        Error::new("CAPABILITY_FACTORY_PANICKED: capability factory panicked");
+                        Error::coded("CAPABILITY_FACTORY_PANICKED", "capability factory panicked")
+                            .with_stage(crate::ErrorStage::CapabilityFactory);
                     capability_factory_failed(&error);
                     return Err(error);
                 }

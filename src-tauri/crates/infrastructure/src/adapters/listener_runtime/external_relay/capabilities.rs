@@ -6,9 +6,9 @@ use async_trait::async_trait;
 use intercept_proxy_application::ExternalPackageCallStage;
 use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, Error, ExternalPackageCallFailure,
-    ExternalPackageCallStage as ExchangeExternalPackageCallStage, Frame, FrameResult, Socket,
-    SocketContext,
+    Decode, Direction, DirectionKind, Display, Document, Error, ErrorStage,
+    ExternalPackageCallFailure, ExternalPackageCallStage as ExchangeExternalPackageCallStage,
+    Frame, FrameResult, Socket, SocketContext,
 };
 use intercept_proxy_package_contract::FrameResult as PackageFrameResult;
 use intercept_proxy_runtime::{SocketConnectionIdentity, SocketProcessingFailureKind};
@@ -70,14 +70,19 @@ impl<D: Direction> Frame<D> for ExternalFrame<D> {
             .runtime
             .frame(self.direction, buffer.to_vec())
             .await
-            .map_err(|error| rpc_error::<D>(ExternalCallStage::Frame, self.method, &error, self))?;
+            .map_err(|error| rpc_error(ExternalCallStage::Frame, self.method, &error, self))?;
         Ok(match result {
             PackageFrameResult::NeedMore { .. } => FrameResult::NeedMore,
             PackageFrameResult::Complete { consumed_bytes } => FrameResult::Complete {
                 consumed: consumed_bytes.get(),
             },
             PackageFrameResult::Reject { reason } => {
-                return Err(Error::new(format!("frame rejected: {reason}")));
+                return Err(Error::coded(
+                    SocketProcessingFailureKind::FrameRejected.as_str(),
+                    format!("frame rejected: {reason}"),
+                )
+                .with_stage(ErrorStage::Frame)
+                .with_direction(D::KIND));
             }
         })
     }
@@ -111,9 +116,7 @@ impl<D: Direction> Decode<Socket, D> for ExternalDecode<D> {
             .runtime
             .decode_socket(self.direction, context.data.clone())
             .await
-            .map_err(|error| {
-                rpc_error::<D>(ExternalCallStage::Decode, self.method, &error, self)
-            })?;
+            .map_err(|error| rpc_error(ExternalCallStage::Decode, self.method, &error, self))?;
         *self.observed.lock() = Some(ExternalSocketObserved {
             document: response.clone(),
             input: context.data.clone(),
@@ -146,9 +149,7 @@ impl Display for ExternalDisplay {
         self.runtime
             .display(self.direction, document.clone())
             .await
-            .map_err(|error| {
-                rpc_error_untyped(ExternalCallStage::Display, self.method, &error, self)
-            })
+            .map_err(|error| rpc_error(ExternalCallStage::Display, self.method, &error, self))
     }
 }
 
@@ -196,38 +197,21 @@ impl ExternalCallStage {
             Self::Frame | Self::Display => SocketProcessingFailureKind::ProcessingFailed,
         }
     }
+
+    const fn exchange_stage(self) -> ErrorStage {
+        match self {
+            Self::Frame => ErrorStage::Frame,
+            Self::Decode => ErrorStage::Decode,
+            Self::Display => ErrorStage::Display,
+        }
+    }
 }
 
-fn rpc_error<D: Direction>(
+fn rpc_error(
     stage: ExternalCallStage,
     method: &str,
     error: &PackageTransportError,
     context: &impl DiagnosticContext,
-) -> Error {
-    rpc_error_inner(
-        stage,
-        method,
-        error,
-        context,
-        Some(format!("{:?}", D::KIND)),
-    )
-}
-
-fn rpc_error_untyped(
-    stage: ExternalCallStage,
-    method: &str,
-    error: &PackageTransportError,
-    context: &impl DiagnosticContext,
-) -> Error {
-    rpc_error_inner(stage, method, error, context, None)
-}
-
-fn rpc_error_inner(
-    stage: ExternalCallStage,
-    method: &str,
-    error: &PackageTransportError,
-    context: &impl DiagnosticContext,
-    direction_prefix: Option<String>,
 ) -> Error {
     let (package, connection, direction) = context.diagnostic();
     let diagnostic = trace_external_rpc_failure(
@@ -239,25 +223,78 @@ fn rpc_error_inner(
         error,
     );
     let kind = stage.failure_kind();
-    let prefix = direction_prefix.map_or_else(String::new, |value| format!("{value}|"));
-    Error::new(format!(
-        "{prefix}{}: external package RPC failed",
-        kind.as_str()
-    ))
-    .with_external_package_call(ExternalPackageCallFailure {
-        package: diagnostic.package,
-        direction: diagnostic.direction,
-        stage: match diagnostic.stage {
-            ExternalPackageCallStage::Frame => ExchangeExternalPackageCallStage::Frame,
-            ExternalPackageCallStage::Decode => ExchangeExternalPackageCallStage::Decode,
-            ExternalPackageCallStage::Display => ExchangeExternalPackageCallStage::Display,
-            ExternalPackageCallStage::Encode => ExchangeExternalPackageCallStage::Encode,
-        },
-        method: diagnostic.method,
-        request_id: diagnostic.request_id,
-        remote_code: diagnostic.remote_code,
-        stable_code: diagnostic.stable_code,
-        remote_message: diagnostic.remote_message,
-        remote_data_summary: diagnostic.remote_data_summary,
-    })
+    let exchange_direction = match direction {
+        ProtocolDirection::Upstream => DirectionKind::Upstream,
+        ProtocolDirection::Downstream => DirectionKind::Downstream,
+    };
+    Error::coded(kind.as_str(), "external package RPC failed")
+        .with_stage(stage.exchange_stage())
+        .with_direction(exchange_direction)
+        .with_external_package_call(ExternalPackageCallFailure {
+            package: diagnostic.package,
+            direction: diagnostic.direction,
+            stage: match diagnostic.stage {
+                ExternalPackageCallStage::Frame => ExchangeExternalPackageCallStage::Frame,
+                ExternalPackageCallStage::Decode => ExchangeExternalPackageCallStage::Decode,
+                ExternalPackageCallStage::Display => ExchangeExternalPackageCallStage::Display,
+                ExternalPackageCallStage::Encode => ExchangeExternalPackageCallStage::Encode,
+            },
+            method: diagnostic.method,
+            request_id: diagnostic.request_id,
+            remote_code: diagnostic.remote_code,
+            stable_code: diagnostic.stable_code,
+            remote_message: diagnostic.remote_message,
+            remote_data_summary: diagnostic.remote_data_summary,
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use intercept_proxy_domain::{ProtocolPackageId, ProtocolPackageVersion};
+    use intercept_proxy_exchange::{Downstream, Upstream};
+    use uuid::Uuid;
+
+    #[derive(Debug)]
+    struct RejectingRuntime;
+
+    #[async_trait]
+    impl ProtocolPackageRuntime for RejectingRuntime {
+        async fn frame(
+            &self,
+            _: ProtocolDirection,
+            _: Vec<u8>,
+        ) -> Result<PackageFrameResult, PackageTransportError> {
+            Ok(PackageFrameResult::Reject {
+                reason: "Upstream|WRITE_FAILED: misleading rejection text".into(),
+            })
+        }
+    }
+
+    async fn assert_frame_rejection<D: Direction>(direction: ProtocolDirection) {
+        let mut frame = ExternalFrame::<D>::new(
+            Arc::new(RejectingRuntime),
+            "hooks.frame",
+            ProtocolPackageRef {
+                id: ProtocolPackageId::new("frame-reject-test").unwrap(),
+                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
+            },
+            SocketConnectionIdentity {
+                runtime_epoch: Uuid::from_u128(1),
+                connection_id: Uuid::from_u128(2),
+                peer_addr: "127.0.0.1:12345".parse().unwrap(),
+            },
+            direction,
+        );
+        let error = frame.split(b"rejected frame").await.unwrap_err();
+        assert_eq!(error.code.as_deref(), Some("FRAME_REJECTED"));
+        assert_eq!(error.stage, Some(ErrorStage::Frame));
+        assert_eq!(error.direction, Some(D::KIND));
+    }
+
+    #[tokio::test]
+    async fn frame_rejection_preserves_code_stage_and_both_directions() {
+        assert_frame_rejection::<Upstream>(ProtocolDirection::Upstream).await;
+        assert_frame_rejection::<Downstream>(ProtocolDirection::Downstream).await;
+    }
 }

@@ -19,6 +19,8 @@ const files = [
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
   "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/request_metadata.rs",
   "src-tauri/crates/exchange/src/pipeline.rs",
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+  "src-tauri/crates/proxy/src/http/capabilities.rs",
 ];
 
 function sandbox() {
@@ -81,6 +83,9 @@ test("fails closed when Phase10 Cargo discovery drifts", () => {
 });
 
 for (const [name, mutate, expected] of [
+  ["plain generation gate removed", replace(files[11], "lock_owned().await", "ungated()"), /rule generation/u],
+  ["HTTP no-op Encode restored", append(files[3], "struct HttpEncode;"), /no-op Encode/u],
+  ["global HTTP staging restored", append(files[4], "struct JointHttpRuleRuntime;"), /global pending/u],
   ["wire body removed", replace(files[0], "wire_body", "projected_body"), /original wire/u],
   ["endpoint loses wire bytes", replace(files[1], "wire_body: message.body.to_vec()", "wire_body: Vec::new()"), /authoritative body/u],
   ["shared provider removed", replace(files[2], "external_package_provider", "legacy_package_provider"), /shared online/u],
@@ -90,13 +95,19 @@ for (const [name, mutate, expected] of [
   ["legacy runtime added", append(files[3], "fn wrong() { DirectionExecutionPlan::default(); }"), /shared package RPC/u],
   ["retry policy added", append(files[3], "fn retry_with_queue_capacity() {}"), /must not add timeout/u],
   ["unchanged gate removed", replace(files[4], "self.document == self.original_document", "false"), /wire contract/u],
-  ["encode RPC removed", replace(files[4], ".encode(", ".display("), /wire contract/u],
-  ["joint actor typed failure removed", replace(files[5], ".with_external_package_call(error.external_package_call)", ".with_external_package_call(None)"), /typed package failure/u],
+  ["encode runtime call removed", replace(files[4], ".encode_http(", ".display("), /wire contract/u],
+  ["joint actor typed failure removed", replace(files[5], "ProxyError::from_exchange_error(", "ProxyError::new("), /typed package failure/u],
+  ["capability typed error conversion removed", replace(files[12], "error.into_exchange_error()", "Error::new(error.message)"), /shared typed Proxy/u],
+  ["capability structured code removed", replace(files[12], "Error::coded(", "Error::new("), /structured error codes/u],
+  ["shared Exchange code removed", replace(files[6], "mapped.exchange_code = error.code", "mapped.exchange_code = None"), /preserve typed detail/u],
   ["legacy runtime restored", append(files[2], "mod legacy_http;"), /remain removed/u],
   ["actor external code folded to internal", replace(files[5], "ErrorCode::ExternalPackageCallFailed", "ErrorCode::Internal"), /top-level external package error code/u],
   ["proxy external code removed", replace(files[6], "ExternalPackageCallFailed => \"EXTERNAL_PACKAGE_CALL_FAILED\"", "ExternalPackageCallFailed => \"INTERNAL_ERROR\""), /external package failure classification/u],
   ["display fail-open observation removed", replace(files[10], "failed_with_context::<Http, D>(\"display\"", "failed_with_context::<Http, D>(\"ignored\""), /Display fail-open/u],
-  ["endpoint typed error removed", replace(files[1], ".with_external_package_call(*failure)", ""), /preserve typed Proxy/u],
+  ["endpoint typed error removed", replace(files[1], "error.into_exchange_error()", "Error::new(error.message)"), /shared typed Proxy/u],
+  ["prepare typed error removed", replace(files[11], "error.into_exchange_error()", "Error::new(error.message)"), /shared typed Proxy/u],
+  ["shared typed error stage removed", replace(files[6], "mapped.stage = self.stage", "mapped.stage = None"), /preserve typed detail/u],
+  ["shared package failure removed", replace(files[6], "mapped.external_package_call = self.external_package_call", "mapped.external_package_call = None"), /preserve typed detail/u],
   ["unchanged behavior test removed", replace(files[7], "unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc", "missing_unchanged_case"), /Cargo Phase10 test/u],
   ["changed behavior test removed", replace(files[7], "changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed", "missing_changed_case"), /Cargo Phase10 test/u],
 ]) {

@@ -5,8 +5,7 @@ use std::sync::Arc;
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DocumentSchemaNode, ListenerId, ProtocolDirection, ProtocolPackageRef, ProxyListener,
-    ProxyWorkspace, RuleContent, RuleProgramEntry, RuleStage, SocketRuleContent, SocketTopology,
-    UnifiedRuleProgram, validate_unified_action_schema,
+    ProxyWorkspace, RuleContent, RuleStage, SocketRuleContent, SocketTopology, UnifiedRuleProgram,
 };
 use parking_lot::RwLock;
 
@@ -106,16 +105,8 @@ pub(super) fn compile_document_rules(
                 )
                 .entity(definition.rule_id().to_string()));
             }
-            if let Some(schema) = schema {
-                intercept_proxy_domain::validate_document_condition_schema(condition, schema)?;
-                validate_unified_action_schema(action, schema)?;
-            }
-            entries.push(RuleProgramEntry::new(
-                definition.rule_id(),
-                definition.priority(),
-                definition.created_order(),
-                condition.clone(),
-                action.clone(),
+            entries.push(super::rule_program_compilation::compile_rule_entry(
+                definition, condition, action, schema,
             )?);
         }
         UnifiedRuleProgram::new(entries)

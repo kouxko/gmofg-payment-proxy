@@ -15,7 +15,7 @@ use tracing::Instrument;
 use crate::transport::BoxIo;
 use crate::transport::relay::{RelayBytes, RelayDirection, RelayProgress};
 
-use self::capabilities::{BoundedEncode, BoundedFrame, factory_failed, factory_panicked};
+use self::capabilities::{BoundedFrame, BoundedPrepare, factory_failed, factory_panicked};
 use self::io::{SocketConnection, SocketReader, SocketWriter};
 use self::server::{RemoteSocketServer, SharedPreparationFailure};
 use super::connector::{PreparedSocketSecurity, SocketPreparationFailure};
@@ -179,13 +179,10 @@ fn pipeline<D: intercept_proxy_exchange::Direction>(
             capabilities.decode,
             capabilities.display,
         )),
-        Box::new(Write::new(
-            capabilities.rules,
-            Box::new(BoundedEncode::new(
-                capabilities.encode,
-                limits.max_output_bytes(),
-            )),
-        )),
+        Box::new(Write::prepared(Box::new(BoundedPrepare::new(
+            capabilities.prepare,
+            limits.max_output_bytes(),
+        )))),
     )
 }
 
@@ -214,36 +211,30 @@ fn create_capabilities<D: Direction>(
 }
 
 fn direction_error<D: Direction>(error: &Error) -> Error {
-    let direction = match D::KIND {
-        intercept_proxy_exchange::DirectionKind::Upstream => "Upstream",
-        intercept_proxy_exchange::DirectionKind::Downstream => "Downstream",
-    };
-    let mut mapped = Error::new(format!("{direction}|{}", error.message));
-    mapped
-        .external_package_call
-        .clone_from(&error.external_package_call);
-    mapped
+    error.clone().with_direction(D::KIND)
 }
 
 fn exchange_failure(error: &Error) -> SocketProcessingFailure {
-    let message = error.message.as_str();
-    let direction = if message.starts_with("Upstream|") {
-        Some(SocketPayloadDirection::AppToUpstream)
-    } else if message.starts_with("Downstream|") {
-        Some(SocketPayloadDirection::UpstreamToApp)
-    } else {
-        None
+    let direction = match error.direction {
+        Some(intercept_proxy_exchange::DirectionKind::Upstream) => {
+            Some(SocketPayloadDirection::AppToUpstream)
+        }
+        Some(intercept_proxy_exchange::DirectionKind::Downstream) => {
+            Some(SocketPayloadDirection::UpstreamToApp)
+        }
+        None => None,
     };
-    let code = message
-        .split_once('|')
-        .map_or(message, |(_, rest)| rest)
-        .split_once(':')
-        .map_or(message, |(code, _)| code);
-    let mut failure = SocketProcessingFailure::new(kind_from_code(code), message);
+    let mut failure = SocketProcessingFailure::new(
+        kind_from_code(error.code.as_deref().unwrap_or_default()),
+        &error.message,
+    );
     if let Some(external_package_call) = error.external_package_call.clone() {
         failure = failure.with_external_package_call(*external_package_call);
     }
-    direction.map_or(failure.clone(), |direction| failure.in_direction(direction))
+    match direction {
+        Some(direction) => failure.in_direction(direction),
+        None => failure,
+    }
 }
 
 fn kind_from_code(code: &str) -> SocketProcessingFailureKind {
@@ -279,4 +270,46 @@ fn observation_span(
 ) -> tracing::Span {
     let metadata = factory.observation_metadata();
     metadata.exchange_span(identity, endpoint)
+}
+
+#[cfg(test)]
+mod tests {
+    use intercept_proxy_exchange::{DirectionKind, ErrorStage};
+
+    use super::*;
+
+    #[test]
+    fn exchange_failure_uses_structured_code_and_direction_instead_of_message_text() {
+        for (kind, stage, observed_stage) in [
+            (
+                SocketProcessingFailureKind::EncodeFailed,
+                ErrorStage::Encode,
+                super::super::SocketRelayStage::Encode,
+            ),
+            (
+                SocketProcessingFailureKind::FrameRejected,
+                ErrorStage::Frame,
+                super::super::SocketRelayStage::FrameInspect,
+            ),
+        ] {
+            let error = Error::coded(
+                kind.as_str(),
+                "Upstream|READ_TIMEOUT: misleading message text",
+            )
+            .with_stage(stage)
+            .with_direction(DirectionKind::Downstream);
+            let failure = exchange_failure(&error);
+            assert_eq!(failure.kind, kind);
+            assert_eq!(
+                failure.direction,
+                Some(SocketPayloadDirection::UpstreamToApp)
+            );
+            let observed = super::super::handler_support::processing_failure(&failure);
+            assert_eq!(observed.stage, observed_stage);
+            assert_eq!(
+                observed.direction,
+                Some(super::super::SocketRelayDirection::ServerToClient)
+            );
+        }
+    }
 }

@@ -51,12 +51,16 @@ Socket 字节、Document、Display 及实际发送内容。两者不能互相替
 | --- | --- | --- |
 | `Opened` | Exchange 已建立 | 时间 |
 | `Received` | Reader 完成一个消息 | 方向、HTTP/Socket Context、可选 Document、固定 Display |
-| `Sent` | Writer 已提交消息 | 方向、实际写入 Context |
+| `Sent` | Writer 返回 Committed：完整写入并 flush（Local 为内存端点接收） | 方向、实际写入 Context |
 | `Failed` | 某阶段失败 | 可选方向、阶段、可选 Context、错误 |
 | `Closed` | 连接结束 | completed/failed 与可选错误 |
 
 HTTP Context 保留 Header 和 Body 文本；Socket Context 保留字节。透明 Socket 没有 Document 或
 Display。协议模式的 Received 展示 Reader 时的事实，Sent 展示 Rules/Encode 后实际发送的事实。
+准备完成的 encoded Context 不代表传输完成。HTTP 的 `ReadReady` 表示可读取提前响应，不产生
+upstream Sent；下游只有 Body 完成且底层 flush 成功才提交。错误通过类型化 code/stage/direction
+传递，真实 Encode/Flush 失败位置不会被外层 Rules/Write 标签覆盖。
+
 HTTP Context 额外记录 `body_is_utf8`。当它为 `false` 时，Body 文本只是 lossy 观测投影，Application
 不得用它生成会写回网络的 Mock 规则草稿。
 

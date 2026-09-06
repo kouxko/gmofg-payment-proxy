@@ -4,16 +4,16 @@ use intercept_proxy_domain::{
     RuleLifecycleDelta, RuleTrace, UnifiedAction,
 };
 use intercept_proxy_runtime::{
-    ErrorCode, JointConditionEvaluation, JointRuleConditionEvaluation, Message, ProxyError,
-    Result as ProxyResult, SocketJointEvaluation,
+    ErrorCode, HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
+    Message, ProxyError, Result as ProxyResult, SocketJointEvaluation,
 };
 
 use super::{RuleRuntime, message_stage};
-use crate::adapters::pipeline::{JointDocumentEvaluation, app_to_proxy};
+use crate::adapters::pipeline::app_to_proxy;
 
 pub(super) fn evaluate_rules(
     current: &mut RuleRuntime,
-    joint_document: &mut Option<JointDocumentEvaluation>,
+    joint_document: &mut Option<Box<dyn HttpJointEvaluation>>,
     socket_joint: &mut Option<Box<dyn SocketJointEvaluation>>,
     context: &MatchContext<'_>,
     execution_order: &[RuleId],
@@ -79,7 +79,7 @@ fn belongs_to_stage(rule: &RuleDefinition, context: &MatchContext<'_>) -> bool {
 
 fn evaluate_condition(
     rule: &RuleDefinition,
-    joint_document: &mut Option<JointDocumentEvaluation>,
+    joint_document: &mut Option<Box<dyn HttpJointEvaluation>>,
     socket_joint: &mut Option<Box<dyn SocketJointEvaluation>>,
     context: &MatchContext<'_>,
     message: Option<&mut Message>,
@@ -90,14 +90,25 @@ fn evaluate_condition(
         joint_document.as_mut(),
         socket_joint.as_mut(),
     ) {
-        (RuleContent::Http(_), Some(joint), None) => joint
-            .gate(
-                rule.rule_id(),
+        (RuleContent::Http(_), Some(joint), None) => {
+            let body_codec =
+                body_codec.expect("HTTP unified evaluation owns its selected body codec");
+            let mut apply_action = |message: &mut Message, action: &HttpAction| {
+                crate::adapters::pipeline::rule_actions::apply_rule_actions(
+                    body_codec,
+                    message,
+                    std::slice::from_ref(action),
+                    0,
+                )
+                .map(|_| ())
+            };
+            joint.gate(
+                rule.rule_id().as_uuid(),
                 context,
                 message.expect("HTTP unified evaluation owns a working message"),
-                body_codec.expect("HTTP unified evaluation owns its selected body codec"),
-            )
-            .map_err(|error| app_to_proxy(error.into()))?,
+                &mut apply_action,
+            )?
+        }
         (RuleContent::Socket(_), None, Some(joint)) => joint.gate(rule.rule_id().as_uuid())?,
         (RuleContent::Http(http_rule), None, None) => {
             ordinary_http_condition(http_rule, context, message.as_deref())?

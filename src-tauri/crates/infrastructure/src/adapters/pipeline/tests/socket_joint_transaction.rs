@@ -32,7 +32,13 @@ impl RuntimeRuleRepository for SocketTransactionRules {
 }
 
 struct TestSocketJointEvaluation {
-    fail_encode: bool,
+    outcome: TestSocketEncodeOutcome,
+    original: Arc<Mutex<Vec<u8>>>,
+}
+
+enum TestSocketEncodeOutcome {
+    Failure,
+    Output(Vec<u8>),
 }
 
 #[async_trait]
@@ -44,9 +50,7 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
     {
         Ok(
             intercept_proxy_runtime::JointRuleConditionEvaluation::UnifiedOwned(
-                intercept_proxy_runtime::JointConditionEvaluation {
-                    matched: true,
-                },
+                intercept_proxy_runtime::JointConditionEvaluation { matched: true },
             ),
         )
     }
@@ -54,21 +58,56 @@ impl intercept_proxy_runtime::SocketJointEvaluation for TestSocketJointEvaluatio
     async fn encode(
         self: Box<Self>,
     ) -> Result<intercept_proxy_exchange::SocketContext, intercept_proxy_exchange::Error> {
-        if self.fail_encode {
-            Err(intercept_proxy_exchange::Error::new(
-                "EXTERNAL_PACKAGE_CALL_FAILED: phase11 encode rejected",
-            ))
-        } else {
-            Ok(intercept_proxy_exchange::SocketContext {
-                data: b"encoded".to_vec(),
-            })
+        assert_eq!(&*self.original.lock(), b"original-frame");
+        match self.outcome {
+            TestSocketEncodeOutcome::Failure => Err(intercept_proxy_exchange::Error::coded(
+                "ENCODE_FAILED",
+                "Rules: misleading text must not select the stage",
+            )
+            .with_external_package_call(
+                intercept_proxy_exchange::ExternalPackageCallFailure {
+                    package: intercept_proxy_domain::ProtocolPackageRef {
+                        id: intercept_proxy_domain::ProtocolPackageId::new("socket-transaction")
+                            .expect("package id"),
+                        version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0")
+                            .expect("package version"),
+                    },
+                    direction: intercept_proxy_domain::ProtocolDirection::Upstream,
+                    stage: intercept_proxy_exchange::ExternalPackageCallStage::Encode,
+                    method: "hooks.encode".into(),
+                    request_id: Some("socket-encode-red".into()),
+                    remote_code: Some(-1),
+                    stable_code: Some("ENCODE_FAILED".into()),
+                    remote_message: Some("phase11 encode rejected".into()),
+                    remote_data_summary: None,
+                },
+            )),
+            TestSocketEncodeOutcome::Output(data) => {
+                Ok(intercept_proxy_exchange::SocketContext { data })
+            }
         }
     }
 }
 
-#[tokio::test]
-async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
-    let rule = intercept_proxy_domain::RuleDefinition::create(
+fn bounded_socket_evaluation(
+    outcome: TestSocketEncodeOutcome,
+    original: &Arc<Mutex<Vec<u8>>>,
+    max_output_bytes: usize,
+) -> Box<dyn intercept_proxy_runtime::SocketJointEvaluation> {
+    Box::new(intercept_proxy_runtime::BoundedSocketJointEvaluation::<
+        intercept_proxy_exchange::Upstream,
+    >::new(
+        Box::new(TestSocketJointEvaluation {
+            outcome,
+            original: Arc::clone(original),
+        }),
+        intercept_proxy_runtime::SocketPipelineLimits::new(1_024, max_output_bytes, 64)
+            .expect("limits"),
+    ))
+}
+
+fn socket_transaction_rule() -> intercept_proxy_domain::RuleDefinition {
+    intercept_proxy_domain::RuleDefinition::create(
         intercept_proxy_domain::RuleDefinitionDraft {
             name: "socket transaction".into(),
             enabled: true,
@@ -93,7 +132,12 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
         },
         1,
     )
-    .expect("rule");
+    .expect("rule")
+}
+
+#[tokio::test]
+async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
+    let rule = socket_transaction_rule();
     let rules = Arc::new(SocketTransactionRules {
         snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
         commit_attempts: AtomicUsize::new(0),
@@ -108,25 +152,75 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
     let epoch = Uuid::new_v4();
     let context = test_context(epoch, Uuid::new_v4(), transaction_channel());
     open_test_connection(&pipeline, &context).await;
+    let original = Arc::new(Mutex::new(b"original-frame".to_vec()));
 
     let error = pipeline
         .apply_socket_policy(
             &context,
             intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream,
-            Box::new(TestSocketJointEvaluation { fail_encode: true }),
+            bounded_socket_evaluation(TestSocketEncodeOutcome::Failure, &original, 7),
         )
         .await
         .expect_err("Encode failure must fail before lifecycle commit");
     assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
+    assert_eq!(error.exchange_code.as_deref(), Some("ENCODE_FAILED"));
+    assert_eq!(
+        error.stage,
+        Some(intercept_proxy_exchange::ErrorStage::Encode)
+    );
+    assert_eq!(
+        error.direction,
+        Some(intercept_proxy_exchange::DirectionKind::Upstream)
+    );
+    assert_eq!(
+        error
+            .external_package_call
+            .as_ref()
+            .and_then(|failure| failure.stable_code.as_deref()),
+        Some("ENCODE_FAILED")
+    );
+    assert_eq!(&*original.lock(), b"original-frame");
     assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
     assert!(rules.snapshot.lock().rules[0].enabled());
     assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 0);
+
+    for (output, expected_code) in [
+        (Vec::new(), "EMPTY_OUTPUT"),
+        (b"oversized".to_vec(), "OUTPUT_LIMIT_EXCEEDED"),
+    ] {
+        let error = pipeline
+            .apply_socket_policy(
+                &context,
+                intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream,
+                bounded_socket_evaluation(TestSocketEncodeOutcome::Output(output), &original, 7),
+            )
+            .await
+            .expect_err("invalid output must fail before lifecycle commit");
+        assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
+        assert_eq!(error.exchange_code.as_deref(), Some(expected_code));
+        assert_eq!(
+            error.stage,
+            Some(intercept_proxy_exchange::ErrorStage::Encode)
+        );
+        assert_eq!(
+            error.direction,
+            Some(intercept_proxy_exchange::DirectionKind::Upstream)
+        );
+        assert_eq!(&*original.lock(), b"original-frame");
+        assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
+        assert!(rules.snapshot.lock().rules[0].enabled());
+        assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 0);
+    }
 
     let encoded = pipeline
         .apply_socket_policy(
             &context,
             intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream,
-            Box::new(TestSocketJointEvaluation { fail_encode: false }),
+            bounded_socket_evaluation(
+                TestSocketEncodeOutcome::Output(b"encoded".to_vec()),
+                &original,
+                7,
+            ),
         )
         .await
         .expect("successful Encode commits the joint lifecycle transaction");

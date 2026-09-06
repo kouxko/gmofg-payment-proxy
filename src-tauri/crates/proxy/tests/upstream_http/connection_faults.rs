@@ -23,6 +23,7 @@ async fn close_after_request_write_sends_the_complete_request_without_waiting_fo
             &[FaultAction::DropResponse {
                 read_upstream: false,
             }],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         ),
@@ -70,6 +71,7 @@ async fn injected_read_timeout_starts_after_the_complete_request_write() {
             &NoopPipelinePorts,
             fault_test_request(),
             &[FaultAction::UpstreamReadTimeout(Duration::from_millis(40))],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         ),

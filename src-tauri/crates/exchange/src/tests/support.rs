@@ -53,12 +53,12 @@ impl<P: Protocol, D: Direction> RecordingWriter<P, D> {
 
 #[async_trait]
 impl<P: Protocol, D: Direction> Writer<P, D> for RecordingWriter<P, D> {
-    async fn write(&mut self, context: P::Context) -> Result<P::Context, Error> {
+    async fn write(&mut self, context: P::Context) -> Result<WriteOutcome<P::Context>, Error> {
         if let Some(error) = self.failure.clone() {
             return Err(error);
         }
         self.writes.lock().push(context.clone());
-        Ok(context)
+        Ok(WriteOutcome::Committed(context))
     }
 }
 

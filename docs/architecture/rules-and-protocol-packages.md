@@ -29,7 +29,8 @@ value type 重新读取 Rust capability，因此 null、object、array 和未来
 每条规则必须且只能包含一个 condition 和一个对应 action，不提供单条规则内的 AND/OR 或 action
 列表。condition 使用 Rust capability 给出的 field、selector、operator 和 typed value；Set、Clear、
 Insert、Append 是否可用由目标路径的 value type 决定。规则保存会再次在 Domain/Application 校验，
-不能依赖前端隐藏非法选项。需要多个独立行为时创建多条规则，它们分别匹配并按规则顺序执行。
+不能依赖前端隐藏非法选项。Document 条件不会跳过 HTTP action 的阶段、方向、参数或托管 Header
+校验；条件和动作各自遵守其合同。需要多个独立行为时创建多条规则，它们分别匹配并按规则顺序执行。
 
 HTTP 新建/编辑条件只有一套当前合同：Method 和 Path。终端 IP、证书指纹与 Header 只用于既有数据
 兼容、连接诊断或抓包展示，
@@ -80,6 +81,9 @@ Proxy -> App:    working Document condition -> action -> Encode -> write
 condition 读取当前 working state，命中后执行唯一 action，并供后序规则条件观察。方向完成后只
 Encode 一次。Document、普通 HTTP action、Encode
 与 actor delta 作为一个事务提交，全部成功才一次提交 lifecycle，任一步失败都回滚。
+该事务由显式 `PrepareWrite` 端口组织，成功准备和真实写出分别观察，见
+[Exchange 与 Pipeline](exchange-pipeline.md)。HTTP/Socket 复用规则 entry 与 Schema 验证步骤，
+各自保留适用方向、协议包种类和精确版本的检查。
 
 Direct Socket 不进入 Frame/Decode/Rules/Encode。Display 是未信任观测输出，失败可回退文本/Hex，
 但 Frame、Decode、Rules、Encode 或 Writer 失败结束 Exchange。

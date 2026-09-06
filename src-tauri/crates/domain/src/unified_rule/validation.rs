@@ -6,9 +6,6 @@ pub(super) fn validate_http_runtime_content(
     definition: &RuleDefinition,
     content: &HttpRuleContent,
 ) -> Result<(), DomainError> {
-    let Condition::Http { .. } = &content.condition else {
-        return Ok(());
-    };
     let action = match &content.action {
         UnifiedAction::Http(action) => action.clone(),
         UnifiedAction::Terminal(action) => HttpAction::Terminal(action.clone()),

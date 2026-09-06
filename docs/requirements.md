@@ -10,7 +10,7 @@
 
 Intercept Proxy 是与具体业务应用无关的 HTTP/HTTPS/Socket 测试代理。它同时提供：
 
-1. 统一代理监听；普通 HTTP 可按请求目标转发，也可转发到固定 Server。
+1. 统一代理监听；普通 HTTP 可按请求目标转发、转发到固定 Server，或由本机应答。
 2. 固定 Server 的 TLS/mTLS，以及独立的 Socket 协议处理或透明转发。
 3. 每条监听可选固定 Server、TLS/mTLS、抓包、规则和故障注入。
 4. Android Companion，通过 `VpnService` 只接管指定包名，在 TCP/IP 包层实施弱网。
@@ -104,11 +104,13 @@ ProxyWorkspace
 “代理入口”表示 Proxy 在本机开放给客户端连接的地址和端口，以及该入口采用的转发方式。
 
 所有入口使用同一个 `ProxyListener` 模型，不再把“正向代理”和“固定上游入口”作为两种
-需要用户理解的入口类型。每个入口都包含监听地址、端口和一个可选的固定 Server 配置：
+需要用户理解的入口类型。每个入口都包含监听地址、端口和明确的响应方式：
 
-- 未启用“转发到固定 Server”时，Rust 根据普通 HTTP absolute-form 动态确定请求目标。
+- 选择按请求目标转发时，Rust 根据普通 HTTP absolute-form 动态确定请求目标。
 - 启用“转发到固定 Server”时，该入口的全部 HTTP 请求只允许转发到本入口配置的唯一
   HTTP/HTTPS origin。不同 Server、端口或证书策略必须使用不同入口，入口数量不受产品模板限制。
+- 选择本机应答时，不创建真实上游连接；HTTP 默认响应和两方向规则遵循
+  [LocalServer 合同](architecture/exchange-pipeline.md#8-localserver-与-remoteserver)。
 - 固定 Server 是入口的可选路由策略，不是另一种“上游入口”，UI、IPC、Workspace 和运行状态
   均不得再暴露 Forward/Reverse 两套入口概念。
 

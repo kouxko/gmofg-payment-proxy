@@ -393,8 +393,7 @@ pub(crate) fn configure_listener_runtime_pipeline(
             assembly.events.clone(),
             assembly.capture,
         )
-        .with_body_codec_resolver(assembly.workspace_body_codecs.clone())
-        .with_joint_http_rules(listener_runtime.joint_http_rules()),
+        .with_body_codec_resolver(assembly.workspace_body_codecs.clone()),
     );
     listener_runtime.set_body_codec_resolver(assembly.workspace_body_codecs);
     listener_runtime.set_pipeline_ports(pipeline);

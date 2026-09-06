@@ -28,7 +28,7 @@ use hyper::service::service_fn;
 use hyper_util::rt::TokioIo;
 use tokio::io::{AsyncRead, AsyncWrite, AsyncWriteExt, ReadBuf, ReadHalf, WriteHalf};
 use tokio::net::{TcpListener, TcpStream};
-use tokio::sync::{Notify, mpsc};
+use tokio::sync::{Notify, mpsc, oneshot};
 use tokio::task::JoinHandle;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
@@ -42,10 +42,13 @@ use crate::traffic::{
     TrafficDirection, TrafficSchedule,
 };
 use crate::{ErrorCode, ProxyError, Result};
+use intercept_proxy_exchange::WriteOutcome;
 
 mod capabilities;
 mod contracts;
+mod egress;
 mod exchange;
+pub(crate) use egress::{Http1TransportSettings, send_http1_exchange};
 mod exchange_runtime;
 pub(crate) use exchange_runtime::{
     HttpExchangeConnection, HttpExchangeRequest, HttpExchangeRuntime,
@@ -55,11 +58,15 @@ mod local_server;
 mod raw_http1;
 mod raw_http1_response;
 mod request_service;
+mod response_write;
+pub(crate) use response_write::{ResponseBody, ResponseIo, ResponseWriteTracker, drive_http1};
 mod schedule;
 mod service;
 #[path = "http/io.rs"]
 mod stream_io;
 mod tracking;
+pub use tracking::UpstreamWriteReceipt;
+pub(crate) use tracking::upstream_write_receipt;
 mod upstream;
 mod wire;
 
@@ -69,7 +76,7 @@ pub use crate::transport::{
     UpstreamSecurityEvidence, UpstreamTransportSecurity,
 };
 pub use capabilities::{
-    HttpConnectionIdentity, HttpDirectionCapabilities, HttpObservationMetadata,
+    HttpConnectionIdentity, HttpDirectionCapabilities, HttpMessagePrepare, HttpObservationMetadata,
     HttpProtocolCapabilityFactory, PlainHttpCapabilityFactory, RulesChain,
 };
 pub use contracts::{
@@ -82,20 +89,19 @@ pub use stream_io::InformationalResponseSink;
 pub use upstream::HyperUpstreamConnector;
 
 pub(crate) use crate::transport::TokioBoundListener;
-use exchange::{Http1ExchangeConfig, send_http1_request, send_scheduled_upstream_abort};
+use exchange::{Http1ExchangeConfig, send_http1_request};
 use helpers::{
-    InjectedTimeoutStage, collect_limited, finish_downstream_write, informational_status,
-    injected_timeout, message_wire_head, raw_head_capture_limit, response_from_disposition,
-    timeout_stage, validate_headers, wait_for_injected_timeout,
+    InjectedTimeoutStage, finish_downstream_write, informational_status, injected_timeout,
+    message_wire_head, raw_head_capture_limit, response_from_disposition, validate_headers,
+    wait_for_injected_timeout,
 };
+pub(crate) use helpers::{collect_limited, timeout_stage};
 use raw_http1::{RawHttp1HeadCapture, ReadRecordingIo, RequestHeadPreservingIo};
 use raw_http1_response::{CanonicalResponseHead, ResponseHeadPreservingIo};
 pub(crate) use schedule::traffic_schedule;
 use service::RequestWireState;
 use stream_io::SplitIo;
-use tracking::{
-    ConnectionTask, RequestWriteTracker, ResponseWriteTracker, TrackedIo, TrackedRequestBody,
-};
+use tracking::{ConnectionTask, RequestWriteTracker, TrackedIo, TrackedRequestBody};
 use wire::{IntentionalWireFault, WireBody};
 
 #[cfg(test)]

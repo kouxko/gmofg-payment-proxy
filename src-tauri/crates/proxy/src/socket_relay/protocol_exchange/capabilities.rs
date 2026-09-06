@@ -5,10 +5,10 @@
 
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
-    Direction, Document, Encode, Error, Frame, FrameResult, Socket, SocketContext,
+    Direction, Envelope, Error, ErrorStage, Frame, FrameResult, PrepareWrite, Socket, SocketContext,
 };
 
-use super::super::SocketProcessingFailureKind;
+use super::super::{SocketProcessingFailureKind, validate_socket_output};
 
 pub(super) struct BoundedFrame<D: Direction> {
     inner: Box<dyn Frame<D>>,
@@ -30,6 +30,7 @@ impl<D: Direction> Frame<D> for BoundedFrame<D> {
         if buffer.len() > self.max_buffer_bytes {
             return Err(stage_error::<D>(
                 SocketProcessingFailureKind::BufferLimitExceeded,
+                ErrorStage::Frame,
                 "frame exceeds the configured buffer limit",
             ));
         }
@@ -37,13 +38,13 @@ impl<D: Direction> Frame<D> for BoundedFrame<D> {
     }
 }
 
-pub(super) struct BoundedEncode<D: Direction> {
-    inner: Box<dyn Encode<Socket, D>>,
+pub(super) struct BoundedPrepare<D: Direction> {
+    inner: Box<dyn PrepareWrite<Socket, D>>,
     max_output_bytes: usize,
 }
 
-impl<D: Direction> BoundedEncode<D> {
-    pub(super) fn new(inner: Box<dyn Encode<Socket, D>>, max_output_bytes: usize) -> Self {
+impl<D: Direction> BoundedPrepare<D> {
+    pub(super) fn new(inner: Box<dyn PrepareWrite<Socket, D>>, max_output_bytes: usize) -> Self {
         Self {
             inner,
             max_output_bytes,
@@ -52,51 +53,33 @@ impl<D: Direction> BoundedEncode<D> {
 }
 
 #[async_trait]
-impl<D: Direction> Encode<Socket, D> for BoundedEncode<D> {
-    async fn encode(
-        &mut self,
-        original: &SocketContext,
-        document: &Document,
-    ) -> Result<SocketContext, Error> {
-        let context = self.inner.encode(original, document).await?;
-        if context.data.is_empty() {
-            return Err(stage_error::<D>(
-                SocketProcessingFailureKind::EmptyOutput,
-                "Encode returned an empty Socket context",
-            ));
-        }
-        if context.data.len() > self.max_output_bytes {
-            return Err(stage_error::<D>(
-                SocketProcessingFailureKind::OutputLimitExceeded,
-                "Encode output exceeds the configured limit",
-            ));
-        }
+impl<D: Direction> PrepareWrite<Socket, D> for BoundedPrepare<D> {
+    async fn prepare(&mut self, envelope: &Envelope<Socket, D>) -> Result<SocketContext, Error> {
+        let context = self.inner.prepare(envelope).await?;
+        validate_socket_output::<D>(&context, self.max_output_bytes)?;
         Ok(context)
     }
 }
 
 pub(super) fn factory_panicked() -> Error {
-    Error::new(format!(
-        "{}: socket capability factory panicked",
-        SocketProcessingFailureKind::ProcessorPanicked.as_str()
-    ))
+    Error::coded(
+        SocketProcessingFailureKind::ProcessorPanicked.as_str(),
+        "socket capability factory panicked",
+    )
+    .with_stage(ErrorStage::CapabilityFactory)
 }
 
 pub(super) fn factory_failed(error: &super::super::SocketProcessingFailure) -> Error {
-    Error::new(format!(
-        "{}: capability factory failed",
-        error.stable_code()
-    ))
+    Error::coded(error.stable_code(), "capability factory failed")
+        .with_stage(ErrorStage::CapabilityFactory)
 }
 
 fn stage_error<D: Direction>(
     kind: SocketProcessingFailureKind,
+    stage: ErrorStage,
     message: impl Into<String>,
 ) -> Error {
-    Error::new(format!(
-        "{:?}|{}: {}",
-        D::KIND,
-        kind.as_str(),
-        message.into()
-    ))
+    Error::coded(kind.as_str(), message)
+        .with_stage(stage)
+        .with_direction(D::KIND)
 }

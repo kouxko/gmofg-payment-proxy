@@ -10,11 +10,12 @@
 | `Protocol` | 决定 Context 的静态类型；HTTP 是 header/body 文本，Socket 是字节数组 |
 | `Direction` | `Upstream` 或 `Downstream`，作为泛型参数防止端点接反 |
 | `Reader` | 从一个方向读取 transport Context；`None` 表示 EOF |
-| `Writer` | 完整写入并 flush，成功后返回真实写出的 Context |
+| `Writer` | 返回明确的传输结果：已提交，或可继续读取响应 |
 | `Connection` | 同时拥有 Reader、Writer 和完整 shutdown |
 | `Server` | 创建时已经固定的 Local 或 Remote Endpoint |
 | `Envelope` | Reader Pipeline 产生的不可变消息事实 |
 | `Pipeline` | 同一协议、同一方向上的 Reader Pipeline 与 Writer Pipeline |
+| `PrepareWrite` | 明确编排写出前的 Rules 与 Encode；不负责网络写入 |
 | `Exchange` | 一个 App connection 的连接级运行器和观察边界 |
 
 ## 2. 协议与方向强约束
@@ -57,7 +58,7 @@ pub trait Reader<P: Protocol, D: Direction> {
 
 #[async_trait]
 pub trait Writer<P: Protocol, D: Direction> {
-    async fn write(&mut self, context: P::Context) -> Result<P::Context, Error>;
+    async fn write(&mut self, context: P::Context) -> Result<WriteOutcome<P::Context>, Error>;
 }
 
 #[async_trait]
@@ -76,6 +77,10 @@ pub trait Server<P: Protocol> {
         -> Result<Box<ServerConnection<P>>, Error>;
 }
 ```
+
+`WriteOutcome::Committed(context)` 表示完整写入并 flush；内存 Local 端点表示已交给本地 Reader。
+HTTP 上游可能在完整请求写出前返回合法最终响应，此时返回 `ReadReady(context)`，Exchange
+继续读取响应且不记录 upstream `Sent`。响应到达、Body 被消费、数据进入 channel 均不代替物理提交。
 
 Connection 而不是 Reader/Writer 拥有 shutdown，因为关闭属于整条底层连接。`ServerSlot<P>`
 延迟到第一条 upstream Context 写出前建立 Server connection；成功后始终复用同一 Endpoint。
@@ -119,7 +124,9 @@ pub trait Encode<P: Protocol, D: Direction> {
 ```
 
 这些 trait 是运行时替换点。实现可以来自 Rust 内建逻辑或统一软件包 RPC，
-但 Exchange 只看见单阶段能力，不允许把整条组合处理器伪装成 Decode。
+读取阶段仍是 Decode、Display。写出由显式 `PrepareWrite` 合同编排，不把规则或编码隐藏在 Decode、
+Writer 内。普通能力使用 `SequentialPrepare` 按 Rules → Encode 执行；需要共同事务的规则与编码
+使用同一 Prepare 实现，在真实 Encode 成功后提交规则生命周期，失败则回滚。
 
 规则链按既定顺序逐条接收前一条输出的 Document。每条协议 Document 规则只有一个 condition 和
 一个对应 action；需要多个独立行为时创建多条规则，由规则顺序决定 working Document 的可见次序。
@@ -168,9 +175,13 @@ pub struct SocketRead<D: Direction> {
     display: Box<dyn Display>,
 }
 
+#[async_trait]
+pub trait PrepareWrite<P: Protocol, D: Direction> {
+    async fn prepare(&mut self, envelope: &Envelope<P, D>) -> Result<P::Context, Error>;
+}
+
 pub struct Write<P: Protocol, D: Direction> {
-    rules: Box<dyn Rules>,
-    encode: Box<dyn Encode<P, D>>,
+    prepare: Box<dyn PrepareWrite<P, D>>,
 }
 ```
 
@@ -201,13 +212,15 @@ flowchart LR
 HTTP transport 已经完成 HTTP framing，Context 保存 header/body 文本，因此 Reader Pipeline
 不需要 Frame。当前有两种明确能力工厂：
 
-- Plain：Rust `TextDecode` 把 header/body 放入 `http-text` Document；Display 返回 body；
-  空 RulesChain 后由 `TextEncode` 重建 Context。
-- Protocol：绑定精确 HTTP 协议包版本；Decode/Display/Encode 调用传输无关的固定 Hook，
-  RulesChain 顺序执行两个边界阶段的 Document 规则。
+- Plain：每笔 Decode 前取得 Listener 事务锁和该方向规则快照。没有 Document 规则时保留
+  `http-text`；存在 Document 规则时解析 JSON。现有 keep-alive 连接添加或删除 Document 规则后，
+  后续消息使用新快照；一笔消息的 Decode 与 Prepare 使用同一代规则。
+- Protocol：绑定精确 HTTP 协议包版本；Decode/Display 使用固定 Hook，Prepare 明确调用
+  joint evaluation，在一个 actor 事务中执行有序规则与一次 Encode。
 
-HTTP 标准 Header/JSON/故障规则不隐藏在协议 Decode 中。它们由 `PipelinePorts` 在已 framing
-的 Message 上执行；协议包阶段仍只由 Exchange capability factory 创建。
+HTTP 的 `HttpMessagePrepare` 接收当前 Message、请求元数据与 PipelinePorts，并返回准备好的故障动作。
+`BufferedHttpPrepare` 只使用 `HttpExchangeState.current` 这一笔交易；joint evaluation 经参数直接
+传递到 actor，不使用跨连接 pending map、stage/take 转交或空 Encode。
 
 ### 6.2 Socket 协议 Pipeline
 
@@ -233,6 +246,10 @@ flowchart LR
 5. EOF 时 buffer 非空代表截断帧，Exchange 失败。
 
 这套限制刻意不支持 Socket pipelining，保证一问一答与当前 Server 回复模型一致。
+Socket 的联合规则和 Encode 同样实现 `PrepareWrite`，不再把预制字节交给占位 Encode。联合事务在
+Encode 返回后、提交规则生命周期之前检查空输出和输出上限；失败不会增加命中次数。普通 Prepare
+与联合事务使用同一个输出校验函数。透明与协议模式共用中立 read/write/flush/timeout 实现及远端
+连接准备，配对与 half-close 各自编排。
 
 ## 7. Exchange 运行器
 
@@ -269,13 +286,19 @@ transport 缓冲区，下一轮才处理。App Reader EOF 正常结束；Server 
 
 `Server<P>` 是统一 Endpoint 端口：
 
-- Remote HTTP：`BufferedHttpServer` 的 Writer 调用真实 `UpstreamConnector`，Reader 返回响应。
-- Local HTTP：`LocalHttpServer` 原样回环 HTTP Context，不创建 `UpstreamConnector`，响应继续进入
-  downstream Pipeline。
+- Remote HTTP：连接拥有的任务驱动 `UpstreamConnector`。Writer 等待真实写出回执或提前响应结果，
+  Reader 等待响应；任务、取消和关闭由当前连接负责。
+- Local HTTP：`LocalHttpServer` 回环上行处理后的 Context；HTTP adapter 构造合法响应，再进入
+  downstream Pipeline。该模式不创建真实网络上游。
 - Remote Socket：`RemoteSocketServer` 延迟建立 TCP/TLS，并暴露 Socket Reader/Writer。
 - Local protocol：`LocalServer<P>` 使用容量为 1 的 channel，把 upstream Context 原样交给
   downstream Reader；downstream Pipeline 仍会执行 Decode、Display、Rules、Encode。
 - Local raw：`LocalRawServer` 对每个非空 chunk 做同字节回环。
+
+Local HTTP 默认响应为 `HTTP/1.1 200 OK`，Body 使用上行处理后的原始字节。仅从回环消息保留
+`Content-Type` 和 `Content-Encoding`，按实际 Body 重算 `Content-Length`；其他请求 Header 不带回。
+该 HTTP 合同在适配层实现，通用 `LocalServer<P>` 仍只负责回环。随后下行规则可继续修改 Body、
+状态码和响应 Header，最终输出继续经过现有 HTTP framing 与写出流程。
 
 因此 LocalServer 是可替换 Server，不是 LocalResponder 旁路。Socket LocalResponder 可以把
 请求 Context 作为 downstream 输入，再由绑定能力生成/修改响应；观察、错误和关闭仍走同一个 Exchange。
@@ -309,5 +332,12 @@ flowchart LR
   交易仍继续。
 - App/Server 最终 shutdown 失败只写 warning，不覆盖已经确定的业务结果。
 - capability factory 错误或 panic 会被转换为同一 Exchange 的 failed/closed 时间线，不构造兜底 Pipeline。
+
+Exchange 错误独立携带 `code`、`stage`、`direction` 和外部包失败详情。适配器传递结构化字段，
+不从错误文本分隔符推断类型；外层阶段只补充缺失信息，不覆盖真实 Encode/Flush 等失败位置。
+
+固定上游与 Forward HTTP 共用 HTTP/1 egress 和下游 ResponseWriteTracker。下游 Writer 等待
+ResponseBody 完成且 ResponseIo 实际 flush 成功的回执；故障和超时传回同一等待者。
+Forward 无 Pipeline 的既有流式接口保留，协议处理仍使用缓冲 Message。
 
 详细事件流见 [数据流、错误与验证](data-flow.md)。

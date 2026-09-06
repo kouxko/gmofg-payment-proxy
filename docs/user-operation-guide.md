@@ -93,8 +93,10 @@ Server，并分别配置 App 到 Proxy、Proxy 到 Server 两段 TLS。
 
 在“1. 响应方式”中选择“本机应答”后，Listener 不创建真实上游连接；另外两个选项分别按原请求
 目标转发或转发到固定 Server。使用本机应答时，请求仍先经过 Proxy → Server
-规则；本地 Server 将收到的 HTTP Context 原样回环，再进入 Proxy → App 规则。需要 Mock Body 时，
-在 Proxy → App 规则中使用“替换当前 Body”，运行时按照最终响应 BodyCodec 编码为网络字节。
+规则；本地 Server 默认返回 HTTP 200，Body 为上行处理后的内容，再进入 Proxy → App 规则。
+需要 Mock Body 时，在 Proxy → App 规则中使用“替换当前 Body”；也可继续修改状态码和响应头。
+运行时按照最终响应 BodyCodec 编码为网络字节，默认响应头规则见
+[LocalServer 响应合同](architecture/exchange-pipeline.md#8-localserver-与-remoteserver)。
 
 ### 3.4 下游 TLS/mTLS
 

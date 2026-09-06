@@ -123,6 +123,7 @@ impl UpstreamConnector for UnusedUpstream {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        _write_receipt: intercept_proxy_runtime::http::UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<intercept_proxy_runtime::http::UpstreamExchange> {

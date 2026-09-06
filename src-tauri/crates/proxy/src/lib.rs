@@ -25,9 +25,9 @@ pub use forward::{
 };
 pub use http::{
     ConnectionAdmission, ConnectionService, HttpConnectionIdentity, HttpDirectionCapabilities,
-    HttpObservationMetadata, HttpProtocolCapabilityFactory, LocalHttpServerConfig,
-    LocalHttpServerService, NoopPipelinePorts, PipelinePorts, PlainHttpCapabilityFactory,
-    RulesChain, UpstreamConnector,
+    HttpMessagePrepare, HttpObservationMetadata, HttpProtocolCapabilityFactory,
+    HttpRequestMetadata, LocalHttpServerConfig, LocalHttpServerService, NoopPipelinePorts,
+    PipelinePorts, PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
 };
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
@@ -37,13 +37,14 @@ pub use reverse::{
     UpstreamTransport,
 };
 pub use socket_relay::{
-    BoundedSocketConnectionObserver, FrameBoundary, JointConditionEvaluation,
-    JointRuleConditionEvaluation, NoopSocketConnectionObserver, SocketConnectionEvent,
-    SocketConnectionIdentity, SocketConnectionObserver, SocketConnectionTarget,
-    SocketDirectionCapabilities, SocketDocumentFieldPreview, SocketDocumentPreview,
-    SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint, SocketJointEvaluation,
-    SocketLocalRequestPreview, SocketLocalResponderConfig, SocketObservationMetadata,
-    SocketOpenedEvidence, SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
+    BoundedSocketConnectionObserver, BoundedSocketJointEvaluation, FrameBoundary,
+    HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
+    NoopSocketConnectionObserver, SocketConnectionEvent, SocketConnectionIdentity,
+    SocketConnectionObserver, SocketConnectionTarget, SocketDirectionCapabilities,
+    SocketDocumentFieldPreview, SocketDocumentPreview, SocketDownstreamSecurity,
+    SocketDownstreamTlsConfig, SocketEndpoint, SocketJointEvaluation, SocketLocalRequestPreview,
+    SocketLocalResponderConfig, SocketObservationMetadata, SocketOpenedEvidence,
+    SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
     SocketProcessingFailureKind, SocketProtocolCapabilityFactory, SocketRejectionReason,
     SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
     SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
@@ -209,11 +210,14 @@ impl ErrorCode {
     }
 }
 
-#[derive(Debug, Error)]
+#[derive(Clone, Debug, Error)]
 #[error("{code}: {message}")]
 pub struct ProxyError {
     pub code: &'static str,
     pub message: String,
+    pub exchange_code: Option<String>,
+    pub stage: Option<intercept_proxy_exchange::ErrorStage>,
+    pub direction: Option<intercept_proxy_exchange::DirectionKind>,
     pub external_package_call: Option<Box<intercept_proxy_exchange::ExternalPackageCallFailure>>,
 }
 
@@ -222,8 +226,22 @@ impl ProxyError {
         Self {
             code: code.as_str(),
             message: message.into(),
+            exchange_code: None,
+            stage: None,
+            direction: None,
             external_package_call: None,
         }
+    }
+
+    #[must_use]
+    pub fn at(
+        mut self,
+        stage: intercept_proxy_exchange::ErrorStage,
+        direction: intercept_proxy_exchange::DirectionKind,
+    ) -> Self {
+        self.stage.get_or_insert(stage);
+        self.direction.get_or_insert(direction);
+        self
     }
 
     #[must_use]
@@ -237,6 +255,30 @@ impl ProxyError {
 
     pub fn io(context: &str, error: &io::Error) -> Self {
         Self::new(ErrorCode::Io, format!("{context}: {error}"))
+    }
+
+    pub fn into_exchange_error(self) -> intercept_proxy_exchange::Error {
+        let mut mapped = intercept_proxy_exchange::Error::coded(
+            self.exchange_code.as_deref().unwrap_or(self.code),
+            self.message,
+        );
+        mapped.stage = self.stage;
+        mapped.direction = self.direction;
+        mapped.external_package_call = self.external_package_call;
+        mapped
+    }
+
+    pub fn from_exchange_error(
+        code: ErrorCode,
+        message: impl Into<String>,
+        error: intercept_proxy_exchange::Error,
+    ) -> Self {
+        let mut mapped = Self::new(code, message);
+        mapped.exchange_code = error.code;
+        mapped.stage = error.stage;
+        mapped.direction = error.direction;
+        mapped.external_package_call = error.external_package_call;
+        mapped
     }
 }
 

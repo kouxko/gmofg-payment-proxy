@@ -262,6 +262,7 @@ where
 }
 
 pub(crate) fn failed<D: Direction>(stage: &'static str, error: &Error) {
+    let stage = error.stage.map_or(stage, crate::ErrorStage::as_str);
     if !fits_projection(&[error.message.as_str()]) {
         observation_lost("failure_projection_too_large");
         return;
@@ -289,6 +290,7 @@ where
     P: ObservedProtocol,
     D: Direction,
 {
+    let stage = error.stage.map_or(stage, crate::ErrorStage::as_str);
     match P::observed(context) {
         ObservedContext::Http {
             header,

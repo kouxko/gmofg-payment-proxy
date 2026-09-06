@@ -24,6 +24,7 @@ Content-Length: 2\r\nConnection: close\r\n\r\nOK",
             &NoopPipelinePorts,
             fault_test_request(),
             &[],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         )
@@ -92,6 +93,7 @@ async fn oversized_upstream_body_is_classified() {
             &NoopPipelinePorts,
             request,
             &[],
+            UpstreamWriteReceipt::channel().0,
             None,
             &CancellationToken::new(),
         )

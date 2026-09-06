@@ -44,7 +44,9 @@ use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
 mod joint_document;
-pub(super) use joint_document::{JointDocumentEvaluation, JointHttpRuleRuntime};
+mod package_error;
+pub(super) use joint_document::JointDocumentEvaluation;
+mod rule_program_compilation;
 mod runtime_rule_bundle;
 use runtime_rule_bundle::{RuntimeRuleBundle, RuntimeRuleBundleBaseline};
 
@@ -111,7 +113,6 @@ pub struct ListenerRuntimeAdapter {
     protected_secrets: Arc<ProtectedSecretAdapter>,
     managed_listener_certificates: Option<Arc<ManagedListenerCertificateAdapter>>,
     document_rule_compiler: DocumentRuleCompiler,
-    joint_http_rules: Arc<JointHttpRuleRuntime>,
     external_package_provider:
         Arc<RwLock<Option<Arc<dyn external_relay::ExternalSocketPackageProvider>>>>,
     pipeline_services: Arc<RwLock<Option<RuntimePipelineServices>>>,
@@ -149,7 +150,6 @@ impl ListenerRuntimeAdapter {
             protected_secrets,
             managed_listener_certificates: None,
             document_rule_compiler: DocumentRuleCompiler::new(4),
-            joint_http_rules: Arc::new(JointHttpRuleRuntime::default()),
             external_package_provider: Arc::new(RwLock::new(None)),
             pipeline_services: Arc::new(RwLock::new(None)),
             body_codec_resolver: Arc::new(RwLock::new(None)),
@@ -188,10 +188,6 @@ impl ListenerRuntimeAdapter {
                 listener_id.as_uuid(),
             ),
         )
-    }
-
-    pub(super) fn joint_http_rules(&self) -> Arc<JointHttpRuleRuntime> {
-        Arc::clone(&self.joint_http_rules)
     }
 
     /// 注入外部协议包在线注册表。

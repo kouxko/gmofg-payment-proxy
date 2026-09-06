@@ -4,6 +4,10 @@ use super::*;
 mod tail_write;
 #[path = "tests/unsupported_requests.rs"]
 mod unsupported_requests;
+#[path = "tests/upstream_write_commit.rs"]
+mod upstream_write_commit;
+#[path = "tests/write_commit.rs"]
+mod write_commit;
 use std::net::{IpAddr, Ipv4Addr};
 
 #[test]
@@ -104,9 +108,11 @@ impl UpstreamConnector for FixedResponseConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         _informational: Option<&InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         let mut message = Message::response(StatusCode::OK, &HeaderMap::new(), self.body.clone());
         if let Some(length) = self.declared_content_length {
             message.set_content_length(length);
@@ -247,6 +253,7 @@ async fn stalled_upstream_request_write_has_write_timeout_classification() {
             limits: MessageLimits::default(),
         },
         None,
+        &upstream_write_receipt().0,
         &CancellationToken::new(),
     )
     .await

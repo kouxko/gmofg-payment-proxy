@@ -20,14 +20,14 @@ use intercept_proxy_runtime::{
 
 use super::{
     ListenerRuntimeAdapter, helpers::ensure_snapshot_matches,
-    http_protocol_pipeline::HttpProtocolRuntimeSnapshot, parse_bind_address,
-    socket_diagnostics::SocketDiagnosticObserver, socket_plan,
+    http_protocol_pipeline::HttpProtocolRuntimeSnapshot, parse_bind_address, socket_plan,
 };
 
 mod tls;
 
 mod scripted;
 mod socket;
+mod socket_config;
 
 pub(super) enum PreparedListenerRuntime {
     HttpForward {
@@ -103,36 +103,6 @@ struct HttpBuildContext<'a> {
 impl<'ctx> ListenerRuntimePlanBuilder<'ctx> {
     pub(super) const fn new(adapter: &'ctx ListenerRuntimeAdapter) -> Self {
         Self { adapter }
-    }
-
-    fn socket_observer(
-        &self,
-        listener: &ProxyListener,
-        socket: &SocketRelaySettings,
-    ) -> AppResult<Arc<SocketDiagnosticObserver>> {
-        let capacity =
-            usize::try_from(socket.runtime_limits.diagnostic_event_capacity).map_err(|_| {
-                runtime_error(
-                    listener,
-                    "CONFIG_INVALID",
-                    "Socket 诊断事件容量超出平台范围".into(),
-                )
-            })?;
-        let max_logical_bytes = usize::try_from(socket.runtime_limits.diagnostic_memory_bytes)
-            .map_err(|_| {
-                runtime_error(
-                    listener,
-                    "CONFIG_INVALID",
-                    "Socket 诊断内存容量超出平台范围".into(),
-                )
-            })?;
-        SocketDiagnosticObserver::new(
-            self.adapter.socket_diagnostic_events.read().clone(),
-            capacity,
-            max_logical_bytes,
-        )
-        .map(Arc::new)
-        .map_err(|error| runtime_error(listener, error.code, error.message))
     }
 
     pub(super) async fn build(

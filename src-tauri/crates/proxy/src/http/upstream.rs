@@ -1,10 +1,9 @@
 use super::{
-    AsyncWriteExt, BoxIo, CancellationToken, ClientTlsAdapter, ConnectionContext, Debug, Duration,
-    ErrorCode, FaultAction, ForwardRequest, Http1ExchangeConfig, InformationalResponseSink,
-    InjectedTimeoutStage, MessageLimits, PipelinePorts, ProxyError, Result, SocketAddr, TcpStream,
-    TrafficDirection, UpstreamConnector, UpstreamExchange, UpstreamSecurityEvidence,
-    UpstreamTransportSecurity, async_trait, injected_timeout, send_http1_request,
-    send_scheduled_upstream_abort, timeout_stage, traffic_schedule, wait_for_injected_timeout,
+    BoxIo, CancellationToken, ClientTlsAdapter, ConnectionContext, Debug, Duration, ErrorCode,
+    FaultAction, ForwardRequest, InformationalResponseSink, MessageLimits, PipelinePorts,
+    ProxyError, Result, SocketAddr, TcpStream, UpstreamConnector, UpstreamExchange,
+    UpstreamSecurityEvidence, UpstreamTransportSecurity, UpstreamWriteReceipt, async_trait,
+    timeout_stage,
 };
 
 #[derive(Debug, Clone)]
@@ -84,64 +83,6 @@ impl HyperUpstreamConnector {
             .await;
         Ok(io)
     }
-
-    async fn execute_injected_write(
-        &self,
-        io: &mut BoxIo,
-        request: &ForwardRequest,
-        actions: &[FaultAction],
-        cancellation: &CancellationToken,
-    ) -> Result<UpstreamExchange> {
-        let wire_request = request.message.reconstruct();
-        timeout_stage(
-            self.write_timeout,
-            cancellation,
-            io.write_all(&wire_request),
-            ErrorCode::UpstreamWriteTimeout,
-        )
-        .await?
-        .map_err(|error| ProxyError::io("write injected upstream request", &error))?;
-        timeout_stage(
-            self.write_timeout,
-            cancellation,
-            io.flush(),
-            ErrorCode::UpstreamWriteTimeout,
-        )
-        .await?
-        .map_err(|error| ProxyError::io("flush injected upstream request", &error))?;
-
-        if drops_response_without_reading(actions) {
-            timeout_stage(
-                self.write_timeout,
-                cancellation,
-                io.shutdown(),
-                ErrorCode::UpstreamWriteTimeout,
-            )
-            .await?
-            .map_err(|error| ProxyError::io("close injected upstream request", &error))?;
-            return Err(ProxyError::new(
-                ErrorCode::ClientDisconnected,
-                "upstream request intentionally closed after complete write",
-            ));
-        }
-
-        wait_for_injected_timeout(actions, InjectedTimeoutStage::Read, cancellation).await?;
-        Err(ProxyError::new(
-            ErrorCode::Internal,
-            "injected read timeout unexpectedly completed",
-        ))
-    }
-}
-
-fn drops_response_without_reading(actions: &[FaultAction]) -> bool {
-    actions.iter().any(|action| {
-        matches!(
-            action,
-            FaultAction::DropResponse {
-                read_upstream: false
-            }
-        )
-    })
 }
 
 #[async_trait]
@@ -152,48 +93,24 @@ impl UpstreamConnector for HyperUpstreamConnector {
         ports: &dyn PipelinePorts,
         mut request: ForwardRequest,
         actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         informational: Option<&InformationalResponseSink>,
         cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
-        wait_for_injected_timeout(actions, InjectedTimeoutStage::Connect, cancellation).await?;
-
         request
             .message
             .normalize_for_forward(&self.host_header, self.rewrite_host);
-        let mut io = self.connect_upstream(context, ports, cancellation).await?;
-
-        wait_for_injected_timeout(actions, InjectedTimeoutStage::Write, cancellation).await?;
-        let schedule = traffic_schedule(actions, TrafficDirection::Upstream)?;
-        if schedule.disconnect_after_bytes.is_some() {
-            return send_scheduled_upstream_abort(
-                &mut io,
-                &request.message,
-                schedule,
-                self.write_timeout,
-                cancellation,
-            )
-            .await
-            .map(UpstreamExchange::from);
-        }
-
-        let close_after_request_write = drops_response_without_reading(actions);
-        let inject_read_timeout = injected_timeout(actions, InjectedTimeoutStage::Read).is_some();
-        if close_after_request_write || inject_read_timeout {
-            return self
-                .execute_injected_write(&mut io, &request, actions, cancellation)
-                .await;
-        }
-
-        send_http1_request(
-            io,
+        super::egress::send_http1_exchange(
+            self.connect_upstream(context, ports, cancellation),
             request,
-            Http1ExchangeConfig {
-                schedule,
+            actions,
+            super::egress::Http1TransportSettings {
                 write_timeout: self.write_timeout,
                 read_timeout: self.read_timeout,
                 limits: self.limits,
             },
             informational,
+            &write_receipt,
             cancellation,
         )
         .await

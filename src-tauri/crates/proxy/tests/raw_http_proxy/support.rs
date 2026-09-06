@@ -9,12 +9,12 @@ use async_trait::async_trait;
 use bytes::Bytes;
 use http::{HeaderMap, StatusCode};
 use intercept_proxy_runtime::RuntimeServiceFactory;
-use intercept_proxy_runtime::message::{Message, MessageLimits};
-use intercept_proxy_runtime::supervisor::{ChannelConfig, ChannelId, ProxyConfig, ProxyState};
 use intercept_proxy_runtime::http::{
     ConnectionService, ForwardRequest, HyperUpstreamConnector, NoopPipelinePorts, PipelinePorts,
-    UpstreamExchange,
+    UpstreamExchange, UpstreamWriteReceipt,
 };
+use intercept_proxy_runtime::message::{Message, MessageLimits};
+use intercept_proxy_runtime::supervisor::{ChannelConfig, ChannelId, ProxyConfig, ProxyState};
 use intercept_proxy_runtime::transport::{
     AcceptedConnection, BoxIo, ConnectionAcceptor, ConnectionContext, HandshakePolicy,
 };
@@ -117,9 +117,11 @@ impl UpstreamConnector for EchoConnector {
         _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         Ok(Message::response(
             StatusCode::OK,
             &HeaderMap::new(),
@@ -140,9 +142,11 @@ impl UpstreamConnector for RawResponseConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         Message::from_raw_http1_head(
             b"HTTP/1.1 299 Vendor Specific Result\r\n\
 X-Trace: first\x80\r\n\
@@ -233,9 +237,11 @@ impl UpstreamConnector for RawChunkedResponseConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         Message::from_raw_http1_head(
             b"HTTP/1.1 200 OK\r\nTransfer-Encoding: chunked\r\n\r\n",
             Bytes::from_static(b"abcdef"),
@@ -255,9 +261,11 @@ impl UpstreamConnector for SequencedRawConnector {
         _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         let sequence = self.0.fetch_add(1, Ordering::SeqCst);
         let head = format!(
             "HTTP/1.1 200 Sequence {sequence}\r\nX-Sequence: exact-{sequence}\r\nContent-Length: {}\r\n\r\n",
@@ -338,6 +346,7 @@ impl UpstreamConnector for FailingConnector {
         _ports: &dyn PipelinePorts,
         _request: ForwardRequest,
         _actions: &[FaultAction],
+        _write_receipt: UpstreamWriteReceipt,
         _informational: Option<&intercept_proxy_runtime::http::InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> Result<UpstreamExchange> {

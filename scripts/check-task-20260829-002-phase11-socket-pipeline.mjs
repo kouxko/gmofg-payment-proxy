@@ -25,13 +25,14 @@ const forbid = (key, pattern, message) => { if (pattern.test(source[key])) failu
 
 requireText("exchange", "consumed == 0 || consumed > buffer.len()", "Socket Frame consumedBytes must reject zero and oversized values");
 requireText("exchange", 'failed_with_context::<Socket, D>("display"', "Socket Display failure must remain observable and fail-open");
-for (const text of ["ExternalPackageRpc", "FrameParams", "DecodeParams", "DisplayParams"])
-  requireText("capabilities", text, `Socket shared RPC capability missing ${text}`);
+for (const text of ["ProtocolPackageRuntime", ".frame(self.direction, buffer.to_vec())", ".decode_socket(self.direction, context.data.clone())", ".display(self.direction, document.clone())"])
+  requireText("capabilities", text, `Socket shared package capability missing ${text}`);
 requireText("factory", "new_with_pipeline", "production Socket factory must receive the shared pipeline");
 requireText("plan", "ExternalSocketCapabilityFactoryAdapter::new_with_pipeline", "production plan must inject shared pipeline ports");
-for (const text of ["apply_socket_policy", "JointDocumentEvaluation::new_external_socket", "PreparedSocketEncode"])
+for (const text of ["apply_socket_policy", "JointDocumentEvaluation::new_external_socket", "PrepareWrite<Socket, D>", "JointSocketPrepare"])
   requireText("joint", text, `joint Socket transaction missing ${text}`);
-for (const text of ["self.document == self.original_document", "CanonicalBase64::from_bytes(&original_input)", "SocketExternal"])
+forbid("joint", /PreparedSocketEncode|JointSocketRules/u, "Socket write preparation must not restore Rules/Encode handoff adapters");
+for (const text of ["self.document == self.original_document", ".encode_socket(direction, original_input, self.document)", "SocketExternal"])
   requireText("evaluation", text, `Socket unchanged/changed Encode contract missing ${text}`);
 for (const text of ["socket_joint", "joint.encode().await", "let checkpoint = current.clone()", "*current = checkpoint"])
   requireText("actor", text, `actor-owned Socket rollback contract missing ${text}`);

@@ -108,7 +108,10 @@ async fn capability_factory_panic_fails_and_drains_the_connection_exchange() {
                 .unwrap(),
         )
         .await;
-    assert!(response.is_err(), "factory panic must terminate the App connection");
+    assert!(
+        response.is_err(),
+        "factory panic must terminate the App connection"
+    );
     assert!(
         tokio::time::timeout(Duration::from_millis(100), origin.accept())
             .await
@@ -118,4 +121,18 @@ async fn capability_factory_panic_fails_and_drains_the_connection_exchange() {
     drop(sender);
     let _ = connection_task.await;
     assert!(proxy_task.await.unwrap().is_err());
+}
+
+#[test]
+fn exchange_closure_classification_uses_codes_instead_of_human_text() {
+    let misleading = ProxyError::new(
+        ErrorCode::Io,
+        "diagnostic quote: HTTP connection Endpoint changed / HTTP connection Exchange is closed",
+    );
+    assert!(!super::closes_exchange(&misleading));
+    for code in ["HTTP_ENDPOINT_CHANGED", "HTTP_EXCHANGE_CLOSED"] {
+        let mut error = ProxyError::new(ErrorCode::Io, "arbitrary diagnostic text");
+        error.exchange_code = Some(code.into());
+        assert!(super::closes_exchange(&error));
+    }
 }

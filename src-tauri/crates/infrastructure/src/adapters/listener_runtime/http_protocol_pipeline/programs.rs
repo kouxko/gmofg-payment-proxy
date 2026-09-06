@@ -3,8 +3,7 @@ use std::sync::Arc;
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
     DocumentSchemaNode, HttpRuleContent, ProtocolDirection, ProxyListener, ProxyWorkspace,
-    RuleContent, RuleProgramEntry, RuleStage, UnifiedRuleProgram, is_document_condition,
-    validate_unified_action_schema,
+    RuleContent, RuleStage, UnifiedRuleProgram, is_document_condition,
 };
 
 #[derive(Clone)]
@@ -19,10 +18,6 @@ impl HttpDocumentRulePrograms {
             ProtocolDirection::Upstream => &self.proxy_to_upstream,
             ProtocolDirection::Downstream => &self.proxy_to_app,
         })
-    }
-
-    pub(super) fn has_rules(&self, direction: ProtocolDirection) -> bool {
-        !self.program(direction).rules().is_empty()
     }
 }
 
@@ -83,16 +78,8 @@ fn compile_program(
         let HttpRuleContent {
             condition, action, ..
         } = content;
-        if let Some(schema) = schema {
-            intercept_proxy_domain::validate_document_condition_schema(condition, schema)?;
-            validate_unified_action_schema(action, schema)?;
-        }
-        entries.push(RuleProgramEntry::new(
-            definition.rule_id(),
-            definition.priority(),
-            definition.created_order(),
-            condition.clone(),
-            action.clone(),
+        entries.push(super::super::rule_program_compilation::compile_rule_entry(
+            definition, condition, action, schema,
         )?);
     }
     UnifiedRuleProgram::new(entries).map_err(AppError::from)

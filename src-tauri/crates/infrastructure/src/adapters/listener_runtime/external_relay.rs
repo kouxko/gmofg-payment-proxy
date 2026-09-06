@@ -11,7 +11,8 @@ use intercept_proxy_domain::ProtocolDirection;
 use intercept_proxy_exchange::{Direction, Downstream, Upstream};
 use intercept_proxy_runtime::{
     PipelinePorts, SocketConnectionIdentity, SocketDirectionCapabilities,
-    SocketObservationMetadata, SocketProcessingFailure, SocketProtocolCapabilityFactory,
+    SocketObservationMetadata, SocketPipelineLimits, SocketProcessingFailure,
+    SocketProtocolCapabilityFactory,
 };
 
 use super::DocumentProgramFactory;
@@ -37,6 +38,7 @@ pub(super) struct ExternalSocketCapabilityFactoryAdapter {
     rules: DocumentProgramFactory,
     observation: SocketObservationMetadata,
     pipeline: Arc<dyn PipelinePorts>,
+    limits: SocketPipelineLimits,
     listener_transaction: Arc<tokio::sync::Mutex<()>>,
 }
 
@@ -45,12 +47,14 @@ impl ExternalSocketCapabilityFactoryAdapter {
         snapshot: &ExternalSocketRuntimeSnapshot,
         observation: SocketObservationMetadata,
         pipeline: Arc<dyn PipelinePorts>,
+        limits: SocketPipelineLimits,
     ) -> Self {
         Self {
             binding: snapshot.binding.clone(),
             rules: snapshot.rules.clone(),
             observation,
             pipeline,
+            limits,
             listener_transaction: Arc::clone(&snapshot.listener_transaction),
         }
     }
@@ -64,7 +68,6 @@ impl ExternalSocketCapabilityFactoryAdapter {
         let runtime = Arc::clone(&self.binding.runtime);
         let package = self.binding.registration.package().identity().clone();
         let observed = Arc::new(parking_lot::Mutex::new(None));
-        let prepared = Arc::new(parking_lot::Mutex::new(None));
         let decode = ExternalDecode::<D>::new(
             Arc::clone(&runtime),
             methods.decode,
@@ -73,25 +76,7 @@ impl ExternalSocketCapabilityFactoryAdapter {
             binding.protocol_direction,
             Arc::clone(&observed),
         );
-        let (rules, encode): (
-            Box<dyn intercept_proxy_exchange::Rules>,
-            Box<dyn intercept_proxy_exchange::Encode<intercept_proxy_exchange::Socket, D>>,
-        ) = (
-            Box::new(joint_socket::JointSocketRules::new(
-                Arc::clone(&self.pipeline),
-                connection.clone(),
-                self.observation.listener_id.clone(),
-                Arc::clone(&runtime),
-                binding.protocol_direction,
-                Arc::clone(&observed),
-                Arc::clone(&prepared),
-                self.rules.clone(),
-                package.clone(),
-                Arc::clone(&self.listener_transaction),
-            )),
-            Box::new(joint_socket::PreparedSocketEncode::<D>::new(prepared)),
-        );
-        SocketDirectionCapabilities::new(
+        SocketDirectionCapabilities::prepared(
             Box::new(ExternalFrame::<D>::new(
                 Arc::clone(&runtime),
                 methods.frame,
@@ -107,8 +92,18 @@ impl ExternalSocketCapabilityFactoryAdapter {
                 connection.clone(),
                 binding.protocol_direction,
             )),
-            rules,
-            encode,
+            Box::new(joint_socket::JointSocketPrepare::<D>::new(
+                Arc::clone(&self.pipeline),
+                connection.clone(),
+                self.observation.listener_id.clone(),
+                Arc::clone(&runtime),
+                binding.protocol_direction,
+                Arc::clone(&observed),
+                self.rules.clone(),
+                package.clone(),
+                Arc::clone(&self.listener_transaction),
+                self.limits,
+            )),
         )
     }
 

@@ -293,6 +293,9 @@ impl SharedError {
         ProxyError {
             code: self.code,
             message: self.message.clone(),
+            exchange_code: None,
+            stage: None,
+            direction: None,
             external_package_call: None,
         }
     }

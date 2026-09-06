@@ -11,73 +11,13 @@ use intercept_proxy_exchange::{
 };
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{
-    ConnectionContext, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
+    HttpJointEvaluation, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
 };
-use parking_lot::Mutex;
 use uuid::Uuid;
 
 use crate::adapters::ProtocolPackageRuntime;
 
-mod error;
-use error::external_rpc_error;
-
-#[derive(Clone, Copy, Debug, Eq, Hash, PartialEq)]
-struct PendingKey {
-    runtime_epoch: Uuid,
-    connection_id: Uuid,
-    response: bool,
-}
-
-#[derive(Debug, Default)]
-pub(crate) struct JointHttpRuleRuntime {
-    pending: Mutex<HashMap<PendingKey, JointDocumentEvaluation>>,
-}
-
-impl JointHttpRuleRuntime {
-    pub(super) fn stage(
-        &self,
-        runtime_epoch: Uuid,
-        connection_id: Uuid,
-        response: bool,
-        evaluation: JointDocumentEvaluation,
-    ) {
-        self.pending.lock().insert(
-            PendingKey {
-                runtime_epoch,
-                connection_id,
-                response,
-            },
-            evaluation,
-        );
-    }
-
-    pub(crate) fn take(
-        &self,
-        context: &ConnectionContext,
-        response: bool,
-    ) -> Option<JointDocumentEvaluation> {
-        self.take_identity(context.runtime_epoch, context.connection_id, response)
-    }
-
-    pub(super) fn take_identity(
-        &self,
-        runtime_epoch: Uuid,
-        connection_id: Uuid,
-        response: bool,
-    ) -> Option<JointDocumentEvaluation> {
-        self.pending.lock().remove(&PendingKey {
-            runtime_epoch,
-            connection_id,
-            response,
-        })
-    }
-
-    pub(crate) fn remove_connection(&self, context: &ConnectionContext) {
-        self.pending.lock().retain(|key, _| {
-            key.runtime_epoch != context.runtime_epoch || key.connection_id != context.connection_id
-        });
-    }
-}
+use super::package_error::external_rpc_error;
 
 pub(crate) struct JointDocumentEvaluation {
     document: Document,
@@ -195,13 +135,16 @@ impl JointDocumentEvaluation {
         self
     }
 
-    pub(crate) fn gate(
+    fn gate_http(
         &mut self,
         rule_id: RuleId,
         match_context: &MatchContext<'_>,
         message: &mut Message,
-        body_codec: &dyn BodyCodec,
-    ) -> Result<JointRuleConditionEvaluation, intercept_proxy_domain::DomainError> {
+        apply_action: &mut dyn FnMut(
+            &mut Message,
+            &intercept_proxy_domain::HttpAction,
+        ) -> intercept_proxy_runtime::Result<()>,
+    ) -> intercept_proxy_runtime::Result<JointRuleConditionEvaluation> {
         let Some(program) = self.programs.get(&rule_id) else {
             return Ok(JointRuleConditionEvaluation::NotOwned);
         };
@@ -223,34 +166,26 @@ impl JointDocumentEvaluation {
             request_target: match_context.request_target,
             headers: &headers,
         };
-        let evaluation =
-            program.evaluate_rule_with_http(rule_id, &self.document, |field, operator| {
+        let evaluation = program
+            .evaluate_rule_with_http(rule_id, &self.document, |field, operator| {
                 matches_http_condition(field, operator, &working_context)
-            })?;
+            })
+            .map_err(|error| crate::adapters::pipeline::app_to_proxy(error.into()))?;
         if evaluation.matched {
             let action = program
                 .rule(rule_id)
                 .expect("owned rule remains in its immutable program")
                 .action();
             match action {
-                UnifiedAction::Document(mutation) => mutation.apply(&mut self.document)?,
+                UnifiedAction::Document(mutation) => mutation
+                    .apply(&mut self.document)
+                    .map_err(|error| crate::adapters::pipeline::app_to_proxy(error.into()))?,
                 UnifiedAction::Http(
                     action @ (intercept_proxy_domain::HttpAction::SetJsonField { .. }
                     | intercept_proxy_domain::HttpAction::ReplaceBodyText(_)
                     | intercept_proxy_domain::HttpAction::SetHeader { .. }),
                 ) => {
-                    crate::adapters::pipeline::rule_actions::apply_rule_actions(
-                        body_codec,
-                        message,
-                        std::slice::from_ref(action),
-                        0,
-                    )
-                    .map_err(|error| {
-                        intercept_proxy_domain::DomainError::new(
-                            intercept_proxy_domain::ErrorCode::RuleInvalid,
-                            error.message,
-                        )
-                    })?;
+                    apply_action(message, action)?;
                 }
                 UnifiedAction::RecordMatch
                 | UnifiedAction::Http(_)
@@ -280,7 +215,7 @@ impl JointDocumentEvaluation {
                 }
                 self.document
                     .to_json()
-                    .map_err(|error| Error::new(format!("{}\n{}", error.code, error.message)))?
+                    .map_err(|error| Error::coded(error.code.as_str(), error.message))?
                     .into_bytes()
             }
             JointDocumentEncoder::External {
@@ -307,11 +242,12 @@ impl JointDocumentEvaluation {
                     })?;
                 codec
                     .encode(&encoded)
-                    .map_err(|error| Error::new(format!("{}: {}", error.code, error.message)))?
+                    .map_err(|error| Error::coded(error.code, error.message))?
             }
             JointDocumentEncoder::SocketExternal { .. } => {
-                return Err(Error::new(
-                    "SOCKET_JOINT_OUTPUT_MISMATCH: Socket evaluation reached HTTP encoder",
+                return Err(Error::coded(
+                    "SOCKET_JOINT_OUTPUT_MISMATCH",
+                    "Socket evaluation reached HTTP encoder",
                 ));
             }
         };
@@ -333,8 +269,9 @@ impl JointDocumentEvaluation {
             package,
         } = self.encoder
         else {
-            return Err(Error::new(
-                "HTTP_JOINT_OUTPUT_MISMATCH: HTTP evaluation reached Socket encoder",
+            return Err(Error::coded(
+                "HTTP_JOINT_OUTPUT_MISMATCH",
+                "HTTP evaluation reached Socket encoder",
             ));
         };
         if self.document == self.original_document {
@@ -355,6 +292,26 @@ impl JointDocumentEvaluation {
                 )
             })?;
         Ok(SocketContext { data: encoded })
+    }
+}
+
+#[async_trait]
+impl HttpJointEvaluation for JointDocumentEvaluation {
+    fn gate(
+        &mut self,
+        rule_id: Uuid,
+        context: &MatchContext<'_>,
+        message: &mut Message,
+        apply_action: &mut dyn FnMut(
+            &mut Message,
+            &intercept_proxy_domain::HttpAction,
+        ) -> intercept_proxy_runtime::Result<()>,
+    ) -> intercept_proxy_runtime::Result<JointRuleConditionEvaluation> {
+        self.gate_http(RuleId::from_uuid(rule_id), context, message, apply_action)
+    }
+
+    async fn encode(self: Box<Self>, message: &mut Message) -> Result<(), Error> {
+        (*self).encode_into(message).await
     }
 }
 

@@ -1,6 +1,7 @@
 use super::*;
 use intercept_proxy_domain::{
-    HttpAction as DomainRuleAction, HttpRuleContent, MatchField, MatchOperator, UnifiedAction,
+    DocumentPredicate, HttpAction as DomainRuleAction, HttpRuleContent, JsonPointer, MatchField,
+    MatchOperator, StringOperator, StringPredicate, UnifiedAction,
 };
 
 #[derive(Debug, Default)]
@@ -282,16 +283,31 @@ async fn unified_runtime_failure_does_not_persist_or_advance_revision() {
 
 #[tokio::test]
 async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persistence() {
-    let invalid_shapes = [(
-        RuleStage::ProxyToUpstream,
-        Condition::Http {
-            field: MatchField::Method,
-            operator: MatchOperator::Contains("OS".into()),
-        },
-        DomainRuleAction::Delay { milliseconds: 10 },
-    )];
+    let invalid_shapes = [
+        (
+            "invalid HTTP condition",
+            RuleStage::ProxyToUpstream,
+            Condition::Http {
+                field: MatchField::Method,
+                operator: MatchOperator::Contains("OS".into()),
+            },
+            DomainRuleAction::Delay { milliseconds: 10 },
+        ),
+        (
+            "Document condition with invalid HTTP action",
+            RuleStage::ProxyToUpstream,
+            Condition::Document {
+                path: JsonPointer::parse("/trace_id").expect("pointer"),
+                predicate: DocumentPredicate::String(StringPredicate {
+                    operator: StringOperator::Equal,
+                    value: "abc".into(),
+                }),
+            },
+            DomainRuleAction::Delay { milliseconds: 0 },
+        ),
+    ];
 
-    for (stage, condition, action) in invalid_shapes {
+    for (case, stage, condition, action) in invalid_shapes {
         let workspaces = Arc::new(InMemoryWorkspaceStore::default());
         let application = application_with_workspace_ports(
             Arc::new(FakePorts::default()),
@@ -318,7 +334,11 @@ async fn unified_save_rejects_every_invalid_http_runtime_shape_without_persisten
             })
             .await
             .unwrap_err();
-        assert_eq!(error.view_model.code, "RULE_INVALID");
-        assert_eq!(application.workspace_get(before.id).await.unwrap(), before);
+        assert_eq!(error.view_model.code, "RULE_INVALID", "case={case}");
+        assert_eq!(
+            application.workspace_get(before.id).await.unwrap(),
+            before,
+            "case={case}"
+        );
     }
 }

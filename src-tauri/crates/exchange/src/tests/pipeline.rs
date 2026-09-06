@@ -137,7 +137,10 @@ async fn http_reader_fixes_display_and_writer_mutates_only_a_document_clone() {
     let recorded = Arc::new(Mutex::new(Vec::new()));
     let mut transport = RecordingWriter::<Http, Upstream>::new(Arc::clone(&recorded));
 
-    let sent = pipeline.write(&mut transport, &envelope).await.unwrap();
+    let WriteOutcome::Committed(sent) = pipeline.write(&mut transport, &envelope).await.unwrap()
+    else {
+        panic!("recording writer must commit");
+    };
 
     assert_eq!(envelope.context(), &original);
     assert_eq!(text(envelope.document()), "sale");
@@ -293,5 +296,8 @@ async fn writer_failure_is_a_single_error_without_partial_commit_model() {
 
     let error = pipeline.write(&mut writer, &envelope).await.unwrap_err();
 
-    assert_eq!(error, Error::new("write failed"));
+    assert_eq!(error.code.as_deref(), Some("WRITE_FAILED"));
+    assert_eq!(error.stage, Some(crate::ErrorStage::Write));
+    assert_eq!(error.direction, Some(crate::DirectionKind::Upstream));
+    assert_eq!(error.message, "write failed");
 }

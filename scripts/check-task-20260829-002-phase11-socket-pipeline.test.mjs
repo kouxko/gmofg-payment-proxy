@@ -45,20 +45,25 @@ function replace(file, before, after) {
     fs.writeFileSync(name, fs.readFileSync(name, "utf8").split(before).join(after));
   };
 }
-test("canonical repository passes", () => assert.equal(run(root).status, 0));
+test("canonical repository passes", () => {
+  const result = run(root);
+  assert.equal(result.status, 0, result.stderr);
+});
 for (const [name, mutate] of [
   ["zero consumed accepted", replace(files[0], "consumed == 0 || consumed > buffer.len()", "consumed > buffer.len()")],
   ["display observation removed", replace(files[0], 'failed_with_context::<Socket, D>("display"', 'failed_with_context::<Socket, D>("ignored"')],
   ["pipeline injection removed", replace(files[6], "ExternalSocketCapabilityFactoryAdapter::new_with_pipeline", "ExternalSocketCapabilityFactoryAdapter::new")],
+  ["write preparation removed", replace(files[3], "PrepareWrite<Socket, D>", "Rules")],
+  ["prepared output handoff restored", replace(files[3], "//! Socket Document", "struct PreparedSocketEncode;\n//! Socket Document")],
   ["joint policy removed", replace(files[3], "apply_socket_policy", "bypass_socket_policy")],
   ["unchanged gate removed", replace(files[4], "self.document == self.original_document", "false")],
-  ["canonical base64 removed", replace(files[4], "CanonicalBase64::from_bytes(&original_input)", "CanonicalBase64::from_bytes(&[])")],
+  ["original Socket encode input removed", replace(files[4], ".encode_socket(direction, original_input, self.document)", ".encode_socket(direction, Vec::new(), self.document)")],
   ["actor encode removed", replace(files[5], "joint.encode().await", "unreachable!()")],
   ["retry added", replace(files[3], "//! Socket Document", "fn retry_with_queue_capacity() {}\n//! Socket Document")],
   ["unchanged production assertion removed", replace(files[12], "assert!(harness.peer().encode_methods().is_empty())", "assert!(false)")],
   ["changed production assertion removed", replace(files[12], 'assert_eq!(harness.peer().encode_methods(), ["hooks.upstream.encode"])', "assert!(false)")],
   ["typed Encode failure trigger removed", replace(files[12], "harness.peer().fail_encode_once()", "missing_fail_encode_once()")],
-  ["HTTP field added to Socket adapter", replace(files[8], "\tactions: UnifiedAction[]", "\theaders: string[]\n\tactions: UnifiedAction[]")],
+  ["HTTP field added to Socket adapter", replace(files[8], "export type SocketRuleContent = {", "export type SocketRuleContent = {\n  headers: string[];")],
   ["actor rollback test removed", replace(files[9], "socket_encode_failure_rolls_back_lifecycle_before_successful_commit", "missing_actor_rollback")],
   ["production assembly removed", replace(files[10], "ListenerRuntimePipelineAssembly", "MissingPipelineAssembly")],
   ["runtime fixture bypasses production assembly", replace(files[11], "configure_listener_runtime_pipeline", "configure_test_pipeline")],

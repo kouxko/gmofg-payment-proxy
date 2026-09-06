@@ -99,6 +99,12 @@ fn workspace_with_http_rules(
     workspace
 }
 
+#[path = "phase10_http_pipeline/live_plain_hot_replacement.rs"]
+mod live_plain_hot_replacement;
+#[path = "phase10_http_pipeline/local_http_response.rs"]
+mod local_http_response;
+#[path = "phase10_http_pipeline/plain_json_rules.rs"]
+mod plain_json_rules;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
 #[path = "phase10_http_pipeline/request_metadata.rs"]
@@ -445,6 +451,6 @@ fn http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding(
             wire_body: b"wire".to_vec(),
         };
         let error = decode_http_body_for_package(BodyCodecKind::Auto, &context).unwrap_err();
-        assert!(error.message.starts_with(code), "{}", error.message);
+        assert_eq!(error.code.as_deref(), Some(code), "{}", error.message);
     }
 }

@@ -7,12 +7,11 @@
 use std::sync::{Arc, Mutex};
 
 use async_trait::async_trait;
-use bytes::Bytes;
 use intercept_proxy_exchange::{
     Connection, Downstream, Error, Http, HttpContext, LocalHttpServer, Reader, Server,
-    ServerConnection, Upstream, Writer,
+    ServerConnection, Upstream, WriteOutcome, Writer,
 };
-use tokio::sync::mpsc;
+use tokio::sync::oneshot;
 use tokio_util::sync::CancellationToken;
 
 #[cfg(test)]
@@ -22,8 +21,13 @@ use super::{
     InformationalResponseSink, Message, PipelinePorts, ProxyError, ResponseDisposition,
     UpstreamConnector,
 };
-use crate::fault::project_response_for_observation;
-use crate::http::{HttpRequestMetadata, UpstreamExchange};
+use crate::http::UpstreamExchange;
+use crate::listener::{ChildTaskError, ConnectionTaskScope};
+
+mod app;
+pub(super) use app::BufferedApp;
+#[cfg(test)]
+use app::BufferedAppWriter;
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct LocalHttpServerConnector;
@@ -36,6 +40,7 @@ impl UpstreamConnector for LocalHttpServerConnector {
         _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         actions: &[FaultAction],
+        write_receipt: super::super::UpstreamWriteReceipt,
         _informational: Option<&InformationalResponseSink>,
         cancellation: &CancellationToken,
     ) -> crate::Result<UpstreamExchange> {
@@ -68,6 +73,7 @@ impl UpstreamConnector for LocalHttpServerConnector {
             .write(original.clone())
             .await
             .map_err(local_server_error)?;
+        write_receipt.confirm_flushed();
         let echoed = connection
             .reader()
             .read()
@@ -81,191 +87,33 @@ impl UpstreamConnector for LocalHttpServerConnector {
             })?;
         connection.shutdown().await.map_err(local_server_error)?;
 
-        let mut response = request.message;
-        apply_context_changes(&mut response, &original, &echoed)
-            .map_err(|error| ProxyError::new(crate::ErrorCode::Internal, error.message))?;
+        let mut effective = request.message;
+        super::super::capabilities::apply_http_context_changes(&mut effective, &original, &echoed)
+            .map_err(|error| {
+                let message = error.message.clone();
+                ProxyError::from_exchange_error(crate::ErrorCode::Internal, message, error)
+            })?;
+        let mut response = Message::response(
+            http::StatusCode::OK,
+            &http::HeaderMap::new(),
+            effective.body,
+        );
+        response.headers = effective
+            .headers
+            .into_iter()
+            .filter(|header| {
+                header.name.eq_ignore_ascii_case(b"content-type")
+                    || header.name.eq_ignore_ascii_case(b"content-encoding")
+            })
+            .collect();
+        response.set_content_length(response.body.len());
         Ok(response.into())
     }
 }
 
 fn local_server_error(error: Error) -> ProxyError {
-    ProxyError::new(crate::ErrorCode::Internal, error.message)
-}
-
-pub(super) struct BufferedApp {
-    reader: BufferedAppReader,
-    writer: BufferedAppWriter,
-}
-
-impl BufferedApp {
-    pub(super) fn new(
-        state: Arc<Mutex<HttpExchangeState>>,
-        receiver: mpsc::Receiver<HttpExchangeInput>,
-        endpoint: String,
-    ) -> Self {
-        Self {
-            reader: BufferedAppReader {
-                state: Arc::clone(&state),
-                receiver,
-                endpoint,
-            },
-            writer: BufferedAppWriter { state },
-        }
-    }
-}
-
-#[async_trait]
-impl Connection<Http, Upstream, Downstream> for BufferedApp {
-    fn reader(&mut self) -> &mut dyn Reader<Http, Upstream> {
-        &mut self.reader
-    }
-
-    fn writer(&mut self) -> &mut dyn Writer<Http, Downstream> {
-        &mut self.writer
-    }
-
-    async fn shutdown(&mut self) -> Result<(), Error> {
-        Ok(())
-    }
-}
-
-struct BufferedAppReader {
-    state: Arc<Mutex<HttpExchangeState>>,
-    receiver: mpsc::Receiver<HttpExchangeInput>,
-    endpoint: String,
-}
-
-#[async_trait]
-impl Reader<Http, Upstream> for BufferedAppReader {
-    async fn read(&mut self) -> Result<Option<HttpContext>, Error> {
-        let Some(input) = self.receiver.recv().await else {
-            return Ok(None);
-        };
-        let command = match input {
-            HttpExchangeInput::Request(command) => command,
-            HttpExchangeInput::Fail(error) => {
-                return Err(proxy_write_error(error));
-            }
-        };
-        if command.endpoint != self.endpoint {
-            let error = adapter_error(
-                crate::ErrorCode::ConfigInvalid.as_str(),
-                format!(
-                    "HTTP connection Endpoint changed from {} to {}",
-                    self.endpoint, command.endpoint
-                ),
-            );
-            let _ = command
-                .completed
-                .send(Err(super::exchange_error(error.clone())));
-            return Err(error);
-        }
-        self.state
-            .lock()
-            .expect("HTTP Exchange state mutex poisoned")
-            .begin(command);
-        let state = self
-            .state
-            .lock()
-            .expect("HTTP Exchange state mutex poisoned");
-        let transaction = state
-            .current
-            .as_ref()
-            .ok_or_else(|| adapter_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing"))?;
-        let request = transaction
-            .request
-            .as_ref()
-            .ok_or_else(|| adapter_error("HTTP_REQUEST_MISSING", "HTTP request missing"))?;
-        Ok(Some(message_context(request)))
-    }
-}
-
-struct BufferedAppWriter {
-    state: Arc<Mutex<HttpExchangeState>>,
-}
-
-#[async_trait]
-impl Writer<Http, Downstream> for BufferedAppWriter {
-    async fn write(&mut self, context: HttpContext) -> Result<HttpContext, Error> {
-        let (
-            mut response,
-            request_metadata,
-            mocked,
-            close_requested,
-            pipeline_context,
-            ports,
-            cancellation,
-        ) = {
-            let mut state = self
-                .state
-                .lock()
-                .expect("HTTP Exchange state mutex poisoned");
-            let transaction = state.current.as_mut().ok_or_else(|| {
-                write_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
-            })?;
-            let response = transaction.response.take().ok_or_else(|| {
-                write_error(
-                    "HTTP_RESPONSE_MISSING",
-                    "HTTP response missing before App write",
-                )
-            })?;
-            let request_metadata =
-                HttpRequestMetadata::from_method_and_uri(&transaction.method, &transaction.uri)
-                    .map_err(proxy_write_error)?;
-            (
-                response,
-                request_metadata,
-                transaction.mocked,
-                transaction.close_requested,
-                state.context.clone(),
-                Arc::clone(&state.ports),
-                state.cancellation.clone(),
-            )
-        };
-        let original = message_context(&response);
-        let actions = if mocked {
-            Vec::new()
-        } else {
-            ports
-                .apply_response_policy(&pipeline_context, &request_metadata, &mut response)
-                .await
-                .map_err(proxy_write_error)?
-        };
-        apply_context_changes(&mut response, &original, &context)?;
-        if close_requested {
-            response.remove_header("connection");
-            response
-                .headers
-                .push(crate::message::RawHeader::new("Connection", "close"));
-        }
-        let written = project_response_for_observation(response.clone(), &actions)
-            .map_err(proxy_write_error)?
-            .map_or_else(
-                || message_context(&response),
-                |message| message_context(&message),
-            );
-        let disposition = if mocked {
-            ResponseDisposition::Send {
-                message: response,
-                schedule: crate::traffic::TrafficSchedule::default(),
-            }
-        } else {
-            crate::fault::apply_response_actions(response, &actions, &cancellation)
-                .await
-                .map_err(proxy_write_error)?
-        };
-        let mut state = self
-            .state
-            .lock()
-            .expect("HTTP Exchange state mutex poisoned");
-        state
-            .current
-            .as_mut()
-            .ok_or_else(|| write_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing"))?
-            .disposition = Some(disposition);
-        state.complete();
-        Ok(written)
-    }
+    let message = error.message.clone();
+    ProxyError::from_exchange_error(crate::ErrorCode::Internal, message, error)
 }
 
 pub(super) struct BufferedHttpServer {
@@ -276,6 +124,7 @@ pub(super) struct BufferedHttpServer {
     clock: Arc<dyn Clock>,
     cancellation: CancellationToken,
     informational: Option<InformationalResponseSink>,
+    task_scope: ConnectionTaskScope,
 }
 
 impl BufferedHttpServer {
@@ -288,6 +137,7 @@ impl BufferedHttpServer {
         clock: Arc<dyn Clock>,
         cancellation: CancellationToken,
         informational: Option<InformationalResponseSink>,
+        task_scope: ConnectionTaskScope,
     ) -> Self {
         Self {
             state,
@@ -297,6 +147,7 @@ impl BufferedHttpServer {
             clock,
             cancellation,
             informational,
+            task_scope,
         }
     }
 }
@@ -307,9 +158,11 @@ impl Server<Http> for BufferedHttpServer {
         &mut self,
         _first: &HttpContext,
     ) -> Result<Box<ServerConnection<Http>>, Error> {
+        let response = Arc::new(Mutex::new(None));
         Ok(Box::new(BufferedServerConnection {
             reader: BufferedServerReader {
                 state: Arc::clone(&self.state),
+                response: Arc::clone(&response),
             },
             writer: BufferedServerWriter {
                 state: Arc::clone(&self.state),
@@ -319,6 +172,8 @@ impl Server<Http> for BufferedHttpServer {
                 clock: Arc::clone(&self.clock),
                 cancellation: self.cancellation.clone(),
                 informational: self.informational.clone(),
+                task_scope: self.task_scope.clone(),
+                response,
             },
         }))
     }
@@ -346,24 +201,61 @@ impl Connection<Http, Downstream, Upstream> for BufferedServerConnection {
 
 struct BufferedServerReader {
     state: Arc<Mutex<HttpExchangeState>>,
+    response: Arc<Mutex<Option<oneshot::Receiver<crate::Result<UpstreamExchange>>>>>,
 }
 
 #[async_trait]
 impl Reader<Http, Downstream> for BufferedServerReader {
     async fn read(&mut self) -> Result<Option<HttpContext>, Error> {
-        let state = self
+        if let Some(response) = self
+            .state
+            .lock()
+            .expect("HTTP Exchange state mutex poisoned")
+            .current
+            .as_ref()
+            .and_then(|transaction| transaction.response.as_ref())
+            .map(message_context)
+        {
+            return Ok(Some(response));
+        }
+        let receiver = self
+            .response
+            .lock()
+            .expect("HTTP upstream response mutex poisoned")
+            .take()
+            .ok_or_else(|| {
+                adapter_error(
+                    "HTTP_RESPONSE_MISSING",
+                    "HTTP upstream response transaction missing",
+                )
+            })?;
+        let exchange = receiver
+            .await
+            .map_err(|_| {
+                adapter_error(
+                    "UPSTREAM_RESPONSE_DROPPED",
+                    "upstream response task ended without a result",
+                )
+            })?
+            .map_err(proxy_write_error)?;
+        let mut state = self
             .state
             .lock()
             .expect("HTTP Exchange state mutex poisoned");
         let transaction = state
             .current
-            .as_ref()
+            .as_mut()
             .ok_or_else(|| adapter_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing"))?;
-        let response = transaction
-            .response
-            .as_ref()
-            .ok_or_else(|| adapter_error("HTTP_RESPONSE_MISSING", "HTTP response missing"))?;
-        Ok(Some(message_context(response)))
+        if transaction.drop_response_after_read {
+            return Err(write_error(
+                crate::ErrorCode::ClientDisconnected.as_str(),
+                "upstream response intentionally dropped after complete read",
+            ));
+        }
+        let context = message_context(&exchange.final_response);
+        transaction.informational_heads = exchange.informational_heads;
+        transaction.response = Some(exchange.final_response);
+        Ok(Some(context))
     }
 }
 
@@ -375,12 +267,14 @@ struct BufferedServerWriter {
     clock: Arc<dyn Clock>,
     cancellation: CancellationToken,
     informational: Option<InformationalResponseSink>,
+    task_scope: ConnectionTaskScope,
+    response: Arc<Mutex<Option<oneshot::Receiver<crate::Result<UpstreamExchange>>>>>,
 }
 
 #[async_trait]
 impl Writer<Http, Upstream> for BufferedServerWriter {
-    async fn write(&mut self, context: HttpContext) -> Result<HttpContext, Error> {
-        let (method, uri, mut request) = {
+    async fn write(&mut self, _context: HttpContext) -> Result<WriteOutcome<HttpContext>, Error> {
+        let (method, uri, request, actions) = {
             let mut state = self
                 .state
                 .lock()
@@ -394,65 +288,116 @@ impl Writer<Http, Upstream> for BufferedServerWriter {
                     "HTTP request missing before Server write",
                 )
             })?;
-            (transaction.method.clone(), transaction.uri.clone(), request)
+            let actions = transaction.request_actions.take().ok_or_else(|| {
+                write_error(
+                    "HTTP_REQUEST_NOT_PREPARED",
+                    "HTTP request actions missing before Server write",
+                )
+            })?;
+            (
+                transaction.method.clone(),
+                transaction.uri.clone(),
+                request,
+                actions,
+            )
         };
-        let request_metadata =
-            HttpRequestMetadata::from_method_and_uri(&method, &uri).map_err(proxy_write_error)?;
-        let original = message_context(&request);
-        let actions = self
-            .ports
-            .apply_request_policy(&self.context, &request_metadata, &mut request)
-            .await
-            .map_err(proxy_write_error)?;
-        apply_context_changes(&mut request, &original, &context)?;
         let written = message_context(&request);
         if self.apply_request_actions(&actions).await? {
-            return Ok(written);
+            return Ok(WriteOutcome::ReadReady(written));
         }
-        let exchange = self
-            .upstream
-            .send(
-                &self.context,
-                self.ports.as_ref(),
-                ForwardRequest {
-                    method,
-                    uri,
-                    message: request,
-                },
-                &actions,
-                self.informational.as_ref(),
-                &self.cancellation,
-            )
-            .await
-            .map_err(proxy_write_error)?;
-        if actions.iter().any(|action| {
+        Ok(
+            match self
+                .start_upstream_send(method, uri, request, actions)
+                .await?
+            {
+                WriteOutcome::Committed(()) => WriteOutcome::Committed(written),
+                WriteOutcome::ReadReady(()) => WriteOutcome::ReadReady(written),
+            },
+        )
+    }
+}
+
+impl BufferedServerWriter {
+    async fn start_upstream_send(
+        &self,
+        method: http::Method,
+        uri: http::Uri,
+        request: Message,
+        actions: Vec<FaultAction>,
+    ) -> Result<WriteOutcome<()>, Error> {
+        let drop_response_after_read = actions.iter().any(|action| {
             matches!(
                 action,
                 FaultAction::DropResponse {
                     read_upstream: true
                 }
             )
-        }) {
-            return Err(write_error(
-                crate::ErrorCode::ClientDisconnected.as_str(),
-                "upstream response intentionally dropped after complete read",
-            ));
+        });
+        {
+            let mut state = self
+                .state
+                .lock()
+                .expect("HTTP Exchange state mutex poisoned");
+            let transaction = state.current.as_mut().ok_or_else(|| {
+                write_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
+            })?;
+            transaction.drop_response_after_read = drop_response_after_read;
         }
-        let mut state = self
-            .state
+        let (write_receipt, write_completion) = super::super::upstream_write_receipt();
+        let (response_sender, response_receiver) = oneshot::channel();
+        *self
+            .response
             .lock()
-            .expect("HTTP Exchange state mutex poisoned");
-        let transaction = state
-            .current
-            .as_mut()
-            .ok_or_else(|| write_error("HTTP_TRANSACTION_MISSING", "HTTP transaction missing"))?;
-        transaction.informational_heads = exchange.informational_heads;
-        transaction.response = Some(exchange.final_response);
-        Ok(written)
+            .expect("HTTP upstream response mutex poisoned") = Some(response_receiver);
+        let context = self.context.clone();
+        let ports = Arc::clone(&self.ports);
+        let upstream = Arc::clone(&self.upstream);
+        let informational = self.informational.clone();
+        let cancellation = self.cancellation.clone();
+        let task_receipt = write_receipt.clone();
+        self.task_scope
+            .spawn_owned(async move {
+                let result = tokio::select! {
+                    biased;
+                    () = cancellation.cancelled() => Err(ProxyError::new(
+                        crate::ErrorCode::ProxyStopped,
+                        "proxy stopped while sending upstream HTTP request",
+                    )),
+                    result = upstream.send(
+                        &context,
+                        ports.as_ref(),
+                        ForwardRequest {
+                            method,
+                            uri,
+                            message: request,
+                        },
+                        &actions,
+                        task_receipt.clone(),
+                        informational.as_ref(),
+                        &cancellation,
+                    ) => result,
+                };
+                match &result {
+                    Err(error) => task_receipt.fail(error),
+                    Ok(_) if task_receipt.is_pending() => task_receipt.response_ready(),
+                    Ok(_) => {}
+                }
+                let _ = response_sender.send(result);
+                Ok::<(), ChildTaskError>(())
+            })
+            .map_err(|_| {
+                write_error(
+                    crate::ErrorCode::Internal.as_str(),
+                    "connection task scope closed before upstream HTTP send",
+                )
+            })?;
+        drop(write_receipt);
+        write_completion
+            .wait(&self.cancellation)
+            .await
+            .map_err(proxy_write_error)
     }
-}
 
-impl BufferedServerWriter {
     async fn apply_request_actions(&self, actions: &[FaultAction]) -> Result<bool, Error> {
         for action in actions {
             match action {
@@ -501,7 +446,7 @@ impl BufferedServerWriter {
     }
 }
 
-fn message_context(message: &Message) -> HttpContext {
+pub(super) fn message_context(message: &Message) -> HttpContext {
     HttpContext {
         header: message_header_text(message),
         body: String::from_utf8_lossy(&message.body).into_owned(),
@@ -519,31 +464,8 @@ fn message_header_text(message: &Message) -> String {
     String::from_utf8_lossy(&bytes[..header_len]).into_owned()
 }
 
-fn apply_context_changes(
-    message: &mut Message,
-    original: &HttpContext,
-    encoded: &HttpContext,
-) -> Result<(), Error> {
-    // Wire policy 先作用于权威 Message，协议 Encode 只覆盖自己确实改动的部分。这样既保持
-    // 原有动作顺序，又让 Reader/Display 固定为接收时事实。
-    if encoded.header != original.header {
-        let parsed = Message::from_raw_http1_head(
-            encoded.header.as_bytes(),
-            Bytes::copy_from_slice(encoded.body.as_bytes()),
-        )
-        .map_err(|error| write_error(error.code, error.message))?;
-        message.start_line = parsed.start_line;
-        message.headers = parsed.headers;
-    }
-    // 非 UTF-8 body 的文本 Context 是 lossy view；未改变时保留权威原字节和 wire policy。
-    if encoded.body != original.body {
-        message.replace_body(Bytes::copy_from_slice(&encoded.wire_body));
-    }
-    Ok(())
-}
-
 fn adapter_error(code: impl AsRef<str>, message: impl AsRef<str>) -> Error {
-    Error::new(format!("{}\n{}", code.as_ref(), message.as_ref()))
+    Error::coded(code.as_ref(), message.as_ref())
 }
 
 fn write_error(code: impl AsRef<str>, message: impl AsRef<str>) -> Error {
@@ -553,12 +475,7 @@ fn write_error(code: impl AsRef<str>, message: impl AsRef<str>) -> Error {
 }
 
 fn proxy_write_error(error: super::ProxyError) -> Error {
-    let exchange_error = write_error(error.code, error.message);
-    error
-        .external_package_call
-        .map_or(exchange_error.clone(), |failure| {
-            exchange_error.with_external_package_call(*failure)
-        })
+    error.into_exchange_error()
 }
 
 #[cfg(test)]

@@ -27,12 +27,11 @@ use tokio::sync::Mutex as AsyncMutex;
 use tokio_util::sync::CancellationToken;
 use uuid::Uuid;
 
-use crate::http::{HttpProtocolCapabilityFactory, PipelinePorts, traffic_schedule};
+use crate::http::{HttpProtocolCapabilityFactory, PipelinePorts, ResponseWriteTracker};
 use crate::listener::{ChildTaskError, ConnectionTaskScope};
 use crate::message::MessageLimits;
 use crate::reverse::{DownstreamTlsAcceptor, ReverseDownstreamTls};
 use crate::supervisor::ChannelId;
-use crate::traffic::TrafficDirection;
 use crate::transport::{BoxIo, ConnectionContext};
 use crate::{ErrorCode, ProxyError, Result};
 
@@ -51,7 +50,7 @@ mod target;
 #[path = "tunnel.rs"]
 mod tunnel;
 
-use body::{ProxyBody, error_response, incoming_body, scheduled_body, text_response};
+use body::{ProxyBody, error_response, incoming_body, text_response};
 use config::ForwardPipelineRuntime;
 pub use config::{
     ForwardAuthenticationMode, ForwardProxyAuthenticator, ForwardProxyConfig,
@@ -60,11 +59,7 @@ pub use config::{
 use exchange_connector::ForwardHttpExchangeConnector;
 use headers::is_websocket_upgrade;
 pub use headers::strip_hop_by_hop_headers;
-use pipeline::{
-    DropResponseMode, collect_pipeline_body, completion_body, drain_upstream_body,
-    drop_response_mode, intentional_drop_error, intentional_response_drop,
-    response_from_pipeline_disposition, send_request_then_drop_after_write,
-};
+use pipeline::{collect_pipeline_body, response_from_pipeline_disposition};
 pub use target::absolute_uri_to_origin_form;
 pub(crate) use target::authority_is_allowed;
 use target::{HttpTarget, absolute_http_target};
@@ -76,6 +71,22 @@ pub struct ForwardProxyService {
     authenticator: Arc<dyn ForwardProxyAuthenticator>,
     pipeline: Option<Arc<ForwardPipelineRuntime>>,
     downstream_tls: Option<DownstreamTlsAcceptor>,
+}
+
+struct ForwardResponse {
+    response: Response<ProxyBody>,
+    completed: Option<tokio::sync::oneshot::Sender<Result<()>>>,
+    terminal_write: bool,
+}
+
+impl From<Response<ProxyBody>> for ForwardResponse {
+    fn from(response: Response<ProxyBody>) -> Self {
+        Self {
+            response,
+            completed: None,
+            terminal_write: false,
+        }
+    }
 }
 
 struct ForwardConnectionExchange {
@@ -127,6 +138,7 @@ impl ForwardProxyService {
         self
     }
 
+    #[allow(clippy::too_many_arguments)]
     async fn handle(
         &self,
         request: Request<Incoming>,
@@ -135,7 +147,33 @@ impl ForwardProxyService {
         cancellation: CancellationToken,
         task_scope: ConnectionTaskScope,
         exchange: SharedForwardExchange,
+        write_tracker: Arc<ResponseWriteTracker>,
     ) -> Result<Response<ProxyBody>> {
+        let is_head = request.method() == Method::HEAD;
+        let reply = self
+            .handle_response(request, peer, context, cancellation, task_scope, exchange)
+            .await?;
+        let suppressed = is_head || matches!(reply.response.status().as_u16(), 204 | 304);
+        let (parts, body) = reply.response.into_parts();
+        let body = body::tracked_response_body(
+            body,
+            write_tracker,
+            reply.completed,
+            suppressed,
+            reply.terminal_write,
+        )?;
+        Ok(Response::from_parts(parts, body))
+    }
+
+    async fn handle_response(
+        &self,
+        request: Request<Incoming>,
+        peer: SocketAddr,
+        context: Option<ConnectionContext>,
+        cancellation: CancellationToken,
+        task_scope: ConnectionTaskScope,
+        exchange: SharedForwardExchange,
+    ) -> Result<ForwardResponse> {
         if self.config.authentication == ForwardAuthenticationMode::Required
             && !self
                 .authenticator
@@ -149,14 +187,15 @@ impl ForwardProxyService {
                 PROXY_AUTHENTICATE,
                 HeaderValue::from_static("Basic realm=\"Intercept Proxy\""),
             );
-            return Ok(response);
+            return Ok(response.into());
         }
 
         if request.method() == Method::CONNECT {
             return Ok(text_response(
                 StatusCode::NOT_IMPLEMENTED,
                 "HTTP CONNECT is not supported by the Exchange runtime",
-            ));
+            )
+            .into());
         }
         match self
             .forward_http(
@@ -169,16 +208,18 @@ impl ForwardProxyService {
             .await
         {
             Ok(response) => Ok(response),
-            Err(error)
-                if intentional_response_drop(&error)
-                    || error.message.contains("HTTP connection Endpoint changed")
-                    || error.message.contains("HTTP connection Exchange is closed") =>
-            {
-                Err(error)
-            }
-            Err(error) => Ok(error_response(&error)),
+            Err(error) if closes_exchange(&error) => Err(error),
+            Err(error) => Ok(error_response(&error).into()),
         }
     }
+}
+
+fn closes_exchange(error: &ProxyError) -> bool {
+    error.code == ErrorCode::ClientDisconnected.as_str()
+        || matches!(
+            error.exchange_code.as_deref(),
+            Some("HTTP_ENDPOINT_CHANGED" | "HTTP_EXCHANGE_CLOSED")
+        )
 }
 
 fn spawn_connection_task<F>(

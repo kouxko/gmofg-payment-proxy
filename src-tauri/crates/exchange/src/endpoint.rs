@@ -14,10 +14,23 @@ pub trait Reader<P: Protocol, D: Direction>: Send {
 
 #[async_trait]
 pub trait Writer<P: Protocol, D: Direction>: Send {
-    /// 只有完整 write + flush 成功才能返回实际写出的 Context；失败不重试，也不返回
-    /// committed prefix。HTTP Writer 可在 wire policy 后返回最终 Header/Body，确保 sent
-    /// 证据与线上数据一致；Socket Writer 原样返回已提交字节。
-    async fn write(&mut self, context: P::Context) -> Result<P::Context, Error>;
+    /// `Committed` 表示完整 write + flush 已成功，可以生成 sent 证据；`ReadReady` 表示
+    /// 对端已提前返回可读响应，但请求尚未完成 flush，因此必须继续 Reader 且不能伪造 sent。
+    async fn write(&mut self, context: P::Context) -> Result<WriteOutcome<P::Context>, Error>;
+}
+
+#[derive(Clone, Debug, Eq, PartialEq)]
+pub enum WriteOutcome<C> {
+    Committed(C),
+    ReadReady(C),
+}
+
+impl<C> WriteOutcome<C> {
+    pub fn into_context(self) -> C {
+        match self {
+            Self::Committed(context) | Self::ReadReady(context) => context,
+        }
+    }
 }
 
 /// 一条全双工连接拥有 Reader、Writer 和最终完整关闭能力。
@@ -91,7 +104,7 @@ impl<P: Protocol> ServerSlot<P> {
 
 #[async_trait]
 impl<P: ObservedProtocol> Writer<P, Upstream> for ServerSlot<P> {
-    async fn write(&mut self, context: P::Context) -> Result<P::Context, Error> {
+    async fn write(&mut self, context: P::Context) -> Result<WriteOutcome<P::Context>, Error> {
         if self.connection.is_none() {
             let connection = self.server.connect(&context).await.inspect_err(|error| {
                 observation::failed_with_context::<P, Upstream>("connect", &context, error);

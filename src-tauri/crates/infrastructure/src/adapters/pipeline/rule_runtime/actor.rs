@@ -14,8 +14,7 @@ use super::{
     rule_trace_text,
 };
 use crate::adapters::pipeline::{
-    JointDocumentEvaluation, RuntimeRuleRepository, app_to_proxy, domain_channel,
-    rule_actions::terminal_identity,
+    RuntimeRuleRepository, app_to_proxy, domain_channel, rule_actions::terminal_identity,
 };
 
 mod evaluation;
@@ -32,7 +31,7 @@ pub(super) struct EvaluationInput {
     pub(super) stage: MessageStage,
     pub(super) method: Option<String>,
     pub(super) request_target: Option<String>,
-    pub(super) joint_document: Option<JointDocumentEvaluation>,
+    pub(super) joint_document: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
     pub(super) socket_joint: Option<Box<dyn SocketJointEvaluation>>,
     pub(super) message: Option<intercept_proxy_runtime::Message>,
     pub(super) body_codec: Option<Arc<dyn intercept_proxy_product_api::BodyCodec>>,
@@ -222,24 +221,17 @@ async fn prepare_evaluated_message(
     let Some(message) = prepared_message.as_mut() else {
         let prepared_socket = match input.socket_joint.take() {
             Some(joint) => Some(joint.encode().await.map_err(|error| {
-                let mut mapped = intercept_proxy_runtime::ProxyError::new(
-                    intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
-                    error.message,
-                );
-                mapped.external_package_call = error.external_package_call;
-                mapped
+                let message = error.message.clone();
+                joint_encode_error(error, input.stage, message)
             })?),
             None => None,
         };
         return Ok((prepared_message, prepared_socket, Vec::new()));
     };
     if let Some(joint) = input.joint_document.take() {
-        joint.encode_into(message).await.map_err(|error| {
-            intercept_proxy_runtime::ProxyError::new(
-                intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
-                format!("联合 Document Encode 失败：{}", error.message),
-            )
-            .with_external_package_call(error.external_package_call)
+        joint.encode(message).await.map_err(|error| {
+            let message = format!("联合 Document Encode 失败：{}", error.message);
+            joint_encode_error(error, input.stage, message)
         })?;
     }
     let body_codec = input
@@ -258,6 +250,29 @@ async fn prepare_evaluated_message(
         seed,
     )?;
     Ok((prepared_message, None, fault_actions))
+}
+
+fn joint_encode_error(
+    error: intercept_proxy_exchange::Error,
+    stage: intercept_proxy_domain::MessageStage,
+    message: String,
+) -> intercept_proxy_runtime::ProxyError {
+    let direction = match stage {
+        intercept_proxy_domain::MessageStage::Request => {
+            intercept_proxy_exchange::DirectionKind::Upstream
+        }
+        intercept_proxy_domain::MessageStage::Response => {
+            intercept_proxy_exchange::DirectionKind::Downstream
+        }
+        intercept_proxy_domain::MessageStage::TlsHandshake => {
+            unreachable!("Document preparation cannot run during TLS handshake")
+        }
+    };
+    intercept_proxy_runtime::ProxyError::from_exchange_error(
+        intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
+        message,
+        error.at(intercept_proxy_exchange::ErrorStage::Encode, direction),
+    )
 }
 
 async fn prepare_runtime(

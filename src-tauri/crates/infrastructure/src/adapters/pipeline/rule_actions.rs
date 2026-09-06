@@ -60,6 +60,9 @@ pub(crate) fn apply_rule_actions(
                 let text = serde_json::to_string(&json).map_err(|error| ProxyError {
                     code: "BODY_ENCODE_FAILED",
                     message: format!("failed to serialize structured body: {error}"),
+                    exchange_code: None,
+                    stage: None,
+                    direction: None,
                     external_package_call: None,
                 })?;
                 message.replace_body(Bytes::from(encode_body(body_codec, &text)?));

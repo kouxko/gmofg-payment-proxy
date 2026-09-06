@@ -7,7 +7,7 @@ use tokio::sync::mpsc;
 
 use crate::{
     Connection, Downstream, Error, Http, Protocol, RawConnection, RawReader, RawServer, RawWriter,
-    Reader, Server, ServerConnection, Socket, Upstream, Writer,
+    Reader, Server, ServerConnection, Socket, Upstream, WriteOutcome, Writer,
 };
 
 /// 协议 `LocalServer` 将 upstream Writer 收到的完整 Context 原样交给 downstream Reader。
@@ -75,14 +75,14 @@ struct LocalProtocolWriter<P: Protocol> {
 
 #[async_trait]
 impl<P: Protocol> Writer<P, Upstream> for LocalProtocolWriter<P> {
-    async fn write(&mut self, context: P::Context) -> Result<P::Context, Error> {
+    async fn write(&mut self, context: P::Context) -> Result<WriteOutcome<P::Context>, Error> {
         let written = context.clone();
         match self.sender.as_ref() {
             Some(sender) => sender
                 .send(context)
                 .await
                 .map_err(|_| Error::new("LocalServer reader is closed"))
-                .map(|()| written),
+                .map(|()| WriteOutcome::Committed(written)),
             None => Err(Error::new("LocalServer writer is closed")),
         }
     }

@@ -210,14 +210,21 @@ pub(super) async fn execute_http_attempt(
     let mut capabilities = snapshot.create_upstream(identity).unwrap();
     let context = phase10_http_context();
     let document = capabilities.decode.decode(&context).await.unwrap();
-    capabilities.rules.apply(document).await.unwrap();
     let mut message = Message::from_raw_http1_head(
         context.header.as_bytes(),
         Bytes::copy_from_slice(&context.wire_body),
     )
     .unwrap();
-    pipeline
-        .apply_request_policy(&connection, &http_request_metadata(), &mut message)
+    capabilities
+        .prepare
+        .prepare(
+            &connection,
+            &http_request_metadata(),
+            &mut message,
+            &context,
+            &document,
+            pipeline,
+        )
         .await
         .unwrap();
     message
@@ -293,7 +300,7 @@ pub(super) fn actor_context(
 }
 
 pub(super) fn actor_pipeline(
-    snapshot: &HttpProtocolRuntimeSnapshot,
+    _snapshot: &HttpProtocolRuntimeSnapshot,
     repository: Arc<Phase10ActorRules>,
 ) -> RuntimePipelineAdapter {
     let sessions = Arc::new(intercept_proxy_application::InMemorySessionStore::default());
@@ -308,7 +315,6 @@ pub(super) fn actor_pipeline(
         Arc::new(intercept_proxy_application::EventHub::new(16)),
         Arc::new(CaptureRepositoryAdapter::new(sessions)),
     )
-    .with_joint_http_rules(snapshot.joint_runtime())
 }
 
 pub(super) fn phase10_http_context() -> HttpContext {
@@ -385,14 +391,21 @@ pub(super) async fn assert_production_changed_commit(
     let context = phase10_http_context();
     let upstream_document = upstream.decode.decode(&context).await.unwrap();
     upstream.display.display(&upstream_document).await.unwrap();
-    upstream.rules.apply(upstream_document).await.unwrap();
     let mut message = Message::from_raw_http1_head(
         context.header.as_bytes(),
         Bytes::copy_from_slice(&context.wire_body),
     )
     .unwrap();
-    pipeline
-        .apply_request_policy(&connection, &http_request_metadata(), &mut message)
+    upstream
+        .prepare
+        .prepare(
+            &connection,
+            &http_request_metadata(),
+            &mut message,
+            &context,
+            &upstream_document,
+            &pipeline,
+        )
         .await
         .unwrap();
     assert_eq!(message.body, Bytes::from_static(expected_body));
@@ -436,7 +449,6 @@ async fn assert_production_encode_failure_rolls_back(
         .await;
     let mut failing_capabilities = failing_snapshot.create_upstream(failing_identity).unwrap();
     let document = failing_capabilities.decode.decode(&context).await.unwrap();
-    failing_capabilities.rules.apply(document).await.unwrap();
     let mut failing_message = Message::from_raw_http1_head(
         context.header.as_bytes(),
         Bytes::copy_from_slice(&context.wire_body),
@@ -444,18 +456,30 @@ async fn assert_production_encode_failure_rolls_back(
     .unwrap();
     let original_message = failing_message.clone();
     let before = failing_repository.snapshot.lock().clone();
-    let error = failing_pipeline
-        .apply_request_policy(
+    let error = failing_capabilities
+        .prepare
+        .prepare(
             &failing_connection,
             &http_request_metadata(),
             &mut failing_message,
+            &context,
+            &document,
+            &failing_pipeline,
         )
         .await
         .unwrap_err();
-    assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
+    assert_eq!(error.code.as_deref(), Some("EXTERNAL_PACKAGE_CALL_FAILED"));
     assert_ne!(
-        error.code,
-        intercept_proxy_runtime::ErrorCode::Internal.as_str()
+        error.code.as_deref(),
+        Some(intercept_proxy_runtime::ErrorCode::Internal.as_str())
+    );
+    assert_eq!(
+        error.stage,
+        Some(intercept_proxy_exchange::ErrorStage::Encode)
+    );
+    assert_eq!(
+        error.direction,
+        Some(intercept_proxy_exchange::DirectionKind::Upstream)
     );
     assert_eq!(
         error

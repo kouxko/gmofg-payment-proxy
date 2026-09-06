@@ -3,9 +3,10 @@ use super::{
     Arc, BoxIo, Bytes, CancellationToken, CanonicalResponseHead, ConnectionContext,
     ConnectionService, ErrorCode, Incoming, InformationalResponseSink, IntentionalWireFault,
     Message, ProxyError, RawHttp1HeadCapture, ReadRecordingIo, Request, RequestWireState, Response,
-    ResponseDisposition, ResponseHeadPreservingIo, ResponseWriteTracker, Result, SplitIo, StdMutex,
-    TokioIo, WireBody, collect_limited, finish_downstream_write, io, raw_head_capture_limit,
-    response_from_disposition, server_http1, service_fn, timeout_stage, validate_headers,
+    ResponseBody, ResponseDisposition, ResponseHeadPreservingIo, ResponseIo, ResponseWriteTracker,
+    Result, SplitIo, StdMutex, TokioIo, WireBody, collect_limited, drive_http1,
+    finish_downstream_write, io, raw_head_capture_limit, response_from_disposition, server_http1,
+    service_fn, timeout_stage, validate_headers,
 };
 
 #[derive(Clone)]
@@ -26,7 +27,8 @@ impl RequestHandlerState {
     async fn handle(
         self,
         request: Request<Incoming>,
-    ) -> std::result::Result<Response<WireBody>, io::Error> {
+    ) -> std::result::Result<Response<ResponseBody<WireBody>>, io::Error> {
+        let is_head = request.method() == http::Method::HEAD;
         let wire = RequestWireState {
             raw_request_head: &self.raw_request_head,
             canonical_response_head: &self.canonical_response_head,
@@ -34,13 +36,28 @@ impl RequestHandlerState {
             raw_tail: &self.raw_tail,
             intentional_wire_fault: &self.intentional_wire_fault,
         };
-        let mut result = self
-            .service
-            .handle_request(request, &self.cancellation, &wire, &self.exchange)
-            .await;
-        if let Ok(response) = &mut result {
-            response.body_mut().track(self.response_write);
+        let result: Result<Response<ResponseBody<WireBody>>> = async {
+            let (response, completed) = self
+                .service
+                .handle_request(request, &self.cancellation, &wire, &self.exchange)
+                .await?;
+            let body_suppressed = is_head || matches!(response.status().as_u16(), 204 | 304);
+            let deferred = self
+                .intentional_wire_fault
+                .lock()
+                .expect("wire fault mutex poisoned")
+                .is_some();
+            let (parts, body) = response.into_parts();
+            let body = ResponseBody::new(
+                body,
+                self.response_write,
+                completed,
+                body_suppressed,
+                deferred,
+            )?;
+            Ok(Response::from_parts(parts, body))
         }
+        .await;
         result.map_err(|error| {
             let wire_error = io::Error::other(error.to_string());
             *self
@@ -78,6 +95,9 @@ impl ConnectionService {
                 return Err(ProxyError {
                     code: error.code,
                     message: error.message,
+                    exchange_code: error.exchange_code,
+                    stage: error.stage,
+                    direction: error.direction,
                     external_package_call: error.external_package_call,
                 });
             }
@@ -124,71 +144,58 @@ impl ConnectionService {
             canonical_response_head,
         ));
         let recording_io = ReadRecordingIo::new(
-            response_preserving_io,
+            Box::new(ResponseIo::new(
+                response_preserving_io,
+                Arc::clone(&response_write),
+            )),
             raw_request_head,
             raw_head_capture_limit(self.limits),
         );
-        let mut connection = Box::pin(
+        let connection = Box::pin(
             server_http1::Builder::new()
                 .max_headers(self.limits.max_headers)
                 .serve_connection(TokioIo::new(recording_io), handler)
                 .without_shutdown(),
         );
-        let result = loop {
-            tokio::select! {
-                () = cancellation.cancelled() => {
-                    let error = ProxyError::new(
-                        ErrorCode::ProxyStopped,
-                        "proxy stopped while connection was active",
-                    );
-                    exchange.fail(&error).await;
-                    return Err(error);
-                }
-                result = &mut connection => break result,
-                () = response_write.wait_for_pending() => {
-                    tokio::select! {
-                        result = &mut connection => break result,
-                        () = response_write.wait_for_clear() => {}
-                        () = cancellation.cancelled() => {
-                            let error = ProxyError::new(
-                                ErrorCode::ProxyStopped,
-                                "proxy stopped during downstream response write",
-                            );
-                            exchange.fail(&error).await;
-                            return Err(error);
-                        }
-                        () = tokio::time::sleep(self.write_timeout) => {
-                            let error = ProxyError::new(
-                                ErrorCode::Io,
-                                format!(
-                                    "downstream response write timed out after {} ms",
-                                    self.write_timeout.as_millis()
-                                ),
-                            );
-                            exchange.fail(&error).await;
-                            return Err(error);
-                        }
-                    }
-                }
+        let result = match drive_http1(
+            connection,
+            &response_write,
+            &cancellation,
+            self.write_timeout,
+        )
+        .await
+        {
+            Ok(result) => result,
+            Err(error) => {
+                response_write.fail(&error);
+                exchange.fail(&error).await;
+                return Err(error);
             }
         };
         let parts = match result {
             Ok(parts) => parts,
             Err(error) => {
                 let error = connection_error(&error, &handler_error, &intentional_wire_fault);
+                response_write.fail(&error);
                 exchange.fail(&error).await;
                 return Err(error);
             }
         };
-        finish_http_connection(
+        let result = finish_http_connection(
             parts.io.into_inner().into_inner(),
             &raw_tail,
             self.write_timeout,
             &cancellation,
             &intentional_wire_fault,
-            &exchange,
         )
-        .await
+        .await;
+        if let Err(error) = &result {
+            response_write.fail(error);
+            exchange.fail(error).await;
+        } else {
+            exchange.shutdown();
+        }
+        result
     }
 
     fn start_exchange(
@@ -218,10 +225,14 @@ impl ConnectionService {
         cancellation: &CancellationToken,
         wire: &RequestWireState<'_>,
         exchange: &HttpExchangeConnection,
-    ) -> Result<Response<WireBody>> {
+    ) -> Result<(
+        Response<WireBody>,
+        Option<tokio::sync::oneshot::Sender<Result<()>>>,
+    )> {
         let (parts, body) = request.into_parts();
         if parts.method == http::Method::CONNECT || is_upgrade_request(&parts.headers) {
-            return unsupported_exchange_response(wire, cancellation);
+            return unsupported_exchange_response(wire, cancellation)
+                .map(|response| (response, None));
         }
         validate_headers(&parts.headers, self.limits)?;
         let body = timeout_stage(
@@ -249,17 +260,28 @@ impl ConnectionService {
             )
             .await?;
         for head in output.informational_heads {
-            wire.informational_response_sink
+            if let Err(error) = wire
+                .informational_response_sink
                 .publish(head, cancellation)
-                .await?;
+                .await
+            {
+                let _ = output.write_completed.send(Err(error.clone()));
+                return Err(error);
+            }
         }
-        response_from_disposition(
+        match response_from_disposition(
             output.disposition,
             wire.canonical_response_head,
             wire.raw_tail,
             wire.intentional_wire_fault,
             cancellation,
-        )
+        ) {
+            Ok(response) => Ok((response, Some(output.write_completed))),
+            Err(error) => {
+                let _ = output.write_completed.send(Err(error.clone()));
+                Err(error)
+            }
+        }
     }
 }
 
@@ -283,10 +305,9 @@ async fn finish_http_connection(
     write_timeout: std::time::Duration,
     cancellation: &CancellationToken,
     intentional_wire_fault: &StdMutex<Option<IntentionalWireFault>>,
-    exchange: &HttpExchangeConnection,
 ) -> Result<()> {
     let tail = raw_tail.lock().expect("raw tail mutex poisoned").take();
-    match finish_downstream_write(
+    finish_downstream_write(
         &mut io,
         tail,
         write_timeout,
@@ -294,16 +315,6 @@ async fn finish_http_connection(
         intentional_wire_fault,
     )
     .await
-    {
-        Ok(()) => {
-            exchange.shutdown();
-            Ok(())
-        }
-        Err(error) => {
-            exchange.fail(&error).await;
-            Err(error)
-        }
-    }
 }
 
 fn connection_error(

@@ -7,12 +7,14 @@
 use std::{collections::BTreeMap, fmt::Debug, marker::PhantomData};
 
 use async_trait::async_trait;
+use bytes::Bytes;
 use intercept_proxy_exchange::{
-    Decode, Direction, Display, Document, DocumentValue, Downstream, Encode, Error, Http,
-    HttpContext, JsonPointer, Rules, Upstream,
+    Decode, Direction, DirectionKind, Display, Document, DocumentValue, Downstream, Encode, Error,
+    Http, HttpContext, JsonPointer, Rules, SequentialPrepare, Upstream,
 };
 use uuid::Uuid;
 
+use super::{FaultAction, HttpRequestMetadata, Message, PipelinePorts, ProxyError};
 use crate::transport::ConnectionContext;
 
 const HEADER_FIELD: &str = "header";
@@ -43,12 +45,24 @@ pub struct HttpObservationMetadata {
     pub listener_id: String,
 }
 
-/// 每连接、每方向独占的四项 HTTP 能力。
+#[async_trait]
+pub trait HttpMessagePrepare<D: Direction>: Send {
+    async fn prepare(
+        &mut self,
+        connection: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+        original: &HttpContext,
+        document: &Document,
+        ports: &dyn PipelinePorts,
+    ) -> Result<Vec<FaultAction>, Error>;
+}
+
+/// 每连接、每方向独占的 HTTP 读取与写出准备能力。
 pub struct HttpDirectionCapabilities<D: Direction> {
     pub decode: Box<dyn Decode<Http, D>>,
     pub display: Box<dyn Display>,
-    pub rules: Box<dyn Rules>,
-    pub encode: Box<dyn Encode<Http, D>>,
+    pub prepare: Box<dyn HttpMessagePrepare<D>>,
 }
 
 impl<D: Direction> Debug for HttpDirectionCapabilities<D> {
@@ -67,13 +81,88 @@ impl<D: Direction> HttpDirectionCapabilities<D> {
         rules: Box<dyn Rules>,
         encode: Box<dyn Encode<Http, D>>,
     ) -> Self {
+        Self::prepared(
+            decode,
+            display,
+            Box::new(SequentialHttpMessagePrepare::<D> {
+                prepare: SequentialPrepare::new(rules, encode),
+            }),
+        )
+    }
+
+    pub fn prepared(
+        decode: Box<dyn Decode<Http, D>>,
+        display: Box<dyn Display>,
+        prepare: Box<dyn HttpMessagePrepare<D>>,
+    ) -> Self {
         Self {
             decode,
             display,
-            rules,
-            encode,
+            prepare,
         }
     }
+}
+
+struct SequentialHttpMessagePrepare<D: Direction> {
+    prepare: SequentialPrepare<Http, D>,
+}
+
+#[async_trait]
+impl<D: Direction> HttpMessagePrepare<D> for SequentialHttpMessagePrepare<D> {
+    async fn prepare(
+        &mut self,
+        connection: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+        original: &HttpContext,
+        document: &Document,
+        ports: &dyn PipelinePorts,
+    ) -> Result<Vec<FaultAction>, Error> {
+        let encoded = self.prepare.prepare_parts(original, document).await?;
+        let actions = match D::KIND {
+            DirectionKind::Upstream => {
+                ports
+                    .apply_request_policy(connection, request, message)
+                    .await
+            }
+            DirectionKind::Downstream => {
+                ports
+                    .apply_response_policy(connection, request, message)
+                    .await
+            }
+        }
+        .map_err(|error| {
+            error
+                .into_exchange_error()
+                .at(intercept_proxy_exchange::ErrorStage::Rules, D::KIND)
+        })?;
+        apply_http_context_changes(message, original, &encoded)?;
+        Ok(actions)
+    }
+}
+
+pub(crate) fn apply_http_context_changes(
+    message: &mut Message,
+    original: &HttpContext,
+    encoded: &HttpContext,
+) -> Result<(), Error> {
+    if encoded.header != original.header {
+        let parsed = Message::from_raw_http1_head(
+            encoded.header.as_bytes(),
+            Bytes::copy_from_slice(encoded.body.as_bytes()),
+        )
+        .map_err(proxy_error)?;
+        message.start_line = parsed.start_line;
+        message.headers = parsed.headers;
+    }
+    if encoded.body != original.body {
+        message.replace_body(Bytes::copy_from_slice(&encoded.wire_body));
+    }
+    Ok(())
+}
+
+pub(crate) fn proxy_error(error: ProxyError) -> Error {
+    error.into_exchange_error()
 }
 
 /// 为一条 HTTP connection 创建 upstream/downstream 两组真实能力。
@@ -224,22 +313,48 @@ fn text<'a>(document: &'a Document, field: &str) -> Result<&'a String, Error> {
         .map_err(|error| domain_error(&error))?
     {
         DocumentValue::String(value) => Ok(value),
-        _ => Err(Error::new(format!(
-            "HTTP_DOCUMENT_INVALID\n{field} must be a String"
-        ))),
+        _ => Err(Error::coded(
+            "HTTP_DOCUMENT_INVALID",
+            format!("{field} must be a String"),
+        )),
     }
 }
 
 fn domain_error(error: &intercept_proxy_exchange::DomainError) -> Error {
-    Error::new(format!("{}\n{}", error.code, error.message))
+    Error::coded(error.code.as_str(), &error.message)
 }
 
 #[cfg(test)]
 mod tests {
-    use intercept_proxy_exchange::{Decode, Encode, HttpContext, Rules};
+    use async_trait::async_trait;
+    use intercept_proxy_exchange::{Decode, DirectionKind, Encode, ErrorStage, HttpContext, Rules};
 
-    use super::{PlainHttpCapabilityFactory, TextDecode, TextEncode, Upstream};
+    use super::{
+        HttpConnectionIdentity, HttpProtocolCapabilityFactory, PlainHttpCapabilityFactory,
+        TextDecode, TextEncode, Upstream, proxy_error,
+    };
     use std::marker::PhantomData;
+    use std::time::SystemTime;
+
+    #[derive(Debug)]
+    struct FailingHttpPolicy;
+
+    impl crate::HandshakePolicy for FailingHttpPolicy {}
+
+    #[async_trait]
+    impl crate::PipelinePorts for FailingHttpPolicy {
+        async fn apply_request_policy(
+            &self,
+            _context: &crate::ConnectionContext,
+            _request: &crate::HttpRequestMetadata,
+            _message: &mut crate::Message,
+        ) -> crate::Result<Vec<crate::FaultAction>> {
+            Err(crate::ProxyError::new(
+                crate::ErrorCode::Internal,
+                "Encode: misleading stage text",
+            ))
+        }
+    }
 
     #[tokio::test]
     async fn plain_capabilities_round_trip_header_and_body() {
@@ -257,5 +372,108 @@ mod tests {
 
         assert_eq!(encode.encode(&context, &document).await.unwrap(), context);
         let _ = PlainHttpCapabilityFactory::new("workspace", "listener");
+    }
+
+    #[tokio::test]
+    async fn text_encode_reports_typed_header_and_body_errors() {
+        let context = HttpContext::default();
+        let mut encode = TextEncode::<Upstream>(PhantomData);
+        for document in [
+            serde_json::from_value(serde_json::json!({"header": 1, "body": "ok"})).unwrap(),
+            serde_json::from_value(serde_json::json!({"header": "ok", "body": 1})).unwrap(),
+        ] {
+            let error = encode.encode(&context, &document).await.unwrap_err();
+            assert_eq!(error.code.as_deref(), Some("HTTP_DOCUMENT_INVALID"));
+        }
+
+        let domain = super::Document::new(super::DocumentValue::Null(()))
+            .resolve(&super::JsonPointer::property("missing"))
+            .unwrap_err();
+        let error = super::domain_error(&domain);
+        assert_eq!(error.code.as_deref(), Some(domain.code.as_str()));
+    }
+
+    #[test]
+    fn proxy_error_round_trip_preserves_typed_location_without_parsing_message() {
+        let mut error = crate::ProxyError::new(
+            crate::ErrorCode::ExternalPackageCallFailed,
+            "Rules: misleading stage text",
+        )
+        .at(ErrorStage::Encode, DirectionKind::Downstream);
+        error.exchange_code = Some("ENCODE_FAILED".into());
+        error.external_package_call = Some(Box::new(
+            intercept_proxy_exchange::ExternalPackageCallFailure {
+                package: intercept_proxy_exchange::ProtocolPackageRef {
+                    id: intercept_proxy_exchange::ProtocolPackageId::new("http-round-trip")
+                        .unwrap(),
+                    version: intercept_proxy_exchange::ProtocolPackageVersion::new("1.0.0")
+                        .unwrap(),
+                },
+                direction: intercept_proxy_exchange::ProtocolDirection::Downstream,
+                stage: intercept_proxy_exchange::ExternalPackageCallStage::Encode,
+                method: "hooks.encode".into(),
+                request_id: None,
+                remote_code: None,
+                stable_code: Some("ENCODE_FAILED".into()),
+                remote_message: None,
+                remote_data_summary: None,
+            },
+        ));
+
+        let error = proxy_error(error);
+        assert_eq!(error.code.as_deref(), Some("ENCODE_FAILED"));
+        assert_eq!(error.stage, Some(ErrorStage::Encode));
+        assert_eq!(error.direction, Some(DirectionKind::Downstream));
+        assert!(error.external_package_call.is_some());
+    }
+
+    #[tokio::test]
+    async fn sequential_prepare_marks_ordinary_policy_failure_as_rules() {
+        let identity = HttpConnectionIdentity {
+            runtime_epoch: uuid::Uuid::new_v4(),
+            connection_id: uuid::Uuid::new_v4(),
+            peer: "127.0.0.1:12345".into(),
+        };
+        let context = crate::ConnectionContext {
+            runtime_epoch: identity.runtime_epoch,
+            connection_id: identity.connection_id,
+            channel: crate::ChannelId::new("listener").unwrap(),
+            peer_addr: identity.peer.parse().unwrap(),
+            accepted_at: SystemTime::now(),
+            tls_peer: None,
+        };
+        let original = HttpContext {
+            header: "POST / HTTP/1.1\r\n\r\n".into(),
+            body: "body".into(),
+            body_is_utf8: true,
+            wire_body: b"body".to_vec(),
+        };
+        let factory = PlainHttpCapabilityFactory::new("workspace", "listener");
+        let mut capabilities = factory.create_upstream(identity).unwrap();
+        let document = capabilities.decode.decode(&original).await.unwrap();
+        let mut message = crate::Message::from_raw_http1_head(
+            original.header.as_bytes(),
+            bytes::Bytes::copy_from_slice(&original.wire_body),
+        )
+        .unwrap();
+        let error = capabilities
+            .prepare
+            .prepare(
+                &context,
+                &crate::HttpRequestMetadata {
+                    method: "POST".into(),
+                    request_target: "/".into(),
+                },
+                &mut message,
+                &original,
+                &document,
+                &FailingHttpPolicy,
+            )
+            .await
+            .unwrap_err();
+
+        assert_eq!(error.code.as_deref(), Some("INTERNAL_ERROR"));
+        assert_eq!(error.stage, Some(ErrorStage::Rules));
+        assert_eq!(error.direction, Some(DirectionKind::Upstream));
     }
 }

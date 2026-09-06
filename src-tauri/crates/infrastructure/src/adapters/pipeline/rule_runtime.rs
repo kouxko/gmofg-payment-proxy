@@ -22,7 +22,7 @@ mod actor;
 
 use actor::{Command, EvaluationInput, Reply, RuleActorSender};
 
-use super::{JointDocumentEvaluation, RuntimeRuleRepository};
+use super::RuntimeRuleRepository;
 
 pub(super) const MAILBOX_CAPACITY: usize = 64;
 #[derive(Debug)]
@@ -79,7 +79,7 @@ impl RuleRuntimeService {
         request: &HttpRequestMetadata,
         message: Option<&Message>,
         body_codec: Arc<dyn BodyCodec>,
-        joint_document: Option<JointDocumentEvaluation>,
+        joint_document: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
     ) -> ProxyResult<EvaluatedRules> {
         let input = EvaluationInput {
             context: context.clone(),

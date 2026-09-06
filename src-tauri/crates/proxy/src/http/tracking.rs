@@ -1,41 +1,86 @@
 use super::{
     Arc, AsyncRead, AsyncWrite, AtomicBool, Body, BoxIo, Bytes, CancellationToken, Context, Debug,
     Formatter, Frame, Future, JoinHandle, Notify, Ordering, PacedBody, PacedBodyError, Pin, Poll,
-    RawHttp1HeadCapture, ReadBuf, SizeHint, StdMutex, TrafficSchedule, io, mpsc,
+    RawHttp1HeadCapture, ReadBuf, Result, SizeHint, StdMutex, TrafficSchedule, WriteOutcome, io,
+    mpsc, oneshot,
 };
 
-#[derive(Debug, Default)]
-pub(super) struct ResponseWriteTracker {
-    pending: AtomicBool,
-    changed: Notify,
+use crate::{ErrorCode, ProxyError};
+
+type WriteReceiptResult = Result<WriteOutcome<()>>;
+type WriteReceiptSender = oneshot::Sender<WriteReceiptResult>;
+
+#[derive(Clone, Debug)]
+pub struct UpstreamWriteReceipt {
+    sender: Arc<StdMutex<Option<WriteReceiptSender>>>,
 }
 
-impl ResponseWriteTracker {
-    pub(super) fn begin(&self) {
-        self.pending.store(true, Ordering::Release);
-        self.changed.notify_waiters();
+#[derive(Debug)]
+pub struct UpstreamWriteCompletion {
+    receiver: oneshot::Receiver<WriteReceiptResult>,
+}
+
+pub(crate) fn upstream_write_receipt() -> (UpstreamWriteReceipt, UpstreamWriteCompletion) {
+    UpstreamWriteReceipt::channel()
+}
+
+impl UpstreamWriteReceipt {
+    pub fn channel() -> (Self, UpstreamWriteCompletion) {
+        let (sender, receiver) = oneshot::channel();
+        (
+            Self {
+                sender: Arc::new(StdMutex::new(Some(sender))),
+            },
+            UpstreamWriteCompletion { receiver },
+        )
     }
 
-    pub(super) fn complete(&self) {
-        self.pending.store(false, Ordering::Release);
-        self.changed.notify_waiters();
+    /// Confirm that the complete request was accepted by the transport's successful flush.
+    pub fn confirm_flushed(&self) {
+        self.resolve(Ok(WriteOutcome::Committed(())));
     }
 
-    pub(super) async fn wait_for_pending(&self) {
-        self.wait_for(true).await;
+    pub(crate) fn response_ready(&self) {
+        self.resolve(Ok(WriteOutcome::ReadReady(())));
     }
 
-    pub(super) async fn wait_for_clear(&self) {
-        self.wait_for(false).await;
+    pub(crate) fn fail(&self, error: &ProxyError) {
+        self.resolve(Err(error.clone()));
     }
 
-    async fn wait_for(&self, pending: bool) {
-        loop {
-            let changed = self.changed.notified();
-            if self.pending.load(Ordering::Acquire) == pending {
-                return;
-            }
-            changed.await;
+    pub(crate) fn is_pending(&self) -> bool {
+        self.sender
+            .lock()
+            .expect("upstream write receipt mutex poisoned")
+            .is_some()
+    }
+
+    fn resolve(&self, result: WriteReceiptResult) {
+        let sender = self
+            .sender
+            .lock()
+            .expect("upstream write receipt mutex poisoned")
+            .take();
+        if let Some(sender) = sender {
+            let _ = sender.send(result);
+        }
+    }
+}
+
+impl UpstreamWriteCompletion {
+    pub async fn wait(self, cancellation: &CancellationToken) -> Result<WriteOutcome<()>> {
+        tokio::select! {
+            biased;
+            () = cancellation.cancelled() => Err(ProxyError::new(
+                ErrorCode::ProxyStopped,
+                "proxy stopped while awaiting upstream request completion",
+            )),
+            result = self.receiver => result.unwrap_or_else(|_| {
+                Err(ProxyError::new(
+                    ErrorCode::Internal,
+                    "upstream write receipt dropped before completion",
+                ))
+            }),
         }
     }
 }

@@ -31,6 +31,8 @@ Reader 是 Downstream。
 5. App EOF 正常结束；任一业务错误结束 Exchange 并关闭两端。
 6. 同一 Socket connection 未断开时 Exchange 保留，可处理后续严格配对交易。
 7. 同一 HTTP/1.1 connection 使用容量为 1 的 actor channel，多个请求依次进入同一个 Exchange。
+8. 可热替换的规则按每笔消息取得快照；Plain 的 JSON 能力随当前 Document 规则变化，Listener 的
+   endpoint、协议包身份和安全配置仍保持连接级边界。
 
 `ExchangeId` 只用于 tracing/UI 并发关联，不进入协议报文、Document 或规则匹配。
 
@@ -62,6 +64,7 @@ HTTP 的边界分两层：
 
 Plain Body 模式仍会建立 `http-text` Document，但不加载协议包；Protocol Body 模式使用
 Listener 启动时冻结的精确协议包版本。规则快照替换不会更换已冻结的协议脚本身份。
+Rules 与 Encode 的共同事务通过 `PrepareWrite` 明确执行，参见 [阶段与事务合同](exchange-pipeline.md)。
 
 固定上游反向代理和普通 HTTP 正向代理都进入同一个 HTTP Exchange。当前连接绑定一个 Endpoint；
 同一 Exchange 不支持在 keep-alive 期间切换目标。CONNECT、Upgrade 和 MITM tunnel fail-closed。
@@ -120,8 +123,8 @@ LocalServer 与 RemoteServer 的差别只有 Endpoint 实现：
 - 容量 1 channel 保持一条在途 Context，不积累第二笔交易。
 - Socket LocalResponder 的响应语义由 downstream 能力产生，而不是在 Exchange 外另建 responder。
 - Direct LocalRawServer 同样属于透明 Exchange 的 Server 端口，每个 chunk 原样回环。
-- HTTP LocalServer 原样回环完整 HTTP Context，不创建真实 `UpstreamConnector`；响应仍执行
-  Proxy → App Pipeline。
+- HTTP LocalServer 回环后由 HTTP adapter 构造默认响应，不创建真实网络上游；响应仍执行
+  Proxy → App Pipeline。默认状态、Body 和 Header 合同见 [LocalServer 与 RemoteServer](exchange-pipeline.md#8-localserver-与-remoteserver)。
 
 新建/编辑不再暴露 `MockResponse`。LocalHttpServer 先产生本机响应 Context，Proxy → App
 `ReplaceBodyText` 再替换其 Body，HTTP wire policy 按最终 BodyCodec 编码并重算托管 Header。底层
@@ -202,7 +205,9 @@ flowchart LR
 | capability factory 返回错误或 panic | 同一 Exchange 记录 failed/closed，不创建兜底 Pipeline |
 | 最终 shutdown 失败 | 追加 warning，不覆盖业务结果 |
 
-Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 flush 成功才返回 sent。
+Writer 必须循环处理底层 partial write；只有整个 Context/chunk 和 flush 成功才返回
+`WriteOutcome::Committed` 并记录 sent。HTTP 上游提前返回最终响应时，`ReadReady` 允许继续读响应，
+不伪造请求已完整发送。下游把消费完 Body 与真实 flush 分开，通过一次性回执确认写出。
 失败后不得猜测已提交前缀、重发完整报文或切换 Local/Remote 模式。
 
 ## 9. 配置与规则验证

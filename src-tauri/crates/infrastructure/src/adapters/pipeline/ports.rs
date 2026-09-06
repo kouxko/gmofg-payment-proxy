@@ -108,6 +108,88 @@ impl PipelinePorts for RuntimePipelineAdapter {
         request: &HttpRequestMetadata,
         message: &mut Message,
     ) -> ProxyResult<Vec<FaultAction>> {
+        self.apply_request_policy_with_joint(context, request, message, None)
+            .await
+    }
+
+    async fn apply_request_joint_policy(
+        &self,
+        context: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+        evaluation: Box<dyn intercept_proxy_runtime::HttpJointEvaluation>,
+    ) -> ProxyResult<Vec<FaultAction>> {
+        self.apply_request_policy_with_joint(context, request, message, Some(evaluation))
+            .await
+    }
+
+    async fn apply_response_policy(
+        &self,
+        context: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+    ) -> ProxyResult<Vec<FaultAction>> {
+        self.apply_response_policy_with_joint(context, request, message, None)
+            .await
+    }
+
+    async fn apply_response_joint_policy(
+        &self,
+        context: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+        evaluation: Box<dyn intercept_proxy_runtime::HttpJointEvaluation>,
+    ) -> ProxyResult<Vec<FaultAction>> {
+        self.apply_response_policy_with_joint(context, request, message, Some(evaluation))
+            .await
+    }
+
+    async fn apply_socket_policy(
+        &self,
+        context: &ConnectionContext,
+        direction: intercept_proxy_runtime::SocketPayloadDirection,
+        evaluation: Box<dyn intercept_proxy_runtime::SocketJointEvaluation>,
+    ) -> ProxyResult<intercept_proxy_exchange::SocketContext> {
+        let stage = match direction {
+            intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream
+            | intercept_proxy_runtime::SocketPayloadDirection::LocalExchange => {
+                DomainMessageStage::Request
+            }
+            intercept_proxy_runtime::SocketPayloadDirection::UpstreamToApp => {
+                DomainMessageStage::Response
+            }
+        };
+        let evaluated = self
+            .rule_runtime
+            .evaluate_socket(context, stage, evaluation)
+            .await?;
+        self.rule_runtime
+            .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules);
+        evaluated.prepared_socket.ok_or_else(|| {
+            ProxyError::new(
+                intercept_proxy_runtime::ErrorCode::Internal,
+                "Socket rule transaction did not prepare encoded output",
+            )
+        })
+    }
+
+    async fn connection_closed(&self, context: &ConnectionContext, result: &ProxyResult<()>) {
+        self.connection_closed_inner(context, result);
+    }
+
+    async fn runtime_fault(&self, epoch: Uuid, channel: ChannelId, error: &ProxyError) {
+        self.runtime_fault_inner(epoch, &channel, error);
+    }
+}
+
+impl RuntimePipelineAdapter {
+    async fn apply_request_policy_with_joint(
+        &self,
+        context: &ConnectionContext,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+        joint: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
+    ) -> ProxyResult<Vec<FaultAction>> {
         let body_codec = self.codec_for(context, DomainMessageStage::Request, message)?;
         self.begin_session(context, message, body_codec.as_ref())?;
         let evaluated = self
@@ -117,6 +199,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 request,
                 Some(message),
                 body_codec.clone(),
+                joint,
             )
             .await?;
         *message = evaluated
@@ -164,11 +247,12 @@ impl PipelinePorts for RuntimePipelineAdapter {
         Ok(actions)
     }
 
-    async fn apply_response_policy(
+    async fn apply_response_policy_with_joint(
         &self,
         context: &ConnectionContext,
         request: &HttpRequestMetadata,
         message: &mut Message,
+        joint: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
     ) -> ProxyResult<Vec<FaultAction>> {
         let body_codec = self.codec_for(context, DomainMessageStage::Response, message)?;
         {
@@ -185,6 +269,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
                 request,
                 Some(message),
                 body_codec.clone(),
+                joint,
             )
             .await?;
         *message = evaluated
@@ -224,36 +309,7 @@ impl PipelinePorts for RuntimePipelineAdapter {
         Ok(actions)
     }
 
-    async fn apply_socket_policy(
-        &self,
-        context: &ConnectionContext,
-        direction: intercept_proxy_runtime::SocketPayloadDirection,
-        evaluation: Box<dyn intercept_proxy_runtime::SocketJointEvaluation>,
-    ) -> ProxyResult<intercept_proxy_exchange::SocketContext> {
-        let stage = match direction {
-            intercept_proxy_runtime::SocketPayloadDirection::AppToUpstream
-            | intercept_proxy_runtime::SocketPayloadDirection::LocalExchange => {
-                DomainMessageStage::Request
-            }
-            intercept_proxy_runtime::SocketPayloadDirection::UpstreamToApp => {
-                DomainMessageStage::Response
-            }
-        };
-        let evaluated = self
-            .rule_runtime
-            .evaluate_socket(context, stage, evaluation)
-            .await?;
-        self.rule_runtime
-            .publish_rule_hits(context.runtime_epoch, evaluated.hit_rules);
-        evaluated.prepared_socket.ok_or_else(|| {
-            ProxyError::new(
-                intercept_proxy_runtime::ErrorCode::Internal,
-                "Socket rule transaction did not prepare encoded output",
-            )
-        })
-    }
-
-    async fn connection_closed(&self, context: &ConnectionContext, result: &ProxyResult<()>) {
+    fn connection_closed_inner(&self, context: &ConnectionContext, result: &ProxyResult<()>) {
         {
             // Update health metrics before SessionUpdated is published so a UI
             // refresh triggered by that event observes the new global state.
@@ -295,17 +351,16 @@ impl PipelinePorts for RuntimePipelineAdapter {
             );
         }
         self.finish_session(context, result);
-        self.joint_http_rules.remove_connection(context);
         self.state.lock().remove_connection(context);
     }
 
-    async fn runtime_fault(&self, epoch: Uuid, channel: ChannelId, error: &ProxyError) {
+    fn runtime_fault_inner(&self, epoch: Uuid, channel: &ChannelId, error: &ProxyError) {
         {
             let mut state = self.state.lock();
             if let Some(metrics) = state
                 .channels
                 .get_mut(&RuntimeEpoch::from_uuid(epoch))
-                .and_then(|channels| channels.get_mut(&channel))
+                .and_then(|channels| channels.get_mut(channel))
             {
                 metrics.error_count = metrics.error_count.saturating_add(1);
             }

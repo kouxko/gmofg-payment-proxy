@@ -1,6 +1,6 @@
 //! Socket RemoteServer/LocalServer 到统一 `Server<Socket>` 端口的实现。
 
-use std::sync::{Arc, Mutex};
+use std::sync::Arc;
 
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
@@ -10,12 +10,11 @@ use tokio_util::sync::CancellationToken;
 
 use crate::transport::relay::{RelayDirection, RelayProgress};
 
-use super::super::connector::{PreparedSocketSecurity, SocketPreparationFailure};
-use super::super::{SocketOpenedEvidence, SocketRelayConfig};
+use super::super::SocketRelayConfig;
+use super::super::connector::PreparedSocketSecurity;
+pub(super) use super::super::remote_endpoint::SharedPreparationFailure;
+use super::super::remote_endpoint::{OpenCallback, connect_remote_endpoint};
 use super::io::{SocketConnection, SocketReader, SocketWriter};
-
-pub(super) type SharedPreparationFailure = Arc<Mutex<Option<SocketPreparationFailure>>>;
-type OpenCallback = Box<dyn FnOnce(SocketOpenedEvidence) + Send>;
 
 pub(super) struct RemoteSocketServer {
     security: PreparedSocketSecurity,
@@ -59,34 +58,16 @@ impl Server<Socket> for RemoteSocketServer {
         &mut self,
         _first: &SocketContext,
     ) -> Result<Box<ServerConnection<Socket>>, Error> {
-        let connected = self
-            .security
-            .connect_upstream_endpoint(
-                &self.config.upstream,
-                self.config.connect_timeout,
-                &self.cancellation,
-            )
-            .await;
-        let connected = match connected {
-            Ok(connected) => connected,
-            Err(failure) => {
-                let error =
-                    Error::new(format!("{}: {}", failure.error.code, failure.error.message));
-                *self
-                    .preparation_failure
-                    .lock()
-                    .unwrap_or_else(std::sync::PoisonError::into_inner) = Some(failure);
-                return Err(error);
-            }
-        };
-        if let Some(on_open) = self.on_open.take() {
-            on_open(SocketOpenedEvidence::Relay {
-                resolved_address: connected.resolved_address,
-                downstream_tls_peer: self.downstream_tls_peer.clone(),
-                upstream_tls: connected.upstream_tls,
-            });
-        }
-        let (reader, writer) = tokio::io::split(connected.upstream);
+        let upstream = connect_remote_endpoint(
+            &self.security,
+            &self.config,
+            &self.cancellation,
+            &self.preparation_failure,
+            self.downstream_tls_peer.clone(),
+            &mut self.on_open,
+        )
+        .await?;
+        let (reader, writer) = tokio::io::split(upstream);
         Ok(Box::new(SocketConnection::new(
             SocketReader::<Downstream>::new(
                 Box::new(reader),

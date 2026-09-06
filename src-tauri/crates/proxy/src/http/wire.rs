@@ -1,7 +1,6 @@
 use super::{
-    Arc, Body, Bytes, CancellationToken, Context, Debug, Duration, ErrorCode, Frame, Future,
-    PacedBody, PacedBodyError, Pin, Poll, ProxyError, ResponseWriteTracker, SizeHint,
-    TrafficSchedule,
+    Body, Bytes, CancellationToken, Context, Debug, Duration, ErrorCode, Frame, Future, PacedBody,
+    PacedBodyError, Pin, Poll, ProxyError, SizeHint, TrafficSchedule,
 };
 
 #[derive(Debug)]
@@ -9,7 +8,6 @@ pub(super) struct WireBody {
     inner: PacedBody,
     finish_delay: Option<Pin<Box<tokio::time::Sleep>>>,
     disconnect_delay: Option<Pin<Box<tokio::time::Sleep>>>,
-    tracker: Option<Arc<ResponseWriteTracker>>,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -51,13 +49,7 @@ impl WireBody {
             inner: PacedBody::new(data, claimed_length, schedule, cancellation),
             finish_delay,
             disconnect_delay: None,
-            tracker: None,
         }
-    }
-
-    pub(super) fn track(&mut self, tracker: Arc<ResponseWriteTracker>) {
-        tracker.begin();
-        self.tracker = Some(tracker);
     }
 }
 
@@ -91,9 +83,6 @@ impl Body for WireBody {
                 return Poll::Pending;
             }
             self.finish_delay = None;
-        }
-        if let Some(tracker) = self.tracker.take() {
-            tracker.complete();
         }
         Poll::Ready(None)
     }

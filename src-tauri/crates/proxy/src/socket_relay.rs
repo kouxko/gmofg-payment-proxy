@@ -9,10 +9,13 @@ mod config;
 mod connector;
 mod handler;
 mod handler_support;
+mod io;
 mod observer;
+mod output_validation;
 mod processing;
 mod protocol_exchange;
 mod raw_exchange;
+mod remote_endpoint;
 mod service;
 mod upstream_tls;
 
@@ -28,8 +31,10 @@ pub use observer::{
     SocketRelayBytes, SocketRelayDirection, SocketRelayFailure, SocketRelayMetricsSnapshot,
     SocketRelayRunContext, SocketRelayStage, SocketTlsEvidence, SocketTransportMode,
 };
+pub use output_validation::BoundedSocketJointEvaluation;
+pub(crate) use output_validation::validate_socket_output;
 pub use processing::{
-    FrameBoundary, JointConditionEvaluation, JointRuleConditionEvaluation,
+    FrameBoundary, HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
     SocketConnectionIdentity, SocketDirectionCapabilities, SocketJointEvaluation,
     SocketObservationMetadata, SocketPayloadDirection, SocketPipelineLimits,
     SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,

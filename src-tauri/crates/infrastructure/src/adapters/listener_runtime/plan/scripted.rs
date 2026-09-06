@@ -1,19 +1,19 @@
 //! Scripted Socket 冻结快照到具体 Relay service 的构建。
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
 use intercept_proxy_application::{AppError, AppResult};
 use intercept_proxy_domain::{
-    ProxyListener, ProxyWorkspace, SocketDownstreamSecurity, SocketPayloadProcessing,
-    SocketRelaySettings, SocketTopology,
+    ProxyListener, ProxyWorkspace, SocketPayloadProcessing, SocketRelaySettings,
 };
 use intercept_proxy_runtime::{
-    SocketDownstreamSecurity as RuntimeDownstreamSecurity, SocketEndpoint,
-    SocketLocalResponderConfig, SocketObservationMetadata, SocketPipelineLimits, SocketRelayConfig,
-    SocketRelayService,
+    SocketObservationMetadata, SocketPipelineLimits, SocketRelayService,
 };
 
-use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
+use super::{
+    ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error,
+    socket_config::{SocketServiceConfig, read_chunk_bytes},
+};
 use crate::adapters::listener_runtime::external_relay::{
     ExternalSocketCapabilityFactoryAdapter, ExternalSocketRuntimeSnapshot,
 };
@@ -91,60 +91,25 @@ impl ListenerRuntimePlanBuilder<'_> {
         })?;
         let observer = self.socket_observer(listener, socket)?;
         let pipeline = self.pipeline(listener)?.ports;
-        let service = match &socket.topology {
-            SocketTopology::Relay(relay) => {
-                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
-                    &snapshot,
-                    Self::observation_metadata(workspace, listener),
-                    Arc::clone(&pipeline),
-                ));
-                SocketRelayService::build_scripted_with_observer(
-                    SocketRelayConfig {
-                        bind_addr,
-                        upstream: SocketEndpoint {
-                            host: relay.upstream.host.clone(),
-                            port: relay.upstream.port,
-                        },
-                        security: self.socket_security(workspace, &relay.security).await?,
-                        maximum_connections: socket.maximum_connections,
-                        read_chunk_bytes: read_chunk_bytes(listener, socket)?,
-                        connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                        read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                        write_timeout: Duration::from_millis(listener.write_timeout_ms),
-                    },
-                    factory,
-                    pipeline_limits,
-                    observer,
-                )
-            }
-            SocketTopology::LocalResponder(local) => {
-                let downstream_tls = match &local.downstream_security {
-                    SocketDownstreamSecurity::Tcp => None,
-                    SocketDownstreamSecurity::Tls { downstream_tls } => Some(
-                        self.socket_downstream_tls(workspace, downstream_tls)
-                            .await?,
-                    ),
-                };
-                let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
-                    &snapshot,
-                    Self::observation_metadata(workspace, listener),
-                    Arc::clone(&pipeline),
-                ));
+        let factory = Arc::new(ExternalSocketCapabilityFactoryAdapter::new_with_pipeline(
+            &snapshot,
+            Self::observation_metadata(workspace, listener),
+            pipeline,
+            pipeline_limits,
+        ));
+        let service = match self
+            .socket_service_config(workspace, listener, socket, bind_addr)
+            .await?
+        {
+            SocketServiceConfig::Relay(config) => SocketRelayService::build_scripted_with_observer(
+                config,
+                factory,
+                pipeline_limits,
+                observer,
+            ),
+            SocketServiceConfig::LocalResponder(config) => {
                 SocketRelayService::build_local_responder_with_observer(
-                    SocketLocalResponderConfig {
-                        bind_addr,
-                        security: downstream_tls.as_ref().map_or(
-                            RuntimeDownstreamSecurity::Tcp,
-                            |tls| RuntimeDownstreamSecurity::Tls {
-                                downstream_tls: tls.clone(),
-                            },
-                        ),
-                        maximum_connections: socket.maximum_connections,
-                        read_chunk_bytes: read_chunk_bytes(listener, socket)?,
-                        handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                        read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                        write_timeout: Duration::from_millis(listener.write_timeout_ms),
-                    },
+                    config,
                     factory,
                     pipeline_limits,
                     observer,
@@ -195,14 +160,4 @@ impl ListenerRuntimePlanBuilder<'_> {
             listener_id: listener.id.to_string(),
         }
     }
-}
-
-fn read_chunk_bytes(listener: &ProxyListener, socket: &SocketRelaySettings) -> AppResult<usize> {
-    usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
-        runtime_error(
-            listener,
-            "CONFIG_INVALID",
-            "Socket 单次读取字节数超出平台范围".into(),
-        )
-    })
 }

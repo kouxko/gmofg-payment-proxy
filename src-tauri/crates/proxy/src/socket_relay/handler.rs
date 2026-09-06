@@ -317,6 +317,9 @@ impl SocketConnectionHandler {
                 Err(ProxyError {
                     code,
                     message: failure.error.message,
+                    exchange_code: None,
+                    stage: None,
+                    direction: None,
                     external_package_call: failure.error.external_package_call,
                 })
             }
@@ -347,6 +350,9 @@ impl SocketConnectionHandler {
                 Err(ProxyError {
                     code: socket_failure.code,
                     message: "socket frame processing failed".into(),
+                    exchange_code: None,
+                    stage: None,
+                    direction: None,
                     external_package_call: failure.external_package_call,
                 })
             }

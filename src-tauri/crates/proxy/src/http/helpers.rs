@@ -199,7 +199,7 @@ pub(super) fn message_wire_head(message: &Message) -> Result<Bytes> {
     Ok(wire.slice(..end))
 }
 
-pub(super) async fn collect_limited(mut body: Incoming, limit: usize) -> Result<Bytes> {
+pub(crate) async fn collect_limited(mut body: Incoming, limit: usize) -> Result<Bytes> {
     let mut bytes = Vec::new();
     while let Some(frame) = body.frame().await {
         let frame = frame.map_err(|error| ProxyError::new(ErrorCode::Io, error.to_string()))?;
@@ -239,7 +239,7 @@ pub(super) fn validate_headers(headers: &HeaderMap, limits: MessageLimits) -> Re
     Ok(())
 }
 
-pub(super) async fn timeout_stage<F, T>(
+pub(crate) async fn timeout_stage<F, T>(
     timeout: Duration,
     cancellation: &CancellationToken,
     future: F,

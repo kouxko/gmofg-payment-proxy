@@ -1,10 +1,9 @@
 use super::{
-    Arc, AsyncWriteExt, BodyExt, BoxIo, CancellationToken, ConnectionTask, Duration, ErrorCode,
-    ForwardRequest, Incoming, InformationalResponseSink, Message, MessageLimits, PacedBody,
-    PacedBodyError, ProxyError, RawHttp1HeadCapture, Request, RequestHeadPreservingIo,
-    RequestWriteTracker, Response, Result, StdMutex, TokioIo, TrackedIo, TrackedRequestBody,
-    TrafficSchedule, UpstreamExchange, client_http1, collect_limited, message_wire_head, mpsc,
-    raw_head_capture_limit, timeout_stage,
+    Arc, BoxIo, CancellationToken, ConnectionTask, Duration, ErrorCode, ForwardRequest, Incoming,
+    InformationalResponseSink, Message, MessageLimits, ProxyError, RawHttp1HeadCapture, Request,
+    RequestHeadPreservingIo, RequestWriteTracker, Response, Result, StdMutex, TokioIo, TrackedIo,
+    TrackedRequestBody, TrafficSchedule, UpstreamExchange, UpstreamWriteReceipt, client_http1,
+    collect_limited, message_wire_head, mpsc, raw_head_capture_limit, timeout_stage,
 };
 
 pub(super) enum WriteStageOutcome {
@@ -25,6 +24,7 @@ struct Http1RequestState<'a> {
     response_head: Arc<StdMutex<RawHttp1HeadCapture>>,
     informational_events: mpsc::UnboundedReceiver<()>,
     informational: Option<&'a InformationalResponseSink>,
+    write_receipt: &'a UpstreamWriteReceipt,
     cancellation: &'a CancellationToken,
 }
 
@@ -61,6 +61,7 @@ pub(super) async fn send_http1_request(
     request: ForwardRequest,
     config: Http1ExchangeConfig,
     informational: Option<&InformationalResponseSink>,
+    write_receipt: &UpstreamWriteReceipt,
     cancellation: &CancellationToken,
 ) -> Result<UpstreamExchange> {
     let canonical_head = message_wire_head(&request.message)?;
@@ -91,6 +92,7 @@ pub(super) async fn send_http1_request(
             response_head,
             informational_events,
             informational,
+            write_receipt,
             cancellation,
         },
     )
@@ -117,6 +119,7 @@ async fn execute_http1_request(
         response_head,
         mut informational_events,
         informational,
+        write_receipt,
         cancellation,
     } = state;
     let effective_write_timeout =
@@ -164,6 +167,7 @@ async fn execute_http1_request(
     let response = match write_outcome {
         WriteStageOutcome::Response(response) => response,
         WriteStageOutcome::Flushed => {
+            write_receipt.confirm_flushed();
             timeout_stage(
                 read_timeout,
                 cancellation,
@@ -268,76 +272,4 @@ async fn finalize_http1_response(
         informational_heads,
         final_response: message,
     })
-}
-
-pub(super) async fn send_scheduled_upstream_abort(
-    io: &mut BoxIo,
-    message: &Message,
-    schedule: TrafficSchedule,
-    write_timeout: Duration,
-    cancellation: &CancellationToken,
-) -> Result<Message> {
-    let after_bytes = schedule
-        .disconnect_after_bytes
-        .expect("disconnect schedule was checked");
-    if after_bytes >= message.body.len() {
-        return Err(ProxyError::new(
-            ErrorCode::ConfigInvalid,
-            "upstream disconnect offset must be smaller than request body",
-        ));
-    }
-    let wire = message.reconstruct();
-    let header_end = wire
-        .windows(4)
-        .position(|window| window == b"\r\n\r\n")
-        .map(|index| index + 4)
-        .ok_or_else(|| ProxyError::new(ErrorCode::Internal, "request headers are incomplete"))?;
-    timeout_stage(
-        write_timeout,
-        cancellation,
-        io.write_all(&wire[..header_end]),
-        ErrorCode::UpstreamWriteTimeout,
-    )
-    .await?
-    .map_err(|error| ProxyError::io("write upstream request headers", &error))?;
-
-    let mut body = PacedBody::new(
-        message.body.clone(),
-        message.body.len(),
-        schedule,
-        cancellation.clone(),
-    );
-    while let Some(frame) = body.frame().await {
-        match frame {
-            Ok(frame) => {
-                if let Ok(data) = frame.into_data() {
-                    timeout_stage(
-                        write_timeout,
-                        cancellation,
-                        io.write_all(&data),
-                        ErrorCode::UpstreamWriteTimeout,
-                    )
-                    .await?
-                    .map_err(|error| ProxyError::io("write paced upstream body", &error))?;
-                }
-            }
-            Err(PacedBodyError::Disconnected) => {
-                let _ = io.shutdown().await;
-                return Err(ProxyError::new(
-                    ErrorCode::FaultStreamAborted,
-                    "request intentionally disconnected during upstream write",
-                ));
-            }
-            Err(PacedBodyError::Cancelled) => {
-                return Err(ProxyError::new(
-                    ErrorCode::FaultExecutionCancelled,
-                    "weak-network request cancelled",
-                ));
-            }
-        }
-    }
-    Err(ProxyError::new(
-        ErrorCode::Internal,
-        "upstream disconnect schedule completed without disconnecting",
-    ))
 }

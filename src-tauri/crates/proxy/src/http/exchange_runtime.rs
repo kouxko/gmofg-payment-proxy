@@ -10,8 +10,8 @@ use std::sync::{Arc, Mutex};
 use bytes::Bytes;
 use http::{Method, Uri};
 use intercept_proxy_exchange::{
-    Error as ExchangeError, Exchange, ExchangeId, Http, HttpRead, Pipeline, ProtocolExchange,
-    ServerSlot, Write,
+    Direction, DirectionKind, Envelope, Error as ExchangeError, ErrorStage, Exchange, ExchangeId,
+    Http, HttpContext, HttpRead, Pipeline, PrepareWrite, ProtocolExchange, ServerSlot, Write,
 };
 use tokio::sync::{mpsc, oneshot};
 use tokio_util::sync::CancellationToken;
@@ -19,8 +19,9 @@ use tracing::Instrument;
 
 use super::{
     Clock, ConnectionContext, ErrorCode, FaultAction, ForwardRequest, HttpConnectionIdentity,
-    HttpDirectionCapabilities, HttpProtocolCapabilityFactory, InformationalResponseSink, Message,
-    PipelinePorts, ProxyError, ResponseDisposition, Result, UpstreamConnector,
+    HttpDirectionCapabilities, HttpMessagePrepare, HttpProtocolCapabilityFactory,
+    InformationalResponseSink, Message, PipelinePorts, ProxyError, ResponseDisposition, Result,
+    UpstreamConnector,
 };
 use crate::listener::{ChildTaskError, ConnectionTaskScope};
 
@@ -33,6 +34,7 @@ use endpoints::{BufferedApp, BufferedHttpServer};
 pub(crate) struct HttpExchangeOutput {
     pub(crate) informational_heads: Vec<Bytes>,
     pub(crate) disposition: ResponseDisposition,
+    pub(crate) write_completed: oneshot::Sender<Result<()>>,
 }
 
 pub(super) struct HttpExchangeCommand {
@@ -67,10 +69,13 @@ struct HttpTransaction {
     uri: Uri,
     request: Option<Message>,
     response: Option<Message>,
+    request_actions: Option<Vec<FaultAction>>,
+    response_actions: Option<Vec<FaultAction>>,
     informational_heads: Vec<Bytes>,
     disposition: Option<ResponseDisposition>,
     mocked: bool,
     close_requested: bool,
+    drop_response_after_read: bool,
     completed: Option<oneshot::Sender<Result<HttpExchangeOutput>>>,
 }
 
@@ -99,18 +104,20 @@ impl HttpExchangeState {
             uri: command.request.uri,
             request: Some(command.request.message),
             response: None,
+            request_actions: None,
+            response_actions: None,
             informational_heads: Vec::new(),
             disposition: None,
             mocked: false,
             close_requested,
+            drop_response_after_read: false,
             completed: Some(command.completed),
         });
     }
 
-    fn complete(&mut self) {
-        let Some(mut transaction) = self.current.take() else {
-            return;
-        };
+    fn complete(&mut self) -> Option<oneshot::Receiver<Result<()>>> {
+        let mut transaction = self.current.take()?;
+        let mut write_completion = None;
         let result = transaction.disposition.take().map_or_else(
             || {
                 Err(ProxyError::new(
@@ -119,15 +126,19 @@ impl HttpExchangeState {
                 ))
             },
             |disposition| {
+                let (write_completed, completed) = oneshot::channel();
+                write_completion = Some(completed);
                 Ok(HttpExchangeOutput {
                     informational_heads: std::mem::take(&mut transaction.informational_heads),
                     disposition,
+                    write_completed,
                 })
             },
         );
         if let Some(completed) = transaction.completed.take() {
             let _ = completed.send(result);
         }
+        write_completion
     }
 
     fn fail(&mut self, error: &ProxyError) {
@@ -135,7 +146,7 @@ impl HttpExchangeState {
             return;
         };
         if let Some(completed) = transaction.completed.take() {
-            let _ = completed.send(Err(copy_error(error)));
+            let _ = completed.send(Err(error.clone()));
         }
     }
 }
@@ -195,18 +206,27 @@ impl HttpExchangeRuntime {
             self.clock,
             self.cancellation,
             self.informational,
+            task_scope.clone(),
         );
         let capabilities = self.capabilities;
         task_scope
             .spawn_owned(async move {
+                let pipeline_state = Arc::clone(&state);
                 let result = Exchange::<Http>::protocol_with(exchange_id, move || {
-                    let upstream_capabilities = capabilities.create_upstream(identity.clone())?;
-                    let downstream_capabilities = capabilities.create_downstream(identity)?;
+                    let upstream_capabilities = capabilities
+                        .create_upstream(identity.clone())
+                        .map_err(|error| {
+                            error.at(ErrorStage::CapabilityFactory, DirectionKind::Upstream)
+                        })?;
+                    let downstream_capabilities =
+                        capabilities.create_downstream(identity).map_err(|error| {
+                            error.at(ErrorStage::CapabilityFactory, DirectionKind::Downstream)
+                        })?;
                     Ok(ProtocolExchange::new(
                         app,
                         ServerSlot::new(Box::new(server)),
-                        pipeline(upstream_capabilities),
-                        pipeline(downstream_capabilities),
+                        pipeline(upstream_capabilities, Arc::clone(&pipeline_state)),
+                        pipeline(downstream_capabilities, Arc::clone(&pipeline_state)),
                     ))
                 })
                 .instrument(span)
@@ -268,9 +288,7 @@ impl HttpExchangeConnection {
             .expect("HTTP Exchange sender mutex poisoned")
             .take();
         if let Some(sender) = sender {
-            let _ = sender
-                .send(HttpExchangeInput::Fail(copy_error(error)))
-                .await;
+            let _ = sender.send(HttpExchangeInput::Fail(error.clone())).await;
         }
     }
 
@@ -283,24 +301,100 @@ impl HttpExchangeConnection {
 }
 
 fn exchange_closed() -> ProxyError {
-    ProxyError::new(ErrorCode::Io, "HTTP connection Exchange is closed")
-}
-
-fn copy_error(error: &ProxyError) -> ProxyError {
-    ProxyError {
-        code: error.code,
-        message: error.message.clone(),
-        external_package_call: error.external_package_call.clone(),
-    }
+    let mut error = ProxyError::new(ErrorCode::Io, "HTTP connection Exchange is closed");
+    error.exchange_code = Some("HTTP_EXCHANGE_CLOSED".into());
+    error
 }
 
 fn pipeline<D: intercept_proxy_exchange::Direction>(
     capabilities: HttpDirectionCapabilities<D>,
+    state: Arc<Mutex<HttpExchangeState>>,
 ) -> Pipeline<Http, D> {
     Pipeline::new(
         Box::new(HttpRead::new(capabilities.decode, capabilities.display)),
-        Box::new(Write::new(capabilities.rules, capabilities.encode)),
+        Box::new(Write::prepared(Box::new(BufferedHttpPrepare {
+            state,
+            prepare: capabilities.prepare,
+        }))),
     )
+}
+
+struct BufferedHttpPrepare<D: Direction> {
+    state: Arc<Mutex<HttpExchangeState>>,
+    prepare: Box<dyn HttpMessagePrepare<D>>,
+}
+
+#[async_trait::async_trait]
+impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
+    async fn prepare(
+        &mut self,
+        envelope: &Envelope<Http, D>,
+    ) -> std::result::Result<HttpContext, ExchangeError> {
+        let (connection, ports, request, mut message, mocked) = {
+            let state = self
+                .state
+                .lock()
+                .expect("HTTP Exchange state mutex poisoned");
+            let transaction = state.current.as_ref().ok_or_else(|| {
+                ExchangeError::coded("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
+            })?;
+            let request = super::HttpRequestMetadata::from_method_and_uri(
+                &transaction.method,
+                &transaction.uri,
+            )
+            .map_err(super::capabilities::proxy_error)?;
+            let message = match D::KIND {
+                DirectionKind::Upstream => transaction.request.clone(),
+                DirectionKind::Downstream => transaction.response.clone(),
+            }
+            .ok_or_else(|| {
+                ExchangeError::coded(
+                    "HTTP_MESSAGE_MISSING",
+                    "HTTP transaction message missing before write preparation",
+                )
+            })?;
+            (
+                state.context.clone(),
+                Arc::clone(&state.ports),
+                request,
+                message,
+                transaction.mocked,
+            )
+        };
+        let actions = if D::KIND == DirectionKind::Downstream && mocked {
+            Vec::new()
+        } else {
+            self.prepare
+                .prepare(
+                    &connection,
+                    &request,
+                    &mut message,
+                    envelope.context(),
+                    envelope.document(),
+                    ports.as_ref(),
+                )
+                .await?
+        };
+        let prepared = endpoints::message_context(&message);
+        let mut state = self
+            .state
+            .lock()
+            .expect("HTTP Exchange state mutex poisoned");
+        let transaction = state.current.as_mut().ok_or_else(|| {
+            ExchangeError::coded("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
+        })?;
+        match D::KIND {
+            DirectionKind::Upstream => {
+                transaction.request = Some(message);
+                transaction.request_actions = Some(actions);
+            }
+            DirectionKind::Downstream => {
+                transaction.response = Some(message);
+                transaction.response_actions = Some(actions);
+            }
+        }
+        Ok(prepared)
+    }
 }
 
 fn observation_span(
@@ -326,21 +420,14 @@ fn observation_span(
 }
 
 fn exchange_error(error: ExchangeError) -> ProxyError {
-    let ExchangeError {
-        message,
-        external_package_call,
-    } = error;
-    let (code, detail) = message.split_once('\n').map_or(
-        (crate::ErrorCode::Internal, message.as_str()),
-        |(code, message)| {
-            (
-                crate::ErrorCode::from_stable_str(code).unwrap_or(crate::ErrorCode::Internal),
-                message,
-            )
-        },
-    );
-    ProxyError::new(code, format!("HTTP Exchange failed: {detail}"))
-        .with_external_package_call(external_package_call)
+    let code = match error.code.as_deref() {
+        Some("HTTP_ENDPOINT_CHANGED") => crate::ErrorCode::ConfigInvalid,
+        code => code
+            .and_then(crate::ErrorCode::from_stable_str)
+            .unwrap_or(crate::ErrorCode::Internal),
+    };
+    let message = format!("HTTP Exchange failed: {}", error.message);
+    ProxyError::from_exchange_error(code, message, error)
 }
 
 impl From<ForwardRequest> for HttpExchangeRequest {
@@ -354,57 +441,4 @@ impl From<ForwardRequest> for HttpExchangeRequest {
 }
 
 #[cfg(test)]
-mod tests {
-    use intercept_proxy_exchange::{
-        Error, ExternalPackageCallFailure, ExternalPackageCallStage, ProtocolDirection,
-        ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
-    };
-
-    use super::exchange_error;
-    use crate::ErrorCode;
-
-    #[test]
-    fn exchange_error_preserves_adapter_error_code() {
-        let error = exchange_error(Error::new("UPSTREAM_READ_TIMEOUT\nserver reply timed out"));
-
-        assert_eq!(error.code, ErrorCode::UpstreamReadTimeout.as_str());
-        assert!(error.message.contains("server reply timed out"));
-    }
-
-    #[test]
-    fn exchange_error_maps_core_failure_to_internal() {
-        let error = exchange_error(Error::new("Server disconnected before replying"));
-
-        assert_eq!(error.code, ErrorCode::Internal.as_str());
-        assert!(
-            error
-                .message
-                .contains("Server disconnected before replying")
-        );
-    }
-
-    #[test]
-    fn exchange_error_preserves_typed_external_package_failure() {
-        let failure = ExternalPackageCallFailure {
-            package: ProtocolPackageRef {
-                id: ProtocolPackageId::new("phase10.http").unwrap(),
-                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
-            },
-            direction: ProtocolDirection::Upstream,
-            stage: ExternalPackageCallStage::Display,
-            method: "document.upstream.display".into(),
-            request_id: Some("proxy-4".into()),
-            remote_code: Some(-32412),
-            stable_code: Some("DISPLAY_FAILED".into()),
-            remote_message: Some("display rejected".into()),
-            remote_data_summary: Some("object(fields=1)".into()),
-        };
-        let error = exchange_error(
-            Error::new("EXTERNAL_PACKAGE_CALL_FAILED\ndisplay rejected")
-                .with_external_package_call(failure.clone()),
-        );
-        assert_eq!(error.code, "EXTERNAL_PACKAGE_CALL_FAILED");
-        assert_ne!(error.code, ErrorCode::Internal.as_str());
-        assert_eq!(error.external_package_call.as_deref(), Some(&failure));
-    }
-}
+mod tests;

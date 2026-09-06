@@ -1,11 +1,14 @@
+use std::future::Future;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::SystemTime;
 
+use bytes::Bytes;
 use http::{HeaderMap, Method, StatusCode};
 
 use super::super::{HttpExchangeOutput, HttpExchangeRequest};
 use super::*;
 use crate::http::{ChannelId, HandshakePolicy, NoopPipelinePorts, SystemClock, UpstreamExchange};
+use tokio::sync::mpsc;
 
 #[derive(Debug, Default)]
 struct RecordingWirePolicy {
@@ -56,6 +59,41 @@ struct RecordingConnector {
     bodies: Mutex<Vec<Bytes>>,
 }
 
+#[derive(Debug)]
+struct ControlledConnector {
+    confirm_flush: bool,
+    started: Arc<tokio::sync::Notify>,
+    release_response: Arc<tokio::sync::Notify>,
+}
+
+#[async_trait]
+impl UpstreamConnector for ControlledConnector {
+    async fn send(
+        &self,
+        _context: &ConnectionContext,
+        _ports: &dyn PipelinePorts,
+        _request: ForwardRequest,
+        _actions: &[FaultAction],
+        write_receipt: crate::http::UpstreamWriteReceipt,
+        _informational: Option<&InformationalResponseSink>,
+        _cancellation: &CancellationToken,
+    ) -> super::super::Result<UpstreamExchange> {
+        if self.confirm_flush {
+            write_receipt.confirm_flushed();
+        }
+        self.started.notify_one();
+        if self.confirm_flush {
+            self.release_response.notified().await;
+        }
+        Ok(Message::response(
+            StatusCode::OK,
+            &HeaderMap::new(),
+            Bytes::from_static(b"actor-response"),
+        )
+        .into())
+    }
+}
+
 #[async_trait]
 impl UpstreamConnector for RecordingConnector {
     async fn send(
@@ -64,9 +102,11 @@ impl UpstreamConnector for RecordingConnector {
         _ports: &dyn PipelinePorts,
         request: ForwardRequest,
         _actions: &[FaultAction],
+        write_receipt: crate::http::UpstreamWriteReceipt,
         _informational: Option<&InformationalResponseSink>,
         _cancellation: &CancellationToken,
     ) -> super::super::Result<UpstreamExchange> {
+        write_receipt.confirm_flushed();
         self.bodies
             .lock()
             .expect("connector body mutex poisoned")
@@ -96,10 +136,20 @@ async fn request_reader_preserves_original_and_writer_reports_effective_wire_mes
         .await
         .unwrap();
 
-    let read = app.reader.read().await.unwrap().unwrap();
+    let read = app.reader().read().await.unwrap().unwrap();
     assert_eq!(read.body, "app-request");
 
     let connector = Arc::new(RecordingConnector::default());
+    {
+        let mut state = state.lock().unwrap();
+        let transaction = state.current.as_mut().unwrap();
+        transaction
+            .request
+            .as_mut()
+            .unwrap()
+            .replace_body(Bytes::from_static(b"policy-request"));
+        transaction.request_actions = Some(Vec::new());
+    }
     let mut writer = server_writer(Arc::clone(&state), policy.clone(), connector.clone());
     let written = writer
         .write(HttpContext {
@@ -109,9 +159,10 @@ async fn request_reader_preserves_original_and_writer_reports_effective_wire_mes
             wire_body: b"app-request".to_vec(),
         })
         .await
-        .unwrap();
+        .unwrap()
+        .into_context();
 
-    assert_eq!(policy.requests.load(Ordering::SeqCst), 1);
+    assert_eq!(policy.requests.load(Ordering::SeqCst), 0);
     assert_eq!(
         connector
             .bodies
@@ -141,83 +192,112 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
         .response = Some(Message::response(
         StatusCode::OK,
         &HeaderMap::new(),
-        Bytes::from_static(b"origin-response"),
+        Bytes::from_static(b"policy-response"),
     ));
+    {
+        let mut state = state.lock().unwrap();
+        state.current.as_mut().unwrap().response_actions = Some(vec![FaultAction::CustomStatus(
+            StatusCode::from_u16(209).unwrap(),
+        )]);
+    }
     let mut reader = BufferedServerReader {
         state: Arc::clone(&state),
+        response: Arc::new(Mutex::new(None)),
     };
 
     let read = reader.read().await.unwrap().unwrap();
-    assert_eq!(read.body, "origin-response");
+    assert_eq!(read.body, "policy-response");
 
     let mut writer = BufferedAppWriter {
         state: Arc::clone(&state),
     };
-    let written = writer
-        .write(HttpContext {
-            header: read.header,
-            body: "origin-response".into(),
-            body_is_utf8: true,
-            wire_body: b"origin-response".to_vec(),
-        })
-        .await
-        .unwrap();
+    let write = tokio::spawn(async move {
+        writer
+            .write(HttpContext {
+                header: read.header,
+                body: "policy-response".into(),
+                body_is_utf8: true,
+                wire_body: b"policy-response".to_vec(),
+            })
+            .await
+            .unwrap()
+            .into_context()
+    });
 
-    assert_eq!(policy.responses.load(Ordering::SeqCst), 1);
+    assert_eq!(policy.responses.load(Ordering::SeqCst), 0);
     assert_eq!(
         policy
             .request_metadata
             .lock()
             .expect("request metadata mutex poisoned")
             .as_slice(),
-        &[crate::http::HttpRequestMetadata {
-            method: "POST".into(),
-            request_target: "/sale".into(),
-        }]
+        &[]
     );
     let output = output.await.unwrap().unwrap();
     let ResponseDisposition::Send { message, .. } = output.disposition else {
         panic!("expected response send disposition");
     };
+    output.write_completed.send(Ok(())).unwrap();
+    let written = write.await.unwrap();
     assert_eq!(message.body, Bytes::from_static(b"policy-response"));
     assert_eq!(message.http_status(), Some(209));
     assert_eq!(written.body, "policy-response");
     assert!(written.header.starts_with("HTTP/1.1 209"));
 }
 
-#[tokio::test]
-async fn local_http_server_connector_echoes_the_exact_effective_request_without_network_upstream() {
-    let connector = LocalHttpServerConnector;
-    let message = Message {
-        start_line: "POST /payment HTTP/1.1".into(),
-        headers: vec![crate::RawHeader::new(
-            b"Content-Type".to_vec(),
-            b"application/json".to_vec(),
-        )],
-        body: Bytes::from_static(br#"{"TransactionType":"0001"}"#),
-        body_modified: false,
-    };
-    let exchange = connector
-        .send(
-            &connection_context(),
-            &NoopPipelinePorts,
-            ForwardRequest {
-                method: Method::POST,
-                uri: "/payment".parse().unwrap(),
-                message: message.clone(),
-            },
-            &[],
-            None,
-            &CancellationToken::new(),
-        )
-        .await
-        .expect("LocalHttpServer replies locally");
+#[path = "tests/local_response.rs"]
+mod local_response;
 
-    assert!(exchange.informational_heads.is_empty());
-    assert_eq!(exchange.final_response.start_line, message.start_line);
-    assert_eq!(exchange.final_response.headers.len(), message.headers.len());
-    assert_eq!(exchange.final_response.body, message.body);
-    assert_eq!(exchange.final_response.body_modified, message.body_modified);
+#[tokio::test]
+async fn upstream_writer_commits_after_flush_while_reader_waits_for_response() {
+    let policy = Arc::new(RecordingWirePolicy::default());
+    let state = prepared_request_state(policy.clone());
+    let response = Arc::new(Mutex::new(None));
+    let started = Arc::new(tokio::sync::Notify::new());
+    let release_response = Arc::new(tokio::sync::Notify::new());
+    let connector = Arc::new(ControlledConnector {
+        confirm_flush: true,
+        started: Arc::clone(&started),
+        release_response: Arc::clone(&release_response),
+    });
+    let mut writer =
+        server_writer_with_response(Arc::clone(&state), policy, connector, Arc::clone(&response));
+    let mut reader = BufferedServerReader { state, response };
+
+    let writer_task = tokio::spawn(async move { writer.write(request_context()).await.unwrap() });
+    started.notified().await;
+    let outcome = tokio::time::timeout(std::time::Duration::from_secs(1), writer_task)
+        .await
+        .expect("flush confirms writer before response")
+        .unwrap();
+    assert!(matches!(outcome, WriteOutcome::Committed(_)));
+
+    let mut read = Box::pin(reader.read());
+    assert!(matches!(
+        std::future::poll_fn(|context| std::task::Poll::Ready(read.as_mut().poll(context))).await,
+        std::task::Poll::Pending
+    ));
+    release_response.notify_one();
+    assert_eq!(read.await.unwrap().unwrap().body, "actor-response");
+}
+
+#[tokio::test]
+async fn early_upstream_response_returns_read_ready_without_forging_flush_commit() {
+    let policy = Arc::new(RecordingWirePolicy::default());
+    let state = prepared_request_state(policy.clone());
+    let response = Arc::new(Mutex::new(None));
+    let connector = Arc::new(ControlledConnector {
+        confirm_flush: false,
+        started: Arc::new(tokio::sync::Notify::new()),
+        release_response: Arc::new(tokio::sync::Notify::new()),
+    });
+    let mut writer =
+        server_writer_with_response(Arc::clone(&state), policy, connector, Arc::clone(&response));
+    let mut reader = BufferedServerReader { state, response };
+
+    let outcome = writer.write(request_context()).await.unwrap();
+    assert!(matches!(outcome, WriteOutcome::ReadReady(_)));
+    assert_eq!(reader.read().await.unwrap().unwrap().body, "actor-response");
 }
 
 fn state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExchangeState>> {
@@ -226,6 +306,32 @@ fn state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExchangeState>> {
         policy,
         CancellationToken::new(),
     )))
+}
+
+fn prepared_request_state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExchangeState>> {
+    let state = state(policy);
+    let (completed, _output) = tokio::sync::oneshot::channel();
+    state
+        .lock()
+        .unwrap()
+        .begin(command("server:80", request("prepared-request"), completed));
+    state
+        .lock()
+        .unwrap()
+        .current
+        .as_mut()
+        .unwrap()
+        .request_actions = Some(Vec::new());
+    state
+}
+
+fn request_context() -> HttpContext {
+    HttpContext {
+        header: "POST /sale HTTP/1.1\r\n\r\n".into(),
+        body: "prepared-request".into(),
+        body_is_utf8: true,
+        wire_body: b"prepared-request".to_vec(),
+    }
 }
 
 fn command(
@@ -269,6 +375,15 @@ fn server_writer(
     policy: Arc<RecordingWirePolicy>,
     connector: Arc<RecordingConnector>,
 ) -> BufferedServerWriter {
+    server_writer_with_response(state, policy, connector, Arc::new(Mutex::new(None)))
+}
+
+fn server_writer_with_response(
+    state: Arc<Mutex<HttpExchangeState>>,
+    policy: Arc<RecordingWirePolicy>,
+    connector: Arc<dyn UpstreamConnector>,
+    response: Arc<Mutex<Option<oneshot::Receiver<super::super::Result<UpstreamExchange>>>>>,
+) -> BufferedServerWriter {
     BufferedServerWriter {
         state,
         context: connection_context(),
@@ -277,6 +392,8 @@ fn server_writer(
         clock: Arc::new(SystemClock),
         cancellation: CancellationToken::new(),
         informational: None,
+        task_scope: ConnectionTaskScope::new(),
+        response,
     }
 }
 

@@ -1,18 +1,17 @@
 //! Direct Socket runtime assembly for `RemoteServer` and `LocalServer` topologies.
 
-use std::{net::SocketAddr, sync::Arc, time::Duration};
+use std::{net::SocketAddr, sync::Arc};
 
 use intercept_proxy_application::AppResult;
 use intercept_proxy_domain::{
-    ProxyListener, ProxyWorkspace, SocketDownstreamSecurity as DomainSocketDownstreamSecurity,
-    SocketPayloadProcessing, SocketRelaySettings, SocketTopology,
+    ProxyListener, ProxyWorkspace, SocketPayloadProcessing, SocketRelaySettings,
 };
-use intercept_proxy_runtime::{
-    SocketDownstreamSecurity as RuntimeSocketDownstreamSecurity, SocketEndpoint,
-    SocketLocalResponderConfig, SocketRelayConfig, SocketRelayService,
-};
+use intercept_proxy_runtime::SocketRelayService;
 
-use super::{ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error};
+use super::{
+    ListenerRuntimePlanBuilder, PreparedListenerRuntime, runtime_error,
+    socket_config::SocketServiceConfig,
+};
 
 impl ListenerRuntimePlanBuilder<'_> {
     pub(super) async fn build_socket(
@@ -34,54 +33,15 @@ impl ListenerRuntimePlanBuilder<'_> {
                 .await;
         }
         let observer = self.socket_observer(listener, socket)?;
-        let read_chunk_bytes =
-            usize::try_from(socket.runtime_limits.read_chunk_bytes).map_err(|_| {
-                runtime_error(
-                    listener,
-                    "CONFIG_INVALID",
-                    "Socket 单次读取字节数超出平台范围".into(),
-                )
-            })?;
-        let service = match &socket.topology {
-            SocketTopology::Relay(relay) => SocketRelayService::build_with_observer(
-                SocketRelayConfig {
-                    bind_addr,
-                    upstream: SocketEndpoint {
-                        host: relay.upstream.host.clone(),
-                        port: relay.upstream.port,
-                    },
-                    security: self.socket_security(workspace, &relay.security).await?,
-                    maximum_connections: socket.maximum_connections,
-                    read_chunk_bytes,
-                    connect_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                    read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                    write_timeout: Duration::from_millis(listener.write_timeout_ms),
-                },
-                observer.clone(),
-            ),
-            SocketTopology::LocalResponder(local) => {
-                let security = match &local.downstream_security {
-                    DomainSocketDownstreamSecurity::Tcp => RuntimeSocketDownstreamSecurity::Tcp,
-                    DomainSocketDownstreamSecurity::Tls { downstream_tls } => {
-                        RuntimeSocketDownstreamSecurity::Tls {
-                            downstream_tls: self
-                                .socket_downstream_tls(workspace, downstream_tls)
-                                .await?,
-                        }
-                    }
-                };
-                SocketRelayService::build_local_raw_responder_with_observer(
-                    SocketLocalResponderConfig {
-                        bind_addr,
-                        security,
-                        maximum_connections: socket.maximum_connections,
-                        read_chunk_bytes,
-                        handshake_timeout: Duration::from_millis(listener.connect_timeout_ms),
-                        read_timeout: Duration::from_millis(listener.read_timeout_ms),
-                        write_timeout: Duration::from_millis(listener.write_timeout_ms),
-                    },
-                    observer,
-                )
+        let service = match self
+            .socket_service_config(workspace, listener, socket, bind_addr)
+            .await?
+        {
+            SocketServiceConfig::Relay(config) => {
+                SocketRelayService::build_with_observer(config, observer)
+            }
+            SocketServiceConfig::LocalResponder(config) => {
+                SocketRelayService::build_local_raw_responder_with_observer(config, observer)
             }
         }
         .map_err(|error| runtime_error(listener, error.code, error.message))?;

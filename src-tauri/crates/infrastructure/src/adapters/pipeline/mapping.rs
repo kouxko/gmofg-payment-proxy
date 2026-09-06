@@ -16,6 +16,9 @@ pub(crate) fn app_to_proxy(error: AppError) -> ProxyError {
         return ProxyError {
             code,
             message: error.view_model.message,
+            exchange_code: None,
+            stage: None,
+            direction: None,
             external_package_call: None,
         };
     }
@@ -30,6 +33,9 @@ pub(crate) fn app_to_proxy(error: AppError) -> ProxyError {
                 "BODY_ENCODE_FAILED"
             },
             message: error.view_model.message,
+            exchange_code: None,
+            stage: None,
+            direction: None,
             external_package_call: None,
         };
     }

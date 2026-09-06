@@ -4,7 +4,8 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
     Decode, Direction, Display, Downstream, Encode, Error, ExternalPackageCallFailure, Frame,
-    Rules, Socket, SocketContext, Upstream,
+    HttpAction, MatchContext, PrepareWrite, Rules, SequentialPrepare, Socket, SocketContext,
+    Upstream,
 };
 use uuid::Uuid;
 
@@ -42,6 +43,19 @@ pub enum JointRuleConditionEvaluation {
 pub trait SocketJointEvaluation: Send + Sync {
     fn gate(&mut self, rule_id: Uuid) -> crate::Result<JointRuleConditionEvaluation>;
     async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
+}
+
+#[async_trait]
+pub trait HttpJointEvaluation: Send + Sync {
+    fn gate(
+        &mut self,
+        rule_id: Uuid,
+        context: &MatchContext<'_>,
+        message: &mut crate::Message,
+        apply_action: &mut dyn FnMut(&mut crate::Message, &HttpAction) -> crate::Result<()>,
+    ) -> crate::Result<JointRuleConditionEvaluation>;
+
+    async fn encode(self: Box<Self>, message: &mut crate::Message) -> Result<(), Error>;
 }
 
 /// Factory 创建连接级 processor 时收到的稳定、无 payload 身份信息。
@@ -246,8 +260,7 @@ pub struct SocketDirectionCapabilities<D: Direction> {
     pub frame: Box<dyn Frame<D>>,
     pub decode: Box<dyn Decode<Socket, D>>,
     pub display: Box<dyn Display>,
-    pub rules: Box<dyn Rules>,
-    pub encode: Box<dyn Encode<Socket, D>>,
+    pub prepare: Box<dyn PrepareWrite<Socket, D>>,
 }
 
 impl<D: Direction> Debug for SocketDirectionCapabilities<D> {
@@ -301,12 +314,25 @@ impl<D: Direction> SocketDirectionCapabilities<D> {
         rules: Box<dyn Rules>,
         encode: Box<dyn Encode<Socket, D>>,
     ) -> Self {
+        Self::prepared(
+            frame,
+            decode,
+            display,
+            Box::new(SequentialPrepare::new(rules, encode)),
+        )
+    }
+
+    pub fn prepared(
+        frame: Box<dyn Frame<D>>,
+        decode: Box<dyn Decode<Socket, D>>,
+        display: Box<dyn Display>,
+        prepare: Box<dyn PrepareWrite<Socket, D>>,
+    ) -> Self {
         Self {
             frame,
             decode,
             display,
-            rules,
-            encode,
+            prepare,
         }
     }
 }

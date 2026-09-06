@@ -144,8 +144,8 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 
 - `protocol.rs`：`Protocol`、HTTP/Socket Context、Upstream/Downstream 类型方向。
 - `capability.rs`：Frame、Decode、Display、Rules、Encode。
-- `endpoint.rs`：Reader、Writer、Connection、Server 和延迟连接的 `ServerSlot`。
-- `pipeline.rs`：HTTP/Socket Reader Pipeline 与公共 Writer Pipeline。
+- `endpoint.rs`：Reader、Writer、WriteOutcome、Connection、Server 和延迟连接的 `ServerSlot`。
+- `pipeline.rs`：HTTP/Socket Reader Pipeline、显式 PrepareWrite 事务与公共 Writer Pipeline。
 - `exchange.rs`：连接级严格配对循环和统一观察 span。
 - `local_server.rs`：与远端 Server 使用同一端口的协议/raw 本地回环。
 - `transparent.rs`：Socket raw 双向转发和 half-close。
@@ -157,14 +157,16 @@ HTTP 标准规则的 `facade/rule_capabilities.rs` 是编辑能力矩阵的唯�
 `intercept-proxy-runtime` 负责真实网络行为：
 
 - `http/`、`forward/`、`reverse/`：HTTP/1、正向/固定上游、连接级 Exchange 适配。
-- `socket_relay/`：Socket 准入、TCP/TLS、协议模式和透明模式。
+- `socket_relay/`：Socket 准入、TCP/TLS、协议模式和透明模式；`remote_endpoint` 统一远端连接准备，
+  `io` 统一读写、超时和关闭，协议适配器各自负责 Frame 配对或 raw half-close。
 - `tls/`、`transport/`、`listener/`：安全握手、I/O 与任务生命周期。
 - `supervisor/`：Listener 状态和并发任务所有权。
 
 `intercept-proxy-infrastructure` 负责外层能力实现：
 
 - `sqlite/`：Workspace、规则、协议包、证书引用和设置持久化。
-- `adapters/listener_runtime/`：领域 Listener 到真实 runtime 的装配与校验。
+- `adapters/listener_runtime/`：领域 Listener 到真实 runtime 的装配与校验；`package_error` 统一
+  HTTP 与 Joint Document 的外部包错误字段转换，`rule_program_compilation` 统一规则编译准备。
 - `adapters/pipeline/`：HTTP 标准规则、抓包、会话和故障动作桥接。
 - `sqlite/external_packages.rs`：远端包注册、本地 Component、生命周期状态和精确版本持久化。
 - `adapters/external_packages/`：外部 WebSocket/RPC 协议能力。

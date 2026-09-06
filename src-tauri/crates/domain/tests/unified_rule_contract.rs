@@ -1,8 +1,8 @@
 use intercept_proxy_domain::{
-    Condition, DocumentMutation, DocumentPredicate, DropResponseMode, HttpAction, HttpRuleContent,
-    JsonPointer, ListenerId, ProtocolPackageId, ProtocolPackageRef, ProxyWorkspace, RuleContent,
-    RuleDefinition, RuleDefinitionDraft, RuleStage, SocketRuleContent, StringOperator,
-    StringPredicate, TerminalAction, UnifiedAction,
+    Condition, DocumentMatchPath, DocumentMutation, DocumentPredicate, DropResponseMode,
+    HttpAction, HttpRuleContent, JsonPointer, ListenerId, ProtocolPackageId, ProtocolPackageRef,
+    ProxyWorkspace, RuleContent, RuleDefinition, RuleDefinitionDraft, RuleStage, SocketRuleContent,
+    StringOperator, StringPredicate, TerminalAction, TrafficDirection, UnifiedAction,
 };
 
 fn package() -> ProtocolPackageRef {
@@ -25,6 +25,35 @@ fn document_condition() -> Condition {
         predicate: DocumentPredicate::String(StringPredicate {
             operator: StringOperator::Equal,
             value: "x".into(),
+        }),
+    }
+}
+
+fn document_pattern_condition() -> Condition {
+    Condition::DocumentPattern {
+        path: DocumentMatchPath::parse("/items/*/value").expect("match path"),
+        predicate: DocumentPredicate::String(StringPredicate {
+            operator: StringOperator::Equal,
+            value: "x".into(),
+        }),
+    }
+}
+
+fn http_rule_with(
+    condition: Condition,
+    stage: RuleStage,
+    action: HttpAction,
+) -> RuleDefinitionDraft {
+    RuleDefinitionDraft {
+        name: "HTTP action validation".into(),
+        enabled: true,
+        priority: 5,
+        listener_id: ListenerId::new(),
+        stage,
+        content: RuleContent::Http(HttpRuleContent {
+            description: String::new(),
+            condition,
+            action: UnifiedAction::Http(action),
         }),
     }
 }
@@ -109,6 +138,88 @@ fn proxy_http_stages_accept_joint_http_and_document_work() {
             )
             .expect("proxy boundary stages expose joint HTTP capability");
         }
+    }
+}
+
+#[test]
+fn document_conditions_do_not_bypass_http_action_validation() {
+    let invalid_cases = [
+        (
+            "response-only status on request",
+            document_condition(),
+            RuleStage::ProxyToUpstream,
+            HttpAction::CustomHttpStatus { status: 503 },
+            "action",
+        ),
+        (
+            "downstream throttle on request",
+            document_pattern_condition(),
+            RuleStage::ProxyToUpstream,
+            HttpAction::Throttle {
+                bytes_per_second: 1,
+                chunk_bytes: 1,
+                direction: TrafficDirection::Downstream,
+            },
+            "action",
+        ),
+        (
+            "zero delay",
+            document_condition(),
+            RuleStage::ProxyToUpstream,
+            HttpAction::Delay { milliseconds: 0 },
+            "action.milliseconds",
+        ),
+        (
+            "managed header",
+            document_pattern_condition(),
+            RuleStage::ProxyToApp,
+            HttpAction::SetHeader {
+                name: "Content-Length".into(),
+                value: "1".into(),
+            },
+            "action.name",
+        ),
+        (
+            "request-only terminal on response",
+            document_condition(),
+            RuleStage::ProxyToApp,
+            HttpAction::Terminal(TerminalAction::DisconnectBeforeUpstream),
+            "action",
+        ),
+    ];
+
+    for (case, condition, stage, action, expected_field) in invalid_cases {
+        let error =
+            RuleDefinition::create(http_rule_with(condition, stage, action), 1).expect_err(case);
+        assert_eq!(error.code.as_str(), "RULE_INVALID", "case={case}");
+        assert!(
+            error.field_errors.contains_key(expected_field),
+            "case={case}, errors={:?}",
+            error.field_errors
+        );
+    }
+}
+
+#[test]
+fn document_conditions_keep_valid_http_action_combinations() {
+    for (condition, stage, action) in [
+        (
+            document_condition(),
+            RuleStage::ProxyToUpstream,
+            HttpAction::Throttle {
+                bytes_per_second: 1,
+                chunk_bytes: 1,
+                direction: TrafficDirection::Upstream,
+            },
+        ),
+        (
+            document_pattern_condition(),
+            RuleStage::ProxyToApp,
+            HttpAction::CustomHttpStatus { status: 503 },
+        ),
+    ] {
+        RuleDefinition::create(http_rule_with(condition, stage, action), 1)
+            .expect("valid Document condition and HTTP action combination");
     }
 }
 
