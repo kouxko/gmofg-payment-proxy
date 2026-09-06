@@ -1,9 +1,10 @@
-use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload};
+use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload, sha256_json};
 use intercept_proxy_application::{
     AndroidNetworkActivation, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
     AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
     AndroidRuntimeOwnerViewModel, AppError, AppResult,
 };
+use serde_json::json;
 
 pub(super) fn is_owner_unreachable(error: &AppError) -> bool {
     matches!(
@@ -38,11 +39,16 @@ impl AndroidAdbAdapter {
         if owner.mode != AndroidRuntimeOwnerMode::Lan {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
-        let has_active_runtime = owner_state
+        let active_runtime = owner_state
             .active_runtime
             .as_ref()
-            .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
-        if owner.state != AndroidRuntimeOwnerState::Active || !has_active_runtime {
+            .filter(|runtime| {
+                runtime.serial == owner.serial
+                    && runtime.epoch == owner.epoch
+                    && runtime.profile_id == owner.profile_id
+            })
+            .cloned();
+        if owner.state != AndroidRuntimeOwnerState::Active || active_runtime.is_none() {
             let state = if owner.state == AndroidRuntimeOwnerState::Active {
                 AndroidRuntimeOwnerState::Faulted
             } else {
@@ -61,6 +67,13 @@ impl AndroidAdbAdapter {
                 AndroidRuntimeEndpointHealth::Faulted,
             ));
         };
+        let active_runtime = active_runtime.expect("active runtime was checked above");
+        if sha256_json(&activation.profile)? != active_runtime.profile_fingerprint {
+            return Ok(endpoints_with_health(
+                persisted,
+                AndroidRuntimeEndpointHealth::Faulted,
+            ));
+        }
         let lan_host = match self
             .preferred_lan_proxy_host_strict(&owner.serial, &activation)
             .await
@@ -81,9 +94,8 @@ impl AndroidAdbAdapter {
             return Ok(endpoints_with_owner_health(persisted, owner.state));
         }
 
-        let Ok((proxy_runtime, runtime)) = self
-            .build_lan_runtime_for_owner(&activation, &owner, lan_host)
-            .await
+        let Ok((proxy_runtime, runtime)) =
+            refresh_lan_runtime_host(&activation, active_runtime, lan_host)
         else {
             return self.fault_lan_endpoints(owner, persisted).await;
         };
@@ -147,6 +159,40 @@ impl AndroidAdbAdapter {
         }
         Ok(endpoints)
     }
+}
+
+fn refresh_lan_runtime_host(
+    activation: &AndroidNetworkActivation,
+    mut runtime: ActiveRuntimeFacts,
+    lan_host: std::net::Ipv4Addr,
+) -> AppResult<(serde_json::Value, ActiveRuntimeFacts)> {
+    let host = lan_host.to_string();
+    for endpoint in &mut runtime.endpoints {
+        endpoint.proxy_host.clone_from(&host);
+    }
+    let routes = runtime
+        .endpoints
+        .iter()
+        .map(|endpoint| {
+            json!({
+                "listener_id": endpoint.listener_id,
+                "original_destination": endpoint.original_destination,
+                "original_ports": endpoint.original_ports,
+                "resolved_original_ips": endpoint.resolved_original_ips,
+                "proxy_host": endpoint.proxy_host,
+                "proxy_port": endpoint.proxy_port,
+            })
+        })
+        .collect::<Vec<_>>();
+    runtime.route_fingerprint = sha256_json(&routes)?;
+    let payload = json!({
+        "routes": routes,
+        "route_source": activation.proxy_routes,
+        "profile_fingerprint": runtime.profile_fingerprint,
+        "route_fingerprint": runtime.route_fingerprint,
+        "route_count": runtime.route_count,
+    });
+    Ok((payload, runtime))
 }
 
 fn endpoints_with_owner_health(

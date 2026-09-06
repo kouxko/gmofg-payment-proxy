@@ -15,7 +15,7 @@ export function RuleDefinitionEditor(props: {
   pending: boolean;
   fieldErrors: Record<string, string[]>;
   onChange: (change: RuleDefinitionChange) => void;
-  onSave: (input: RuleDefinitionSaveInput) => void;
+  onSave: (input: RuleDefinitionSaveInput) => void | Promise<void>;
   onCopy: () => void;
   onDelete: () => void;
 }) {

@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import { toast } from "@heroui/react";
 import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
 import { commands } from "@/generated/rust-types";
@@ -25,9 +25,18 @@ export function RulesView() {
   const [pending, setPending] = useState(false);
   const [creationOpen, setCreationOpen] = useState(false);
   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
-  const editorGeneration = useRef(0);
+  const [editorSession, setEditorSession] = useState(0);
+  const editorSessionRef = useRef(0);
+  const mutationPending = useRef(false);
   const listener = source.listeners.find((item) => item.id === input?.draft.listener_id);
   useAppEventRefresh(["rule_hit", "snapshot_required"], source.refresh);
+
+  const startEditorSession = useCallback(() => {
+    const session = editorSessionRef.current + 1;
+    editorSessionRef.current = session;
+    setEditorSession(session);
+    return session;
+  }, []);
 
   useEffect(() => {
     if (!sourceExchangeId || sourceResponseEvent == null) return;
@@ -42,6 +51,7 @@ export function RulesView() {
       .then(async (draft) => {
         const editorContext = await callCommand(commands.ruleEditorContext(draft.draft.listener_id));
         if (!active) return;
+        startEditorSession();
         setCreationOpen(false);
         setSelected(undefined);
         setInput(draft);
@@ -53,10 +63,10 @@ export function RulesView() {
         if (active) toast(errorMessage(reason), { variant: "danger" });
       });
     return () => { active = false; };
-  }, [navigate, sourceExchangeId, sourceResponseEvent]);
+  }, [navigate, sourceExchangeId, sourceResponseEvent, startEditorSession]);
 
   async function selectRule(rule: RuleDefinition_Serialize) {
-    const generation = ++editorGeneration.current;
+    const session = startEditorSession();
     setCreationOpen(false);
     setLoadingEditor(true);
     setFieldErrors({});
@@ -65,67 +75,84 @@ export function RulesView() {
         callCommand(commands.ruleDefinitionGet(rule.rule_id)),
         callCommand(commands.ruleEditorContext(rule.listener_id)),
       ]);
-      if (editorGeneration.current !== generation) return;
+      if (editorSessionRef.current !== session) return;
       setSelected(definition);
       setInput(toSaveInput(definition));
       setContext(editorContext);
     } catch (reason) {
-      if (editorGeneration.current === generation) toast(errorMessage(reason), { variant: "danger" });
+      if (editorSessionRef.current === session) toast(errorMessage(reason), { variant: "danger" });
     } finally {
-      if (editorGeneration.current === generation) setLoadingEditor(false);
+      if (editorSessionRef.current === session) setLoadingEditor(false);
     }
   }
 
   async function save(materialized: RuleDefinitionSaveInput) {
-    if (pending) return;
+    if (mutationPending.current) return;
+    const session = editorSessionRef.current;
+    mutationPending.current = true;
     setPending(true);
     try {
       const saved = await callCommand(commands.ruleDefinitionSave(materialized));
-      setSelected(saved);
-      setInput(toSaveInput(saved));
-      setCreationOpen(false);
-      setFieldErrors({});
+      if (editorSessionRef.current === session) {
+        setSelected(saved);
+        setInput(toSaveInput(saved));
+        setCreationOpen(false);
+        setFieldErrors({});
+      }
       await source.refresh();
       toast(`规则“${saved.name}”已保存。`, { variant: "success" });
     } catch (reason) {
-      setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
+      if (editorSessionRef.current === session) {
+        setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
+      }
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
+      mutationPending.current = false;
       setPending(false);
     }
   }
 
   async function copy() {
-    if (!selected || pending) return;
+    if (!selected || mutationPending.current) return;
+    const session = editorSessionRef.current;
+    mutationPending.current = true;
     setPending(true);
     try {
       const copied = await callCommand(commands.ruleDefinitionCopy(selected.rule_id));
       const editorContext = await callCommand(commands.ruleEditorContext(copied.listener_id));
-      setSelected(copied);
-      setInput(toSaveInput(copied));
-      setContext(editorContext);
+      if (editorSessionRef.current === session) {
+        setSelected(copied);
+        setInput(toSaveInput(copied));
+        setContext(editorContext);
+      }
       await source.refresh();
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
+      mutationPending.current = false;
       setPending(false);
     }
   }
 
   async function remove() {
-    if (!selected || pending) return;
+    if (!selected || mutationPending.current) return;
+    const session = editorSessionRef.current;
+    mutationPending.current = true;
     setPending(true);
     try {
       const result = await callCommand(commands.ruleDefinitionDelete(selected.rule_id, selected.revision, true));
       if (!result.success || result.entity_id !== selected.rule_id) throw new Error("规则删除响应无效。");
-      setSelected(undefined);
-      setInput(undefined);
-      setContext(undefined);
+      if (editorSessionRef.current === session) {
+        setSelected(undefined);
+        setInput(undefined);
+        setContext(undefined);
+      }
       await source.refresh();
       toast(result.message, { variant: "success" });
     } catch (reason) {
       toast(errorMessage(reason), { variant: "danger" });
     } finally {
+      mutationPending.current = false;
       setPending(false);
     }
   }
@@ -138,6 +165,7 @@ export function RulesView() {
             error={source.error}
             loading={source.isLoading}
             onNew={() => {
+              startEditorSession();
               setSelected(undefined);
               setInput(undefined);
               setContext(undefined);
@@ -152,18 +180,21 @@ export function RulesView() {
           />
           {creationOpen ? <RuleCreationEditor
             fieldErrors={fieldErrors}
+            key={editorSession}
             listeners={source.listeners}
             onCancel={() => {
+              startEditorSession();
               setCreationOpen(false);
               setInput(undefined);
               setContext(undefined);
             }}
-            onSave={(materialized) => void save(materialized)}
+            onSave={save}
             pending={pending}
           /> : <RuleDefinitionEditor
             context={context}
             fieldErrors={fieldErrors}
             input={input}
+            key={editorSession}
             listener={listener}
             loading={loadingEditor}
             onChange={(change) => {
@@ -172,7 +203,7 @@ export function RulesView() {
             }}
             onCopy={() => void copy()}
             onDelete={() => void remove()}
-            onSave={(materialized) => void save(materialized)}
+            onSave={save}
             pending={pending}
           />}
         </RulesWorkspaceShell>

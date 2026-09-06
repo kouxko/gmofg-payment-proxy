@@ -366,6 +366,8 @@ Selected App → VpnService TUN → Rust ImpairedTun
 - 桌面只在显式 start/apply 时重新解析透明路由、准备 LAN/ADB reverse 端点并建立新的 runtime
   epoch 与控制租约。已确认仍在运行且 owner、active runtime 和 epoch 匹配的 LAN 实例可以继续
   协调当前 LAN 端点；不得用该热协调启动已停止或缺少有效运行事实的 VPN。
+- LAN 热协调还必须匹配活动 Profile 指纹，仅更新活动路由的桌面地址。保存后的 Profile 与活动
+  配置不一致时报告端点不健康，等待显式“应用修改”；不得自动应用新的目标应用或弱网参数。
 - 关闭控制失联保护的 device-only Profile 保留 `auto_resume_after_reboot` 的既有开机自动恢复；
   5 分钟内失败 3 次后禁止该自动恢复。
 - 用户主动停止后保持停止。

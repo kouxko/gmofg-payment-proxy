@@ -4,6 +4,7 @@ use intercept_proxy_application::{
     AndroidControlPort, AndroidNetworkActivation, AndroidNetworkState,
     AndroidRuntimeEndpointHealth, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource,
     AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason, AndroidRuntimeTarget,
+    AndroidTargetApplication,
 };
 use serde_json::{Value, json};
 use std::{collections::HashMap, net::Ipv4Addr, sync::Mutex as StdMutex};
@@ -367,6 +368,15 @@ async fn active_lan_address_change_keeps_hot_apply_and_current_control_lease() {
         true,
     )
     .await;
+    let frozen = {
+        let mut states = adapter.owner_states.lock().await;
+        let state = states.get_mut(&owner.serial).unwrap();
+        let runtime = state.active_runtime.as_mut().unwrap();
+        runtime.endpoints[0].resolved_original_ips = vec!["198.51.100.7".into()];
+        state.runtime_endpoints.clone_from(&runtime.endpoints);
+        runtime.clone()
+    };
+    let active_profile = activation.profile.clone();
     let endpoints = adapter
         .network_runtime_endpoints(
             AndroidDeviceTarget {
@@ -376,13 +386,112 @@ async fn active_lan_address_change_keeps_hot_apply_and_current_control_lease() {
         )
         .await
         .unwrap();
-    assert_eq!(endpoints[0].proxy_host, "192.168.1.20");
-    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Healthy);
-    let requests = runner.requests.lock().unwrap();
-    assert_eq!(requests.len(), 1);
-    assert_eq!(requests[0]["operation"], "apply_active");
+    let request = runner.requests.lock().unwrap()[0].clone();
+    let sent_runtime = &request["payload"]["proxy_runtime"];
+    let mut expected_endpoints = frozen.endpoints.clone();
+    expected_endpoints[0].proxy_host = "192.168.1.20".into();
+    assert_eq!(endpoints, expected_endpoints);
+    assert_eq!(request["operation"], "apply_active");
     assert_eq!(
-        requests[0]["payload"]["control_lease"]["owner_epoch"],
+        request["payload"]["control_lease"]["owner_epoch"],
         owner.epoch.to_string()
     );
+    assert_eq!(request["payload"]["profile"], json!(active_profile));
+    assert_eq!(
+        sent_runtime["profile_fingerprint"],
+        frozen.profile_fingerprint
+    );
+    assert_eq!(sent_runtime["route_count"], frozen.route_count);
+    assert_eq!(
+        sent_runtime["routes"][0],
+        json!({
+            "listener_id": frozen.endpoints[0].listener_id,
+            "original_destination": frozen.endpoints[0].original_destination,
+            "original_ports": frozen.endpoints[0].original_ports,
+            "resolved_original_ips": ["198.51.100.7"],
+            "proxy_host": "192.168.1.20",
+            "proxy_port": frozen.endpoints[0].proxy_port,
+        })
+    );
+    assert_eq!(
+        sent_runtime["route_fingerprint"],
+        sha256_json(&sent_runtime["routes"]).unwrap()
+    );
+    let committed = adapter
+        .owner_state_snapshot_for(&owner.serial)
+        .await
+        .active_runtime
+        .unwrap();
+    assert_eq!(committed.epoch, owner.epoch);
+    assert_eq!(committed.endpoints, expected_endpoints);
+}
+
+#[tokio::test]
+async fn saved_target_application_change_never_enters_lan_hot_apply() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(RecoveryRunner::default());
+    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    adapter.lan_address = Arc::new(DesktopLan);
+    let active_activation = activation();
+    let owner = seed_lan(
+        &adapter,
+        &active_activation,
+        AndroidRuntimeOwnerState::Active,
+        true,
+    )
+    .await;
+    let mut saved_activation = active_activation;
+    saved_activation
+        .profile
+        .target_applications
+        .push(AndroidTargetApplication {
+            package_name: "com.example.saved-only".into(),
+            uid: 10_001,
+            display_name: None,
+        });
+    let endpoints = adapter
+        .network_runtime_endpoints(
+            AndroidDeviceTarget {
+                serial: owner.serial,
+            },
+            Some(saved_activation),
+        )
+        .await
+        .unwrap();
+    assert!(runner.requests.lock().unwrap().is_empty());
+    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
+    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
+}
+
+#[tokio::test]
+async fn saved_total_packet_loss_never_enters_lan_hot_apply() {
+    let temp = tempfile::tempdir().unwrap();
+    let runner = Arc::new(RecoveryRunner::default());
+    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
+    adapter.lan_address = Arc::new(DesktopLan);
+    let active_activation = activation();
+    let owner = seed_lan(
+        &adapter,
+        &active_activation,
+        AndroidRuntimeOwnerState::Active,
+        true,
+    )
+    .await;
+    let mut saved_activation = active_activation;
+    saved_activation
+        .profile
+        .weak_network
+        .random_loss_basis_points = 10_000;
+    let endpoints = adapter
+        .network_runtime_endpoints(
+            AndroidDeviceTarget {
+                serial: owner.serial,
+            },
+            Some(saved_activation),
+        )
+        .await
+        .unwrap();
+    assert!(runner.requests.lock().unwrap().is_empty());
+    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
+    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
 }

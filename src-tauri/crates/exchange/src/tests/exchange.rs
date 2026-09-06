@@ -305,6 +305,10 @@ async fn server_eof_before_the_required_response_fails_the_exchange() {
     let error = harness.exchange.exchange().await.unwrap_err();
 
     assert_eq!(error.message, "Server disconnected before replying");
+    assert_eq!(error.code.as_deref(), Some("READ_FAILED"));
+    assert_eq!(error.stage, Some(ErrorStage::Read));
+    assert_eq!(error.direction, Some(DirectionKind::Downstream));
+    assert!(harness.responses.lock().is_empty());
     assert_eq!(harness.events.lock().last().unwrap(), "server_shutdown");
 }
 

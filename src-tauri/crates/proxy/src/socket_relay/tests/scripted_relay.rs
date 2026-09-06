@@ -194,3 +194,73 @@ async fn scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_e
         }
     )));
 }
+
+#[tokio::test]
+async fn server_eof_before_reply_reports_one_downstream_read_failure() {
+    use super::super::{SocketRelayDirection, SocketRelayStage};
+
+    let (upstream, upstream_address) = bind_listener().await;
+    let upstream_task = tokio::spawn(async move {
+        let (mut stream, _) = upstream.accept().await.unwrap();
+        let mut request = [0_u8; 4];
+        stream.read_exact(&mut request).await.unwrap();
+        assert_eq!(&request, b"Uabc");
+        stream.shutdown().await.unwrap();
+        request
+    });
+    let (listener, bind_addr) = bind_listener().await;
+    let observer = Arc::new(TestObserver::default());
+    let service = Arc::new(
+        SocketRelayService::build_scripted_with_observer(
+            relay_config(bind_addr, upstream_address),
+            Arc::new(ScriptedFactory::new(None)),
+            limits(),
+            observer.clone(),
+        )
+        .unwrap(),
+    );
+    let cancellation = CancellationToken::new();
+    let server_cancel = cancellation.clone();
+    let server = tokio::spawn(async move {
+        service
+            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
+            .await
+    });
+    let mut client = connect_retry(bind_addr).await;
+    client.write_all(&[3, b'a', b'b', b'c']).await.unwrap();
+    let mut response = Vec::new();
+    tokio::time::timeout(TEST_TIMEOUT, client.read_to_end(&mut response))
+        .await
+        .unwrap()
+        .unwrap();
+    observer
+        .wait_until(|event| matches!(event, SocketConnectionEvent::Closed { .. }))
+        .await;
+    cancellation.cancel();
+    server.await.unwrap().unwrap();
+    let received = upstream_task.await.unwrap();
+    let events = observer.events();
+    let closed = events
+        .iter()
+        .filter_map(|event| match event {
+            SocketConnectionEvent::Closed { failure, bytes, .. } => Some((failure, bytes)),
+            _ => None,
+        })
+        .collect::<Vec<_>>();
+    assert_eq!(response, b"");
+    assert_eq!(closed.len(), 1);
+    let failure = closed[0]
+        .0
+        .as_ref()
+        .expect("required response EOF must fail");
+    eprintln!(
+        "App input=03616263; Server received={received:?}; Server response=EOF; App response={response:?}; terminal={failure:?}; bytes={:?}",
+        closed[0].1
+    );
+    assert_eq!(failure.code, "READ_FAILED");
+    assert_eq!(failure.stage, SocketRelayStage::RelayRead);
+    assert_eq!(
+        failure.direction,
+        Some(SocketRelayDirection::ServerToClient)
+    );
+}

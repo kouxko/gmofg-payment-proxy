@@ -183,6 +183,9 @@ LAN 模式使用当前可达桌面地址和 Listener 端口，不创建 reverse�
 bind 地址和端点健康。对于已确认仍在运行、owner 为 Active 且 active runtime 与 epoch 匹配的 LAN
 实例，桌面可以在 LAN 地址或端点变化时协调当前运行端点。恢复态、非 Active owner 或缺少匹配
 active runtime 时只报告不健康状态，等待用户显式 start/apply，不通过端点查询启动 VPN。
+热协调同时校验活动 Profile 指纹；最新保存值与活动事实不一致时报告 Faulted，不发送 apply。
+端点更新从活动事实构建，只替换 `proxy_host`，保留原目标解析 IP、Listener 端口和 Profile 指纹，
+避免地址刷新重新解析路由或应用尚未显式应用的草稿。
 
 ## 8. ADB reverse 两阶段更新
 

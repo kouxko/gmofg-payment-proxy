@@ -5,7 +5,7 @@ use std::{fmt, future::Future, panic::AssertUnwindSafe};
 use tracing::Instrument;
 
 use crate::{
-    AppConnection, Direction, DirectionKind, Downstream, Envelope, Error, Pipeline, Protocol,
+    AppConnection, Direction, Downstream, Envelope, Error, ErrorStage, Pipeline, Protocol,
     ServerSlot, Socket, Upstream, WriteOutcome,
 };
 use crate::{ObservedProtocol, observation};
@@ -94,11 +94,10 @@ impl<P: ObservedProtocol> ProtocolExchange<P> {
             }
 
             let Some(response) = self.downstream.read(self.server.reader()?).await? else {
-                return fail(
-                    Downstream::KIND,
-                    "read",
-                    "Server disconnected before replying",
-                );
+                let error = Error::coded("READ_FAILED", "Server disconnected before replying")
+                    .at(ErrorStage::Read, Downstream::KIND);
+                observation::failed::<Downstream>("read", &error);
+                return Err(error);
             };
             record_received(&response);
 
@@ -116,26 +115,6 @@ fn record_received<P: ObservedProtocol, D: Direction>(envelope: &Envelope<P, D>)
 
 fn record_sent<P: ObservedProtocol, D: Direction>(context: &P::Context) {
     observation::sent::<P, D>(context);
-}
-
-fn fail<T>(
-    direction: DirectionKind,
-    stage: &'static str,
-    message: &'static str,
-) -> Result<T, Error> {
-    let error = Error::new(message);
-    let direction = match direction {
-        DirectionKind::Upstream => "upstream",
-        DirectionKind::Downstream => "downstream",
-    };
-    tracing::error!(
-        target: "intercept_proxy::exchange::ui",
-        event = "failed",
-        direction,
-        stage,
-        error = error.message.as_str(),
-    );
-    Err(error)
 }
 
 /// 一个 accepted App connection 只创建一个外层 Exchange。

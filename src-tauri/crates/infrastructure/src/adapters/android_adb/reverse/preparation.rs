@@ -25,6 +25,7 @@ struct ReverseCreationFailure {
 }
 
 impl AndroidAdbAdapter {
+    #[cfg(test)]
     pub(in crate::adapters::android_adb) async fn build_lan_runtime_for_owner(
         &self,
         activation: &AndroidNetworkActivation,

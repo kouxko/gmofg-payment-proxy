@@ -9,7 +9,7 @@ import { RuleSinglePairEditor } from "./rule-single-pair-editor";
 export function RuleCreationEditor(props: {
   listeners: ProxyListener[];
   onCancel: () => void;
-  onSave: (draft: RuleDefinitionSaveInput) => void;
+  onSave: (draft: RuleDefinitionSaveInput) => void | Promise<void>;
   pending: boolean;
   fieldErrors: Record<string, string[]>;
 }) {

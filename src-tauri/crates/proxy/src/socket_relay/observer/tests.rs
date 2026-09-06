@@ -34,3 +34,13 @@ fn bounded_retention_rejects_zero_limits() {
     assert!(BoundedSocketConnectionObserver::with_limits(0, 1).is_err());
     assert!(BoundedSocketConnectionObserver::with_limits(1, 0).is_err());
 }
+
+#[test]
+fn bounded_retention_does_not_preallocate_the_event_capacity() {
+    let observer = BoundedSocketConnectionObserver::with_limits(usize::MAX, 512).unwrap();
+    observer.record(rejected(1));
+    observer.record(rejected(2));
+
+    assert_eq!(observer.snapshot(), vec![rejected(2)]);
+    assert_eq!(observer.retained_diagnostic_evictions(), 1);
+}

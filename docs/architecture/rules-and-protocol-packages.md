@@ -13,6 +13,11 @@
 Workspace 只保存一个 `rule_definitions` 集合。HTTP 与 Socket 内容保持带标签隔离，不能交换 transport
 字段或动作；Document 条件和动作通过共同领域合同复用。
 
+规则编辑器的一次保存从条件/动作草稿物化开始，持续到保存请求完成，期间只允许一个提交。
+失败后释放提交状态，允许重试；编辑器被替换后，旧物化结果不得继续提交。
+每次新建、选择、取消和抓包草稿替换都会生成独立编辑会话，即使规则 ID、Listener 和 Stage 相同，
+也会卸载旧编辑器。保存、复制和删除的异步返回绑定发起时的会话，不覆盖后来打开的草稿或规则。
+
 ## 2. 递归 Document
 
 递归 `Document` 是自然 JSON 树，值类型包括 null、boolean、number、string、object 和 array。JSON

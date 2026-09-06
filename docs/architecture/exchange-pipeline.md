@@ -281,6 +281,8 @@ upstream.read(App)
 
 任何时刻只 poll 当前步骤。等待 Server 回复时不读取 App；App 提前到达的下一笔数据留在
 transport 缓冲区，下一轮才处理。App Reader EOF 正常结束；Server 在应答前 EOF 是业务失败。
+该失败沿用 `READ_FAILED` 分类，并携带 `Read` 阶段与 `Downstream` 方向；Socket 终态据此
+记录为下游读取失败，不丢失已知上下文。
 
 ## 8. LocalServer 与 RemoteServer
 
@@ -335,6 +337,10 @@ flowchart LR
 
 Exchange 错误独立携带 `code`、`stage`、`direction` 和外部包失败详情。适配器传递结构化字段，
 不从错误文本分隔符推断类型；外层阶段只补充缺失信息，不覆盖真实 Encode/Flush 等失败位置。
+HTTP 与 Socket 的失败观测都保留外部包 ID、版本、调用阶段、方法、请求 ID 和远端错误详情，
+使 UI 能关联同一次外部调用；Socket 同时保留原始 Context 的十六进制表示。
+这些可变文本与 Context、错误消息共用现有的 16 MiB 观测投影预算；总 UTF-8 字节数超过预算时
+记录 `observation_lost`，不产生超预算投影，也不改变已经确定的业务错误。
 
 固定上游与 Forward HTTP 共用 HTTP/1 egress 和下游 ResponseWriteTracker。下游 Writer 等待
 ResponseBody 完成且 ResponseIo 实际 flush 成功的回执；故障和超时传回同一等待者。

@@ -1,4 +1,4 @@
-import { type ReactNode, useState } from "react";
+import { type ReactNode, useEffect, useRef, useState } from "react";
 import { Button, Input, Label, ListBox, NumberField, Select, Tabs, TextField } from "@heroui/react";
 import type {
   Condition, DocumentMutation, HttpAction, HttpRuleEditorStageViewModel, RuleActionCapabilityViewModel,
@@ -33,7 +33,7 @@ export function RuleSinglePairEditor(props: {
   localTypes: RuleLocalDocumentTypeCapability[];
   conditionPath?: RuleDocumentConditionPathCapability;
   pending: boolean;
-  onSave: (input: RuleDefinitionSaveInput) => void;
+  onSave: (input: RuleDefinitionSaveInput) => void | Promise<void>;
 }) {
   const initialCondition = props.input?.draft.content.value.condition;
   const initialAction = props.input?.draft.content.value.action;
@@ -50,11 +50,20 @@ export function RuleSinglePairEditor(props: {
   const [httpAction, setHttpAction] = useState(() => httpActionDraft(initialAction));
   const [commonAction, setCommonAction] = useState<RuleCommonActionCapability | "">(() => initialAction?.source === "record_match" ? "record_match" : "");
   const [error, setError] = useState<string>();
+  const [materializing, setMaterializing] = useState(false);
+  const materializingRef = useRef(false);
+  const operationGeneration = useRef(0);
   const schemaFields = documentSchemaFields(documentFields);
   const conditionSchemaFields = schemaFields.filter((field) => field.predicates.length > 0);
   const conditionLocalTypes = props.localTypes.filter((type) => type.predicates.length > 0);
 
+  useEffect(() => () => { operationGeneration.current += 1; }, []);
+
   async function materialize() {
+    if (materializingRef.current) return;
+    const generation = ++operationGeneration.current;
+    materializingRef.current = true;
+    setMaterializing(true);
     setError(undefined);
     try {
       if (!conditionReady || !actionReady) return;
@@ -94,9 +103,14 @@ export function RuleSinglePairEditor(props: {
         action = await callCommand(commands.ruleDefinitionDocumentActionDraft(canonicalPath(actionDocument), valueType, actionDocument.action, raw, index));
       }
       const materialized = props.input ? withSinglePair(props.input, condition, action) : props.creation ? newSaveInput(props.creation, condition, action) : null;
-      if (materialized) props.onSave(materialized);
+      if (materialized && operationGeneration.current === generation) await props.onSave(materialized);
     } catch (reason) {
-      setError(errorMessage(reason));
+      if (operationGeneration.current === generation) setError(errorMessage(reason));
+    } finally {
+      if (operationGeneration.current === generation) {
+        materializingRef.current = false;
+        setMaterializing(false);
+      }
     }
   }
 
@@ -109,7 +123,7 @@ export function RuleSinglePairEditor(props: {
 
   const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={conditionSchemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={conditionLocalTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
   const actionForm = <ActionForm action={httpAction} capabilities={httpStage?.actions ?? []} commonAction={commonAction} commonActions={commonActions} document={actionDocument} fields={schemaFields} isHttp={contentType === "http"} localTypes={props.localTypes} onAction={setHttpAction} onCommonAction={setCommonAction} onDocument={setActionDocument} onSource={setActionSource} source={actionSource} />;
-  const saveButton = <Button isDisabled={props.pending || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
+  const saveButton = <Button isDisabled={props.pending || materializing || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
 
   return <div className="space-y-4">
     {props.creationTabs && <header className="flex items-center gap-2" data-testid="rule-creation-header">

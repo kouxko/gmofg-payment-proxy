@@ -232,7 +232,7 @@ impl BoundedSocketConnectionObserver {
         Ok(Self {
             capacity,
             max_logical_bytes,
-            retained: Mutex::new(VecDeque::with_capacity(capacity)),
+            retained: Mutex::new(VecDeque::new()),
             retained_logical_bytes: Mutex::new(0),
             dropped: AtomicU64::new(0),
         })

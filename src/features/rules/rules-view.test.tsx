@@ -3,8 +3,10 @@
 import "@testing-library/jest-dom/vitest";
 import { act, render, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
+import { useState } from "react";
 import { beforeEach, describe, expect, it, vi } from "vitest";
-import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+import { RuleSinglePairEditor } from "./rule-single-pair-editor";
 import { RulesView } from "./rules-view";
 import { httpCondition, httpListener, httpRule, socketListener } from "./rules-view-test-fixtures";
 
@@ -17,8 +19,13 @@ const commandMocks = vi.hoisted(() => ({
   ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
   ruleDefinitionDocumentCommonActionDraft: vi.fn(),
 }));
+const toastMock = vi.hoisted(() => vi.fn());
 
 const navigationState = vi.hoisted(() => ({ searchParams: new URLSearchParams(), navigate: vi.fn() }));
+vi.mock("@heroui/react", async (importOriginal) => ({
+  ...await importOriginal<typeof import("@heroui/react")>(),
+  toast: toastMock,
+}));
 vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
 vi.mock("@/lib/ipc/client", () => ({
   appErrorViewModel: () => undefined,
@@ -230,5 +237,182 @@ describe("RulesView inline editor", () => {
     expect(await screen.findByDisplayValue("Second")).toBeVisible();
     await act(async () => { finishFirst(httpRule()); await Promise.resolve(); });
     expect(screen.getByDisplayValue("Second")).toBeVisible();
+  });
+
+  it("keeps a newer rule selected when an older save completes", async () => {
+    const first = httpRule();
+    const second = httpRule({ rule_id: "second", name: "Second" });
+    commandMocks.ruleDefinitionList.mockResolvedValue([first, second]);
+    commandMocks.ruleDefinitionGet.mockImplementation(async (id) => id === second.rule_id ? second : first);
+    let finishSave!: (rule: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { finishSave = resolve; }));
+    render(<RulesView />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
+    await act(async () => { finishSave({ ...first, revision: 4 }); await Promise.resolve(); });
+
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second");
+  });
+
+  it("reports an older save failure without changing the newer rule selection", async () => {
+    const first = httpRule();
+    const second = httpRule({ rule_id: "second", name: "Second" });
+    commandMocks.ruleDefinitionList.mockResolvedValue([first, second]);
+    commandMocks.ruleDefinitionGet.mockImplementation(async (id) => id === second.rule_id ? second : first);
+    let failSave!: (reason: Error) => void;
+    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((_, reject) => { failSave = reject; }));
+    render(<RulesView />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
+    await act(async () => { failSave(new Error("older save failed")); await Promise.resolve(); });
+
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second");
+    expect(toastMock).toHaveBeenCalledWith("older save failed", { variant: "danger" });
+  });
+
+  it("admits only one creation while draft materialization is pending", async () => {
+    const rule = httpRule();
+    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
+    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
+      rule_id: null,
+      expected_revision: null,
+      draft: {
+        name: rule.name,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        listener_id: rule.listener_id,
+        stage: rule.stage,
+        content: rule.content,
+      },
+    });
+    let completeCondition!: (value: typeof httpCondition) => void;
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
+    let completeSave!: (value: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { completeSave = resolve; }));
+    render(<RulesView />);
+
+    const save = await screen.findByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await userEvent.click(save);
+    expect(save).toBeDisabled();
+    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+    await act(async () => { completeSave({ ...rule, rule_id: "new-rule" }); await Promise.resolve(); });
+
+    expect(commandMocks.ruleDefinitionSave.mock.calls.map(([input]) => input.rule_id)).toEqual([null]);
+  });
+
+  it("releases creation ownership after materialization fails so the user can retry", async () => {
+    const rule = httpRule();
+    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
+    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
+      rule_id: null,
+      expected_revision: null,
+      draft: {
+        name: rule.name,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        listener_id: rule.listener_id,
+        stage: rule.stage,
+        content: rule.content,
+      },
+    });
+    commandMocks.ruleDefinitionHttpConditionDraft
+      .mockRejectedValueOnce(new Error("materialization failed"))
+      .mockResolvedValueOnce(httpCondition);
+    render(<RulesView />);
+
+    const save = await screen.findByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    expect(await screen.findByRole("alert")).toHaveTextContent("materialization failed");
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+  });
+
+  it("cancels creation during materialization without submitting the abandoned draft", async () => {
+    const rule = httpRule();
+    const input: RuleDefinitionSaveInput = {
+      rule_id: null,
+      expected_revision: null,
+      draft: {
+        name: rule.name,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        listener_id: rule.listener_id,
+        stage: rule.stage,
+        content: rule.content,
+      },
+    };
+    let completeCondition!: (value: typeof httpCondition) => void;
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
+    const onSave = vi.fn();
+    function Harness() {
+      const [open, setOpen] = useState(true);
+      return open ? <RuleSinglePairEditor
+        conditionPath={context.document_condition_path}
+        creationTabs={{ title: "新建规则", cancelAction: <button onClick={() => setOpen(false)}>取消</button>, basicContent: null, contentAvailable: true, unavailableMessage: "" }}
+        input={input}
+        localTypes={[]}
+        onSave={onSave}
+        pending={false}
+        stage={context.content.value.stages[0]}
+      /> : <p>editor closed</p>;
+    }
+    render(<Harness />);
+
+    await userEvent.click(screen.getByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledOnce());
+    const cancel = screen.getByRole("button", { name: "取消" });
+    expect(cancel).toBeEnabled();
+    await userEvent.click(cancel);
+    expect(screen.getByText("editor closed")).toBeVisible();
+    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
+    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentCommonActionDraft).toHaveBeenCalledOnce());
+
+    expect(onSave).not.toHaveBeenCalled();
+  });
+
+  it("does not save a materialized draft after the editor is replaced", async () => {
+    const draft = httpRule();
+    const second = httpRule({ rule_id: "second", name: "Second" });
+    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
+    commandMocks.ruleDefinitionList.mockResolvedValue([second]);
+    commandMocks.ruleDefinitionGet.mockResolvedValue(second);
+    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
+      rule_id: null,
+      expected_revision: null,
+      draft: {
+        name: draft.name,
+        enabled: draft.enabled,
+        priority: draft.priority,
+        listener_id: draft.listener_id,
+        stage: draft.stage,
+        content: draft.content,
+      },
+    });
+    let completeCondition!: (value: typeof httpCondition) => void;
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
+    render(<RulesView />);
+
+    const save = await screen.findByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
+    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
+
+    expect(commandMocks.ruleDefinitionSave).not.toHaveBeenCalled();
   });
 });
