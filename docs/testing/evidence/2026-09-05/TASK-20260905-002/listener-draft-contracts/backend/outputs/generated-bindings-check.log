@@ -1,0 +1,57 @@
+   Compiling objc2-exception-helper v0.1.1
+   Compiling ring v0.17.14
+   Compiling zstd-sys v2.0.16+zstd.1.5.7
+   Compiling wasmtime-internal-jit-debug v48.0.1
+   Compiling wasmtime v48.0.1
+   Compiling openssl-sys v0.9.117
+   Compiling libsqlite3-sys v0.37.0
+   Compiling intercept-proxy v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri)
+   Compiling objc2 v0.6.4
+   Compiling openssl v0.10.81
+   Compiling tokio-openssl v0.6.5
+   Compiling objc2-core-foundation v0.3.2
+   Compiling block2 v0.6.2
+   Compiling objc2-foundation v0.3.2
+   Compiling dispatch2 v0.3.1
+   Compiling rustls v0.23.42
+   Compiling rustls-webpki v0.103.13
+   Compiling x509-parser v0.18.1
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling zstd-safe v7.2.4
+   Compiling objc2-app-kit v0.3.2
+   Compiling zstd v0.13.3
+   Compiling rcgen v0.14.8
+   Compiling p12-keystore v0.3.1
+   Compiling wasmtime-internal-cache v48.0.1
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.30.0
+   Compiling objc2-web-kit v0.3.2
+   Compiling tao v0.35.3
+   Compiling muda v0.19.3
+   Compiling window-vibrancy v0.6.0
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling wry v0.55.1
+   Compiling tauri-runtime v2.11.3
+   Compiling tokio-tungstenite v0.30.0
+   Compiling rfd v0.16.0
+   Compiling tauri-runtime-wry v2.11.4
+   Compiling rusqlite v0.39.0
+   Compiling tauri v2.11.5
+   Compiling tauri-plugin-fs v2.5.1
+   Compiling tauri-plugin-log v2.9.0
+   Compiling tauri-specta v2.0.0-rc.25
+   Compiling tauri-plugin-dialog v2.7.2
+   Compiling wasmtime-wasi-io v48.0.1
+   Compiling wiggle v48.0.1
+   Compiling wasmtime-wasi v48.0.1
+   Compiling wasmtime-wasi-http v48.0.1
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+   Compiling intercept-proxy-host v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/host)
+    Finished `release` profile [optimized] target(s) in 2m 58s
+     Running `src-tauri/target/release/export-bindings`
+/Users/codin/Code/gmofg-payment-proxy/src-tauri/../src/generated/rust-types.ts
+    Finished `release` profile [optimized] target(s) in 1.36s
+     Running `src-tauri/target/release/export-bindings`
+/Users/codin/Code/gmofg-payment-proxy/src-tauri/../src/generated/rust-types.ts
+PASS generated bindings are fresh and deterministic

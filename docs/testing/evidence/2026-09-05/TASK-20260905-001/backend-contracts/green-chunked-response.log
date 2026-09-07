@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.04s
+     Running tests/raw_http_proxy.rs (src-tauri/target/debug/deps/raw_http_proxy-03642ff640266325)
+
+running 3 tests
+test close_delimited_transfer_coding_is_reframed_as_chunked_downstream ... ok
+test keep_alive_request_forwards_chunked_close_response_without_header_conflict ... ok
+test chunked_truncation_closes_without_a_terminal_chunk ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.01s
+

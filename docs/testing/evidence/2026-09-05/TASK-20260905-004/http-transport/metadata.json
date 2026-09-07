@@ -1,0 +1,35 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "http-transport",
+  "executed_at": "2026-09-06 00:56:26 +0800",
+  "environment": "macOS; Rust/Tokio/Hyper from current Cargo.lock; local in-memory I/O and TCP tests",
+  "result": "PASS",
+  "inputs": "inline response bytes and PendingFlush/duplex fixture in resources/source snapshots",
+  "resources": [
+    {
+      "source": "src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+      "required": true,
+      "purpose": "actual inline inputs and expected output"
+    },
+    {
+      "source": "src-tauri/crates/proxy/tests/raw_http_proxy/wire_fidelity.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/tests/raw_http_proxy/wire_fidelity.rs",
+      "required": true,
+      "purpose": "actual inline inputs and expected output"
+    }
+  ],
+  "state": "Shared transport and write tracking verified on frozen source; Local HTTP Q1 remains pending separately",
+  "not_applicable": {
+    "ui": "no UI changes",
+    "remote_service": "local tests only",
+    "ci": "not requested"
+  },
+  "initial_result": "RED_CONFIRMED_TARGETED_GREEN_FINAL_INTEGRATION_PENDING",
+  "final_integration": {
+    "source": "../../../2026-09-06/TASK-20260905-004/integrated-verification/README.md",
+    "write_commit": "7/7",
+    "runtime_lib": "202/202",
+    "full_workspace_runtime_integration_targets": "all passed; MCP failure is in unchanged root application test"
+  }
+}

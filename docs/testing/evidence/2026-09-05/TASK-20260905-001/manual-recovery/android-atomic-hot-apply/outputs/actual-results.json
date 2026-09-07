@@ -1,0 +1,23 @@
+{
+  "apply_active_supported_by_v2_envelope": "PASS",
+  "start_and_apply_default_to_unconditional_explicit_path": "PASS",
+  "apply_active_forces_atomic_active_lease_admission": "PASS",
+  "expired_lease_rejected_without_enqueue_or_generation_change": "PASS",
+  "cleared_lease_rejected_without_enqueue_or_generation_change": "PASS",
+  "old_owner_epoch_rejected_and_current_lease_preserved": "PASS",
+  "old_generation_rejected_without_enqueue_or_generation_change": "PASS",
+  "current_running_generation_and_lease_enqueues_new_generation": "PASS",
+  "stale_error_code": "ANDROID_CONTROL_LEASE_STALE",
+  "jvm": {
+    "tests": 45,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "instrumentation": {
+    "compile": "PASS",
+    "execution": "NOT_RUN",
+    "reason": "no attached adb device"
+  },
+  "release_apk_gate": "PASS"
+}

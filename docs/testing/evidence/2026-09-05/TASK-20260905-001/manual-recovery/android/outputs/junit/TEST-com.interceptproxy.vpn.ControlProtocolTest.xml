@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.ControlProtocolTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-05T09:29:18.502Z" hostname="KQR.local" time="0.013">
+  <properties/>
+  <testcase name="peerUidPolicyFailsClosedOutsideShellAndRoot" classname="com.interceptproxy.vpn.ControlProtocolTest" time="0.009"/>
+  <testcase name="rejectsUnknownProtocolVersion" classname="com.interceptproxy.vpn.ControlProtocolTest" time="0.0"/>
+  <testcase name="acceptsSupportedEnvelopeFields" classname="com.interceptproxy.vpn.ControlProtocolTest" time="0.003"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

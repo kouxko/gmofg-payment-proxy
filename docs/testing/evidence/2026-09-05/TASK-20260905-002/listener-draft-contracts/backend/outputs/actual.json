@@ -1,0 +1,15 @@
+{
+  "red_exit_code": 101,
+  "application_tests": { "passed": 12, "failed": 0 },
+  "command_binding_tests": { "passed": 1, "failed": 0 },
+  "existing_listener_validation_tests": { "passed": 2, "failed": 0 },
+  "bindings_check": "PASS generated bindings are fresh and deterministic",
+  "public_draft_commands": [
+    "listener_draft_copy",
+    "listener_draft_transition",
+    "listener_draft_validate"
+  ],
+  "draft_new_present": false,
+  "draft_save_present": false,
+  "domain_source_changed": false
+}

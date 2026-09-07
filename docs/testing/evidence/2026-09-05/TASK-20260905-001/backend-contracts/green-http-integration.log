@@ -1,0 +1,8 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.36s
+     Running tests/upstream_http.rs (src-tauri/target/debug/deps/upstream_http-d92d3acfba650ddc)
+
+running 1 test
+test upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.10s
+

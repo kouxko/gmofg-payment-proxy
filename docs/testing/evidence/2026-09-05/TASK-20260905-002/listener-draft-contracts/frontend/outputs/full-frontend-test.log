@@ -1,0 +1,10 @@
+Task test vitest run
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+
+
+ Test Files  68 passed (68)
+      Tests  536 passed (536)
+   Start at  16:23:31
+   Duration  46.34s (transform 19.80s, setup 18.79s, import 86.00s, tests 151.09s, environment 57.40s)
+

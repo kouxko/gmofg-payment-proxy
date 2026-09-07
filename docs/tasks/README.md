@@ -2,6 +2,19 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-06
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 09:59:31 +08:00 | [TASK-20260905-004：统一HTTP/Socket运行合同并消除重复](completed/2026-09-06/unify-http-socket-runtime-contracts.md) | 共同写准备/传输/错误/Socket装配/规则编译；Local默认响应与两方向规则；4个旧超长文件拆分 | PASS；Rust1640、前端542、守卫60、类型/零警告lint/Clippy/架构/500行门禁及独立审查通过 | 高 | HTTP、Socket、LocalServer、Rules、Upstream、Downstream、DRY |
+
+## 2026-09-05
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 22:33:24 +08:00 | [TASK-20260905-003：功能职责与独立 crate 重构](completed/2026-09-05/separate-functional-responsibilities.md) | Android协议与流量投影独立crate；环境服务/唯一配置事务端口；共享Workspace与页面控制器 | PASS；Rust1034、前端542、类型/lint/格式/Clippy/架构/绑定/构建及独立审查通过；保留6项既有尺寸超限 | 高 | crate、职责、配置事务、观测、Workspace、控制器 |
+| 16:59:02 +08:00 | [TASK-20260905-002：Listener 草稿 DTO 与领域构造边界修复](completed/2026-09-05/listener-draft-dto-design.md) | 编辑草稿与严格领域分离；Rust统一copy/transition/validate，保留唯一save事务；UI异步/冲突/证书lease门禁 | PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_NATIVE_UI_NOT_RUN；受影响回归、构建、类型/lint/架构及独立复审通过；剩6个旧尺寸超限 | 高 | Listener、Draft、CAS、Rust、异步、证书lease |
+
 ## 2026-09-04
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

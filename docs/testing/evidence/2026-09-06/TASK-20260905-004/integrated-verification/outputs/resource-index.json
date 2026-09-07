@@ -1,0 +1,666 @@
+[
+  {
+    "source": "deno.json",
+    "snapshot": "resources/deno.json",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "docs/architecture/data-flow.md",
+    "snapshot": "resources/docs/architecture/data-flow.md",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "docs/architecture/exchange-pipeline.md",
+    "snapshot": "resources/docs/architecture/exchange-pipeline.md",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "docs/architecture/modules.md",
+    "snapshot": "resources/docs/architecture/modules.md",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "docs/architecture/rules-and-protocol-packages.md",
+    "snapshot": "resources/docs/architecture/rules-and-protocol-packages.md",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "docs/architecture/runtime-observability.md",
+    "snapshot": "resources/docs/architecture/runtime-observability.md",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/Cargo.lock",
+    "snapshot": "resources/src-tauri/Cargo.lock",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/Cargo.toml",
+    "snapshot": "resources/src-tauri/Cargo.toml",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "snapshot": "resources/src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/endpoint.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/error.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/error.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/lib.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/local_server.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/local_server.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/observation.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/observation.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/support.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document/error.rs",
+    "deleted": true,
+    "purpose": "removed duplicate implementation"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/body.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/body.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/pipeline/drop_response.rs",
+    "deleted": true,
+    "purpose": "removed duplicate implementation"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/http.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/capabilities.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/contracts.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/contracts.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/egress.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/egress.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/helpers.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/helpers.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/request_service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/request_service.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/response_write.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/response_write.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tracking.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tracking.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/upstream.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/upstream.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/wire.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/wire.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/lib.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "required": true,
+    "purpose": "frozen implementation or actual inline regression input, expected output and replay procedure"
+  }
+]

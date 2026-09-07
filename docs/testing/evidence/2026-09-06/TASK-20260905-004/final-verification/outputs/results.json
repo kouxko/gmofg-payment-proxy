@@ -1,0 +1,145 @@
+[
+  {
+    "name": "cargo-check",
+    "command": [
+      "cargo",
+      "check",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T09:37:15.465043+08:00",
+    "finished_at": "2026-09-06T09:37:43.558138+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "cargo-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--no-fail-fast"
+    ],
+    "started_at": "2026-09-06T09:37:43.558718+08:00",
+    "finished_at": "2026-09-06T09:42:20.521305+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-06T09:42:20.522167+08:00",
+    "finished_at": "2026-09-06T09:43:00.424008+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "rustfmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "started_at": "2026-09-06T09:43:00.424674+08:00",
+    "finished_at": "2026-09-06T09:43:01.479369+08:00",
+    "exit_code": 1
+  },
+  {
+    "name": "source-size",
+    "command": [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    "started_at": "2026-09-06T09:43:01.479759+08:00",
+    "finished_at": "2026-09-06T09:43:01.971616+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-06T09:43:01.972081+08:00",
+    "finished_at": "2026-09-06T09:43:04.623445+08:00",
+    "exit_code": 1
+  },
+  {
+    "name": "pipeline-guards",
+    "command": [
+      "deno",
+      "test",
+      "-A",
+      "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+      "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs"
+    ],
+    "started_at": "2026-09-06T09:43:04.623966+08:00",
+    "finished_at": "2026-09-06T09:44:08.529270+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "frontend-tests",
+    "command": [
+      "deno",
+      "task",
+      "test"
+    ],
+    "started_at": "2026-09-06T09:44:08.530089+08:00",
+    "finished_at": "2026-09-06T09:45:19.827181+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "started_at": "2026-09-06T09:45:19.828361+08:00",
+    "finished_at": "2026-09-06T09:45:26.808555+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "lint",
+    "command": [
+      "deno",
+      "task",
+      "lint"
+    ],
+    "started_at": "2026-09-06T09:45:26.811747+08:00",
+    "finished_at": "2026-09-06T09:45:42.483826+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "diff-check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-06T09:45:42.484655+08:00",
+    "finished_at": "2026-09-06T09:45:42.554559+08:00",
+    "exit_code": 0
+  }
+]

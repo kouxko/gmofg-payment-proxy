@@ -1,0 +1,75 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-004",
+  "case_id": "integrated-verification",
+  "executed_at": "2026-09-06 02:03:57 +08:00",
+  "result": "IMPLEMENTED_SCOPE_PASS_WITH_DECLARED_GAPS",
+  "task_complete": false,
+  "environment_file": "outputs/environment.json",
+  "source_state": {
+    "full_workspace_run": "outputs/source-stability.json",
+    "post_review_run": "outputs/post-review-source-stability.json",
+    "changed_files": "outputs/changed-files.txt",
+    "frozen_resources": "outputs/resource-index.json",
+    "final_delta_resources": "outputs/post-review-resource-index.json",
+    "byte_comparison": "outputs/post-review-resource-comparison.json",
+    "stable": true
+  },
+  "commands": "replay/verify.py; replay/verify.py --post-review",
+  "results": {
+    "full_run": "outputs/results.json",
+    "full_test_summary": "outputs/test-summary.json",
+    "post_review": "outputs/post-review-results.json",
+    "final_infrastructure": "479 passed / 0 failed",
+    "final_runtime": "202 passed / 0 failed",
+    "frame_rejection": "1 passed / 0 failed; previous RED code=None",
+    "write_commit": "7 passed / 0 failed",
+    "strict_clippy": "PASS workspace/all-targets/all-features",
+    "rustfmt": "PASS",
+    "architecture": "PASS",
+    "pipeline_guards": "60 passed / 0 failed",
+    "script_lint": "PASS",
+    "diff_check": "PASS",
+    "independent_review": "APPROVE implemented scope"
+  },
+  "full_run_failures": [
+    {
+      "name": "MCP production_bind_is_reachable_on_current_platform_interfaces_without_false_availability",
+      "status": "UNRESOLVED_OUTSIDE_MODIFIED_SCOPE",
+      "evidence": [
+        "outputs/rust-tests.log",
+        "outputs/mcp-interface-recheck.log",
+        "outputs/non-loopback-isolation.json"
+      ],
+      "finding": "non-loopback HTTP exchange times out; same-interface bare TCP succeeds; root cause unconfirmed"
+    },
+    {
+      "name": "HTTP package charset/content encoding and Plain invalid JSON assertions",
+      "status": "RESOLVED",
+      "finding": "two assertions still expected error-code prefixes in message; corrected to structured code and final Infrastructure 479/479 PASS"
+    },
+    {
+      "name": "Socket transaction scenario Clippy too_many_lines",
+      "status": "RESOLVED",
+      "finding": "extracted rule fixture constructor; final strict workspace Clippy PASS"
+    },
+    {
+      "name": "four unchanged source-size violations",
+      "status": "EXISTING",
+      "evidence": "outputs/existing-source-size.json"
+    }
+  ],
+  "pending_requirement": "Local HTTP default response Q1 remains unconfirmed and unimplemented",
+  "resources": "All modified source/tests/scripts and Cargo/Deno toolchain files are frozen under resources; inline fixtures preserve exact bytes, expected fields and procedures. Five final corrections have separate post-review snapshots.",
+  "review": [
+    "outputs/review-attempt-1.md",
+    "outputs/review-attempt-2.md",
+    "outputs/review-final.md"
+  ],
+  "not_applicable": {
+    "ui": "no UI changes",
+    "real_device_business": "local automatic tests only; no external payment request",
+    "ci_commit_push_publish": "not requested"
+  },
+  "limitations": "Full workspace snapshot had 1634 passed and 3 failed; final five-file delta re-ran all Infrastructure/Runtime lib tests and workspace static checks. No claim that the complete workspace suite is all green."
+}

@@ -1,0 +1,20 @@
+{
+  "red": {
+    "enabled_true": "Ok",
+    "enabled_false": "Ok",
+    "authoritative_log": "red-server-tls-local-responder-both-inputs.log"
+  },
+  "green": {
+    "enabled_true": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE",
+    "enabled_false": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE",
+    "focused_test": "1 passed, 0 failed",
+    "listener_draft_suite": "13 passed, 0 failed",
+    "existing_listener_validation": "2 passed, 0 failed",
+    "command_binding": "1 passed, 0 failed",
+    "application_clippy": "PASS",
+    "format_diff_size": "PASS"
+  },
+  "public_signature_changed": false,
+  "generated_bindings_changed": false,
+  "full_repository_suite_rerun": false
+}

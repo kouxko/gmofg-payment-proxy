@@ -1,0 +1,29 @@
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+error[E0509]: cannot move out of type `RecoveryRunner`, which implements the `Drop` trait
+   --> crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:103:27
+    |
+103 |       let runner = Arc::new(RecoveryRunner {
+    |  ___________________________^
+104 | |         reject_hot_apply: true,
+105 | |         ..Default::default()
+106 | |     });
+    | |     ^
+    | |     |
+    | |_____cannot move out of here
+    |       move occurs because value has type `std::sync::Arc<std::sync::Mutex<Vec<serde_json::Value>>>`, which does not implement the `Copy` trait
+
+error[E0509]: cannot move out of type `RecoveryRunner`, which implements the `Drop` trait
+   --> crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:103:27
+    |
+103 |       let runner = Arc::new(RecoveryRunner {
+    |  ___________________________^
+104 | |         reject_hot_apply: true,
+105 | |         ..Default::default()
+106 | |     });
+    | |     ^
+    | |     |
+    | |_____cannot move out of here
+    |       move occurs because value has type `std::sync::Mutex<HashMap<u16, tokio::task::JoinHandle<()>>>`, which does not implement the `Copy` trait
+
+For more information about this error, try `rustc --explain E0509`.
+error: could not compile `intercept-proxy-infrastructure` (lib test) due to 2 previous errors

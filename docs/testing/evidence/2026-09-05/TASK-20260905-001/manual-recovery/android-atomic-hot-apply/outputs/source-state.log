@@ -1,0 +1,100 @@
+captured_at=2026-09-05 17:41:31 +0800
+c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525
+ M README.md
+ M android-companion/README.md
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/CompanionControlServer.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseCoordinator.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseWatchdog.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/ControlProtocol.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnServiceControl.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/NativeBridge.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/ResumeVpnJobService.kt
+ M android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt
+ M android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseWatchdogTest.kt
+ M android-companion/app/src/test/java/com/interceptproxy/vpn/ControlProtocolTest.kt
+ M docs/README.md
+ M docs/architecture/android-vpn-transparent-routing.md
+ M docs/architecture/data-flow.md
+ M docs/architecture/modules.md
+ M docs/requirements.md
+ M docs/tasks/README.md
+ M docs/testing/evidence/README.md
+ M docs/user-operation-guide.md
+ M eslint.config.mjs
+ M src-tauri/crates/android-engine/src/routing.rs
+ M src-tauri/crates/android-engine/src/routing_tests.rs
+ M src-tauri/crates/android-engine/src/socks5/tests/tcp.rs
+ M src-tauri/crates/application/src/facade/lifecycle.rs
+ M src-tauri/crates/application/src/facade/listeners.rs
+ M src-tauri/crates/application/src/models.rs
+ M src-tauri/crates/application/src/requirements_tests.rs
+ M src-tauri/crates/application/src/requirements_tests/events.rs
+ M src-tauri/crates/application/src/requirements_tests/support/fake_ports.rs
+ M src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
+ M src-tauri/crates/infrastructure/src/adapters/android_adb/lease.rs
+ M src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs
+ M src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs
+ M src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs
+ M src-tauri/crates/proxy/src/message.rs
+ M src-tauri/crates/proxy/src/message/tests.rs
+ M src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs
+ M src-tauri/src/commands/listener.rs
+ M src-tauri/src/commands/mod.rs
+ M src-tauri/src/mcp/resources.rs
+ M src-tauri/src/mcp/tests.rs
+ M src/features/listeners/downstream-tls-card.tsx
+ M src/features/listeners/fixed-server-tls-settings.tsx
+ M src/features/listeners/http-protocol-processing-card.tsx
+ M src/features/listeners/listener-data-plane.ts
+ M src/features/listeners/listener-editor.socket.test.tsx
+ M src/features/listeners/listener-editor.test.tsx
+ M src/features/listeners/listener-editor.tsx
+ M src/features/listeners/listener-list-panel.tsx
+ M src/features/listeners/listener-runtime-card.tsx
+ M src/features/listeners/listener-workspace-draft.ts
+ M src/features/listeners/listeners-view.certificate-details.test.tsx
+ M src/features/listeners/listeners-view.certificates.test.tsx
+ M src/features/listeners/listeners-view.socket-contracts.test.tsx
+ M src/features/listeners/listeners-view.test-support.ts
+ M src/features/listeners/listeners-view.test.tsx
+ M src/features/listeners/listeners-view.tsx
+ M src/features/listeners/request-routing-card.tsx
+ M src/features/listeners/socket-listener-model.test.ts
+ M src/features/listeners/socket-listener-model.ts
+ M src/features/listeners/socket-listener-settings.test.tsx
+ M src/features/listeners/socket-listener-settings.tsx
+ M src/features/listeners/socket-processing-card.test.tsx
+ M src/features/listeners/socket-processing-card.tsx
+ M src/features/listeners/socket-security-cards.test-support.tsx
+ M src/features/listeners/socket-security-cards.test.tsx
+ M src/features/listeners/socket-security-cards.tsx
+ M src/features/listeners/socket-working-mode.test.ts
+ M src/features/listeners/upstream-tls-card.tsx
+ M src/features/listeners/use-listener-certificates.ts
+ M src/features/listeners/use-listener-persistence.ts
+ M src/features/shell/bootstrap-context.test.tsx
+ M src/features/shell/bootstrap-context.tsx
+ M src/generated/rust-types.ts
+ M tsconfig.json
+?? android-companion/app/src/androidTest/java/com/interceptproxy/vpn/SavedRecoveryAdmissionInstrumentedTest.kt
+?? android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseRecoveryTest.kt
+?? android-companion/app/src/test/java/com/interceptproxy/vpn/NativeDataPlaneFailureCoordinatorTest.kt
+?? docs/tasks/completed/2026-09-05/
+?? docs/tasks/pending/2026-09-05/
+?? docs/testing/evidence/2026-09-05/
+?? src-tauri/crates/application/src/facade/listeners/draft.rs
+?? src-tauri/crates/application/src/models/listener_draft.rs
+?? src-tauri/crates/application/src/models/listener_draft/
+?? src-tauri/crates/application/src/requirements_tests/listener_draft.rs
+?? src-tauri/crates/application/src/requirements_tests/listener_draft/
+?? src-tauri/crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs
+?? src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
+?? src/features/listeners/listener-feedback.tsx
+?? src/features/listeners/listener-view-model.ts
+?? src/features/listeners/listener-workspace-draft.test.ts
+?? src/features/listeners/listeners-view.external-refresh.test.tsx
+?? src/features/listeners/listeners-view.transition-races.test.tsx
+?? src/features/listeners/use-listener-draft-transition.test.tsx
+?? src/features/listeners/use-listener-draft-transition.ts

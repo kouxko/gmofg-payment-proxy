@@ -1,0 +1,14 @@
+{
+  "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+  "source_files_stable": 1352,
+  "source_changes": [],
+  "isolated_rust_differences": {
+    "domain": [
+      "src/workspace/tests/listener_v3.rs"
+    ],
+    "exchange": [
+      "src/tests/exchange.rs",
+      "src/observation/tests.rs"
+    ]
+  }
+}

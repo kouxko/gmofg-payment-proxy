@@ -1,0 +1,56 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.17s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_domain-b93b9d01f7f5d30d)
+
+running 29 tests
+test workspace::tests::fixed_server_accepts_generic_http_and_https_origins ... ok
+test workspace::tests::apply_is_atomic_and_preserves_workspace_identity ... ok
+test workspace::tests::downstream_tls_can_use_installation_root_for_dynamic_sni ... ok
+test workspace::tests::fixed_server_stores_body_encoding_on_the_listener ... ok
+test workspace::tests::downstream_tls_rejects_invalid_dynamic_sni_pattern ... ok
+test workspace::tests::fixed_http_server_rejects_tls_certificate_configuration ... ok
+test workspace::tests::downstream_tls_rejects_ip_literal_dynamic_sni ... ok
+test workspace::tests::listener_tls_rejects_certificate_references_used_in_the_wrong_role ... ok
+test workspace::tests::listener_topology::local_responder_accepts_direct_or_protocol_processing ... ok
+test workspace::tests::android_proxy_routes_must_reference_a_listener_in_the_same_workspace ... ok
+test workspace::tests::listener_v3::cloned_socket_workspace_edits_only_the_selected_package_binding ... ok
+test workspace::tests::listener_body_codec_values_are_deserializable ... ok
+test workspace::tests::default_workspace_is_empty_safe_and_serializable ... ok
+test workspace::tests::listener_topology::local_responder_tls_references_are_validated_at_exact_wire_paths ... ok
+test workspace::tests::listener_v3::scripted_processing_round_trips_only_the_exact_package_binding ... ok
+test workspace::tests::listener_v3::socket_runtime_limits_reject_zero_without_normalization ... ok
+test workspace::tests::listener_v3::socket_target_and_capacity_are_validated_without_http_state ... ok
+test workspace::tests::listener_v3::socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data ... ok
+test workspace::tests::non_loopback_fixed_server_allows_all_clients ... ok
+test workspace::tests::mitm_is_fail_closed_without_allowlist_but_can_use_installation_root ... ok
+test workspace::tests::non_loopback_forward_listener_requires_authentication ... ok
+test workspace::tests::standard_http_rules_require_one_existing_http_listener ... ok
+test workspace::tests::workspace_accepts_multiple_fixed_server_listener_mappings ... ok
+test workspace::tests::listener_v3::socket_processing_default_is_direct_and_current_wire_is_strict ... ok
+test workspace::tests::listener_topology::topology_wire_rejects_unknown_or_cross_mode_fields ... ok
+test workspace::tests::listener_topology::http_topology_round_trips_local_and_reads_legacy_remote_settings ... ok
+test workspace::tests::listener_topology::local_responder_tcp_and_tls_round_trip_without_processing_switches ... ok
+test workspace::tests::listener_v3::current_listener_rejects_unknown_fields ... ok
+test workspace::tests::listener_v3::socket_tls_roles_are_exhaustive_and_round_trip ... ok
+
+test result: ok. 29 passed; 0 failed; 0 ignored; 0 measured; 41 filtered out; finished in 0.01s
+
+     Running tests/phase5_unified_rule_domain.rs (src-tauri/target/debug/deps/phase5_unified_rule_domain-451b5f62d104c448)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/phase6_rule_lifecycle.rs (src-tauri/target/debug/deps/phase6_rule_lifecycle-a6a94e9b7863da94)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/unified_rule_contract.rs (src-tauri/target/debug/deps/unified_rule_contract-f02a3ab37b6f29fd)
+
+running 2 tests
+test workspace_persists_exactly_one_unified_rule_collection ... ok
+test workspace_rejects_legacy_split_rule_collections ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.00s
+

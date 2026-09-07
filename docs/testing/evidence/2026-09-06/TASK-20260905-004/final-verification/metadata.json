@@ -1,0 +1,74 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "final-verification",
+  "result": "PASS",
+  "completed_at": "2026-09-06T09:56:53.521903+08:00",
+  "environment": {
+    "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+    "timezone": "Asia/Shanghai",
+    "tools": {
+      "rustc --version": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+      "cargo --version": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+      "deno --version": "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 15.0.245.2-rusty\ntypescript 6.0.3"
+    }
+  },
+  "tested_state": {
+    "description": "Frozen current task source and current architecture/requirements/user docs. Final source delta only Rust test indentation and shared TS test-support filename/imports. Final review removed one unused test import; affected checks rerun in review-cleanup.",
+    "snapshot_index": "outputs/final-resource-index.json",
+    "source_stability": "outputs/review-cleanup/source-stability.json",
+    "byte_comparison": "outputs/final-resource-verification.json"
+  },
+  "commands_and_results": {
+    "full_initial_matrix": "outputs/results.json",
+    "authoritative_final_matrix": "outputs/post-fix/results.json",
+    "final_typecheck": "outputs/post-fix/typecheck-artifact-layout-recheck.json",
+    "final_review_cleanup": "outputs/review-cleanup/results.json"
+  },
+  "actual": {
+    "cargo_suite_count": 45,
+    "cargo_tests": {
+      "passed": 1640,
+      "failed": 0,
+      "ignored": 0
+    },
+    "frontend_full": {
+      "files": 72,
+      "passed": 542
+    },
+    "pipeline_guards": {
+      "passed": 60
+    },
+    "mcp_non_loopback": "PASS"
+  },
+  "final_frontend_affected": {
+    "passed": 18,
+    "failed": 0
+  },
+  "review": "APPROVE; one LOW unused test import found during archive check, removed and final zero-warning lint passed. No open P0/P1/P2.",
+  "source_size": "Repository-wide PASS; original gate counts546/516/504/516 become400/299/411/416. Runtime parent445.",
+  "initial_failures_and_recovery": [
+    "Rust test indentation failed fmt, formatted and passed.",
+    "Fixture filename did not match existing test-support convention; renamed with two imports, architecture passed.",
+    "Delta evidence directory was included by TypeScript; moved under existing resources convention, source/tsconfig unchanged, typecheck recheck passed.",
+    "Duplicate reviewer run overwrote initial Cargo logs. Those are not final acceptance evidence; use post-fix rerun logs."
+  ],
+  "derived_from": [
+    {
+      "task_id": "TASK-20260905-004",
+      "case_id": "integrated-verification",
+      "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260905-004/integrated-verification",
+      "change": "Local Q1 confirmed/implemented; four source-size exceptions fixed; full final verification."
+    }
+  ],
+  "replay": "python3 docs/testing/evidence/2026-09-06/TASK-20260905-004/final-verification/replay/verify.py",
+  "resources": "Inline fixtures/expected assertions and toolchain contracts copied. Specialized TCP bytes/logs in sibling local-http-default-response. Final index gives exact active snapshots.",
+  "not_applicable": {
+    "screenshots_real_devices_remote_business": "No product UI/device/business change; localhost production listener proves affected runtime.",
+    "http_frame_hooks": "Hyper owns HTTP framing; Socket Frame is covered by existing workspace tests.",
+    "external_file_inputs": "No new external user resources; existing inline test vectors used."
+  },
+  "not_run": {
+    "ci_commit_push_publish_packaging": "Outside task scope.",
+    "rust_analyzer_lsp": "Component unavailable; cargo check and strict Clippy supply compile/type diagnostics."
+  }
+}

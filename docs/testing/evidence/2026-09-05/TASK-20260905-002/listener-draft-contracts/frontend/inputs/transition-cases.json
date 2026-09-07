@@ -1,0 +1,11 @@
+{
+  "cases": [
+    {"id":"independent_tls_composition","input":["app_tls:true","server_tls:true"],"expected":"serial Rust calls; second source is first result; publish only both-enabled endpoint"},
+    {"id":"same_control_latest","input":["app_tls:true","app_tls:false"],"expected":"publish only disabled endpoint"},
+    {"id":"leaf_epoch_cancel","input":["http_response_mode:request_target","edit listener name before reply"],"expected":"retain edited name and fixed-server draft; ignore late reply"},
+    {"id":"scope_cancel","input":["processing:scripted","queued local_responder","selection epoch changes","processing:direct in new epoch"],"expected":"old tail is not sent; new epoch completes independently"},
+    {"id":"stale_plane_guard","input":["data_plane:http in flight","old Socket server_tls click"],"expected":"do not send inapplicable old-plane intent; keep data-plane selector usable"},
+    {"id":"submission_gate","input":["HTTP response transition in flight","save/start/validate/TLS probe"],"expected":"all snapshot submissions disabled until transition finishes"},
+    {"id":"failure","input":["app_tls fails","server_tls queued"],"expected":"visible error callback; queued tail not sent; no local fallback"}
+  ]
+}

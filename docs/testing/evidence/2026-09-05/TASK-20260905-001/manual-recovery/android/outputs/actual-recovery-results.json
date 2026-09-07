@@ -1,0 +1,35 @@
+{
+  "protected_saved_recovery": {
+    "admission": "waiting_for_desktop_control",
+    "enqueue_count": 0,
+    "generation_change": false,
+    "lease_change": false,
+    "startup_failure_counted": false,
+    "result": "PASS"
+  },
+  "unprotected_device_only_recovery": {
+    "admission": "started",
+    "enqueue_count": 1,
+    "lease_armed": false,
+    "result": "PASS"
+  },
+  "explicit_desktop_start_after_wait": {
+    "heartbeat_accepted": true,
+    "expired_at_4999_millis": false,
+    "expired_at_5000_millis": true,
+    "result": "PASS"
+  },
+  "enqueue_failure_rollback": "PASS",
+  "stale_recovery_cleanup_generation_isolation": "PASS",
+  "jvm_tests": {
+    "tests": 39,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "instrumentation": {
+    "compile": "PASS",
+    "execution": "NOT_RUN",
+    "reason": "adb devices -l returned no attached device"
+  }
+}

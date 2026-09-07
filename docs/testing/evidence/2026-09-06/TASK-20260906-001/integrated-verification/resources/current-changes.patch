@@ -1,0 +1,1394 @@
+diff --git a/docs/architecture/android-vpn-transparent-routing.md b/docs/architecture/android-vpn-transparent-routing.md
+index 89a258eb..70ef04ae 100644
+--- a/docs/architecture/android-vpn-transparent-routing.md
++++ b/docs/architecture/android-vpn-transparent-routing.md
+@@ -183,6 +183,9 @@ LAN 模式使用当前可达桌面地址和 Listener 端口，不创建 reverse
+ bind 地址和端点健康。对于已确认仍在运行、owner 为 Active 且 active runtime 与 epoch 匹配的 LAN
+ 实例，桌面可以在 LAN 地址或端点变化时协调当前运行端点。恢复态、非 Active owner 或缺少匹配
+ active runtime 时只报告不健康状态，等待用户显式 start/apply，不通过端点查询启动 VPN。
++热协调同时校验活动 Profile 指纹；最新保存值与活动事实不一致时报告 Faulted，不发送 apply。
++端点更新从活动事实构建，只替换 `proxy_host`，保留原目标解析 IP、Listener 端口和 Profile 指纹，
++避免地址刷新重新解析路由或应用尚未显式应用的草稿。
+ 
+ ## 8. ADB reverse 两阶段更新
+ 
+diff --git a/docs/architecture/exchange-pipeline.md b/docs/architecture/exchange-pipeline.md
+index 4dcca9d2..28573e75 100644
+--- a/docs/architecture/exchange-pipeline.md
++++ b/docs/architecture/exchange-pipeline.md
+@@ -281,6 +281,8 @@ upstream.read(App)
+ 
+ 任何时刻只 poll 当前步骤。等待 Server 回复时不读取 App；App 提前到达的下一笔数据留在
+ transport 缓冲区，下一轮才处理。App Reader EOF 正常结束；Server 在应答前 EOF 是业务失败。
++该失败沿用 `READ_FAILED` 分类，并携带 `Read` 阶段与 `Downstream` 方向；Socket 终态据此
++记录为下游读取失败，不丢失已知上下文。
+ 
+ ## 8. LocalServer 与 RemoteServer
+ 
+@@ -335,6 +337,10 @@ flowchart LR
+ 
+ Exchange 错误独立携带 `code`、`stage`、`direction` 和外部包失败详情。适配器传递结构化字段，
+ 不从错误文本分隔符推断类型；外层阶段只补充缺失信息，不覆盖真实 Encode/Flush 等失败位置。
++HTTP 与 Socket 的失败观测都保留外部包 ID、版本、调用阶段、方法、请求 ID 和远端错误详情，
++使 UI 能关联同一次外部调用；Socket 同时保留原始 Context 的十六进制表示。
++这些可变文本与 Context、错误消息共用现有的 16 MiB 观测投影预算；总 UTF-8 字节数超过预算时
++记录 `observation_lost`，不产生超预算投影，也不改变已经确定的业务错误。
+ 
+ 固定上游与 Forward HTTP 共用 HTTP/1 egress 和下游 ResponseWriteTracker。下游 Writer 等待
+ ResponseBody 完成且 ResponseIo 实际 flush 成功的回执；故障和超时传回同一等待者。
+diff --git a/docs/architecture/rules-and-protocol-packages.md b/docs/architecture/rules-and-protocol-packages.md
+index 946ec8cb..a2a7624a 100644
+--- a/docs/architecture/rules-and-protocol-packages.md
++++ b/docs/architecture/rules-and-protocol-packages.md
+@@ -13,6 +13,11 @@
+ Workspace 只保存一个 `rule_definitions` 集合。HTTP 与 Socket 内容保持带标签隔离，不能交换 transport
+ 字段或动作；Document 条件和动作通过共同领域合同复用。
+ 
++规则编辑器的一次保存从条件/动作草稿物化开始，持续到保存请求完成，期间只允许一个提交。
++失败后释放提交状态，允许重试；编辑器被替换后，旧物化结果不得继续提交。
++每次新建、选择、取消和抓包草稿替换都会生成独立编辑会话，即使规则 ID、Listener 和 Stage 相同，
++也会卸载旧编辑器。保存、复制和删除的异步返回绑定发起时的会话，不覆盖后来打开的草稿或规则。
++
+ ## 2. 递归 Document
+ 
+ 递归 `Document` 是自然 JSON 树，值类型包括 null、boolean、number、string、object 和 array。JSON
+diff --git a/docs/requirements.md b/docs/requirements.md
+index 2616b588..456fec4a 100644
+--- a/docs/requirements.md
++++ b/docs/requirements.md
+@@ -366,6 +366,8 @@ Selected App → VpnService TUN → Rust ImpairedTun
+ - 桌面只在显式 start/apply 时重新解析透明路由、准备 LAN/ADB reverse 端点并建立新的 runtime
+   epoch 与控制租约。已确认仍在运行且 owner、active runtime 和 epoch 匹配的 LAN 实例可以继续
+   协调当前 LAN 端点；不得用该热协调启动已停止或缺少有效运行事实的 VPN。
++- LAN 热协调还必须匹配活动 Profile 指纹，仅更新活动路由的桌面地址。保存后的 Profile 与活动
++  配置不一致时报告端点不健康，等待显式“应用修改”；不得自动应用新的目标应用或弱网参数。
+ - 关闭控制失联保护的 device-only Profile 保留 `auto_resume_after_reboot` 的既有开机自动恢复；
+   5 分钟内失败 3 次后禁止该自动恢复。
+ - 用户主动停止后保持停止。
+diff --git a/src-tauri/crates/exchange/src/exchange.rs b/src-tauri/crates/exchange/src/exchange.rs
+index c5e11590..9d886330 100644
+--- a/src-tauri/crates/exchange/src/exchange.rs
++++ b/src-tauri/crates/exchange/src/exchange.rs
+@@ -5,7 +5,7 @@ use std::{fmt, future::Future, panic::AssertUnwindSafe};
+ use tracing::Instrument;
+ 
+ use crate::{
+-    AppConnection, Direction, DirectionKind, Downstream, Envelope, Error, Pipeline, Protocol,
++    AppConnection, Direction, Downstream, Envelope, Error, ErrorStage, Pipeline, Protocol,
+     ServerSlot, Socket, Upstream, WriteOutcome,
+ };
+ use crate::{ObservedProtocol, observation};
+@@ -94,11 +94,10 @@ impl<P: ObservedProtocol> ProtocolExchange<P> {
+             }
+ 
+             let Some(response) = self.downstream.read(self.server.reader()?).await? else {
+-                return fail(
+-                    Downstream::KIND,
+-                    "read",
+-                    "Server disconnected before replying",
+-                );
++                let error = Error::coded("READ_FAILED", "Server disconnected before replying")
++                    .at(ErrorStage::Read, Downstream::KIND);
++                observation::failed::<Downstream>("read", &error);
++                return Err(error);
+             };
+             record_received(&response);
+ 
+@@ -118,26 +117,6 @@ fn record_sent<P: ObservedProtocol, D: Direction>(context: &P::Context) {
+     observation::sent::<P, D>(context);
+ }
+ 
+-fn fail<T>(
+-    direction: DirectionKind,
+-    stage: &'static str,
+-    message: &'static str,
+-) -> Result<T, Error> {
+-    let error = Error::new(message);
+-    let direction = match direction {
+-        DirectionKind::Upstream => "upstream",
+-        DirectionKind::Downstream => "downstream",
+-    };
+-    tracing::error!(
+-        target: "intercept_proxy::exchange::ui",
+-        event = "failed",
+-        direction,
+-        stage,
+-        error = error.message.as_str(),
+-    );
+-    Err(error)
+-}
+-
+ /// 一个 accepted App connection 只创建一个外层 Exchange。
+ pub struct Exchange<P: Protocol> {
+     id: ExchangeId,
+diff --git a/src-tauri/crates/exchange/src/observation.rs b/src-tauri/crates/exchange/src/observation.rs
+index 88d290d8..305df8ae 100644
+--- a/src-tauri/crates/exchange/src/observation.rs
++++ b/src-tauri/crates/exchange/src/observation.rs
+@@ -1,10 +1,11 @@
+-//! Exchange UI tracing 的稳定字段投影。
+-//!
+-//! UI Layer 只读取这些 primitive 字段，不解析 `Debug` 文本。序列化属于观测旁路；超限
+-//! 或失败时只发出固定大小的 loss 事件，绝不改变业务 `Result`。
++//! Exchange UI tracing 的稳定 primitive 字段投影，不解析 `Debug` 文本。
++//! 观测序列化超限或失败时仅记录固定大小的 loss，不改变业务 `Result`。
+ 
+ use serde::Serialize;
+ 
++mod failure;
++pub(crate) use failure::{failed, failed_with_context};
++
+ use crate::{
+     Direction, Document, Envelope, Error, ObservedContext, ObservedProtocol, ProtocolDirection,
+ };
+@@ -261,93 +262,6 @@ where
+     }
+ }
+ 
+-pub(crate) fn failed<D: Direction>(stage: &'static str, error: &Error) {
+-    let stage = error.stage.map_or(stage, crate::ErrorStage::as_str);
+-    if !fits_projection(&[error.message.as_str()]) {
+-        observation_lost("failure_projection_too_large");
+-        return;
+-    }
+-    tracing::error!(
+-        target: "intercept_proxy::exchange::ui",
+-        event = "failed",
+-        direction = direction::<D>(),
+-        stage,
+-        error = error.message.as_str(),
+-        external_package_id = error.external_package_call.as_ref().map_or("", |value| value.package.id.as_str()),
+-        external_package_version = error.external_package_call.as_ref().map_or("", |value| value.package.version.as_str()),
+-        external_stage = error.external_package_call.as_ref().map_or("", |value| external_stage(value.stage)),
+-        external_method = error.external_package_call.as_ref().map_or("", |value| value.method.as_str()),
+-        external_request_id = error.external_package_call.as_ref().and_then(|value| value.request_id.as_deref()).unwrap_or(""),
+-        external_remote_code = error.external_package_call.as_ref().and_then(|value| value.remote_code).unwrap_or(0),
+-        external_stable_code = error.external_package_call.as_ref().and_then(|value| value.stable_code.as_deref()).unwrap_or(""),
+-        external_remote_message = error.external_package_call.as_ref().and_then(|value| value.remote_message.as_deref()).unwrap_or(""),
+-        external_remote_data_summary = error.external_package_call.as_ref().and_then(|value| value.remote_data_summary.as_deref()).unwrap_or(""),
+-    );
+-}
+-
+-pub(crate) fn failed_with_context<P, D>(stage: &'static str, context: &P::Context, error: &Error)
+-where
+-    P: ObservedProtocol,
+-    D: Direction,
+-{
+-    let stage = error.stage.map_or(stage, crate::ErrorStage::as_str);
+-    match P::observed(context) {
+-        ObservedContext::Http {
+-            header,
+-            body,
+-            body_is_utf8,
+-        } if fits_projection(&[header, body, error.message.as_str()]) => {
+-            tracing::error!(
+-                target: "intercept_proxy::exchange::ui",
+-                event = "failed",
+-                protocol = P::NAME,
+-                direction = direction::<D>(),
+-                stage,
+-                context_header = header,
+-                context_body = body,
+-                context_body_is_utf8 = body_is_utf8,
+-                context_bytes_hex = tracing::field::Empty,
+-                error = error.message.as_str(),
+-                external_package_id = error.external_package_call.as_ref().map_or("", |value| value.package.id.as_str()),
+-                external_package_version = error.external_package_call.as_ref().map_or("", |value| value.package.version.as_str()),
+-                external_stage = error.external_package_call.as_ref().map_or("", |value| external_stage(value.stage)),
+-                external_method = error.external_package_call.as_ref().map_or("", |value| value.method.as_str()),
+-                external_request_id = error.external_package_call.as_ref().and_then(|value| value.request_id.as_deref()).unwrap_or(""),
+-                external_remote_code = error.external_package_call.as_ref().and_then(|value| value.remote_code).unwrap_or(0),
+-                external_stable_code = error.external_package_call.as_ref().and_then(|value| value.stable_code.as_deref()).unwrap_or(""),
+-                external_remote_message = error.external_package_call.as_ref().and_then(|value| value.remote_message.as_deref()).unwrap_or(""),
+-                external_remote_data_summary = error.external_package_call.as_ref().and_then(|value| value.remote_data_summary.as_deref()).unwrap_or(""),
+-            );
+-        }
+-        ObservedContext::Http { .. } => observation_lost("http_failure_projection_too_large"),
+-        ObservedContext::Socket { data } => match hex(data) {
+-            Some(encoded) if fits_projection(&[&encoded, error.message.as_str()]) => {
+-                tracing::error!(
+-                    target: "intercept_proxy::exchange::ui",
+-                    event = "failed",
+-                    protocol = P::NAME,
+-                    direction = direction::<D>(),
+-                    stage,
+-                    context_header = tracing::field::Empty,
+-                    context_body = tracing::field::Empty,
+-                    context_bytes_hex = encoded.as_str(),
+-                    error = error.message.as_str(),
+-                );
+-            }
+-            _ => observation_lost("socket_failure_projection_too_large"),
+-        },
+-    }
+-}
+-
+-const fn external_stage(stage: crate::ExternalPackageCallStage) -> &'static str {
+-    match stage {
+-        crate::ExternalPackageCallStage::Frame => "frame",
+-        crate::ExternalPackageCallStage::Decode => "decode",
+-        crate::ExternalPackageCallStage::Display => "display",
+-        crate::ExternalPackageCallStage::Encode => "encode",
+-    }
+-}
+-
+ pub(crate) fn raw_received<D: Direction>(bytes: &[u8]) {
+     let Some(encoded) = hex(bytes) else {
+         observation_lost("raw_received_projection_too_large");
+diff --git a/src-tauri/crates/exchange/src/observation/tests.rs b/src-tauri/crates/exchange/src/observation/tests.rs
+index 79d01075..90d937c7 100644
+--- a/src-tauri/crates/exchange/src/observation/tests.rs
++++ b/src-tauri/crates/exchange/src/observation/tests.rs
+@@ -3,22 +3,31 @@ use std::sync::{Arc, Mutex};
+ use tracing::{Event, Subscriber, field::Visit, subscriber::with_default};
+ use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan};
+ 
+-use super::{MAX_OBSERVATION_TEXT_BYTES, failed_with_context, raw_failed, raw_received};
++use super::{MAX_OBSERVATION_TEXT_BYTES, failed, failed_with_context, raw_failed, raw_received};
+ use crate::{
+     Error, ExternalPackageCallFailure, ExternalPackageCallStage, Http, HttpContext,
+     ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+     RuleProcessingAccumulator, RuleProcessingChange, RuleProcessingOperation,
+-    RuleProcessingOperationKind, Upstream, rules_processed,
++    RuleProcessingOperationKind, Socket, SocketContext, Upstream, rules_processed,
+ };
+ 
+ #[derive(Default)]
+ struct CapturedFields {
+     event: Option<String>,
++    protocol: Option<String>,
++    context_header: Option<String>,
++    context_body: Option<String>,
++    context_body_is_utf8: Option<bool>,
+     context_bytes: Option<String>,
+     external_method: Option<String>,
+     external_request_id: Option<String>,
+     external_stable_code: Option<String>,
+     external_remote_code: Option<i64>,
++    external_package_id: Option<String>,
++    external_package_version: Option<String>,
++    external_stage: Option<String>,
++    external_remote_message: Option<String>,
++    external_remote_data_summary: Option<String>,
+     changes_truncated: Option<bool>,
+ }
+ 
+@@ -27,10 +36,20 @@ impl Visit for CapturedFields {
+     fn record_str(&mut self, field: &tracing::field::Field, value: &str) {
+         match field.name() {
+             "event" => self.event = Some(value.to_owned()),
++            "protocol" => self.protocol = Some(value.to_owned()),
++            "context_header" => self.context_header = Some(value.to_owned()),
++            "context_body" => self.context_body = Some(value.to_owned()),
+             "context_bytes_hex" => self.context_bytes = Some(value.to_owned()),
+             "external_method" => self.external_method = Some(value.to_owned()),
+             "external_request_id" => self.external_request_id = Some(value.to_owned()),
+             "external_stable_code" => self.external_stable_code = Some(value.to_owned()),
++            "external_package_id" => self.external_package_id = Some(value.to_owned()),
++            "external_package_version" => self.external_package_version = Some(value.to_owned()),
++            "external_stage" => self.external_stage = Some(value.to_owned()),
++            "external_remote_message" => self.external_remote_message = Some(value.to_owned()),
++            "external_remote_data_summary" => {
++                self.external_remote_data_summary = Some(value.to_owned());
++            }
+             _ => {}
+         }
+     }
+@@ -43,6 +62,9 @@ impl Visit for CapturedFields {
+         if field.name() == "changes_truncated" {
+             self.changes_truncated = Some(value);
+         }
++        if field.name() == "context_body_is_utf8" {
++            self.context_body_is_utf8 = Some(value);
++        }
+     }
+ }
+ 
+@@ -127,6 +149,201 @@ fn fail_open_display_observation_keeps_typed_external_failure_fields() {
+     );
+ }
+ 
++#[test]
++fn socket_display_failure_keeps_context_and_all_external_correlation_fields() {
++    let captured = Arc::new(Mutex::new(CapturedFields::default()));
++    let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
++    let error =
++        Error::new("display rejected").with_external_package_call(ExternalPackageCallFailure {
++            package: ProtocolPackageRef {
++                id: ProtocolPackageId::new("socket.external").unwrap(),
++                version: ProtocolPackageVersion::new("1.0.0").unwrap(),
++            },
++            direction: ProtocolDirection::Upstream,
++            stage: ExternalPackageCallStage::Display,
++            method: "document.upstream.display".into(),
++            request_id: Some("socket-display-1".into()),
++            remote_code: Some(-32_409),
++            stable_code: Some("INTERNAL_ERROR".into()),
++            remote_message: Some("display rejected".into()),
++            remote_data_summary: Some("object(fields=1)".into()),
++        });
++    with_default(subscriber, || {
++        failed_with_context::<Socket, Upstream>(
++            "display",
++            &SocketContext {
++                data: b"wire".to_vec(),
++            },
++            &error,
++        );
++    });
++    let captured = captured.lock().unwrap();
++    assert_eq!(captured.event.as_deref(), Some("failed"));
++    assert_eq!(captured.context_bytes.as_deref(), Some("77697265"));
++    assert_eq!(
++        captured.external_package_id.as_deref(),
++        Some("socket.external")
++    );
++    assert_eq!(captured.external_package_version.as_deref(), Some("1.0.0"));
++    assert_eq!(captured.external_stage.as_deref(), Some("display"));
++    assert_eq!(
++        captured.external_method.as_deref(),
++        Some("document.upstream.display")
++    );
++    assert_eq!(
++        captured.external_request_id.as_deref(),
++        Some("socket-display-1")
++    );
++    assert_eq!(captured.external_remote_code, Some(-32_409));
++    assert_eq!(
++        captured.external_stable_code.as_deref(),
++        Some("INTERNAL_ERROR")
++    );
++    assert_eq!(
++        captured.external_remote_message.as_deref(),
++        Some("display rejected")
++    );
++    assert_eq!(
++        captured.external_remote_data_summary.as_deref(),
++        Some("object(fields=1)")
++    );
++}
++
++fn external_budget_error(message: String) -> Error {
++    Error::new("remote failure").with_external_package_call(ExternalPackageCallFailure {
++        package: ProtocolPackageRef {
++            id: ProtocolPackageId::new("socket.external").unwrap(),
++            version: ProtocolPackageVersion::new("1.0.0").unwrap(),
++        },
++        direction: ProtocolDirection::Upstream,
++        stage: ExternalPackageCallStage::Display,
++        method: "document.upstream.display".into(),
++        request_id: Some("budget-request".into()),
++        remote_code: Some(-1),
++        stable_code: Some("INTERNAL_ERROR".into()),
++        remote_message: Some(message),
++        remote_data_summary: Some("字段".into()),
++    })
++}
++
++#[test]
++fn socket_external_fields_share_the_context_projection_budget() {
++    let captured = Arc::new(Mutex::new(CapturedFields::default()));
++    let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
++    let error = external_budget_error("x".repeat(5 * 1024 * 1024));
++    with_default(subscriber, || {
++        failed_with_context::<Socket, Upstream>(
++            "display",
++            &SocketContext {
++                data: vec![0xA5; 6 * 1024 * 1024],
++            },
++            &error,
++        );
++    });
++    let captured = captured.lock().unwrap();
++    assert_eq!(captured.event.as_deref(), Some("observation_lost"));
++    assert!(captured.context_bytes.is_none());
++    assert!(captured.external_remote_message.is_none());
++}
++
++#[test]
++fn all_failure_projections_accept_exact_budget_and_reject_one_extra_byte() {
++    let fixed_error_bytes: usize = [
++        "remote failure",
++        "socket.external",
++        "1.0.0",
++        "display",
++        "document.upstream.display",
++        "budget-request",
++        "INTERNAL_ERROR",
++        "字段",
++    ]
++    .iter()
++    .map(|value| value.len())
++    .sum();
++    let http = HttpContext {
++        header: "HTTP/1.1 500\r\nContent-Length: 4\r\n\r\n".into(),
++        body: "wire".into(),
++        body_is_utf8: true,
++        wire_body: b"wire".to_vec(),
++    };
++    let socket = SocketContext {
++        data: b"wire".to_vec(),
++    };
++    for projection in ["http", "socket", "without_context"] {
++        let context_bytes = match projection {
++            "http" => http.header.len() + http.body.len(),
++            "socket" => socket.data.len() * 2,
++            _ => 0,
++        };
++        for extra in [0, 1] {
++            let captured = Arc::new(Mutex::new(CapturedFields::default()));
++            let subscriber =
++                tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
++            let error = external_budget_error(
++                "x".repeat(MAX_OBSERVATION_TEXT_BYTES - fixed_error_bytes - context_bytes + extra),
++            );
++            with_default(subscriber, || match projection {
++                "http" => failed_with_context::<Http, Upstream>("display", &http, &error),
++                "socket" => failed_with_context::<Socket, Upstream>("display", &socket, &error),
++                _ => failed::<Upstream>("display", &error),
++            });
++            let captured = captured.lock().unwrap();
++            let expected_event = if extra == 0 {
++                "failed"
++            } else {
++                "observation_lost"
++            };
++            eprintln!(
++                "projection={projection}; content_budget={MAX_OBSERVATION_TEXT_BYTES}; extra={extra}; event={:?}",
++                captured.event
++            );
++            assert_eq!(
++                captured.event.as_deref(),
++                Some(expected_event),
++                "{projection}, extra={extra}"
++            );
++            if extra == 0 {
++                assert_eq!(
++                    captured.external_method.as_deref(),
++                    Some("document.upstream.display")
++                );
++                assert_eq!(
++                    captured.external_remote_data_summary.as_deref(),
++                    Some("字段")
++                );
++                match projection {
++                    "http" => {
++                        assert_eq!(captured.protocol.as_deref(), Some("http"));
++                        assert_eq!(
++                            captured.context_header.as_deref(),
++                            Some(http.header.as_str())
++                        );
++                        assert_eq!(captured.context_body.as_deref(), Some("wire"));
++                        assert_eq!(captured.context_body_is_utf8, Some(true));
++                        assert!(captured.context_bytes.is_none());
++                    }
++                    "socket" => {
++                        assert_eq!(captured.protocol.as_deref(), Some("socket"));
++                        assert_eq!(captured.context_bytes.as_deref(), Some("77697265"));
++                        assert!(captured.context_header.is_none());
++                        assert!(captured.context_body.is_none());
++                    }
++                    _ => {
++                        assert!(captured.protocol.is_none());
++                        assert!(captured.context_header.is_none());
++                        assert!(captured.context_bytes.is_none());
++                    }
++                }
++            } else {
++                assert!(captured.external_method.is_none());
++                assert!(captured.context_bytes.is_none());
++                assert!(captured.context_header.is_none());
++            }
++        }
++    }
++}
++
+ #[test]
+ fn large_document_and_1024_rules_keep_process_evidence_within_the_fixed_budget() {
+     let payload = "x".repeat(4 * 1024 * 1024);
+diff --git a/src-tauri/crates/exchange/src/tests/exchange.rs b/src-tauri/crates/exchange/src/tests/exchange.rs
+index 58502372..8c9604e6 100644
+--- a/src-tauri/crates/exchange/src/tests/exchange.rs
++++ b/src-tauri/crates/exchange/src/tests/exchange.rs
+@@ -305,6 +305,10 @@ async fn server_eof_before_the_required_response_fails_the_exchange() {
+     let error = harness.exchange.exchange().await.unwrap_err();
+ 
+     assert_eq!(error.message, "Server disconnected before replying");
++    assert_eq!(error.code.as_deref(), Some("READ_FAILED"));
++    assert_eq!(error.stage, Some(ErrorStage::Read));
++    assert_eq!(error.direction, Some(DirectionKind::Downstream));
++    assert!(harness.responses.lock().is_empty());
+     assert_eq!(harness.events.lock().last().unwrap(), "server_shutdown");
+ }
+ 
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
+index 0d4c9daf..27e44631 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
+@@ -1,9 +1,10 @@
+-use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload};
++use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload, sha256_json};
+ use intercept_proxy_application::{
+     AndroidNetworkActivation, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
+     AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
+     AndroidRuntimeOwnerViewModel, AppError, AppResult,
+ };
++use serde_json::json;
+ 
+ pub(super) fn is_owner_unreachable(error: &AppError) -> bool {
+     matches!(
+@@ -38,11 +39,16 @@ impl AndroidAdbAdapter {
+         if owner.mode != AndroidRuntimeOwnerMode::Lan {
+             return Ok(endpoints_with_owner_health(persisted, owner.state));
+         }
+-        let has_active_runtime = owner_state
++        let active_runtime = owner_state
+             .active_runtime
+             .as_ref()
+-            .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
+-        if owner.state != AndroidRuntimeOwnerState::Active || !has_active_runtime {
++            .filter(|runtime| {
++                runtime.serial == owner.serial
++                    && runtime.epoch == owner.epoch
++                    && runtime.profile_id == owner.profile_id
++            })
++            .cloned();
++        if owner.state != AndroidRuntimeOwnerState::Active || active_runtime.is_none() {
+             let state = if owner.state == AndroidRuntimeOwnerState::Active {
+                 AndroidRuntimeOwnerState::Faulted
+             } else {
+@@ -61,6 +67,13 @@ impl AndroidAdbAdapter {
+                 AndroidRuntimeEndpointHealth::Faulted,
+             ));
+         };
++        let active_runtime = active_runtime.expect("active runtime was checked above");
++        if sha256_json(&activation.profile)? != active_runtime.profile_fingerprint {
++            return Ok(endpoints_with_health(
++                persisted,
++                AndroidRuntimeEndpointHealth::Faulted,
++            ));
++        }
+         let lan_host = match self
+             .preferred_lan_proxy_host_strict(&owner.serial, &activation)
+             .await
+@@ -81,9 +94,8 @@ impl AndroidAdbAdapter {
+             return Ok(endpoints_with_owner_health(persisted, owner.state));
+         }
+ 
+-        let Ok((proxy_runtime, runtime)) = self
+-            .build_lan_runtime_for_owner(&activation, &owner, lan_host)
+-            .await
++        let Ok((proxy_runtime, runtime)) =
++            refresh_lan_runtime_host(&activation, active_runtime, lan_host)
+         else {
+             return self.fault_lan_endpoints(owner, persisted).await;
+         };
+@@ -149,6 +161,40 @@ impl AndroidAdbAdapter {
+     }
+ }
+ 
++fn refresh_lan_runtime_host(
++    activation: &AndroidNetworkActivation,
++    mut runtime: ActiveRuntimeFacts,
++    lan_host: std::net::Ipv4Addr,
++) -> AppResult<(serde_json::Value, ActiveRuntimeFacts)> {
++    let host = lan_host.to_string();
++    for endpoint in &mut runtime.endpoints {
++        endpoint.proxy_host.clone_from(&host);
++    }
++    let routes = runtime
++        .endpoints
++        .iter()
++        .map(|endpoint| {
++            json!({
++                "listener_id": endpoint.listener_id,
++                "original_destination": endpoint.original_destination,
++                "original_ports": endpoint.original_ports,
++                "resolved_original_ips": endpoint.resolved_original_ips,
++                "proxy_host": endpoint.proxy_host,
++                "proxy_port": endpoint.proxy_port,
++            })
++        })
++        .collect::<Vec<_>>();
++    runtime.route_fingerprint = sha256_json(&routes)?;
++    let payload = json!({
++        "routes": routes,
++        "route_source": activation.proxy_routes,
++        "profile_fingerprint": runtime.profile_fingerprint,
++        "route_fingerprint": runtime.route_fingerprint,
++        "route_count": runtime.route_count,
++    });
++    Ok((payload, runtime))
++}
++
+ fn endpoints_with_owner_health(
+     endpoints: Vec<AndroidRuntimeEndpointViewModel>,
+     state: AndroidRuntimeOwnerState,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
+index b2920a39..ccf780f0 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
+@@ -25,6 +25,7 @@ struct ReverseCreationFailure {
+ }
+ 
+ impl AndroidAdbAdapter {
++    #[cfg(test)]
+     pub(in crate::adapters::android_adb) async fn build_lan_runtime_for_owner(
+         &self,
+         activation: &AndroidNetworkActivation,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
+index 2bfe643e..5b9708e2 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
+@@ -4,6 +4,7 @@ use intercept_proxy_application::{
+     AndroidControlPort, AndroidNetworkActivation, AndroidNetworkState,
+     AndroidRuntimeEndpointHealth, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource,
+     AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason, AndroidRuntimeTarget,
++    AndroidTargetApplication,
+ };
+ use serde_json::{Value, json};
+ use std::{collections::HashMap, net::Ipv4Addr, sync::Mutex as StdMutex};
+@@ -367,6 +368,15 @@ async fn active_lan_address_change_keeps_hot_apply_and_current_control_lease() {
+         true,
+     )
+     .await;
++    let frozen = {
++        let mut states = adapter.owner_states.lock().await;
++        let state = states.get_mut(&owner.serial).unwrap();
++        let runtime = state.active_runtime.as_mut().unwrap();
++        runtime.endpoints[0].resolved_original_ips = vec!["198.51.100.7".into()];
++        state.runtime_endpoints.clone_from(&runtime.endpoints);
++        runtime.clone()
++    };
++    let active_profile = activation.profile.clone();
+     let endpoints = adapter
+         .network_runtime_endpoints(
+             AndroidDeviceTarget {
+@@ -376,13 +386,112 @@ async fn active_lan_address_change_keeps_hot_apply_and_current_control_lease() {
+         )
+         .await
+         .unwrap();
+-    assert_eq!(endpoints[0].proxy_host, "192.168.1.20");
+-    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Healthy);
+-    let requests = runner.requests.lock().unwrap();
+-    assert_eq!(requests.len(), 1);
+-    assert_eq!(requests[0]["operation"], "apply_active");
++    let request = runner.requests.lock().unwrap()[0].clone();
++    let sent_runtime = &request["payload"]["proxy_runtime"];
++    let mut expected_endpoints = frozen.endpoints.clone();
++    expected_endpoints[0].proxy_host = "192.168.1.20".into();
++    assert_eq!(endpoints, expected_endpoints);
++    assert_eq!(request["operation"], "apply_active");
+     assert_eq!(
+-        requests[0]["payload"]["control_lease"]["owner_epoch"],
++        request["payload"]["control_lease"]["owner_epoch"],
+         owner.epoch.to_string()
+     );
++    assert_eq!(request["payload"]["profile"], json!(active_profile));
++    assert_eq!(
++        sent_runtime["profile_fingerprint"],
++        frozen.profile_fingerprint
++    );
++    assert_eq!(sent_runtime["route_count"], frozen.route_count);
++    assert_eq!(
++        sent_runtime["routes"][0],
++        json!({
++            "listener_id": frozen.endpoints[0].listener_id,
++            "original_destination": frozen.endpoints[0].original_destination,
++            "original_ports": frozen.endpoints[0].original_ports,
++            "resolved_original_ips": ["198.51.100.7"],
++            "proxy_host": "192.168.1.20",
++            "proxy_port": frozen.endpoints[0].proxy_port,
++        })
++    );
++    assert_eq!(
++        sent_runtime["route_fingerprint"],
++        sha256_json(&sent_runtime["routes"]).unwrap()
++    );
++    let committed = adapter
++        .owner_state_snapshot_for(&owner.serial)
++        .await
++        .active_runtime
++        .unwrap();
++    assert_eq!(committed.epoch, owner.epoch);
++    assert_eq!(committed.endpoints, expected_endpoints);
++}
++
++#[tokio::test]
++async fn saved_target_application_change_never_enters_lan_hot_apply() {
++    let temp = tempfile::tempdir().unwrap();
++    let runner = Arc::new(RecoveryRunner::default());
++    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
++    adapter.lan_address = Arc::new(DesktopLan);
++    let active_activation = activation();
++    let owner = seed_lan(
++        &adapter,
++        &active_activation,
++        AndroidRuntimeOwnerState::Active,
++        true,
++    )
++    .await;
++    let mut saved_activation = active_activation;
++    saved_activation
++        .profile
++        .target_applications
++        .push(AndroidTargetApplication {
++            package_name: "com.example.saved-only".into(),
++            uid: 10_001,
++            display_name: None,
++        });
++    let endpoints = adapter
++        .network_runtime_endpoints(
++            AndroidDeviceTarget {
++                serial: owner.serial,
++            },
++            Some(saved_activation),
++        )
++        .await
++        .unwrap();
++    assert!(runner.requests.lock().unwrap().is_empty());
++    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
++    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
++}
++
++#[tokio::test]
++async fn saved_total_packet_loss_never_enters_lan_hot_apply() {
++    let temp = tempfile::tempdir().unwrap();
++    let runner = Arc::new(RecoveryRunner::default());
++    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
++    adapter.lan_address = Arc::new(DesktopLan);
++    let active_activation = activation();
++    let owner = seed_lan(
++        &adapter,
++        &active_activation,
++        AndroidRuntimeOwnerState::Active,
++        true,
++    )
++    .await;
++    let mut saved_activation = active_activation;
++    saved_activation
++        .profile
++        .weak_network
++        .random_loss_basis_points = 10_000;
++    let endpoints = adapter
++        .network_runtime_endpoints(
++            AndroidDeviceTarget {
++                serial: owner.serial,
++            },
++            Some(saved_activation),
++        )
++        .await
++        .unwrap();
++    assert!(runner.requests.lock().unwrap().is_empty());
++    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
++    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
+ }
+diff --git a/src-tauri/crates/proxy/src/socket_relay/observer.rs b/src-tauri/crates/proxy/src/socket_relay/observer.rs
+index 20723549..c24bdf42 100644
+--- a/src-tauri/crates/proxy/src/socket_relay/observer.rs
++++ b/src-tauri/crates/proxy/src/socket_relay/observer.rs
+@@ -232,7 +232,7 @@ impl BoundedSocketConnectionObserver {
+         Ok(Self {
+             capacity,
+             max_logical_bytes,
+-            retained: Mutex::new(VecDeque::with_capacity(capacity)),
++            retained: Mutex::new(VecDeque::new()),
+             retained_logical_bytes: Mutex::new(0),
+             dropped: AtomicU64::new(0),
+         })
+diff --git a/src-tauri/crates/proxy/src/socket_relay/observer/tests.rs b/src-tauri/crates/proxy/src/socket_relay/observer/tests.rs
+index 020108ee..fdf95264 100644
+--- a/src-tauri/crates/proxy/src/socket_relay/observer/tests.rs
++++ b/src-tauri/crates/proxy/src/socket_relay/observer/tests.rs
+@@ -34,3 +34,13 @@ fn bounded_retention_rejects_zero_limits() {
+     assert!(BoundedSocketConnectionObserver::with_limits(0, 1).is_err());
+     assert!(BoundedSocketConnectionObserver::with_limits(1, 0).is_err());
+ }
++
++#[test]
++fn bounded_retention_does_not_preallocate_the_event_capacity() {
++    let observer = BoundedSocketConnectionObserver::with_limits(usize::MAX, 512).unwrap();
++    observer.record(rejected(1));
++    observer.record(rejected(2));
++
++    assert_eq!(observer.snapshot(), vec![rejected(2)]);
++    assert_eq!(observer.retained_diagnostic_evictions(), 1);
++}
+diff --git a/src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs b/src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs
+index eeb59981..82b8b44b 100644
+--- a/src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs
++++ b/src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs
+@@ -194,3 +194,73 @@ async fn scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_e
+         }
+     )));
+ }
++
++#[tokio::test]
++async fn server_eof_before_reply_reports_one_downstream_read_failure() {
++    use super::super::{SocketRelayDirection, SocketRelayStage};
++
++    let (upstream, upstream_address) = bind_listener().await;
++    let upstream_task = tokio::spawn(async move {
++        let (mut stream, _) = upstream.accept().await.unwrap();
++        let mut request = [0_u8; 4];
++        stream.read_exact(&mut request).await.unwrap();
++        assert_eq!(&request, b"Uabc");
++        stream.shutdown().await.unwrap();
++        request
++    });
++    let (listener, bind_addr) = bind_listener().await;
++    let observer = Arc::new(TestObserver::default());
++    let service = Arc::new(
++        SocketRelayService::build_scripted_with_observer(
++            relay_config(bind_addr, upstream_address),
++            Arc::new(ScriptedFactory::new(None)),
++            limits(),
++            observer.clone(),
++        )
++        .unwrap(),
++    );
++    let cancellation = CancellationToken::new();
++    let server_cancel = cancellation.clone();
++    let server = tokio::spawn(async move {
++        service
++            .serve_listener(listener, uuid::Uuid::new_v4(), server_cancel)
++            .await
++    });
++    let mut client = connect_retry(bind_addr).await;
++    client.write_all(&[3, b'a', b'b', b'c']).await.unwrap();
++    let mut response = Vec::new();
++    tokio::time::timeout(TEST_TIMEOUT, client.read_to_end(&mut response))
++        .await
++        .unwrap()
++        .unwrap();
++    observer
++        .wait_until(|event| matches!(event, SocketConnectionEvent::Closed { .. }))
++        .await;
++    cancellation.cancel();
++    server.await.unwrap().unwrap();
++    let received = upstream_task.await.unwrap();
++    let events = observer.events();
++    let closed = events
++        .iter()
++        .filter_map(|event| match event {
++            SocketConnectionEvent::Closed { failure, bytes, .. } => Some((failure, bytes)),
++            _ => None,
++        })
++        .collect::<Vec<_>>();
++    assert_eq!(response, b"");
++    assert_eq!(closed.len(), 1);
++    let failure = closed[0]
++        .0
++        .as_ref()
++        .expect("required response EOF must fail");
++    eprintln!(
++        "App input=03616263; Server received={received:?}; Server response=EOF; App response={response:?}; terminal={failure:?}; bytes={:?}",
++        closed[0].1
++    );
++    assert_eq!(failure.code, "READ_FAILED");
++    assert_eq!(failure.stage, SocketRelayStage::RelayRead);
++    assert_eq!(
++        failure.direction,
++        Some(SocketRelayDirection::ServerToClient)
++    );
++}
+diff --git a/src/features/rules/rule-creation-editor.tsx b/src/features/rules/rule-creation-editor.tsx
+index 74a93bcb..2df4d67b 100644
+--- a/src/features/rules/rule-creation-editor.tsx
++++ b/src/features/rules/rule-creation-editor.tsx
+@@ -9,7 +9,7 @@ import { RuleSinglePairEditor } from "./rule-single-pair-editor";
+ export function RuleCreationEditor(props: {
+   listeners: ProxyListener[];
+   onCancel: () => void;
+-  onSave: (draft: RuleDefinitionSaveInput) => void;
++  onSave: (draft: RuleDefinitionSaveInput) => void | Promise<void>;
+   pending: boolean;
+   fieldErrors: Record<string, string[]>;
+ }) {
+diff --git a/src/features/rules/rule-definition-editor.tsx b/src/features/rules/rule-definition-editor.tsx
+index 017ac1a7..dea03e5c 100644
+--- a/src/features/rules/rule-definition-editor.tsx
++++ b/src/features/rules/rule-definition-editor.tsx
+@@ -15,7 +15,7 @@ export function RuleDefinitionEditor(props: {
+   pending: boolean;
+   fieldErrors: Record<string, string[]>;
+   onChange: (change: RuleDefinitionChange) => void;
+-  onSave: (input: RuleDefinitionSaveInput) => void;
++  onSave: (input: RuleDefinitionSaveInput) => void | Promise<void>;
+   onCopy: () => void;
+   onDelete: () => void;
+ }) {
+diff --git a/src/features/rules/rule-single-pair-editor.tsx b/src/features/rules/rule-single-pair-editor.tsx
+index bf892185..7e1c5c59 100644
+--- a/src/features/rules/rule-single-pair-editor.tsx
++++ b/src/features/rules/rule-single-pair-editor.tsx
+@@ -1,4 +1,4 @@
+-import { type ReactNode, useState } from "react";
++import { type ReactNode, useEffect, useRef, useState } from "react";
+ import { Button, Input, Label, ListBox, NumberField, Select, Tabs, TextField } from "@heroui/react";
+ import type {
+   Condition, DocumentMutation, HttpAction, HttpRuleEditorStageViewModel, RuleActionCapabilityViewModel,
+@@ -33,7 +33,7 @@ export function RuleSinglePairEditor(props: {
+   localTypes: RuleLocalDocumentTypeCapability[];
+   conditionPath?: RuleDocumentConditionPathCapability;
+   pending: boolean;
+-  onSave: (input: RuleDefinitionSaveInput) => void;
++  onSave: (input: RuleDefinitionSaveInput) => void | Promise<void>;
+ }) {
+   const initialCondition = props.input?.draft.content.value.condition;
+   const initialAction = props.input?.draft.content.value.action;
+@@ -50,11 +50,20 @@ export function RuleSinglePairEditor(props: {
+   const [httpAction, setHttpAction] = useState(() => httpActionDraft(initialAction));
+   const [commonAction, setCommonAction] = useState<RuleCommonActionCapability | "">(() => initialAction?.source === "record_match" ? "record_match" : "");
+   const [error, setError] = useState<string>();
++  const [materializing, setMaterializing] = useState(false);
++  const materializingRef = useRef(false);
++  const operationGeneration = useRef(0);
+   const schemaFields = documentSchemaFields(documentFields);
+   const conditionSchemaFields = schemaFields.filter((field) => field.predicates.length > 0);
+   const conditionLocalTypes = props.localTypes.filter((type) => type.predicates.length > 0);
+ 
++  useEffect(() => () => { operationGeneration.current += 1; }, []);
++
+   async function materialize() {
++    if (materializingRef.current) return;
++    const generation = ++operationGeneration.current;
++    materializingRef.current = true;
++    setMaterializing(true);
+     setError(undefined);
+     try {
+       if (!conditionReady || !actionReady) return;
+@@ -94,9 +103,14 @@ export function RuleSinglePairEditor(props: {
+         action = await callCommand(commands.ruleDefinitionDocumentActionDraft(canonicalPath(actionDocument), valueType, actionDocument.action, raw, index));
+       }
+       const materialized = props.input ? withSinglePair(props.input, condition, action) : props.creation ? newSaveInput(props.creation, condition, action) : null;
+-      if (materialized) props.onSave(materialized);
++      if (materialized && operationGeneration.current === generation) await props.onSave(materialized);
+     } catch (reason) {
+-      setError(errorMessage(reason));
++      if (operationGeneration.current === generation) setError(errorMessage(reason));
++    } finally {
++      if (operationGeneration.current === generation) {
++        materializingRef.current = false;
++        setMaterializing(false);
++      }
+     }
+   }
+ 
+@@ -109,7 +123,7 @@ export function RuleSinglePairEditor(props: {
+ 
+   const conditionForm = <ConditionForm conditionPath={props.conditionPath} document={conditionDocument} fields={conditionSchemaFields} http={httpCondition} httpFields={httpStage?.match_fields ?? []} isHttp={contentType === "http"} localTypes={conditionLocalTypes} onDocument={setConditionDocument} onHttp={setHttpCondition} onSource={setConditionSource} source={conditionSource} />;
+   const actionForm = <ActionForm action={httpAction} capabilities={httpStage?.actions ?? []} commonAction={commonAction} commonActions={commonActions} document={actionDocument} fields={schemaFields} isHttp={contentType === "http"} localTypes={props.localTypes} onAction={setHttpAction} onCommonAction={setCommonAction} onDocument={setActionDocument} onSource={setActionSource} source={actionSource} />;
+-  const saveButton = <Button isDisabled={props.pending || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
++  const saveButton = <Button isDisabled={props.pending || materializing || !conditionReady || !actionReady} variant="primary" onPress={() => void materialize()}>保存规则</Button>;
+ 
+   return <div className="space-y-4">
+     {props.creationTabs && <header className="flex items-center gap-2" data-testid="rule-creation-header">
+diff --git a/src/features/rules/rules-view.test.tsx b/src/features/rules/rules-view.test.tsx
+index 1cc5211f..39c87996 100644
+--- a/src/features/rules/rules-view.test.tsx
++++ b/src/features/rules/rules-view.test.tsx
+@@ -3,8 +3,10 @@
+ import "@testing-library/jest-dom/vitest";
+ import { act, render, screen, waitFor, within } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
++import { useState } from "react";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+-import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
++import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
++import { RuleSinglePairEditor } from "./rule-single-pair-editor";
+ import { RulesView } from "./rules-view";
+ import { httpCondition, httpListener, httpRule, socketListener } from "./rules-view-test-fixtures";
+ 
+@@ -17,8 +19,13 @@ const commandMocks = vi.hoisted(() => ({
+   ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
+   ruleDefinitionDocumentCommonActionDraft: vi.fn(),
+ }));
++const toastMock = vi.hoisted(() => vi.fn());
+ 
+ const navigationState = vi.hoisted(() => ({ searchParams: new URLSearchParams(), navigate: vi.fn() }));
++vi.mock("@heroui/react", async (importOriginal) => ({
++  ...await importOriginal<typeof import("@heroui/react")>(),
++  toast: toastMock,
++}));
+ vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
+ vi.mock("@/lib/ipc/client", () => ({
+   appErrorViewModel: () => undefined,
+@@ -231,4 +238,181 @@ describe("RulesView inline editor", () => {
+     await act(async () => { finishFirst(httpRule()); await Promise.resolve(); });
+     expect(screen.getByDisplayValue("Second")).toBeVisible();
+   });
++
++  it("keeps a newer rule selected when an older save completes", async () => {
++    const first = httpRule();
++    const second = httpRule({ rule_id: "second", name: "Second" });
++    commandMocks.ruleDefinitionList.mockResolvedValue([first, second]);
++    commandMocks.ruleDefinitionGet.mockImplementation(async (id) => id === second.rule_id ? second : first);
++    let finishSave!: (rule: RuleDefinition_Serialize) => void;
++    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { finishSave = resolve; }));
++    render(<RulesView />);
++
++    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
++    await userEvent.click(await screen.findByRole("button", { name: "保存规则" }));
++    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
++    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
++    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
++    await act(async () => { finishSave({ ...first, revision: 4 }); await Promise.resolve(); });
++
++    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second");
++  });
++
++  it("reports an older save failure without changing the newer rule selection", async () => {
++    const first = httpRule();
++    const second = httpRule({ rule_id: "second", name: "Second" });
++    commandMocks.ruleDefinitionList.mockResolvedValue([first, second]);
++    commandMocks.ruleDefinitionGet.mockImplementation(async (id) => id === second.rule_id ? second : first);
++    let failSave!: (reason: Error) => void;
++    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((_, reject) => { failSave = reject; }));
++    render(<RulesView />);
++
++    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
++    await userEvent.click(await screen.findByRole("button", { name: "保存规则" }));
++    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
++    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
++    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
++    await act(async () => { failSave(new Error("older save failed")); await Promise.resolve(); });
++
++    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second");
++    expect(toastMock).toHaveBeenCalledWith("older save failed", { variant: "danger" });
++  });
++
++  it("admits only one creation while draft materialization is pending", async () => {
++    const rule = httpRule();
++    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
++    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
++      rule_id: null,
++      expected_revision: null,
++      draft: {
++        name: rule.name,
++        enabled: rule.enabled,
++        priority: rule.priority,
++        listener_id: rule.listener_id,
++        stage: rule.stage,
++        content: rule.content,
++      },
++    });
++    let completeCondition!: (value: typeof httpCondition) => void;
++    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
++    let completeSave!: (value: RuleDefinition_Serialize) => void;
++    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { completeSave = resolve; }));
++    render(<RulesView />);
++
++    const save = await screen.findByRole("button", { name: "保存规则" });
++    await waitFor(() => expect(save).toBeEnabled());
++    await userEvent.click(save);
++    await userEvent.click(save);
++    expect(save).toBeDisabled();
++    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
++    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
++    await act(async () => { completeSave({ ...rule, rule_id: "new-rule" }); await Promise.resolve(); });
++
++    expect(commandMocks.ruleDefinitionSave.mock.calls.map(([input]) => input.rule_id)).toEqual([null]);
++  });
++
++  it("releases creation ownership after materialization fails so the user can retry", async () => {
++    const rule = httpRule();
++    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
++    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
++      rule_id: null,
++      expected_revision: null,
++      draft: {
++        name: rule.name,
++        enabled: rule.enabled,
++        priority: rule.priority,
++        listener_id: rule.listener_id,
++        stage: rule.stage,
++        content: rule.content,
++      },
++    });
++    commandMocks.ruleDefinitionHttpConditionDraft
++      .mockRejectedValueOnce(new Error("materialization failed"))
++      .mockResolvedValueOnce(httpCondition);
++    render(<RulesView />);
++
++    const save = await screen.findByRole("button", { name: "保存规则" });
++    await waitFor(() => expect(save).toBeEnabled());
++    await userEvent.click(save);
++    expect(await screen.findByRole("alert")).toHaveTextContent("materialization failed");
++    expect(save).toBeEnabled();
++    await userEvent.click(save);
++
++    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
++  });
++
++  it("cancels creation during materialization without submitting the abandoned draft", async () => {
++    const rule = httpRule();
++    const input: RuleDefinitionSaveInput = {
++      rule_id: null,
++      expected_revision: null,
++      draft: {
++        name: rule.name,
++        enabled: rule.enabled,
++        priority: rule.priority,
++        listener_id: rule.listener_id,
++        stage: rule.stage,
++        content: rule.content,
++      },
++    };
++    let completeCondition!: (value: typeof httpCondition) => void;
++    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
++    const onSave = vi.fn();
++    function Harness() {
++      const [open, setOpen] = useState(true);
++      return open ? <RuleSinglePairEditor
++        conditionPath={context.document_condition_path}
++        creationTabs={{ title: "新建规则", cancelAction: <button onClick={() => setOpen(false)}>取消</button>, basicContent: null, contentAvailable: true, unavailableMessage: "" }}
++        input={input}
++        localTypes={[]}
++        onSave={onSave}
++        pending={false}
++        stage={context.content.value.stages[0]}
++      /> : <p>editor closed</p>;
++    }
++    render(<Harness />);
++
++    await userEvent.click(screen.getByRole("button", { name: "保存规则" }));
++    await waitFor(() => expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledOnce());
++    const cancel = screen.getByRole("button", { name: "取消" });
++    expect(cancel).toBeEnabled();
++    await userEvent.click(cancel);
++    expect(screen.getByText("editor closed")).toBeVisible();
++    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
++    await waitFor(() => expect(commandMocks.ruleDefinitionDocumentCommonActionDraft).toHaveBeenCalledOnce());
++
++    expect(onSave).not.toHaveBeenCalled();
++  });
++
++  it("does not save a materialized draft after the editor is replaced", async () => {
++    const draft = httpRule();
++    const second = httpRule({ rule_id: "second", name: "Second" });
++    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
++    commandMocks.ruleDefinitionList.mockResolvedValue([second]);
++    commandMocks.ruleDefinitionGet.mockResolvedValue(second);
++    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
++      rule_id: null,
++      expected_revision: null,
++      draft: {
++        name: draft.name,
++        enabled: draft.enabled,
++        priority: draft.priority,
++        listener_id: draft.listener_id,
++        stage: draft.stage,
++        content: draft.content,
++      },
++    });
++    let completeCondition!: (value: typeof httpCondition) => void;
++    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
++    render(<RulesView />);
++
++    const save = await screen.findByRole("button", { name: "保存规则" });
++    await waitFor(() => expect(save).toBeEnabled());
++    await userEvent.click(save);
++    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
++    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
++    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
++
++    expect(commandMocks.ruleDefinitionSave).not.toHaveBeenCalled();
++  });
+ });
+diff --git a/src/features/rules/rules-view.tsx b/src/features/rules/rules-view.tsx
+index 37dcf402..18e86564 100644
+--- a/src/features/rules/rules-view.tsx
++++ b/src/features/rules/rules-view.tsx
+@@ -1,6 +1,6 @@
+ "use client";
+ 
+-import { useEffect, useRef, useState } from "react";
++import { useCallback, useEffect, useRef, useState } from "react";
+ import { toast } from "@heroui/react";
+ import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+ import { commands } from "@/generated/rust-types";
+@@ -25,10 +25,19 @@ export function RulesView() {
+   const [pending, setPending] = useState(false);
+   const [creationOpen, setCreationOpen] = useState(false);
+   const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+-  const editorGeneration = useRef(0);
++  const [editorSession, setEditorSession] = useState(0);
++  const editorSessionRef = useRef(0);
++  const mutationPending = useRef(false);
+   const listener = source.listeners.find((item) => item.id === input?.draft.listener_id);
+   useAppEventRefresh(["rule_hit", "snapshot_required"], source.refresh);
+ 
++  const startEditorSession = useCallback(() => {
++    const session = editorSessionRef.current + 1;
++    editorSessionRef.current = session;
++    setEditorSession(session);
++    return session;
++  }, []);
++
+   useEffect(() => {
+     if (!sourceExchangeId || sourceResponseEvent == null) return;
+     const responseEventIndex = Number(sourceResponseEvent);
+@@ -42,6 +51,7 @@ export function RulesView() {
+       .then(async (draft) => {
+         const editorContext = await callCommand(commands.ruleEditorContext(draft.draft.listener_id));
+         if (!active) return;
++        startEditorSession();
+         setCreationOpen(false);
+         setSelected(undefined);
+         setInput(draft);
+@@ -53,10 +63,10 @@ export function RulesView() {
+         if (active) toast(errorMessage(reason), { variant: "danger" });
+       });
+     return () => { active = false; };
+-  }, [navigate, sourceExchangeId, sourceResponseEvent]);
++  }, [navigate, sourceExchangeId, sourceResponseEvent, startEditorSession]);
+ 
+   async function selectRule(rule: RuleDefinition_Serialize) {
+-    const generation = ++editorGeneration.current;
++    const session = startEditorSession();
+     setCreationOpen(false);
+     setLoadingEditor(true);
+     setFieldErrors({});
+@@ -65,67 +75,84 @@ export function RulesView() {
+         callCommand(commands.ruleDefinitionGet(rule.rule_id)),
+         callCommand(commands.ruleEditorContext(rule.listener_id)),
+       ]);
+-      if (editorGeneration.current !== generation) return;
++      if (editorSessionRef.current !== session) return;
+       setSelected(definition);
+       setInput(toSaveInput(definition));
+       setContext(editorContext);
+     } catch (reason) {
+-      if (editorGeneration.current === generation) toast(errorMessage(reason), { variant: "danger" });
++      if (editorSessionRef.current === session) toast(errorMessage(reason), { variant: "danger" });
+     } finally {
+-      if (editorGeneration.current === generation) setLoadingEditor(false);
++      if (editorSessionRef.current === session) setLoadingEditor(false);
+     }
+   }
+ 
+   async function save(materialized: RuleDefinitionSaveInput) {
+-    if (pending) return;
++    if (mutationPending.current) return;
++    const session = editorSessionRef.current;
++    mutationPending.current = true;
+     setPending(true);
+     try {
+       const saved = await callCommand(commands.ruleDefinitionSave(materialized));
+-      setSelected(saved);
+-      setInput(toSaveInput(saved));
+-      setCreationOpen(false);
+-      setFieldErrors({});
++      if (editorSessionRef.current === session) {
++        setSelected(saved);
++        setInput(toSaveInput(saved));
++        setCreationOpen(false);
++        setFieldErrors({});
++      }
+       await source.refresh();
+       toast(`规则“${saved.name}”已保存。`, { variant: "success" });
+     } catch (reason) {
+-      setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
++      if (editorSessionRef.current === session) {
++        setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
++      }
+       toast(errorMessage(reason), { variant: "danger" });
+     } finally {
++      mutationPending.current = false;
+       setPending(false);
+     }
+   }
+ 
+   async function copy() {
+-    if (!selected || pending) return;
++    if (!selected || mutationPending.current) return;
++    const session = editorSessionRef.current;
++    mutationPending.current = true;
+     setPending(true);
+     try {
+       const copied = await callCommand(commands.ruleDefinitionCopy(selected.rule_id));
+       const editorContext = await callCommand(commands.ruleEditorContext(copied.listener_id));
+-      setSelected(copied);
+-      setInput(toSaveInput(copied));
+-      setContext(editorContext);
++      if (editorSessionRef.current === session) {
++        setSelected(copied);
++        setInput(toSaveInput(copied));
++        setContext(editorContext);
++      }
+       await source.refresh();
+     } catch (reason) {
+       toast(errorMessage(reason), { variant: "danger" });
+     } finally {
++      mutationPending.current = false;
+       setPending(false);
+     }
+   }
+ 
+   async function remove() {
+-    if (!selected || pending) return;
++    if (!selected || mutationPending.current) return;
++    const session = editorSessionRef.current;
++    mutationPending.current = true;
+     setPending(true);
+     try {
+       const result = await callCommand(commands.ruleDefinitionDelete(selected.rule_id, selected.revision, true));
+       if (!result.success || result.entity_id !== selected.rule_id) throw new Error("规则删除响应无效。");
+-      setSelected(undefined);
+-      setInput(undefined);
+-      setContext(undefined);
++      if (editorSessionRef.current === session) {
++        setSelected(undefined);
++        setInput(undefined);
++        setContext(undefined);
++      }
+       await source.refresh();
+       toast(result.message, { variant: "success" });
+     } catch (reason) {
+       toast(errorMessage(reason), { variant: "danger" });
+     } finally {
++      mutationPending.current = false;
+       setPending(false);
+     }
+   }
+@@ -138,6 +165,7 @@ export function RulesView() {
+             error={source.error}
+             loading={source.isLoading}
+             onNew={() => {
++              startEditorSession();
+               setSelected(undefined);
+               setInput(undefined);
+               setContext(undefined);
+@@ -152,18 +180,21 @@ export function RulesView() {
+           />
+           {creationOpen ? <RuleCreationEditor
+             fieldErrors={fieldErrors}
++            key={editorSession}
+             listeners={source.listeners}
+             onCancel={() => {
++              startEditorSession();
+               setCreationOpen(false);
+               setInput(undefined);
+               setContext(undefined);
+             }}
+-            onSave={(materialized) => void save(materialized)}
++            onSave={save}
+             pending={pending}
+           /> : <RuleDefinitionEditor
+             context={context}
+             fieldErrors={fieldErrors}
+             input={input}
++            key={editorSession}
+             listener={listener}
+             loading={loadingEditor}
+             onChange={(change) => {
+@@ -172,7 +203,7 @@ export function RulesView() {
+             }}
+             onCopy={() => void copy()}
+             onDelete={() => void remove()}
+-            onSave={(materialized) => void save(materialized)}
++            onSave={save}
+             pending={pending}
+           />}
+         </RulesWorkspaceShell>

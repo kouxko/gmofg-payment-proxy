@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260906-001",
+  "case_id": "rules-save-ownership",
+  "recorded_at": "2026-09-06T15:18:00.294496+08:00",
+  "execution_date": "2026-09-06",
+  "environment": "macOS 27.0 arm64; tool versions in ../integrated-verification/resources/environment.txt",
+  "source": {
+    "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+    "snapshot": "../integrated-verification/resources/source-snapshot.zip",
+    "inventory": "../integrated-verification/resources/source-inventory.json",
+    "phase_resources": "runs/ contains actual RED/GREEN/follow-up resources and logs",
+    "stability": "../integrated-verification/outputs/validation/review-fixes/source-stability.json"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260905-004",
+    "case_id": "final-verification",
+    "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260905-004/final-verification"
+  },
+  "commands": [
+    [
+      "deno",
+      "task",
+      "test",
+      "src/features/rules",
+      "--reporter=verbose"
+    ]
+  ],
+  "result": "COMPONENT_PASS_NATIVE_UI_NOT_RUN",
+  "purpose": "同次保存仅一次提交，旧物化任务和迟到写回不越过编辑会话",
+  "expected": [
+    "物化和保存请求完成前重复 Save 不重复创建",
+    "切换规则后旧保存不覆盖当前编辑器；失败提示仍显示并可重试",
+    "New/Cancel/同身份抓包草稿替换会卸载旧会话，旧物化不能调用保存"
+  ],
+  "actual": [
+    "初始 RED 7 pass / 2 fail，初次修复 41 pass，取消/错误提示补强 43 pass",
+    "复审的有效 red-final 同身份替换两项失败；最终 5 文件45项通过",
+    "最新全前端 73 文件550项通过"
+  ],
+  "not_run": {
+    "native_app": "未启动原生 App 做点击或截图；真实组件测试按可访问名操作并断言状态",
+    "binary_frames": "N/A，UI 与 IPC mocks，不是协议链路测试"
+  }
+}

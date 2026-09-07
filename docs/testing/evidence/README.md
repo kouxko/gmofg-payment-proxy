@@ -3,6 +3,41 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-06
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260906-001 | integrated-verification | Rust1647/前端550、静态构建、资源重放及子集独立审查 | CHECKS_PASS_IMPLEMENTED_SUBSET_APPROVED_READ_CHUNK_CAP_PENDING | TASK-20260905-004 | final-verification | [父证据](2026-09-06/TASK-20260905-004/final-verification/README.md) | [证据](2026-09-06/TASK-20260906-001/integrated-verification/README.md) |
+| TASK-20260906-001 | socket-resource-limits | 诊断队列按需分配；读取块上限待确认 | OBSERVER_PASS_READ_CHUNK_CAP_PENDING | TASK-20260905-004 | final-verification | [父证据](2026-09-06/TASK-20260905-004/final-verification/README.md) | [证据](2026-09-06/TASK-20260906-001/socket-resource-limits/README.md) |
+| TASK-20260906-001 | exchange-error-observation | 类型化EOF、外部字段、16MiB投影预算与真实TCP | LOCAL_UNIT_AND_LOOPBACK_TCP_PASS | TASK-20260905-004 | final-verification | [父证据](2026-09-06/TASK-20260905-004/final-verification/README.md) | [证据](2026-09-06/TASK-20260906-001/exchange-error-observation/README.md) |
+| TASK-20260906-001 | rules-save-ownership | 物化提交锁、编辑会话与迟到结果隔离 | COMPONENT_PASS_NATIVE_UI_NOT_RUN | TASK-20260905-004 | final-verification | [父证据](2026-09-06/TASK-20260905-004/final-verification/README.md) | [证据](2026-09-06/TASK-20260906-001/rules-save-ownership/README.md) |
+| TASK-20260906-001 | android-active-profile | 活动Profile指纹、冻结LAN端点与显式应用边界 | LOCAL_PASS_DEVICE_NOT_RUN | TASK-20260905-001 | MANUAL-RECOVERY-001 | [父证据](2026-09-05/TASK-20260905-001/manual-recovery/README.md) | [证据](2026-09-06/TASK-20260906-001/android-active-profile/README.md) |
+| TASK-20260905-004 | final-verification | 完整最终矩阵、资源比对与独立审查 | PASS | TASK-20260905-004 | integrated-verification | [父证据](2026-09-06/TASK-20260905-004/integrated-verification/README.md) | [证据](2026-09-06/TASK-20260905-004/final-verification/README.md) |
+| TASK-20260905-004 | local-http-default-response | 确认后的Local默认200、两方向规则与真实TCP | PASS | TASK-20260903-002 | HTTP-LOCAL-MOCK-001 | [父证据](2026-09-03/TASK-20260903-002/HTTP-LOCAL-MOCK-001/README.md) | [证据](2026-09-06/TASK-20260905-004/local-http-default-response/README.md) |
+| TASK-20260905-004 | source-size-cleanup | 四个旧超长文件职责拆分与原行为保持 | PASS | 无 | 无 | 无 | [证据](2026-09-06/TASK-20260905-004/source-size-cleanup/README.md) |
+| TASK-20260905-004 | typed-socket-io | 类型化错误及Socket共同I/O | PASS | 无 | 无 | 无 | [证据](2026-09-06/TASK-20260905-004/typed-socket-io/README.md) |
+| TASK-20260905-004 | http-upstream-commit | 真实上游flush与提前响应 | PASS | 无 | 无 | 无 | [证据](2026-09-06/TASK-20260905-004/http-upstream-commit/README.md) |
+| TASK-20260905-004 | integrated-verification | 稳定批次编译测试及独立审查 | IMPLEMENTED_SCOPE_PASS_WITH_GAPS_LOCAL_Q1_PENDING | 无 | 无 | 无 | [证据](2026-09-06/TASK-20260905-004/integrated-verification/README.md) |
+
+## 2026-09-05
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260905-004 | rule-validation | HTTP动作完整校验 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/rule-validation/README.md) |
+| TASK-20260905-004 | socket-plan | Socket共同装配及职责拆分 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/socket-plan/README.md) |
+| TASK-20260905-004 | rule-compilation | HTTP/Socket共同规则entry编译 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/rule-compilation/README.md) |
+| TASK-20260905-004 | plain-hot-replacement | Plain capability与真实TCP热替换 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/plain-hot-replacement/README.md) |
+| TASK-20260905-004 | joint-write | 显式联合事务与Encode回滚 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/joint-write/README.md) |
+| TASK-20260905-004 | http-transport | 公共传输及下游flush提交 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-004/http-transport/README.md) |
+| TASK-20260905-002 | LISTENER-DRAFT-CONTRACTS-001 | Listener编辑草稿与严格领域配置分离、Rust转换和前端并发/证书合同 | PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_NATIVE_UI_NOT_RUN | TASK-20260905-001 | frontend-contracts | [父证据](2026-09-05/TASK-20260905-001/frontend-contracts/README.md) | [证据](2026-09-05/TASK-20260905-002/listener-draft-contracts/README.md) |
+| TASK-20260905-001 | MANUAL-RECOVERY-001 | 受保护恢复等待手动start/apply，保留device-only与有效LAN热协调 | LOCAL_PASS_REVIEW_APPROVED_DEVICE_NOT_RUN | TASK-20260905-001 | android-contracts | [父证据](2026-09-05/TASK-20260905-001/android-contracts/README.md) | [证据](2026-09-05/TASK-20260905-001/manual-recovery/README.md) |
+| TASK-20260905-001 | android-contracts | Android心跳与generation清理 | PASS_WITH_DEVICE_NOT_RUN | TASK-20260828-004 | ANDROID-CONTROL-LEASE-001 | [父证据](2026-08-28/TASK-20260828-004/ANDROID-CONTROL-LEASE-001/README.md) | [证据](2026-09-05/TASK-20260905-001/android-contracts/README.md) |
+| TASK-20260905-001 | backend-contracts | 快照游标与请求逐跳Header、chunked回归 | PASS | TASK-20260904-005 | HTTP-CHUNKED-RESPONSE-001 | [父证据](2026-09-04/TASK-20260904-005/HTTP-CHUNKED-RESPONSE-001/README.md) | [证据](2026-09-05/TASK-20260905-001/backend-contracts/README.md) |
+| TASK-20260905-001 | frontend-contracts | Listener草稿冲突和Bootstrap事件刷新 | PASS | TASK-20260828-006 | WORKSPACE-LIVE-REFRESH-001 | [父证据](2026-08-28/TASK-20260828-006/WORKSPACE-LIVE-REFRESH-001/README.md) | [证据](2026-09-05/TASK-20260905-001/frontend-contracts/README.md) |
+| TASK-20260905-001 | STRICT-ROUTING-001 | 严格目标路由及真实SOCKS5原目标直连 | PASS_WITH_ANDROID_DEVICE_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-001/strict-routing/README.md) |
+| TASK-20260905-001 | CURRENT-DOCUMENTS-001 | 当前模块、MCP和行为文档一致性 | PASS | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-001/current-documents/README.md) |
+| TASK-20260905-001 | INTEGRATED-VERIFICATION-001 | 已实现批次Rust1120及最终构建/静态检查 | CHECKS_PASS_REVIEW_APPROVED_DEVICE_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-05/TASK-20260905-001/integrated-verification/README.md) |
+
 ## 2026-09-04
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

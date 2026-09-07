@@ -1,0 +1,54 @@
+{
+  "task_id": "TASK-20260905-002",
+  "case_id": "listener-draft-contracts/frontend",
+  "evidence_finalized_at": "2026-09-05 16:33:13 +08:00",
+  "timezone": "Asia/Shanghai",
+  "repository_revision": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "working_tree": "shared dirty workspace; scoped source snapshots and commands captured",
+  "result": "PASS",
+  "execution_windows": [
+    {
+      "started_at": "2026-09-05 16:23:31 +08:00",
+      "command": "deno task test",
+      "result": "68 files, 536 passed",
+      "log": "outputs/full-frontend-test.log"
+    },
+    {
+      "started_at": "2026-09-05 16:25:06 +08:00",
+      "command": "deno task test src/features/listeners",
+      "result": "18 files, 168 passed",
+      "log": "outputs/listener-tests.log"
+    },
+    {
+      "started_at": "2026-09-05 16:30:50 +08:00",
+      "command": "affected Listener tests after final lifecycle and test split",
+      "result": "6 files, 72 passed",
+      "log": "outputs/affected-tests-v2.log"
+    },
+    {
+      "started_at": "2026-09-05 16:33:13 +08:00",
+      "command": "pending control and transition hook tests",
+      "result": "3 files, 39 passed",
+      "log": "outputs/pending-controls-v4.log"
+    }
+  ],
+  "accidental_local_repeats": "Unquoted evidence heredoc interpreted Markdown backticks and locally reran Listener and full frontend tests at 16:26:40 and 16:27:03; both passed; no external operation occurred.",
+  "results": {
+    "typecheck": "PASS",
+    "lint": "PASS, 0 errors and 0 warnings",
+    "frontend_boundaries": "PASS",
+    "source_sizes": "6 pre-existing debt files remain; Listener view and its main test are now within limit"
+  },
+  "retest": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/replay/run.sh",
+  "not_applicable": {
+    "network_frames": "No network protocol execution in this frontend DTO/state task.",
+    "device": "No real-device behavior changed.",
+    "screenshots": "Automated jsdom accessibility and state assertions provide the affected UI evidence."
+  },
+  "final_source_snapshot": "resources/source-after-v4-final",
+  "final_static_logs": {
+    "typecheck": "outputs/typecheck-v4-final.log",
+    "lint": "outputs/lint-v4-final.log",
+    "frontend_boundaries": "outputs/frontend-boundaries-v4-final.log"
+  }
+}

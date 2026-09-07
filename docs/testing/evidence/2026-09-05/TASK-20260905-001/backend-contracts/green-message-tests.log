@@ -1,0 +1,18 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.34s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 11 tests
+test message::tests::reconstruction_uses_crlf_and_exact_body ... ok
+test message::tests::raw_head_parser_preserves_binary_values_case_and_interleaved_duplicates ... ok
+test message::tests::preserves_unmodified_raw_body_and_recalculates_modified_length ... ok
+test message::tests::close_delimited_transfer_coding_is_extended_with_chunked ... ok
+test message::tests::forward_normalization_removes_connection_declared_and_proxy_hop_headers ... ok
+test message::tests::replacement_accepts_arbitrary_binary_bytes_without_decoding ... ok
+test message::tests::raw_head_parser_preserves_non_standard_reason_phrase ... ok
+test message::tests::exposes_response_status_without_misclassifying_request_start_lines ... ok
+test message::tests::replacing_chunked_body_preserves_transfer_encoding_without_content_length ... ok
+test message::tests::setting_content_length_removes_transfer_encoding ... ok
+test message::tests::raw_head_parser_preserves_each_header_separator_and_optional_whitespace ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 174 filtered out; finished in 0.00s
+

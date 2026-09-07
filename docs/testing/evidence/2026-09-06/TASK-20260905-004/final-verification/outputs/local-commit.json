@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "commit": "5fd8bfbb",
+  "title": "refactor: unify HTTP and Socket runtime contracts",
+  "committed_at": "2026-09-06 10:03:54 +08:00",
+  "files": 122,
+  "staged_set_verified": true,
+  "committed_bytes_verified": true,
+  "index_empty": true,
+  "push_ci": "NOT_RUN",
+  "archives": "retained locally, unstaged"
+}

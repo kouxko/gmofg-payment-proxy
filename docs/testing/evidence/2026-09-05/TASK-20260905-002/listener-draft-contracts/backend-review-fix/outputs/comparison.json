@@ -1,0 +1,10 @@
+{
+  "result": "PASS",
+  "expected_error_code": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE",
+  "actual_error_codes": {
+    "enabled_true": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE",
+    "enabled_false": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE"
+  },
+  "relay_tls_matrix_preserved": true,
+  "scope": "two source files only"
+}

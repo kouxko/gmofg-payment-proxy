@@ -1,0 +1,22 @@
+[
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "matches_snapshot": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "matches_snapshot": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "matches_snapshot": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "matches_snapshot": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "matches_snapshot": true
+  }
+]

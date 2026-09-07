@@ -1,0 +1,10 @@
+Task test vitest run 'src/features/android-network/android-network-view.test.tsx' 'src/features/android-network/android-network-view.network-intent.test.tsx'
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+
+
+ Test Files  2 passed (2)
+      Tests  18 passed (18)
+   Start at  09:32:47
+   Duration  16.65s (transform 5.88s, setup 959ms, import 9.42s, tests 15.82s, environment 2.03s)
+

@@ -1,0 +1,44 @@
+    Checking intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Checking intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+error: this argument is passed by value, but not consumed in the function body
+  --> crates/application/src/models/listener_draft/transition.rs:52:21
+   |
+52 |         transition: ListenerDraftTransition,
+   |                     ^^^^^^^^^^^^^^^^^^^^^^^
+   |
+help: or consider marking this type as `Copy`
+  --> crates/application/src/models/listener_draft/transition.rs:40:1
+   |
+40 | pub enum ListenerDraftTransition {
+   | ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#needless_pass_by_value
+   = note: `-D clippy::needless-pass-by-value` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::needless_pass_by_value)]`
+help: consider taking a reference instead
+   |
+52 |         transition: &ListenerDraftTransition,
+   |                     +
+
+error: calling `HttpListenerSettings::default()` is more clear than this expression
+  --> crates/application/src/models/listener_draft/transition.rs:64:53
+   |
+64 | ...                   ListenerDataPlane::Http(Default::default()).into()
+   |                                               ^^^^^^^^^^^^^^^^^^ help: try: `HttpListenerSettings::default()`
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#default_trait_access
+   = note: `-D clippy::default-trait-access` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::default_trait_access)]`
+
+error: use of `unwrap_or_else` to construct default value
+   --> crates/application/src/models/listener_draft/transition.rs:228:23
+    |
+228 |         Some(existing.unwrap_or_else(SocketUpstreamTlsSettings::default))
+    |                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: try: `unwrap_or_default()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#unwrap_or_default
+    = note: `-D clippy::unwrap-or-default` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::unwrap_or_default)]`
+
+error: could not compile `intercept-proxy-application` (lib) due to 3 previous errors
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `intercept-proxy-application` (lib test) due to 3 previous errors

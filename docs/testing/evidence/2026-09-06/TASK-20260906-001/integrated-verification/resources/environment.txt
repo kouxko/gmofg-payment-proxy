@@ -1,0 +1,8 @@
+rustc 1.98.0 (88d9e12ae 2026-08-18)
+cargo 1.98.0 (797e8a9bc 2026-08-05)
+deno 2.9.6 (stable, release, aarch64-apple-darwin)
+v8 15.0.245.2-rusty
+typescript 6.0.3
+27.0
+arm64
+5fd8bfbb5a048fba4f4ac9da483ec704b5264437

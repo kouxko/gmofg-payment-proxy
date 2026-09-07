@@ -1,0 +1,9 @@
+    Blocking waiting for file lock on build directory
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.80s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-c8c37ca5c1a6cffd)
+
+running 1 test
+test requirements_tests::android_runtime::device_network_status_does_not_reapply_a_stale_runtime ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 430 filtered out; finished in 0.02s
+

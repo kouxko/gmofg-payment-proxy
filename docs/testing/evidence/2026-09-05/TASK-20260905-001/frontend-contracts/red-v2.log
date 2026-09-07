@@ -1,0 +1,11 @@
+Command: deno task test src/features/listeners/listeners-view.external-refresh.test.tsx
+Exit: 1
+
+Test Files  1 failed (1)
+Tests       3 failed | 1 passed (4)
+
+Observed failures against the first conflict-detection implementation:
+- A valid conflicted draft still displayed the ordinary save/start success description.
+- No explicit per-Listener action existed to discard only Listener A's draft and load its authoritative value.
+- An externally deleted dirty Listener could not be removed through an explicit conflict-resolution action.
+

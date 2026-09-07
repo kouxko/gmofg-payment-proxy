@@ -1,0 +1,12 @@
+{
+  "command": [
+    "python3",
+    "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/proxy-review-fixes-20260906-ij7h8n5b/evidence-stage/integrated-verification/replay/run.py",
+    "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/proxy-review-archive-replay-t8_csv_e",
+    "integrated-verification",
+    "--verify-only"
+  ],
+  "started_at": "2026-09-06T15:27:51.406441+08:00",
+  "completed_at": "2026-09-06T15:27:51.611667+08:00",
+  "exit_code": 0
+}

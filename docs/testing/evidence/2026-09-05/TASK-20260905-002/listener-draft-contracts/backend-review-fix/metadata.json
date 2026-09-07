@@ -1,0 +1,71 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-002",
+  "case_id": "listener-draft-server-tls-local-responder-review-fix",
+  "result": "PASS",
+  "started_at": "2026-09-05 16:46:55 +08:00",
+  "finished_at": "2026-09-05 16:51:34 +08:00",
+  "environment": {
+    "repository": "/Users/codin/Code/gmofg-payment-proxy",
+    "git_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "worktree": "shared and dirty before this review fix; the two owned files were frozen during final verification"
+  },
+  "source_snapshots": [
+    {
+      "repository_path": "src-tauri/crates/application/src/models/listener_draft/transition.rs",
+      "before_snapshot": "resources/before/transition.rs",
+      "before_sha256": "6a8515bee810aa41d1e4724b8c6b31e826b0de5e75f38386ca9403f89337284d",
+      "after_snapshot": "resources/after/transition.rs",
+      "after_sha256": "b6dabdb09f48d5590f6d327def11c51ba4b5d81bfc06d87de7493d9f90660293"
+    },
+    {
+      "repository_path": "src-tauri/crates/application/src/requirements_tests/listener_draft.rs",
+      "before_snapshot": "resources/before/listener_draft.rs",
+      "before_sha256": "cd5c1c6db75d449b3f4b7c8d87c952f8a0b9d73fcb5b51ec4ac3e10d6bf96d40",
+      "after_snapshot": "resources/after/listener_draft.rs",
+      "after_sha256": "9d048db17a263d6392c0ede32178ccd12920efc3046566169859939c1d233b28"
+    }
+  ],
+  "manifest_contract": {
+    "before": "resources/before/SHA256SUMS.txt",
+    "after": "resources/after/SHA256SUMS.txt",
+    "self_entry_excluded": true
+  },
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application requirements_tests::listener_draft --no-fail-fast",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application listener_validation --no-fail-fast",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy commands::listener::tests::generated_bindings_expose_only_the_three_draft_commands --no-fail-fast",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --tests -- -D warnings",
+    "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "git diff --check -- src-tauri/crates/application/src/models/listener_draft/transition.rs src-tauri/crates/application/src/requirements_tests/listener_draft.rs"
+  ],
+  "results": {
+    "red_both_inputs": "actual [Ok, Ok], expected [Err, Err]",
+    "focused_green": "1 passed, 0 failed",
+    "draft_suite_green": "13 passed, 0 failed",
+    "existing_validation_green": "2 passed, 0 failed",
+    "command_binding_green": "1 passed, 0 failed",
+    "application_clippy": "PASS",
+    "format_diff_size": "PASS; production 280 lines, requirement test 450 lines"
+  },
+  "baseline_and_scope": {
+    "prior_full_repository_tests": "The previously recorded 969-test result remains the pre-fix baseline and was not relabeled as a new run.",
+    "full_repository_suite_rerun": false,
+    "generated_bindings": "Not regenerated because no public type or command signature changed.",
+    "modified_production_scope": [
+      "src-tauri/crates/application/src/models/listener_draft/transition.rs"
+    ],
+    "modified_test_scope": [
+      "src-tauri/crates/application/src/requirements_tests/listener_draft.rs"
+    ]
+  },
+  "not_applicable": {
+    "frontend": "No frontend contract or source changed.",
+    "protocol_frames_network_tls": "The fix changes only intent applicability before runtime work.",
+    "certificate_lease": "No certificate storage or lease operation was invoked.",
+    "ci_push_commit": "Not authorized and not executed."
+  }
+}

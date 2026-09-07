@@ -1,0 +1,8 @@
+{
+  "draft_data_plane": "socket",
+  "draft_topology": "local_responder",
+  "intents": [
+    { "type": "server_tls", "enabled": true },
+    { "type": "server_tls", "enabled": false }
+  ]
+}

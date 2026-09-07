@@ -1,0 +1,13 @@
+{
+  "command": [
+    "deno",
+    "run",
+    "-A",
+    "scripts/check-architecture-docs.mjs"
+  ],
+  "cwd": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/proxy-review-archive-replay-t8_csv_e",
+  "started_at": "2026-09-06T15:22:56.281111+08:00",
+  "completed_at": "2026-09-06T15:22:56.348094+08:00",
+  "exit_code": 0,
+  "purpose": "execute architecture documentation gate using only archived files"
+}

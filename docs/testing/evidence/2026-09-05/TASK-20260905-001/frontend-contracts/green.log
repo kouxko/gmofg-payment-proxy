@@ -1,0 +1,23 @@
+Focused:
+deno task test src/features/listeners/listener-workspace-draft.test.ts src/features/listeners/listeners-view.external-refresh.test.tsx src/features/shell/bootstrap-context.test.tsx
+Test Files  3 passed (3)
+Tests       11 passed (11)
+
+Expanded affected surface:
+deno task test src/features/listeners src/features/shell/bootstrap-context.test.tsx src/features/shell/workspace-query-invalidation.test.tsx
+Test Files  19 passed (19)
+Tests       214 passed (214)
+
+Full frontend:
+deno task test
+Test Files  67 passed (67)
+Tests       573 passed (573)
+
+Static:
+deno task typecheck: PASS
+deno task lint: PASS
+deno task scan:frontend-boundaries: PASS
+git diff --check -- src/features/listeners src/features/shell: PASS
+
+Known baseline:
+deno task scan:source-size: FAIL with the same seven pre-existing oversized files; new files are 122 and 114 lines.

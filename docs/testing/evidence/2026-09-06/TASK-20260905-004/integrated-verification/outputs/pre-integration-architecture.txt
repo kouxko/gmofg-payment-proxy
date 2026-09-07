@@ -1,0 +1,9 @@
+Observed in this session before the final stable integration run:
+Runtime dependency fixtures: 3 passed
+Architecture documentation: 9 current documents, 10 ADRs, 5 MCP documents
+Architecture boundaries: 80 behavior fixtures, 8 role fixtures; production gate PASS
+Runtime ownership: 43 fixtures; 10 owned production task sites; infrastructure 10 owned sites
+Spawn debt: zero
+Socket relay boundaries: 24 fixtures; production gate PASS
+Frontend Rust-only boundary: PASS
+This is an intermediate observation; final raw stdout/stderr is recorded by replay/verify.py.

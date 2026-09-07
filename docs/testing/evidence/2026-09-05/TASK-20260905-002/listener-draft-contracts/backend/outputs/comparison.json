@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "checks": {
+    "red_was_observed": true,
+    "application_contracts": "PASS",
+    "command_registration": "PASS",
+    "generated_bindings": "PASS",
+    "three_api_limit": "PASS",
+    "strict_domain_preserved": "PASS",
+    "source_file_500_line_gate": "PASS"
+  }
+}

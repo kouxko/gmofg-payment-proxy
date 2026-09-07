@@ -1,0 +1,8 @@
+RED command:
+deno task test src/features/listeners/use-listener-draft-transition.test.tsx
+
+Observed result before implementation:
+FAIL src/features/listeners/use-listener-draft-transition.test.tsx
+Error: Failed to resolve import "./use-listener-draft-transition" from "src/features/listeners/use-listener-draft-transition.test.tsx". Does the file exist?
+
+Expected RED reason: the queue/epoch transition hook did not exist yet.

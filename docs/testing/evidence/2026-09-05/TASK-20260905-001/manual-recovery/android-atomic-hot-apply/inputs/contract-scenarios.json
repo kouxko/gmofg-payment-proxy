@@ -1,0 +1,26 @@
+{
+  "operation_contract": {
+    "automatic_protected_lan_hot_apply": "apply_active",
+    "explicit_start": "start",
+    "explicit_apply": "apply",
+    "automatic_unprotected_lan_apply": "apply",
+    "payload_flag": null,
+    "old_companion_behavior": "reject unknown apply_active operation"
+  },
+  "apply_active_admission": {
+    "required": [
+      "owner_epoch matches current watchdog lease",
+      "lease deadline has not been reached",
+      "lease generation is the registry current generation",
+      "registry desiredRunning is true",
+      "registry state is running"
+    ],
+    "rejections": ["expired", "cleared", "old_owner_epoch", "old_generation"],
+    "rejection_expected": {
+      "error_code": "ANDROID_CONTROL_LEASE_STALE",
+      "enqueue_count": 0,
+      "generation_change": false,
+      "lease_rebuilt": false
+    }
+  }
+}

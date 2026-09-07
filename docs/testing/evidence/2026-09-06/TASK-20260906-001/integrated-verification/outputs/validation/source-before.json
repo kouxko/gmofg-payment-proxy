@@ -1,0 +1,5410 @@
+{
+  ".github/workflows/ci.yml": {
+    "size": 8730,
+    "mtime_ns": 1788329297166369537
+  },
+  ".github/workflows/windows-quick-build.yml": {
+    "size": 4334,
+    "mtime_ns": 1788517536657271508
+  },
+  ".github/workflows/windows-release.yml": {
+    "size": 21193,
+    "mtime_ns": 1788341635025809902
+  },
+  ".gitignore": {
+    "size": 1139,
+    "mtime_ns": 1788425252264613057
+  },
+  ".gitlab-ci.yml": {
+    "size": 12787,
+    "mtime_ns": 1788517887384757830
+  },
+  "AGENTS.md": {
+    "size": 57898,
+    "mtime_ns": 1787718629009372977
+  },
+  "DESIGN.md": {
+    "size": 20061,
+    "mtime_ns": 1788420966085797275
+  },
+  "README.md": {
+    "size": 7633,
+    "mtime_ns": 1788589949755049977
+  },
+  "android-companion/.gitignore": {
+    "size": 86,
+    "mtime_ns": 1785575424586407391
+  },
+  "android-companion/README.md": {
+    "size": 6108,
+    "mtime_ns": 1788602237726249149
+  },
+  "android-companion/app/build.gradle.kts": {
+    "size": 3516,
+    "mtime_ns": 1788423987742837487
+  },
+  "android-companion/app/proguard-rules.pro": {
+    "size": 201,
+    "mtime_ns": 1785574082423835995
+  },
+  "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/CompanionProfileParserInstrumentedTest.kt": {
+    "size": 5234,
+    "mtime_ns": 1785908331054467053
+  },
+  "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/EmulatorProxyGateTest.kt": {
+    "size": 6661,
+    "mtime_ns": 1788322539263198245
+  },
+  "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/RuntimeStateStoreInstrumentedTest.kt": {
+    "size": 3353,
+    "mtime_ns": 1785908331054098009
+  },
+  "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/SavedRecoveryAdmissionInstrumentedTest.kt": {
+    "size": 2773,
+    "mtime_ns": 1788600396950027419
+  },
+  "android-companion/app/src/main/AndroidManifest.xml": {
+    "size": 3550,
+    "mtime_ns": 1785921737319276080
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/AdbControlActivity.kt": {
+    "size": 4613,
+    "mtime_ns": 1788422859145348815
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/AndroidPlatformCompatibility.kt": {
+    "size": 726,
+    "mtime_ns": 1788424425002020326
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/BootCompletedReceiver.kt": {
+    "size": 1212,
+    "mtime_ns": 1786358715821572120
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/CompanionControlServer.kt": {
+    "size": 11041,
+    "mtime_ns": 1788601175942970023
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseCoordinator.kt": {
+    "size": 3672,
+    "mtime_ns": 1788601056752835021
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt": {
+    "size": 3375,
+    "mtime_ns": 1788601039536319454
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseWatchdog.kt": {
+    "size": 1643,
+    "mtime_ns": 1788601039534807487
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlProtocol.kt": {
+    "size": 2857,
+    "mtime_ns": 1788601175943865403
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptProxyApplication.kt": {
+    "size": 436,
+    "mtime_ns": 1785576350219791744
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt": {
+    "size": 13069,
+    "mtime_ns": 1788600468216335234
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnServiceControl.kt": {
+    "size": 6087,
+    "mtime_ns": 1788600542438351882
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/NativeBridge.kt": {
+    "size": 2713,
+    "mtime_ns": 1788590503680069739
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/PackageInventory.kt": {
+    "size": 1007,
+    "mtime_ns": 1785819771318345995
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ProfileModels.kt": {
+    "size": 6403,
+    "mtime_ns": 1787891961056357073
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/ResumeVpnJobService.kt": {
+    "size": 1390,
+    "mtime_ns": 1788600351213695878
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/RuntimeStateStore.kt": {
+    "size": 4956,
+    "mtime_ns": 1785908331053499381
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/TargetPackageChangeReceiver.kt": {
+    "size": 695,
+    "mtime_ns": 1785894666828016354
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/TargetPackageReceiverRegistration.kt": {
+    "size": 1253,
+    "mtime_ns": 1786441404346832656
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnConsentActivity.kt": {
+    "size": 2251,
+    "mtime_ns": 1785908514425365287
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnForegroundNotification.kt": {
+    "size": 2738,
+    "mtime_ns": 1788424425002541205
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnLocalDns.kt": {
+    "size": 567,
+    "mtime_ns": 1786358037810712306
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt": {
+    "size": 8822,
+    "mtime_ns": 1788601039535337365
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnServiceResourceOrder.kt": {
+    "size": 1339,
+    "mtime_ns": 1786441675178389755
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnStartPreparation.kt": {
+    "size": 2400,
+    "mtime_ns": 1786441482440952533
+  },
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnTunFactory.kt": {
+    "size": 1113,
+    "mtime_ns": 1786441331597658274
+  },
+  "android-companion/app/src/main/res/drawable/ic_intercept_proxy.xml": {
+    "size": 608,
+    "mtime_ns": 1785577067035416966
+  },
+  "android-companion/app/src/main/res/values/strings.xml": {
+    "size": 523,
+    "mtime_ns": 1785574082424642910
+  },
+  "android-companion/app/src/main/res/values/styles.xml": {
+    "size": 269,
+    "mtime_ns": 1785574082424822493
+  },
+  "android-companion/app/src/main/res/xml/data_extraction_rules.xml": {
+    "size": 775,
+    "mtime_ns": 1785577067035699923
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/AndroidPlatformCompatibilityTest.kt": {
+    "size": 644,
+    "mtime_ns": 1788422859143953888
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseRecoveryTest.kt": {
+    "size": 10437,
+    "mtime_ns": 1788601131559468630
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseWatchdogTest.kt": {
+    "size": 7179,
+    "mtime_ns": 1788588199665756916
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlProtocolTest.kt": {
+    "size": 1113,
+    "mtime_ns": 1788601359890300577
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/NativeDataPlaneFailureCoordinatorTest.kt": {
+    "size": 3014,
+    "mtime_ns": 1788590355106481050
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/PackageInventoryTest.kt": {
+    "size": 368,
+    "mtime_ns": 1785819771318921911
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/VpnConsentPolicyTest.kt": {
+    "size": 554,
+    "mtime_ns": 1785908490567554370
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/VpnLocalDnsTest.kt": {
+    "size": 244,
+    "mtime_ns": 1786358037811821813
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/VpnRuntimeRegistryTest.kt": {
+    "size": 3572,
+    "mtime_ns": 1785928186329911159
+  },
+  "android-companion/app/src/test/java/com/interceptproxy/vpn/VpnServiceResourceOrderTest.kt": {
+    "size": 2720,
+    "mtime_ns": 1786441675179535846
+  },
+  "android-companion/build.gradle.kts": {
+    "size": 74,
+    "mtime_ns": 1785574178895103437
+  },
+  "android-companion/gradle.properties": {
+    "size": 149,
+    "mtime_ns": 1785574082423029747
+  },
+  "android-companion/isolation-probe/build.gradle.kts": {
+    "size": 323,
+    "mtime_ns": 1788422859149992264
+  },
+  "android-companion/isolation-probe/src/main/AndroidManifest.xml": {
+    "size": 523,
+    "mtime_ns": 1785655686504413431
+  },
+  "android-companion/isolation-probe/src/main/java/com/interceptproxy/vpn/isolationprobe/ProbeActivity.java": {
+    "size": 8176,
+    "mtime_ns": 1785656593155889204
+  },
+  "android-companion/scripts/build-rust-android.sh": {
+    "size": 2855,
+    "mtime_ns": 1788422859150974229
+  },
+  "android-companion/settings.gradle.kts": {
+    "size": 1500,
+    "mtime_ns": 1788429388421962550
+  },
+  "android-companion/signing/README.md": {
+    "size": 824,
+    "mtime_ns": 1785673718216090985
+  },
+  "android-companion/signing/certificate-sha256.txt": {
+    "size": 96,
+    "mtime_ns": 1785673744318435637
+  },
+  "android-companion/signing/intercept-proxy-companion.crt": {
+    "size": 1901,
+    "mtime_ns": 1785673734133902538
+  },
+  "android-companion/signing/intercept-proxy-companion.jks": {
+    "size": 3869,
+    "mtime_ns": 1785673733918197048
+  },
+  "android-companion/signing/signing.properties": {
+    "size": 251,
+    "mtime_ns": 1785673718215819067
+  },
+  "android-companion/target-probe/build.gradle.kts": {
+    "size": 636,
+    "mtime_ns": 1788422859150590643
+  },
+  "android-companion/target-probe/src/main/AndroidManifest.xml": {
+    "size": 557,
+    "mtime_ns": 1785656281196228210
+  },
+  "deno.json": {
+    "size": 426,
+    "mtime_ns": 1788317368802185071
+  },
+  "deno.lock": {
+    "size": 157766,
+    "mtime_ns": 1788516044197962481
+  },
+  "design-qa.md": {
+    "size": 14614,
+    "mtime_ns": 1787545342461188485
+  },
+  "eslint.config.mjs": {
+    "size": 689,
+    "mtime_ns": 1788596172138373988
+  },
+  "examples/external-packages/au_eftex/README.md": {
+    "size": 1639,
+    "mtime_ns": 1788404579609461823
+  },
+  "examples/external-packages/au_eftex/component/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268773999019094
+  },
+  "examples/external-packages/au_eftex/component/Cargo.lock": {
+    "size": 21090,
+    "mtime_ns": 1788268970332529160
+  },
+  "examples/external-packages/au_eftex/component/Cargo.toml": {
+    "size": 383,
+    "mtime_ns": 1788268657602318100
+  },
+  "examples/external-packages/au_eftex/component/manifest.json": {
+    "size": 13763,
+    "mtime_ns": 1788336635671594704
+  },
+  "examples/external-packages/au_eftex/component/src/crypto.rs": {
+    "size": 4863,
+    "mtime_ns": 1788268657603117481
+  },
+  "examples/external-packages/au_eftex/component/src/iso8583.rs": {
+    "size": 11489,
+    "mtime_ns": 1788268657603738112
+  },
+  "examples/external-packages/au_eftex/component/src/lib.rs": {
+    "size": 18239,
+    "mtime_ns": 1788336965482738240
+  },
+  "examples/external-packages/au_eftex/component/tests/manifest.rs": {
+    "size": 557,
+    "mtime_ns": 1788268657604650744
+  },
+  "examples/external-packages/iso8583-deno/README.md": {
+    "size": 969,
+    "mtime_ns": 1788404579609834115
+  },
+  "examples/external-packages/iso8583-deno/component/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268657605654378
+  },
+  "examples/external-packages/iso8583-deno/component/Cargo.lock": {
+    "size": 8707,
+    "mtime_ns": 1788338015623712945
+  },
+  "examples/external-packages/iso8583-deno/component/Cargo.toml": {
+    "size": 240,
+    "mtime_ns": 1788338000375551104
+  },
+  "examples/external-packages/iso8583-deno/component/manifest.json": {
+    "size": 7288,
+    "mtime_ns": 1788338000376024232
+  },
+  "examples/external-packages/iso8583-deno/component/src/lib.rs": {
+    "size": 22721,
+    "mtime_ns": 1788337914705179949
+  },
+  "examples/external-packages/nuvei_tango_json/README.md": {
+    "size": 974,
+    "mtime_ns": 1788404579610093698
+  },
+  "examples/external-packages/nuvei_tango_json/component/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268773999857226
+  },
+  "examples/external-packages/nuvei_tango_json/component/Cargo.lock": {
+    "size": 12297,
+    "mtime_ns": 1788339230020095664
+  },
+  "examples/external-packages/nuvei_tango_json/component/Cargo.toml": {
+    "size": 390,
+    "mtime_ns": 1788339230019474076
+  },
+  "examples/external-packages/nuvei_tango_json/component/manifest.json": {
+    "size": 3519,
+    "mtime_ns": 1788339230020580000
+  },
+  "examples/external-packages/nuvei_tango_json/component/src/lib.rs": {
+    "size": 28401,
+    "mtime_ns": 1788340042190492006
+  },
+  "examples/protocol-packages/gmofg_payment_dll/.gitignore": {
+    "size": 20,
+    "mtime_ns": 1788420988011019133
+  },
+  "examples/protocol-packages/gmofg_payment_dll/Cargo.lock": {
+    "size": 8544,
+    "mtime_ns": 1788420300797132162
+  },
+  "examples/protocol-packages/gmofg_payment_dll/Cargo.toml": {
+    "size": 433,
+    "mtime_ns": 1788420292323057326
+  },
+  "examples/protocol-packages/gmofg_payment_dll/README.md": {
+    "size": 4599,
+    "mtime_ns": 1788424805567658971
+  },
+  "examples/protocol-packages/gmofg_payment_dll/build.mjs": {
+    "size": 5826,
+    "mtime_ns": 1788421004157799650
+  },
+  "examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm": {
+    "size": 537608,
+    "mtime_ns": 1788424818078557107
+  },
+  "examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm.sha256": {
+    "size": 95,
+    "mtime_ns": 1788424818079934659
+  },
+  "examples/protocol-packages/gmofg_payment_dll/manifest.json": {
+    "size": 11808,
+    "mtime_ns": 1788420980089290803
+  },
+  "examples/protocol-packages/gmofg_payment_dll/src/codec.rs": {
+    "size": 31036,
+    "mtime_ns": 1788421170867316717
+  },
+  "examples/protocol-packages/gmofg_payment_dll/src/display.rs": {
+    "size": 6060,
+    "mtime_ns": 1788424720351814124
+  },
+  "examples/protocol-packages/gmofg_payment_dll/src/lib.rs": {
+    "size": 24633,
+    "mtime_ns": 1788424759086606357
+  },
+  "examples/protocol-packages/gmofg_payment_dll/src/model.rs": {
+    "size": 10509,
+    "mtime_ns": 1788421163679157664
+  },
+  "examples/protocol-packages/gmofg_payment_dll/tests/fixtures/connection-test.json": {
+    "size": 210,
+    "mtime_ns": 1788420292324383924
+  },
+  "examples/protocol-packages/gmofg_payment_dll/tests/fixtures/credit-success.json": {
+    "size": 33575,
+    "mtime_ns": 1788420731172826677
+  },
+  "examples/protocol-packages/gmofg_payment_dll/tests/fixtures/d48.json": {
+    "size": 119,
+    "mtime_ns": 1788420292324092046
+  },
+  "examples/protocol-packages/gmofg_payment_dll/tests/fixtures/union-pay-success.json": {
+    "size": 423,
+    "mtime_ns": 1788420742974915370
+  },
+  "examples/protocol-packages/json_pretty/.gitignore": {
+    "size": 20,
+    "mtime_ns": 1788401476837487362
+  },
+  "examples/protocol-packages/json_pretty/Cargo.lock": {
+    "size": 8511,
+    "mtime_ns": 1788400894292651662
+  },
+  "examples/protocol-packages/json_pretty/Cargo.toml": {
+    "size": 268,
+    "mtime_ns": 1788400881119029537
+  },
+  "examples/protocol-packages/json_pretty/README.md": {
+    "size": 1587,
+    "mtime_ns": 1788402942700586480
+  },
+  "examples/protocol-packages/json_pretty/build.mjs": {
+    "size": 5272,
+    "mtime_ns": 1788402266033208752
+  },
+  "examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm": {
+    "size": 161042,
+    "mtime_ns": 1788403031988138488
+  },
+  "examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm.sha256": {
+    "size": 89,
+    "mtime_ns": 1788403031991658786
+  },
+  "examples/protocol-packages/json_pretty/manifest.json": {
+    "size": 298,
+    "mtime_ns": 1788402266032826960
+  },
+  "examples/protocol-packages/json_pretty/src/lib.rs": {
+    "size": 8933,
+    "mtime_ns": 1788403001050931811
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/README.md": {
+    "size": 1083,
+    "mtime_ns": 1788404579610307699
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268657611734513
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/Cargo.lock": {
+    "size": 8535,
+    "mtime_ns": 1788338011345823266
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/Cargo.toml": {
+    "size": 288,
+    "mtime_ns": 1788338000376912029
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/manifest.json": {
+    "size": 1825,
+    "mtime_ns": 1788338000377372991
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/src/lib.rs": {
+    "size": 17237,
+    "mtime_ns": 1788404593848941286
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/tests/fixtures/request.json": {
+    "size": 255,
+    "mtime_ns": 1788404593848070327
+  },
+  "examples/protocol-packages/nuvei_tango_rhai/component/tests/fixtures/response.json": {
+    "size": 175,
+    "mtime_ns": 1788404593848402952
+  },
+  "next.config.ts": {
+    "size": 210,
+    "mtime_ns": 1785221709695177101
+  },
+  "package.json": {
+    "size": 11634,
+    "mtime_ns": 1788617456437228145
+  },
+  "pnpm-workspace.yaml": {
+    "size": 360,
+    "mtime_ns": 1787093066170504969
+  },
+  "postcss.config.mjs": {
+    "size": 94,
+    "mtime_ns": 1785214127000000000
+  },
+  "public/file.svg": {
+    "size": 391,
+    "mtime_ns": 1785214127000000000
+  },
+  "public/globe.svg": {
+    "size": 1035,
+    "mtime_ns": 1785214127000000000
+  },
+  "public/next.svg": {
+    "size": 1375,
+    "mtime_ns": 1785214127000000000
+  },
+  "public/vercel.svg": {
+    "size": 128,
+    "mtime_ns": 1785214127000000000
+  },
+  "public/window.svg": {
+    "size": 385,
+    "mtime_ns": 1785214127000000000
+  },
+  "rust-toolchain.toml": {
+    "size": 114,
+    "mtime_ns": 1788319183252969447
+  },
+  "scripts/build-android-companion.sh": {
+    "size": 1128,
+    "mtime_ns": 1785673718216310319
+  },
+  "scripts/build-macos-universal.mjs": {
+    "size": 1586,
+    "mtime_ns": 1788340830707986704
+  },
+  "scripts/build-macos-universal.test.mjs": {
+    "size": 738,
+    "mtime_ns": 1788340814579722573
+  },
+  "scripts/build-protocol-package-components.mjs": {
+    "size": 5925,
+    "mtime_ns": 1788268657615959257
+  },
+  "scripts/check-architecture-boundaries.mjs": {
+    "size": 64608,
+    "mtime_ns": 1788617300993368487
+  },
+  "scripts/check-architecture-docs.mjs": {
+    "size": 15540,
+    "mtime_ns": 1788268657616920265
+  },
+  "scripts/check-architecture-docs.test.mjs": {
+    "size": 3801,
+    "mtime_ns": 1788161699401093276
+  },
+  "scripts/check-bundle-branding.mjs": {
+    "size": 4061,
+    "mtime_ns": 1787084852752180975
+  },
+  "scripts/check-frontend-boundaries.mjs": {
+    "size": 23473,
+    "mtime_ns": 1788314563795106773
+  },
+  "scripts/check-generated-bindings.mjs": {
+    "size": 2086,
+    "mtime_ns": 1788317137125322148
+  },
+  "scripts/check-generated-bindings.test.mjs": {
+    "size": 4336,
+    "mtime_ns": 1788317137126093439
+  },
+  "scripts/check-runtime-architecture.mjs": {
+    "size": 37642,
+    "mtime_ns": 1788317137126756146
+  },
+  "scripts/check-rust-coverage.mjs": {
+    "size": 10207,
+    "mtime_ns": 1788181941396247549
+  },
+  "scripts/check-socket-relay-boundaries.mjs": {
+    "size": 5751,
+    "mtime_ns": 1786945800094283127
+  },
+  "scripts/check-source-file-sizes.mjs": {
+    "size": 2250,
+    "mtime_ns": 1785939273174822110
+  },
+  "scripts/check-task-20260829-002-phase-baseline.mjs": {
+    "size": 4449,
+    "mtime_ns": 1788317137131047889
+  },
+  "scripts/check-task-20260829-002-phase-baseline.test.mjs": {
+    "size": 2306,
+    "mtime_ns": 1788317137131359305
+  },
+  "scripts/check-task-20260829-002-phase10-http-pipeline.mjs": {
+    "size": 8556,
+    "mtime_ns": 1788629444227415788
+  },
+  "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs": {
+    "size": 7480,
+    "mtime_ns": 1788629444227721332
+  },
+  "scripts/check-task-20260829-002-phase11-socket-pipeline.mjs": {
+    "size": 7984,
+    "mtime_ns": 1788627142226302371
+  },
+  "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs": {
+    "size": 6866,
+    "mtime_ns": 1788627340449643873
+  },
+  "scripts/check-task-20260829-002-phase12-legacy-deletion.mjs": {
+    "size": 2862,
+    "mtime_ns": 1788128449582657848
+  },
+  "scripts/check-task-20260829-002-phase12-legacy-deletion.test.mjs": {
+    "size": 2786,
+    "mtime_ns": 1788317414650565225
+  },
+  "scripts/check-task-20260829-002-phase14-schema100.mjs": {
+    "size": 2243,
+    "mtime_ns": 1788143937917683809
+  },
+  "scripts/check-task-20260829-002-phase14-schema100.test.mjs": {
+    "size": 2397,
+    "mtime_ns": 1788317414647201814
+  },
+  "scripts/check-task-20260829-002-phase15-ui.mjs": {
+    "size": 16103,
+    "mtime_ns": 1788315153847033778
+  },
+  "scripts/check-task-20260829-002-phase15-ui.test.mjs": {
+    "size": 18585,
+    "mtime_ns": 1788317414649836518
+  },
+  "scripts/check-task-20260829-002-phase2-release-blocker.mjs": {
+    "size": 8610,
+    "mtime_ns": 1788242243315416839
+  },
+  "scripts/check-task-20260829-002-phase2-release-blocker.test.mjs": {
+    "size": 10575,
+    "mtime_ns": 1788317414650938516
+  },
+  "scripts/check-task-20260829-002-phase3-contract.mjs": {
+    "size": 1952,
+    "mtime_ns": 1788033979836781588
+  },
+  "scripts/check-task-20260829-002-phase3-contract.test.mjs": {
+    "size": 869,
+    "mtime_ns": 1788033979837321133
+  },
+  "scripts/check-task-20260829-002-phase4-contract.mjs": {
+    "size": 33919,
+    "mtime_ns": 1788095050141088392
+  },
+  "scripts/check-task-20260829-002-phase4-contract.test.mjs": {
+    "size": 19065,
+    "mtime_ns": 1788094877202531524
+  },
+  "scripts/check-task-20260829-002-phase5-contract.mjs": {
+    "size": 10090,
+    "mtime_ns": 1788317137127387687
+  },
+  "scripts/check-task-20260829-002-phase5-contract.test.mjs": {
+    "size": 6103,
+    "mtime_ns": 1788317414649382769
+  },
+  "scripts/check-task-20260829-002-phase6-contract.mjs": {
+    "size": 5462,
+    "mtime_ns": 1788268289866751822
+  },
+  "scripts/check-task-20260829-002-phase6-contract.test.mjs": {
+    "size": 3962,
+    "mtime_ns": 1788317414650212392
+  },
+  "scripts/check-unified-exchange-runtime.mjs": {
+    "size": 1858,
+    "mtime_ns": 1788317137129913183
+  },
+  "scripts/check-unified-exchange-runtime.test.mjs": {
+    "size": 2766,
+    "mtime_ns": 1788317414648979019
+  },
+  "scripts/check-unified-rule-model.mjs": {
+    "size": 1771,
+    "mtime_ns": 1788317137129136642
+  },
+  "scripts/check-unified-rule-model.test.mjs": {
+    "size": 5500,
+    "mtime_ns": 1788317414646580565
+  },
+  "scripts/check-windows-rust.mjs": {
+    "size": 716,
+    "mtime_ns": 1786587558196544096
+  },
+  "scripts/ci/bootstrap-gitlab-linux.sh": {
+    "size": 7326,
+    "mtime_ns": 1788444630270086623
+  },
+  "scripts/ci/bootstrap-gitlab-windows.ps1": {
+    "size": 11481,
+    "mtime_ns": 1788504445861675116
+  },
+  "scripts/ci/configure-ubuntu-apt-mirror.sh": {
+    "size": 549,
+    "mtime_ns": 1788428967890261246
+  },
+  "scripts/ci/stage-android-companion-windows.ps1": {
+    "size": 792,
+    "mtime_ns": 1788425451026287692
+  },
+  "scripts/coverage-policy.mjs": {
+    "size": 1077,
+    "mtime_ns": 1786614701549866985
+  },
+  "scripts/coverage-policy.test.mjs": {
+    "size": 1578,
+    "mtime_ns": 1786614701550109862
+  },
+  "scripts/deno-toolchain-contract.test.mjs": {
+    "size": 4247,
+    "mtime_ns": 1788425833912983915
+  },
+  "scripts/e2e_external_packages.py": {
+    "size": 18126,
+    "mtime_ns": 1788167692753181280
+  },
+  "scripts/e2e_macos_mounted_release.py": {
+    "size": 17484,
+    "mtime_ns": 1788268657617571187
+  },
+  "scripts/e2e_socket_cases.py": {
+    "size": 8306,
+    "mtime_ns": 1787410613293115851
+  },
+  "scripts/gitlab-ci-contract.test.mjs": {
+    "size": 14851,
+    "mtime_ns": 1788517887385233166
+  },
+  "scripts/package-portable.ps1": {
+    "size": 3232,
+    "mtime_ns": 1788317137128571310
+  },
+  "scripts/runtime-crate-dependencies.mjs": {
+    "size": 4723,
+    "mtime_ns": 1788618023369979862
+  },
+  "scripts/runtime-crate-dependencies.test.mjs": {
+    "size": 2165,
+    "mtime_ns": 1788616972951609216
+  },
+  "scripts/rust-lexical-scan.mjs": {
+    "size": 9014,
+    "mtime_ns": 1786945623168343527
+  },
+  "scripts/send-iso8583-sample.py": {
+    "size": 2118,
+    "mtime_ns": 1787280561896367460
+  },
+  "scripts/sign-macos-app.mjs": {
+    "size": 692,
+    "mtime_ns": 1788170843778261388
+  },
+  "scripts/stage-android-companion.sh": {
+    "size": 740,
+    "mtime_ns": 1785576420701752396
+  },
+  "scripts/test_e2e_external_packages.py": {
+    "size": 9466,
+    "mtime_ns": 1787826022499157265
+  },
+  "scripts/tests/fixtures/apksigner-missing-digest.txt": {
+    "size": 85,
+    "mtime_ns": 1785921332016015256
+  },
+  "scripts/tests/fixtures/apksigner-multiple-signers.txt": {
+    "size": 236,
+    "mtime_ns": 1785921332015626836
+  },
+  "scripts/tests/fixtures/apksigner-signer-numbered.txt": {
+    "size": 290,
+    "mtime_ns": 1785921332003740713
+  },
+  "scripts/tests/fixtures/apksigner-v3-signer-colon.txt": {
+    "size": 459,
+    "mtime_ns": 1785986133056910248
+  },
+  "scripts/tests/fixtures/apksigner-v3-signer.txt": {
+    "size": 202,
+    "mtime_ns": 1785921332015240750
+  },
+  "scripts/tests/verify-android-companion-signing-report-test.sh": {
+    "size": 1399,
+    "mtime_ns": 1785986133057468333
+  },
+  "scripts/verify-android-companion.sh": {
+    "size": 5734,
+    "mtime_ns": 1785986133056614580
+  },
+  "scripts/verify-macos-universal.mjs": {
+    "size": 2547,
+    "mtime_ns": 1788268657618098442
+  },
+  "scripts/verify-windows-openssl-runtime.ps1": {
+    "size": 1112,
+    "mtime_ns": 1788274369671006719
+  },
+  "scripts/windows-build-only-workflow.test.mjs": {
+    "size": 4812,
+    "mtime_ns": 1788517563919620964
+  },
+  "src-tauri/.gitignore": {
+    "size": 86,
+    "mtime_ns": 1785214612749539322
+  },
+  "src-tauri/Cargo.lock": {
+    "size": 200511,
+    "mtime_ns": 1788617052976078551
+  },
+  "src-tauri/Cargo.toml": {
+    "size": 5161,
+    "mtime_ns": 1788319183253572530
+  },
+  "src-tauri/build.rs": {
+    "size": 2506,
+    "mtime_ns": 1788268657620410795
+  },
+  "src-tauri/capabilities/default.json": {
+    "size": 207,
+    "mtime_ns": 1785214612750572117
+  },
+  "src-tauri/crates/android-control-protocol/Cargo.toml": {
+    "size": 306,
+    "mtime_ns": 1788616800164864816
+  },
+  "src-tauri/crates/android-control-protocol/src/error.rs": {
+    "size": 787,
+    "mtime_ns": 1788616800165305109
+  },
+  "src-tauri/crates/android-control-protocol/src/lib.rs": {
+    "size": 4338,
+    "mtime_ns": 1788616831670996582
+  },
+  "src-tauri/crates/android-control-protocol/src/tests.rs": {
+    "size": 2453,
+    "mtime_ns": 1788616831671724625
+  },
+  "src-tauri/crates/android-engine/Cargo.toml": {
+    "size": 690,
+    "mtime_ns": 1785643072352353065
+  },
+  "src-tauri/crates/android-engine/src/data_plane.rs": {
+    "size": 16211,
+    "mtime_ns": 1786358037807515620
+  },
+  "src-tauri/crates/android-engine/src/data_plane/packet/checksum.rs": {
+    "size": 5916,
+    "mtime_ns": 1785924913470110626
+  },
+  "src-tauri/crates/android-engine/src/data_plane/packet/mod.rs": {
+    "size": 5873,
+    "mtime_ns": 1785924428701253568
+  },
+  "src-tauri/crates/android-engine/src/data_plane/packet/pmtu.rs": {
+    "size": 5161,
+    "mtime_ns": 1785924913470752588
+  },
+  "src-tauri/crates/android-engine/src/data_plane/pump.rs": {
+    "size": 8409,
+    "mtime_ns": 1785936363941942778
+  },
+  "src-tauri/crates/android-engine/src/data_plane/scheduler.rs": {
+    "size": 9794,
+    "mtime_ns": 1785925290098571308
+  },
+  "src-tauri/crates/android-engine/src/data_plane/stats.rs": {
+    "size": 9138,
+    "mtime_ns": 1785926045040206600
+  },
+  "src-tauri/crates/android-engine/src/data_plane/tests.rs": {
+    "size": 10125,
+    "mtime_ns": 1785938861548615946
+  },
+  "src-tauri/crates/android-engine/src/data_plane/tun.rs": {
+    "size": 3416,
+    "mtime_ns": 1785925546470551437
+  },
+  "src-tauri/crates/android-engine/src/engine.rs": {
+    "size": 13623,
+    "mtime_ns": 1785936160420000412
+  },
+  "src-tauri/crates/android-engine/src/engine/tests.rs": {
+    "size": 12436,
+    "mtime_ns": 1787891861880550134
+  },
+  "src-tauri/crates/android-engine/src/jni_bridge.rs": {
+    "size": 7213,
+    "mtime_ns": 1785728322661884209
+  },
+  "src-tauri/crates/android-engine/src/lib.rs": {
+    "size": 1113,
+    "mtime_ns": 1785923243929121779
+  },
+  "src-tauri/crates/android-engine/src/model.rs": {
+    "size": 6341,
+    "mtime_ns": 1787891837621684391
+  },
+  "src-tauri/crates/android-engine/src/rng.rs": {
+    "size": 1249,
+    "mtime_ns": 1785573824328480982
+  },
+  "src-tauri/crates/android-engine/src/routing.rs": {
+    "size": 6797,
+    "mtime_ns": 1788589899815133223
+  },
+  "src-tauri/crates/android-engine/src/routing_tests.rs": {
+    "size": 9921,
+    "mtime_ns": 1788590281206760255
+  },
+  "src-tauri/crates/android-engine/src/socks5/mod.rs": {
+    "size": 8677,
+    "mtime_ns": 1785923742272547520
+  },
+  "src-tauri/crates/android-engine/src/socks5/protocol.rs": {
+    "size": 6804,
+    "mtime_ns": 1785922508947806235
+  },
+  "src-tauri/crates/android-engine/src/socks5/tests/lifecycle.rs": {
+    "size": 5054,
+    "mtime_ns": 1785923631502686711
+  },
+  "src-tauri/crates/android-engine/src/socks5/tests/mod.rs": {
+    "size": 3098,
+    "mtime_ns": 1787891861881385887
+  },
+  "src-tauri/crates/android-engine/src/socks5/tests/tcp.rs": {
+    "size": 7828,
+    "mtime_ns": 1788618359034896382
+  },
+  "src-tauri/crates/android-engine/src/socks5/tests/udp.rs": {
+    "size": 3792,
+    "mtime_ns": 1785923124994616215
+  },
+  "src-tauri/crates/android-engine/src/socks5/udp.rs": {
+    "size": 4484,
+    "mtime_ns": 1785923243932454049
+  },
+  "src-tauri/crates/android-engine/src/validation.rs": {
+    "size": 13535,
+    "mtime_ns": 1785936160420623499
+  },
+  "src-tauri/crates/android-engine/src/validation/tests.rs": {
+    "size": 5850,
+    "mtime_ns": 1787891861879939465
+  },
+  "src-tauri/crates/application/Cargo.toml": {
+    "size": 769,
+    "mtime_ns": 1788616800167869700
+  },
+  "src-tauri/crates/application/src/android.rs": {
+    "size": 8646,
+    "mtime_ns": 1788616800166496196
+  },
+  "src-tauri/crates/application/src/android/protocol_error.rs": {
+    "size": 1631,
+    "mtime_ns": 1788616831674557383
+  },
+  "src-tauri/crates/application/src/android/runtime_endpoint.rs": {
+    "size": 1615,
+    "mtime_ns": 1787034181975374282
+  },
+  "src-tauri/crates/application/src/android/runtime_owner.rs": {
+    "size": 3647,
+    "mtime_ns": 1788616973011397919
+  },
+  "src-tauri/crates/application/src/android/tests.rs": {
+    "size": 8582,
+    "mtime_ns": 1788616831676190387
+  },
+  "src-tauri/crates/application/src/application_backup.rs": {
+    "size": 11060,
+    "mtime_ns": 1788268657621007133
+  },
+  "src-tauri/crates/application/src/backup_export.rs": {
+    "size": 1425,
+    "mtime_ns": 1787031745494368882
+  },
+  "src-tauri/crates/application/src/backup_import.rs": {
+    "size": 6036,
+    "mtime_ns": 1787036994577379622
+  },
+  "src-tauri/crates/application/src/capacity.rs": {
+    "size": 6460,
+    "mtime_ns": 1787495785067775404
+  },
+  "src-tauri/crates/application/src/configuration.rs": {
+    "size": 11436,
+    "mtime_ns": 1787396429414163204
+  },
+  "src-tauri/crates/application/src/configuration/tests.rs": {
+    "size": 4352,
+    "mtime_ns": 1787898926120757675
+  },
+  "src-tauri/crates/application/src/coordination.rs": {
+    "size": 466,
+    "mtime_ns": 1788616815692697925
+  },
+  "src-tauri/crates/application/src/document_security.rs": {
+    "size": 1475,
+    "mtime_ns": 1785940299080910626
+  },
+  "src-tauri/crates/application/src/environment_configuration/android.rs": {
+    "size": 6942,
+    "mtime_ns": 1787891867818942409
+  },
+  "src-tauri/crates/application/src/environment_configuration/android/projection.rs": {
+    "size": 2712,
+    "mtime_ns": 1787891867819567578
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply.rs": {
+    "size": 11819,
+    "mtime_ns": 1787800602686351733
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply/affected.rs": {
+    "size": 4499,
+    "mtime_ns": 1787738836291746044
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply/baseline.rs": {
+    "size": 10505,
+    "mtime_ns": 1787805907355818284
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply/capability.rs": {
+    "size": 6390,
+    "mtime_ns": 1787744594973849666
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply/lease.rs": {
+    "size": 1160,
+    "mtime_ns": 1787740237911287611
+  },
+  "src-tauri/crates/application/src/environment_configuration/apply/lifting.rs": {
+    "size": 4793,
+    "mtime_ns": 1787892825829496705
+  },
+  "src-tauri/crates/application/src/environment_configuration/identity.rs": {
+    "size": 2262,
+    "mtime_ns": 1788182110028732054
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/mod.rs": {
+    "size": 912,
+    "mtime_ns": 1787771878295868275
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/queries.rs": {
+    "size": 1806,
+    "mtime_ns": 1787711804264103581
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/registry.rs": {
+    "size": 16255,
+    "mtime_ns": 1787772781442544022
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/registry_admission.rs": {
+    "size": 4616,
+    "mtime_ns": 1787771707815276225
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/shutdown.rs": {
+    "size": 2941,
+    "mtime_ns": 1787750177751196164
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/snapshot.rs": {
+    "size": 10138,
+    "mtime_ns": 1788027450218255726
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/state.rs": {
+    "size": 9225,
+    "mtime_ns": 1787765098229840708
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/types.rs": {
+    "size": 12180,
+    "mtime_ns": 1787765082226844512
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/validation.rs": {
+    "size": 4218,
+    "mtime_ns": 1787752842405886632
+  },
+  "src-tauri/crates/application/src/environment_configuration/lifecycle/worker.rs": {
+    "size": 7004,
+    "mtime_ns": 1788616815694491388
+  },
+  "src-tauri/crates/application/src/environment_configuration/listener.rs": {
+    "size": 13504,
+    "mtime_ns": 1788658208357013944
+  },
+  "src-tauri/crates/application/src/environment_configuration/listener/materials.rs": {
+    "size": 4407,
+    "mtime_ns": 1788658215647428387
+  },
+  "src-tauri/crates/application/src/environment_configuration/listener/projection.rs": {
+    "size": 6351,
+    "mtime_ns": 1788416497222185271
+  },
+  "src-tauri/crates/application/src/environment_configuration/materials.rs": {
+    "size": 7074,
+    "mtime_ns": 1787757779311720147
+  },
+  "src-tauri/crates/application/src/environment_configuration/mod.rs": {
+    "size": 14469,
+    "mtime_ns": 1788617616184851203
+  },
+  "src-tauri/crates/application/src/environment_configuration/preview.rs": {
+    "size": 6026,
+    "mtime_ns": 1788056057090557017
+  },
+  "src-tauri/crates/application/src/environment_configuration/rules.rs": {
+    "size": 868,
+    "mtime_ns": 1788257916474982273
+  },
+  "src-tauri/crates/application/src/environment_configuration/rules/projection.rs": {
+    "size": 3305,
+    "mtime_ns": 1788257886399002249
+  },
+  "src-tauri/crates/application/src/environment_configuration/service.rs": {
+    "size": 14988,
+    "mtime_ns": 1788617616150133267
+  },
+  "src-tauri/crates/application/src/environment_configuration/terminal.rs": {
+    "size": 11240,
+    "mtime_ns": 1788181611508007426
+  },
+  "src-tauri/crates/application/src/environment_configuration/validation.rs": {
+    "size": 12875,
+    "mtime_ns": 1787762586655349956
+  },
+  "src-tauri/crates/application/src/environment_configuration/validation/outcome.rs": {
+    "size": 2861,
+    "mtime_ns": 1787762574080048867
+  },
+  "src-tauri/crates/application/src/environment_configuration/validation/projection.rs": {
+    "size": 12919,
+    "mtime_ns": 1788233738478684684
+  },
+  "src-tauri/crates/application/src/environment_configuration/validation/runner.rs": {
+    "size": 19068,
+    "mtime_ns": 1787762574080615035
+  },
+  "src-tauri/crates/application/src/environment_configuration/validation/status_code.rs": {
+    "size": 5029,
+    "mtime_ns": 1788181611508561763
+  },
+  "src-tauri/crates/application/src/environment_configuration/workspace_projection.rs": {
+    "size": 9527,
+    "mtime_ns": 1788182110048970565
+  },
+  "src-tauri/crates/application/src/error.rs": {
+    "size": 4265,
+    "mtime_ns": 1787808992071970931
+  },
+  "src-tauri/crates/application/src/events.rs": {
+    "size": 572,
+    "mtime_ns": 1786366133946586244
+  },
+  "src-tauri/crates/application/src/events/capture.rs": {
+    "size": 5304,
+    "mtime_ns": 1785932509806465379
+  },
+  "src-tauri/crates/application/src/events/diagnostics.rs": {
+    "size": 19223,
+    "mtime_ns": 1788233546294643418
+  },
+  "src-tauri/crates/application/src/events/hub.rs": {
+    "size": 6105,
+    "mtime_ns": 1785932509807623054
+  },
+  "src-tauri/crates/application/src/events/receiver.rs": {
+    "size": 3253,
+    "mtime_ns": 1785932120237646922
+  },
+  "src-tauri/crates/application/src/events/replay.rs": {
+    "size": 1803,
+    "mtime_ns": 1785932120237346295
+  },
+  "src-tauri/crates/application/src/events/retention.rs": {
+    "size": 3915,
+    "mtime_ns": 1785932509808822771
+  },
+  "src-tauri/crates/application/src/events/storage.rs": {
+    "size": 6054,
+    "mtime_ns": 1785932509809591819
+  },
+  "src-tauri/crates/application/src/events/subscription.rs": {
+    "size": 10439,
+    "mtime_ns": 1785941618332275715
+  },
+  "src-tauri/crates/application/src/events/types.rs": {
+    "size": 2210,
+    "mtime_ns": 1785932120237048334
+  },
+  "src-tauri/crates/application/src/facade.rs": {
+    "size": 8252,
+    "mtime_ns": 1788617643237410546
+  },
+  "src-tauri/crates/application/src/facade/android.rs": {
+    "size": 564,
+    "mtime_ns": 1787805007947002276
+  },
+  "src-tauri/crates/application/src/facade/android/activation.rs": {
+    "size": 19656,
+    "mtime_ns": 1787809007011988547
+  },
+  "src-tauri/crates/application/src/facade/android/control.rs": {
+    "size": 1961,
+    "mtime_ns": 1787809020180846526
+  },
+  "src-tauri/crates/application/src/facade/android/packages.rs": {
+    "size": 8645,
+    "mtime_ns": 1787809020181569863
+  },
+  "src-tauri/crates/application/src/facade/android/profiles.rs": {
+    "size": 9342,
+    "mtime_ns": 1787891837621024972
+  },
+  "src-tauri/crates/application/src/facade/android/runtime.rs": {
+    "size": 3027,
+    "mtime_ns": 1787808992072915351
+  },
+  "src-tauri/crates/application/src/facade/android/runtime_owner.rs": {
+    "size": 688,
+    "mtime_ns": 1788616973012175921
+  },
+  "src-tauri/crates/application/src/facade/android_tests.rs": {
+    "size": 2147,
+    "mtime_ns": 1787891861882966809
+  },
+  "src-tauri/crates/application/src/facade/application_backup.rs": {
+    "size": 5439,
+    "mtime_ns": 1788136339033886788
+  },
+  "src-tauri/crates/application/src/facade/application_backup_import.rs": {
+    "size": 8567,
+    "mtime_ns": 1788136339034842000
+  },
+  "src-tauri/crates/application/src/facade/application_snapshot.rs": {
+    "size": 2204,
+    "mtime_ns": 1787642034699157560
+  },
+  "src-tauri/crates/application/src/facade/bootstrap.rs": {
+    "size": 1426,
+    "mtime_ns": 1787827173586180538
+  },
+  "src-tauri/crates/application/src/facade/certificate_portability.rs": {
+    "size": 4553,
+    "mtime_ns": 1787039290111975855
+  },
+  "src-tauri/crates/application/src/facade/certificates.rs": {
+    "size": 3357,
+    "mtime_ns": 1788344716123499830
+  },
+  "src-tauri/crates/application/src/facade/configuration.rs": {
+    "size": 5449,
+    "mtime_ns": 1788617643238540970
+  },
+  "src-tauri/crates/application/src/facade/diagnostic_report.rs": {
+    "size": 10911,
+    "mtime_ns": 1787899202194889953
+  },
+  "src-tauri/crates/application/src/facade/diagnostic_report/markdown.rs": {
+    "size": 5442,
+    "mtime_ns": 1788415158675563062
+  },
+  "src-tauri/crates/application/src/facade/diagnostics.rs": {
+    "size": 2831,
+    "mtime_ns": 1788087700717124120
+  },
+  "src-tauri/crates/application/src/facade/environment_candidates.rs": {
+    "size": 3493,
+    "mtime_ns": 1788617643239127182
+  },
+  "src-tauri/crates/application/src/facade/exchange_observations.rs": {
+    "size": 1206,
+    "mtime_ns": 1787769276491865144
+  },
+  "src-tauri/crates/application/src/facade/lifecycle.rs": {
+    "size": 4960,
+    "mtime_ns": 1788590054930362875
+  },
+  "src-tauri/crates/application/src/facade/listener_certificates.rs": {
+    "size": 4508,
+    "mtime_ns": 1787641503789820008
+  },
+  "src-tauri/crates/application/src/facade/listeners.rs": {
+    "size": 16948,
+    "mtime_ns": 1788593541821349309
+  },
+  "src-tauri/crates/application/src/facade/listeners/draft.rs": {
+    "size": 2684,
+    "mtime_ns": 1788593576905294684
+  },
+  "src-tauri/crates/application/src/facade/listeners/model.rs": {
+    "size": 10762,
+    "mtime_ns": 1788415158677350651
+  },
+  "src-tauri/crates/application/src/facade/listeners_tests.rs": {
+    "size": 4174,
+    "mtime_ns": 1788416714579544107
+  },
+  "src-tauri/crates/application/src/facade/protocol_package_portability.rs": {
+    "size": 7944,
+    "mtime_ns": 1788275027712058440
+  },
+  "src-tauri/crates/application/src/facade/protocol_packages.rs": {
+    "size": 15757,
+    "mtime_ns": 1788271040100349506
+  },
+  "src-tauri/crates/application/src/facade/protocol_packages/catalog.rs": {
+    "size": 4368,
+    "mtime_ns": 1788268657622211477
+  },
+  "src-tauri/crates/application/src/facade/protocol_packages/imports.rs": {
+    "size": 2213,
+    "mtime_ns": 1788271418649581383
+  },
+  "src-tauri/crates/application/src/facade/protocol_packages/lifecycle.rs": {
+    "size": 1463,
+    "mtime_ns": 1788268657623398361
+  },
+  "src-tauri/crates/application/src/facade/protocol_packages/lookup.rs": {
+    "size": 1181,
+    "mtime_ns": 1788268657624283786
+  },
+  "src-tauri/crates/application/src/facade/protocol_rule_values.rs": {
+    "size": 3243,
+    "mtime_ns": 1788180621325652982
+  },
+  "src-tauri/crates/application/src/facade/rule_capabilities.rs": {
+    "size": 5747,
+    "mtime_ns": 1788494655341764321
+  },
+  "src-tauri/crates/application/src/facade/rules.rs": {
+    "size": 2722,
+    "mtime_ns": 1788190536437017094
+  },
+  "src-tauri/crates/application/src/facade/rules/exchange_mock.rs": {
+    "size": 7315,
+    "mtime_ns": 1788496917200452927
+  },
+  "src-tauri/crates/application/src/facade/secrets.rs": {
+    "size": 1642,
+    "mtime_ns": 1785579838175372351
+  },
+  "src-tauri/crates/application/src/facade/settings.rs": {
+    "size": 2506,
+    "mtime_ns": 1787037711836325522
+  },
+  "src-tauri/crates/application/src/facade/traffic.rs": {
+    "size": 2196,
+    "mtime_ns": 1788235939980689665
+  },
+  "src-tauri/crates/application/src/facade/unified_rule_editor.rs": {
+    "size": 16422,
+    "mtime_ns": 1788494655342304780
+  },
+  "src-tauri/crates/application/src/facade/unified_rule_editor/document_factory.rs": {
+    "size": 10732,
+    "mtime_ns": 1788491743098695914
+  },
+  "src-tauri/crates/application/src/facade/unified_rule_editor/validation.rs": {
+    "size": 5391,
+    "mtime_ns": 1788265945280803934
+  },
+  "src-tauri/crates/application/src/facade/unified_rules.rs": {
+    "size": 7550,
+    "mtime_ns": 1788188649201563124
+  },
+  "src-tauri/crates/application/src/facade/validation.rs": {
+    "size": 5625,
+    "mtime_ns": 1788079472478119526
+  },
+  "src-tauri/crates/application/src/facade/workspaces.rs": {
+    "size": 9775,
+    "mtime_ns": 1787805007973838208
+  },
+  "src-tauri/crates/application/src/lib.rs": {
+    "size": 4305,
+    "mtime_ns": 1788617616402513968
+  },
+  "src-tauri/crates/application/src/listeners.rs": {
+    "size": 12826,
+    "mtime_ns": 1788415158678516697
+  },
+  "src-tauri/crates/application/src/models.rs": {
+    "size": 979,
+    "mtime_ns": 1788593406857314775
+  },
+  "src-tauri/crates/application/src/models/application_snapshot.rs": {
+    "size": 1280,
+    "mtime_ns": 1787641624526585204
+  },
+  "src-tauri/crates/application/src/models/capture.rs": {
+    "size": 11334,
+    "mtime_ns": 1788235939981178079
+  },
+  "src-tauri/crates/application/src/models/certificate_settings.rs": {
+    "size": 4602,
+    "mtime_ns": 1788079472477126602
+  },
+  "src-tauri/crates/application/src/models/common.rs": {
+    "size": 3680,
+    "mtime_ns": 1788275027731103903
+  },
+  "src-tauri/crates/application/src/models/diagnostic_report.rs": {
+    "size": 3495,
+    "mtime_ns": 1787902433704294055
+  },
+  "src-tauri/crates/application/src/models/diagnostics.rs": {
+    "size": 9668,
+    "mtime_ns": 1788083180179151073
+  },
+  "src-tauri/crates/application/src/models/diagnostics/sanitization.rs": {
+    "size": 4546,
+    "mtime_ns": 1786364410028870993
+  },
+  "src-tauri/crates/application/src/models/events.rs": {
+    "size": 2946,
+    "mtime_ns": 1788234885652132949
+  },
+  "src-tauri/crates/application/src/models/exchange_observation.rs": {
+    "size": 7700,
+    "mtime_ns": 1788156334624225804
+  },
+  "src-tauri/crates/application/src/models/fault.rs": {
+    "size": 2214,
+    "mtime_ns": 1788257916475522944
+  },
+  "src-tauri/crates/application/src/models/listener_draft.rs": {
+    "size": 10722,
+    "mtime_ns": 1788593920734429460
+  },
+  "src-tauri/crates/application/src/models/listener_draft/normalization.rs": {
+    "size": 9108,
+    "mtime_ns": 1788593920731928237
+  },
+  "src-tauri/crates/application/src/models/listener_draft/transition.rs": {
+    "size": 11218,
+    "mtime_ns": 1788598071339377450
+  },
+  "src-tauri/crates/application/src/models/protocol_package.rs": {
+    "size": 15805,
+    "mtime_ns": 1788315354473225709
+  },
+  "src-tauri/crates/application/src/models/rule.rs": {
+    "size": 5050,
+    "mtime_ns": 1788415158673205178
+  },
+  "src-tauri/crates/application/src/models/session.rs": {
+    "size": 4005,
+    "mtime_ns": 1788233392938325135
+  },
+  "src-tauri/crates/application/src/models/socket_diagnostics.rs": {
+    "size": 5252,
+    "mtime_ns": 1787396141628579105
+  },
+  "src-tauri/crates/application/src/models/unified_rule.rs": {
+    "size": 16599,
+    "mtime_ns": 1788492864663389653
+  },
+  "src-tauri/crates/application/src/models/workspace.rs": {
+    "size": 8848,
+    "mtime_ns": 1787726523673514759
+  },
+  "src-tauri/crates/application/src/portable_certificates.rs": {
+    "size": 11285,
+    "mtime_ns": 1787039290145453814
+  },
+  "src-tauri/crates/application/src/portable_protocol_packages.rs": {
+    "size": 10936,
+    "mtime_ns": 1788268657625711673
+  },
+  "src-tauri/crates/application/src/ports.rs": {
+    "size": 11690,
+    "mtime_ns": 1788617616422761503
+  },
+  "src-tauri/crates/application/src/ports/android.rs": {
+    "size": 2468,
+    "mtime_ns": 1787805007987845593
+  },
+  "src-tauri/crates/application/src/ports/application_bundle.rs": {
+    "size": 623,
+    "mtime_ns": 1788617616421761567
+  },
+  "src-tauri/crates/application/src/ports/external_packages.rs": {
+    "size": 3351,
+    "mtime_ns": 1788617616422090073
+  },
+  "src-tauri/crates/application/src/ports/protocol_packages.rs": {
+    "size": 2910,
+    "mtime_ns": 1788616947090511287
+  },
+  "src-tauri/crates/application/src/requirements_tests.rs": {
+    "size": 1222,
+    "mtime_ns": 1788593258718037638
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_multi_device.rs": {
+    "size": 2792,
+    "mtime_ns": 1788233444198740209
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_runtime.rs": {
+    "size": 182,
+    "mtime_ns": 1788233444199134168
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_runtime/deletion.rs": {
+    "size": 2675,
+    "mtime_ns": 1788233444156938983
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_runtime/listener_runtime.rs": {
+    "size": 4348,
+    "mtime_ns": 1788233444157400191
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_runtime/support.rs": {
+    "size": 12102,
+    "mtime_ns": 1788233444158667859
+  },
+  "src-tauri/crates/application/src/requirements_tests/android_runtime/workspace_lifecycle.rs": {
+    "size": 5377,
+    "mtime_ns": 1788233444159149901
+  },
+  "src-tauri/crates/application/src/requirements_tests/application_snapshot.rs": {
+    "size": 2198,
+    "mtime_ns": 1788233444199593251
+  },
+  "src-tauri/crates/application/src/requirements_tests/capacity.rs": {
+    "size": 13456,
+    "mtime_ns": 1788234972777619525
+  },
+  "src-tauri/crates/application/src/requirements_tests/diagnostic_report.rs": {
+    "size": 13949,
+    "mtime_ns": 1788233444200510001
+  },
+  "src-tauri/crates/application/src/requirements_tests/diagnostics.rs": {
+    "size": 5116,
+    "mtime_ns": 1788233444200894877
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply.rs": {
+    "size": 230,
+    "mtime_ns": 1788233444201322502
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/application_wiring_contract.rs": {
+    "size": 7358,
+    "mtime_ns": 1788617766674269617
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/baseline_collector_behavior.rs": {
+    "size": 6930,
+    "mtime_ns": 1788233444163220861
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/material_behavior.rs": {
+    "size": 7054,
+    "mtime_ns": 1788233444163800736
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/static_contract.rs": {
+    "size": 5768,
+    "mtime_ns": 1788233444164194153
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/worker_behavior.rs": {
+    "size": 16315,
+    "mtime_ns": 1788233444164810695
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/worker_behavior/baseline.rs": {
+    "size": 2120,
+    "mtime_ns": 1788233444165331945
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/worker_behavior/events.rs": {
+    "size": 2716,
+    "mtime_ns": 1788233444165778862
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_atomic_apply/worker_contract.rs": {
+    "size": 1609,
+    "mtime_ns": 1788233444166217154
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle.rs": {
+    "size": 674,
+    "mtime_ns": 1788233444201744169
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/capacity.rs": {
+    "size": 4450,
+    "mtime_ns": 1788233444167317404
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/cleanup.rs": {
+    "size": 2847,
+    "mtime_ns": 1788233444167810696
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/redlines.rs": {
+    "size": 2636,
+    "mtime_ns": 1788233444168297696
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/retention.rs": {
+    "size": 6011,
+    "mtime_ns": 1788233444168961363
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/state.rs": {
+    "size": 9106,
+    "mtime_ns": 1788233444169674488
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/static_contract.rs": {
+    "size": 2429,
+    "mtime_ns": 1788233444170151530
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/support.rs": {
+    "size": 6298,
+    "mtime_ns": 1788233444170749281
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_candidate_lifecycle/worker.rs": {
+    "size": 9312,
+    "mtime_ns": 1788233444171309448
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation.rs": {
+    "size": 13803,
+    "mtime_ns": 1788233444202320377
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/domain_contract_red.rs": {
+    "size": 17081,
+    "mtime_ns": 1788417320594733277
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/existing_active_listener_red.rs": {
+    "size": 11411,
+    "mtime_ns": 1788617278237654559
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/facade_race_red.rs": {
+    "size": 1840,
+    "mtime_ns": 1788233444173948115
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/http_rule_domain_red.rs": {
+    "size": 2974,
+    "mtime_ns": 1788275027766781356
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/limits_red.rs": {
+    "size": 8331,
+    "mtime_ns": 1788233444175202116
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/packaged_resource_projection.rs": {
+    "size": 3096,
+    "mtime_ns": 1788416967650493185
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/preview_contract_red.rs": {
+    "size": 17169,
+    "mtime_ns": 1788617278236348556
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/preview_security_red.rs": {
+    "size": 5070,
+    "mtime_ns": 1788617278231107875
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/review_red.rs": {
+    "size": 5407,
+    "mtime_ns": 1788233444177482450
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/runner_worker_red.rs": {
+    "size": 7749,
+    "mtime_ns": 1788617278233996216
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/selector_parse_red.rs": {
+    "size": 4360,
+    "mtime_ns": 1788275027773898696
+  },
+  "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/selector_projection_red.rs": {
+    "size": 17561,
+    "mtime_ns": 1788617278232098669
+  },
+  "src-tauri/crates/application/src/requirements_tests/events.rs": {
+    "size": 9279,
+    "mtime_ns": 1788589955920359832
+  },
+  "src-tauri/crates/application/src/requirements_tests/external_package_lifecycle.rs": {
+    "size": 8465,
+    "mtime_ns": 1788315806806069919
+  },
+  "src-tauri/crates/application/src/requirements_tests/external_package_lifecycle/support.rs": {
+    "size": 12597,
+    "mtime_ns": 1788617031790212091
+  },
+  "src-tauri/crates/application/src/requirements_tests/listener_certificates.rs": {
+    "size": 10285,
+    "mtime_ns": 1788658075922204228
+  },
+  "src-tauri/crates/application/src/requirements_tests/listener_certificates/runtime_guards.rs": {
+    "size": 9480,
+    "mtime_ns": 1788658075921956519
+  },
+  "src-tauri/crates/application/src/requirements_tests/listener_draft.rs": {
+    "size": 16252,
+    "mtime_ns": 1788598043645982661
+  },
+  "src-tauri/crates/application/src/requirements_tests/listener_draft/validation.rs": {
+    "size": 6463,
+    "mtime_ns": 1788594513079342840
+  },
+  "src-tauri/crates/application/src/requirements_tests/local_responder_topology.rs": {
+    "size": 6232,
+    "mtime_ns": 1788233444204230461
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/mod.rs": {
+    "size": 12476,
+    "mtime_ns": 1788233444184826412
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/protocol_rules.rs": {
+    "size": 4445,
+    "mtime_ns": 1788491828044667623
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/protocol_rules/listener_modes.rs": {
+    "size": 9549,
+    "mtime_ns": 1788491803994202042
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/protocol_rules/unified_validation.rs": {
+    "size": 7602,
+    "mtime_ns": 1788275027789238259
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/queries.rs": {
+    "size": 14774,
+    "mtime_ns": 1788315387342816025
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/support.rs": {
+    "size": 15142,
+    "mtime_ns": 1788616992224190469
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_package_lifecycle/support/models.rs": {
+    "size": 3292,
+    "mtime_ns": 1788233444188791580
+  },
+  "src-tauri/crates/application/src/requirements_tests/protocol_rule_values.rs": {
+    "size": 3086,
+    "mtime_ns": 1788233444204731962
+  },
+  "src-tauri/crates/application/src/requirements_tests/settings_lifecycle.rs": {
+    "size": 12088,
+    "mtime_ns": 1788494555735386592
+  },
+  "src-tauri/crates/application/src/requirements_tests/support.rs": {
+    "size": 412,
+    "mtime_ns": 1788233444205711879
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/application.rs": {
+    "size": 11439,
+    "mtime_ns": 1788616974346983427
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/environment_candidate_ports.rs": {
+    "size": 4630,
+    "mtime_ns": 1788233444191611164
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/fake_listener_certificates.rs": {
+    "size": 3893,
+    "mtime_ns": 1788233444192105956
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/fake_ports.rs": {
+    "size": 12758,
+    "mtime_ns": 1788617616474015603
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/fixtures.rs": {
+    "size": 11201,
+    "mtime_ns": 1788491828044265331
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/protocol_package_portability.rs": {
+    "size": 10157,
+    "mtime_ns": 1788616960834369713
+  },
+  "src-tauri/crates/application/src/requirements_tests/support/workspace_repository.rs": {
+    "size": 2411,
+    "mtime_ns": 1788233444194035165
+  },
+  "src-tauri/crates/application/src/requirements_tests/unified_rules.rs": {
+    "size": 11777,
+    "mtime_ns": 1788622935755992759
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration.rs": {
+    "size": 5296,
+    "mtime_ns": 1788616960835364174
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_export.rs": {
+    "size": 12063,
+    "mtime_ns": 1788268657630656173
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import.rs": {
+    "size": 16614,
+    "mtime_ns": 1788271424960332607
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/commit.rs": {
+    "size": 10199,
+    "mtime_ns": 1788258756826440021
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/source.rs": {
+    "size": 1700,
+    "mtime_ns": 1788233444197354667
+  },
+  "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs": {
+    "size": 2623,
+    "mtime_ns": 1788491803991280208
+  },
+  "src-tauri/crates/application/src/sessions.rs": {
+    "size": 12042,
+    "mtime_ns": 1788235939979817552
+  },
+  "src-tauri/crates/application/src/workspace_persistence.rs": {
+    "size": 93,
+    "mtime_ns": 1787892426941919405
+  },
+  "src-tauri/crates/application/src/workspaces.rs": {
+    "size": 12895,
+    "mtime_ns": 1788415158679085408
+  },
+  "src-tauri/crates/application/src/workspaces_tests.rs": {
+    "size": 6903,
+    "mtime_ns": 1788266076883823619
+  },
+  "src-tauri/crates/application/tests/environment_configuration_contract.rs": {
+    "size": 13338,
+    "mtime_ns": 1788268056141451200
+  },
+  "src-tauri/crates/application/tests/environment_configuration_document_contract.rs": {
+    "size": 6134,
+    "mtime_ns": 1788268056142372916
+  },
+  "src-tauri/crates/application/tests/environment_configuration_negative_contract.rs": {
+    "size": 4451,
+    "mtime_ns": 1787702025111009932
+  },
+  "src-tauri/crates/application/tests/r07a_application_backup_wire.rs": {
+    "size": 7375,
+    "mtime_ns": 1788318757126523474
+  },
+  "src-tauri/crates/domain/Cargo.toml": {
+    "size": 412,
+    "mtime_ns": 1787227029574578007
+  },
+  "src-tauri/crates/domain/src/android_network.rs": {
+    "size": 15158,
+    "mtime_ns": 1788616877236907198
+  },
+  "src-tauri/crates/domain/src/android_network_tests.rs": {
+    "size": 3496,
+    "mtime_ns": 1787891837619698842
+  },
+  "src-tauri/crates/domain/src/certificate.rs": {
+    "size": 6320,
+    "mtime_ns": 1785493838941134486
+  },
+  "src-tauri/crates/domain/src/document/mod.rs": {
+    "size": 597,
+    "mtime_ns": 1788131350735798025
+  },
+  "src-tauri/crates/domain/src/document/model.rs": {
+    "size": 18191,
+    "mtime_ns": 1788492062755965455
+  },
+  "src-tauri/crates/domain/src/document/pointer.rs": {
+    "size": 6087,
+    "mtime_ns": 1788492078223997718
+  },
+  "src-tauri/crates/domain/src/document/schema.rs": {
+    "size": 6821,
+    "mtime_ns": 1788492062756664372
+  },
+  "src-tauri/crates/domain/src/document/tests/mod.rs": {
+    "size": 103,
+    "mtime_ns": 1788024862712740966
+  },
+  "src-tauri/crates/domain/src/document/tests/recursive.rs": {
+    "size": 6354,
+    "mtime_ns": 1788031528971354557
+  },
+  "src-tauri/crates/domain/src/error.rs": {
+    "size": 6088,
+    "mtime_ns": 1788233278524936445
+  },
+  "src-tauri/crates/domain/src/id.rs": {
+    "size": 1777,
+    "mtime_ns": 1788233278524215653
+  },
+  "src-tauri/crates/domain/src/json_path.rs": {
+    "size": 5379,
+    "mtime_ns": 1785493733365882355
+  },
+  "src-tauri/crates/domain/src/lib.rs": {
+    "size": 1051,
+    "mtime_ns": 1788233278523604611
+  },
+  "src-tauri/crates/domain/src/message.rs": {
+    "size": 7536,
+    "mtime_ns": 1788233278526000403
+  },
+  "src-tauri/crates/domain/src/protocol_direction.rs": {
+    "size": 294,
+    "mtime_ns": 1788180521774590290
+  },
+  "src-tauri/crates/domain/src/protocol_package/identity.rs": {
+    "size": 5849,
+    "mtime_ns": 1788041365143417442
+  },
+  "src-tauri/crates/domain/src/protocol_package/mod.rs": {
+    "size": 339,
+    "mtime_ns": 1787466561592360962
+  },
+  "src-tauri/crates/domain/src/protocol_package/tests/identity.rs": {
+    "size": 3927,
+    "mtime_ns": 1788041616721173591
+  },
+  "src-tauri/crates/domain/src/protocol_package/tests/mod.rs": {
+    "size": 29,
+    "mtime_ns": 1787466561592659547
+  },
+  "src-tauri/crates/domain/src/revision.rs": {
+    "size": 2384,
+    "mtime_ns": 1786733625377183956
+  },
+  "src-tauri/crates/domain/src/rule.rs": {
+    "size": 420,
+    "mtime_ns": 1788190256058226620
+  },
+  "src-tauri/crates/domain/src/rule/matching.rs": {
+    "size": 4933,
+    "mtime_ns": 1788177070369943031
+  },
+  "src-tauri/crates/domain/src/rule/types.rs": {
+    "size": 11192,
+    "mtime_ns": 1788417320695086689
+  },
+  "src-tauri/crates/domain/src/rule/validation.rs": {
+    "size": 9512,
+    "mtime_ns": 1788416416398894697
+  },
+  "src-tauri/crates/domain/src/session.rs": {
+    "size": 3840,
+    "mtime_ns": 1788259982754600837
+  },
+  "src-tauri/crates/domain/src/settings.rs": {
+    "size": 16701,
+    "mtime_ns": 1787493103570505503
+  },
+  "src-tauri/crates/domain/src/state.rs": {
+    "size": 6825,
+    "mtime_ns": 1788233278525641278
+  },
+  "src-tauri/crates/domain/src/unified_matching_contract_tests.rs": {
+    "size": 5237,
+    "mtime_ns": 1788265578428678946
+  },
+  "src-tauri/crates/domain/src/unified_rule.rs": {
+    "size": 10448,
+    "mtime_ns": 1788265452637595077
+  },
+  "src-tauri/crates/domain/src/unified_rule/lifecycle.rs": {
+    "size": 3905,
+    "mtime_ns": 1788257856221661638
+  },
+  "src-tauri/crates/domain/src/unified_rule/validation.rs": {
+    "size": 1246,
+    "mtime_ns": 1788622987113866973
+  },
+  "src-tauri/crates/domain/src/unified_rule_execution.rs": {
+    "size": 9641,
+    "mtime_ns": 1788491743097694664
+  },
+  "src-tauri/crates/domain/src/unified_rule_execution/condition_evaluation.rs": {
+    "size": 2492,
+    "mtime_ns": 1788259062218238345
+  },
+  "src-tauri/crates/domain/src/unified_rule_execution/mutation.rs": {
+    "size": 3388,
+    "mtime_ns": 1788492078240264141
+  },
+  "src-tauri/crates/domain/src/unified_rule_execution/program.rs": {
+    "size": 6264,
+    "mtime_ns": 1788275027871416238
+  },
+  "src-tauri/crates/domain/src/workspace.rs": {
+    "size": 7745,
+    "mtime_ns": 1788229908969451582
+  },
+  "src-tauri/crates/domain/src/workspace/listener_model.rs": {
+    "size": 11750,
+    "mtime_ns": 1788658062300118283
+  },
+  "src-tauri/crates/domain/src/workspace/listener_model/socket.rs": {
+    "size": 5466,
+    "mtime_ns": 1788658062554543179
+  },
+  "src-tauri/crates/domain/src/workspace/socket_topology.rs": {
+    "size": 3988,
+    "mtime_ns": 1787396461031675417
+  },
+  "src-tauri/crates/domain/src/workspace/tests.rs": {
+    "size": 12948,
+    "mtime_ns": 1788417320709631261
+  },
+  "src-tauri/crates/domain/src/workspace/tests/listener_topology.rs": {
+    "size": 7035,
+    "mtime_ns": 1788418791824216167
+  },
+  "src-tauri/crates/domain/src/workspace/tests/listener_v3.rs": {
+    "size": 11968,
+    "mtime_ns": 1787396854865964412
+  },
+  "src-tauri/crates/domain/src/workspace/validation.rs": {
+    "size": 6675,
+    "mtime_ns": 1788234684087987804
+  },
+  "src-tauri/crates/domain/src/workspace/validation/listener.rs": {
+    "size": 10134,
+    "mtime_ns": 1788417320711502229
+  },
+  "src-tauri/crates/domain/src/workspace/validation/listener/socket.rs": {
+    "size": 6535,
+    "mtime_ns": 1787397812855343512
+  },
+  "src-tauri/crates/domain/src/workspace/validation/value.rs": {
+    "size": 2371,
+    "mtime_ns": 1787635606433814970
+  },
+  "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs": {
+    "size": 16346,
+    "mtime_ns": 1788492078254345897
+  },
+  "src-tauri/crates/domain/tests/phase6_rule_lifecycle.rs": {
+    "size": 4115,
+    "mtime_ns": 1788265642042169642
+  },
+  "src-tauri/crates/domain/tests/unified_rule_contract.rs": {
+    "size": 14201,
+    "mtime_ns": 1788623047746013433
+  },
+  "src-tauri/crates/exchange/Cargo.toml": {
+    "size": 454,
+    "mtime_ns": 1788147640297893721
+  },
+  "src-tauri/crates/exchange/src/capability.rs": {
+    "size": 1369,
+    "mtime_ns": 1787388769535398890
+  },
+  "src-tauri/crates/exchange/src/endpoint.rs": {
+    "size": 4156,
+    "mtime_ns": 1788625460421641874
+  },
+  "src-tauri/crates/exchange/src/envelope.rs": {
+    "size": 1192,
+    "mtime_ns": 1787388769535604516
+  },
+  "src-tauri/crates/exchange/src/error.rs": {
+    "size": 3997,
+    "mtime_ns": 1788624396980848768
+  },
+  "src-tauri/crates/exchange/src/exchange.rs": {
+    "size": 8051,
+    "mtime_ns": 1788663302859767423
+  },
+  "src-tauri/crates/exchange/src/lib.rs": {
+    "size": 1248,
+    "mtime_ns": 1788625020021236744
+  },
+  "src-tauri/crates/exchange/src/local_server.rs": {
+    "size": 5624,
+    "mtime_ns": 1788625475000679597
+  },
+  "src-tauri/crates/exchange/src/observation.rs": {
+    "size": 18856,
+    "mtime_ns": 1788663471449828537
+  },
+  "src-tauri/crates/exchange/src/observation/tests.rs": {
+    "size": 9595,
+    "mtime_ns": 1788663315535834434
+  },
+  "src-tauri/crates/exchange/src/pipeline.rs": {
+    "size": 14694,
+    "mtime_ns": 1788626946332410326
+  },
+  "src-tauri/crates/exchange/src/protocol.rs": {
+    "size": 2934,
+    "mtime_ns": 1788110802870737588
+  },
+  "src-tauri/crates/exchange/src/tests.rs": {
+    "size": 625,
+    "mtime_ns": 1788110802871236091
+  },
+  "src-tauri/crates/exchange/src/tests/exchange.rs": {
+    "size": 13944,
+    "mtime_ns": 1788663142501618319
+  },
+  "src-tauri/crates/exchange/src/tests/pipeline.rs": {
+    "size": 9106,
+    "mtime_ns": 1788625845309759552
+  },
+  "src-tauri/crates/exchange/src/tests/raw.rs": {
+    "size": 8625,
+    "mtime_ns": 1787399438826662078
+  },
+  "src-tauri/crates/exchange/src/tests/support.rs": {
+    "size": 2172,
+    "mtime_ns": 1788625845309243800
+  },
+  "src-tauri/crates/exchange/src/transparent.rs": {
+    "size": 4069,
+    "mtime_ns": 1787489845357571817
+  },
+  "src-tauri/crates/host/Cargo.toml": {
+    "size": 748,
+    "mtime_ns": 1788268657631187636
+  },
+  "src-tauri/crates/host/src/lib.rs": {
+    "size": 12531,
+    "mtime_ns": 1788268657631875142
+  },
+  "src-tauri/crates/host/src/platform.rs": {
+    "size": 1063,
+    "mtime_ns": 1787229879289512448
+  },
+  "src-tauri/crates/host/src/tests.rs": {
+    "size": 16176,
+    "mtime_ns": 1788275027916078835
+  },
+  "src-tauri/crates/host/src/tests/phase2_database_startup.rs": {
+    "size": 15529,
+    "mtime_ns": 1788321809317481577
+  },
+  "src-tauri/crates/host/tests/application_matrix.rs": {
+    "size": 542,
+    "mtime_ns": 1787038076095224287
+  },
+  "src-tauri/crates/host/tests/application_matrix/certificates.rs": {
+    "size": 1832,
+    "mtime_ns": 1788234081246775058
+  },
+  "src-tauri/crates/host/tests/application_matrix/rules_and_faults.rs": {
+    "size": 6801,
+    "mtime_ns": 1788266764572855673
+  },
+  "src-tauri/crates/host/tests/application_matrix/support.rs": {
+    "size": 8679,
+    "mtime_ns": 1788230431871575234
+  },
+  "src-tauri/crates/host/tests/application_matrix/validation_and_queries.rs": {
+    "size": 3582,
+    "mtime_ns": 1787038123837212256
+  },
+  "src-tauri/crates/host/tests/architecture.rs": {
+    "size": 13146,
+    "mtime_ns": 1788181611508959974
+  },
+  "src-tauri/crates/host/tests/architecture/support.rs": {
+    "size": 8322,
+    "mtime_ns": 1787653161922259588
+  },
+  "src-tauri/crates/host/tests/r05_removed_metadata_contract.rs": {
+    "size": 2856,
+    "mtime_ns": 1787083510143585320
+  },
+  "src-tauri/crates/host/tests/r07a_application_backup_entry_points.rs": {
+    "size": 3299,
+    "mtime_ns": 1787083510144327491
+  },
+  "src-tauri/crates/infrastructure/Cargo.toml": {
+    "size": 1712,
+    "mtime_ns": 1788616877236641573
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb.rs": {
+    "size": 2534,
+    "mtime_ns": 1788080576073331492
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/command.rs": {
+    "size": 11392,
+    "mtime_ns": 1788080576042906919
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/control_frame_read.rs": {
+    "size": 2133,
+    "mtime_ns": 1788080576059928220
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/control_port.rs": {
+    "size": 18859,
+    "mtime_ns": 1788080576054246759
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/device_reconciliation.rs": {
+    "size": 3393,
+    "mtime_ns": 1788080576054733012
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs": {
+    "size": 8725,
+    "mtime_ns": 1788663466413838743
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/environment_apply.rs": {
+    "size": 2824,
+    "mtime_ns": 1788080576058033997
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/fingerprint.rs": {
+    "size": 2217,
+    "mtime_ns": 1788080576040248690
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/lease.rs": {
+    "size": 12401,
+    "mtime_ns": 1788590428549502023
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs": {
+    "size": 17626,
+    "mtime_ns": 1788601009532418242
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/owner/persistence.rs": {
+    "size": 4122,
+    "mtime_ns": 1788080576040927445
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/owner/replacement.rs": {
+    "size": 6603,
+    "mtime_ns": 1788080576041560992
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/protocol.rs": {
+    "size": 17296,
+    "mtime_ns": 1788616800167561282
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/reverse.rs": {
+    "size": 9900,
+    "mtime_ns": 1788080576039665977
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/lan.rs": {
+    "size": 1750,
+    "mtime_ns": 1788080576055144599
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs": {
+    "size": 14201,
+    "mtime_ns": 1788663343986658282
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/support.rs": {
+    "size": 4178,
+    "mtime_ns": 1788080576055615019
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/runtime.rs": {
+    "size": 7813,
+    "mtime_ns": 1788080576038344091
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/status.rs": {
+    "size": 4731,
+    "mtime_ns": 1788080576056938363
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs": {
+    "size": 6562,
+    "mtime_ns": 1788600317345502454
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/environment_apply_gate_revision16.rs": {
+    "size": 4819,
+    "mtime_ns": 1788080576053617170
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/fixtures.rs": {
+    "size": 8769,
+    "mtime_ns": 1788080576053115958
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/forward_control.rs": {
+    "size": 11080,
+    "mtime_ns": 1788080576044698308
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs": {
+    "size": 4823,
+    "mtime_ns": 1788590006983090403
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs": {
+    "size": 16420,
+    "mtime_ns": 1788663263475848627
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/multi_device_registry.rs": {
+    "size": 12589,
+    "mtime_ns": 1788080576047461622
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/owner_async.rs": {
+    "size": 4185,
+    "mtime_ns": 1788080576048703840
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/owner_crash_safety.rs": {
+    "size": 2444,
+    "mtime_ns": 1788080576052480620
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/owner_lifecycle.rs": {
+    "size": 2794,
+    "mtime_ns": 1788080576046635407
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/owner_state_machine.rs": {
+    "size": 8430,
+    "mtime_ns": 1788080576046105861
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/reverse.rs": {
+    "size": 16006,
+    "mtime_ns": 1788080576045424606
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs": {
+    "size": 5605,
+    "mtime_ns": 1788601009554447323
+  },
+  "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/shared_gate.rs": {
+    "size": 8045,
+    "mtime_ns": 1788080576043696384
+  },
+  "src-tauri/crates/infrastructure/src/adapters/body_codecs.rs": {
+    "size": 11212,
+    "mtime_ns": 1788234886027946935
+  },
+  "src-tauri/crates/infrastructure/src/adapters/body_codecs/content_type.rs": {
+    "size": 7041,
+    "mtime_ns": 1788233591849555446
+  },
+  "src-tauri/crates/infrastructure/src/adapters/builtin_protocol_package.rs": {
+    "size": 1362,
+    "mtime_ns": 1788275028078463529
+  },
+  "src-tauri/crates/infrastructure/src/adapters/bundle.rs": {
+    "size": 17731,
+    "mtime_ns": 1788625540397231836
+  },
+  "src-tauri/crates/infrastructure/src/adapters/capture.rs": {
+    "size": 11534,
+    "mtime_ns": 1788617278830277171
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates.rs": {
+    "size": 17343,
+    "mtime_ns": 1788502303386517936
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates/fixed_root.rs": {
+    "size": 2184,
+    "mtime_ns": 1788344716123877249
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates/helpers.rs": {
+    "size": 4937,
+    "mtime_ns": 1788080576063535665
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates/material.rs": {
+    "size": 1919,
+    "mtime_ns": 1788502303387111313
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates/ports.rs": {
+    "size": 14580,
+    "mtime_ns": 1788344716124195793
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates_tests.rs": {
+    "size": 210,
+    "mtime_ns": 1788080576084320121
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates_tests/async_listener_material.rs": {
+    "size": 5941,
+    "mtime_ns": 1788080576035996865
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates_tests/imports.rs": {
+    "size": 7252,
+    "mtime_ns": 1788080576034317601
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates_tests/runtime_material.rs": {
+    "size": 9196,
+    "mtime_ns": 1788344865996902866
+  },
+  "src-tauri/crates/infrastructure/src/adapters/certificates_tests/support_and_failures.rs": {
+    "size": 9737,
+    "mtime_ns": 1788502175651299346
+  },
+  "src-tauri/crates/infrastructure/src/adapters/common.rs": {
+    "size": 8985,
+    "mtime_ns": 1788080576092383226
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests.rs": {
+    "size": 16980,
+    "mtime_ns": 1788080575985694759
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/android_owners.rs": {
+    "size": 2851,
+    "mtime_ns": 1788080576087031225
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/drift.rs": {
+    "size": 6028,
+    "mtime_ns": 1788080576085876675
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/revision16_integration.rs": {
+    "size": 15531,
+    "mtime_ns": 1788134814461444690
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/revision16_integration/internal_package_baseline.rs": {
+    "size": 2691,
+    "mtime_ns": 1788268657635077585
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_lease_tests/typed_exact_package_revision16.rs": {
+    "size": 2907,
+    "mtime_ns": 1788080576088096400
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_resources.rs": {
+    "size": 10742,
+    "mtime_ns": 1788080576082534440
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_apply_shared_gate_integration.rs": {
+    "size": 5025,
+    "mtime_ns": 1788080859427653404
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_baseline_capture.rs": {
+    "size": 4196,
+    "mtime_ns": 1788080575989774500
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_lease.rs": {
+    "size": 17810,
+    "mtime_ns": 1788132655547394047
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_lease/package.rs": {
+    "size": 2725,
+    "mtime_ns": 1788268657635523673
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_lease/resource.rs": {
+    "size": 2307,
+    "mtime_ns": 1788080576089673580
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_materials.rs": {
+    "size": 7780,
+    "mtime_ns": 1788080576066340687
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_validation.rs": {
+    "size": 17865,
+    "mtime_ns": 1788268657636662182
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_validation/probes.rs": {
+    "size": 2529,
+    "mtime_ns": 1788080575984323290
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_validation_tests.rs": {
+    "size": 16438,
+    "mtime_ns": 1788617834614278569
+  },
+  "src-tauri/crates/infrastructure/src/adapters/environment_configuration_validation_tests/review_red.rs": {
+    "size": 5690,
+    "mtime_ns": 1788080576060743976
+  },
+  "src-tauri/crates/infrastructure/src/adapters/exchange_observation.rs": {
+    "size": 10418,
+    "mtime_ns": 1788421213816751917
+  },
+  "src-tauri/crates/infrastructure/src/adapters/exchange_observation/tests.rs": {
+    "size": 8803,
+    "mtime_ns": 1788421213817581736
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/application_bundle.rs": {
+    "size": 4909,
+    "mtime_ns": 1788617834606730587
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/application_port.rs": {
+    "size": 13336,
+    "mtime_ns": 1788617867483864736
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/cleanup.rs": {
+    "size": 4655,
+    "mtime_ns": 1788103114719631274
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/connection.rs": {
+    "size": 1965,
+    "mtime_ns": 1788104323757069240
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/diagnostics.rs": {
+    "size": 7222,
+    "mtime_ns": 1788087700718227166
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/identity.rs": {
+    "size": 1143,
+    "mtime_ns": 1788080575952902084
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/local_archives.rs": {
+    "size": 11354,
+    "mtime_ns": 1788268657639049119
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/mod.rs": {
+    "size": 18903,
+    "mtime_ns": 1788617616550138154
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/service.rs": {
+    "size": 1858,
+    "mtime_ns": 1788080575952377247
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests.rs": {
+    "size": 15989,
+    "mtime_ns": 1788268657640441839
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/async_persistence.rs": {
+    "size": 7529,
+    "mtime_ns": 1788080575950144937
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/coverage.rs": {
+    "size": 14767,
+    "mtime_ns": 1788080859449899621
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/diagnostics.rs": {
+    "size": 3402,
+    "mtime_ns": 1788080859450612127
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/environment_apply_gate_revision16.rs": {
+    "size": 5813,
+    "mtime_ns": 1788080575950682483
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/error_views.rs": {
+    "size": 1687,
+    "mtime_ns": 1788087372862985977
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/tests/lifecycle.rs": {
+    "size": 5946,
+    "mtime_ns": 1788080575951124154
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_registry/views.rs": {
+    "size": 6324,
+    "mtime_ns": 1788402942699251188
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_server.rs": {
+    "size": 17459,
+    "mtime_ns": 1788268657642270480
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_server/tests.rs": {
+    "size": 14808,
+    "mtime_ns": 1788188892041881448
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_package_server/tests/fault_isolation.rs": {
+    "size": 7201,
+    "mtime_ns": 1788083317137688886
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_packages.rs": {
+    "size": 144,
+    "mtime_ns": 1788080576033570429
+  },
+  "src-tauri/crates/infrastructure/src/adapters/external_packages/handshake.rs": {
+    "size": 1668,
+    "mtime_ns": 1788080576080558799
+  },
+  "src-tauri/crates/infrastructure/src/adapters/faults.rs": {
+    "size": 6699,
+    "mtime_ns": 1788275028137076847
+  },
+  "src-tauri/crates/infrastructure/src/adapters/faults/actions.rs": {
+    "size": 10354,
+    "mtime_ns": 1788415227284893778
+  },
+  "src-tauri/crates/infrastructure/src/adapters/faults/template_fields.rs": {
+    "size": 11494,
+    "mtime_ns": 1788257916476102533
+  },
+  "src-tauri/crates/infrastructure/src/adapters/faults/templates.rs": {
+    "size": 8667,
+    "mtime_ns": 1788230709676475961
+  },
+  "src-tauri/crates/infrastructure/src/adapters/faults_tests.rs": {
+    "size": 11106,
+    "mtime_ns": 1788416644759394985
+  },
+  "src-tauri/crates/infrastructure/src/adapters/files.rs": {
+    "size": 1078,
+    "mtime_ns": 1788080576066967067
+  },
+  "src-tauri/crates/infrastructure/src/adapters/in_process_wasm.rs": {
+    "size": 9423,
+    "mtime_ns": 1788268657642819151
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificate_metadata.rs": {
+    "size": 5337,
+    "mtime_ns": 1788080576067980992
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificate_portable.rs": {
+    "size": 2607,
+    "mtime_ns": 1788080575989263913
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificate_reference.rs": {
+    "size": 2075,
+    "mtime_ns": 1788080576082972235
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificate_store.rs": {
+    "size": 2895,
+    "mtime_ns": 1788080576074927297
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates.rs": {
+    "size": 16511,
+    "mtime_ns": 1788080576083557198
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates/resolution.rs": {
+    "size": 4139,
+    "mtime_ns": 1788080576030979492
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates_test_support.rs": {
+    "size": 5016,
+    "mtime_ns": 1788080576037510543
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates_tests.rs": {
+    "size": 15530,
+    "mtime_ns": 1788319430529670334
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates_tests/async_resolution.rs": {
+    "size": 1972,
+    "mtime_ns": 1788080575986261889
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates_tests/bundles.rs": {
+    "size": 1801,
+    "mtime_ns": 1788319430530364583
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_certificates_tests/server_identity_import.rs": {
+    "size": 3591,
+    "mtime_ns": 1788080575986717768
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs": {
+    "size": 16865,
+    "mtime_ns": 1788629885500993100
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rule_compiler.rs": {
+    "size": 1350,
+    "mtime_ns": 1788080576028577764
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs": {
+    "size": 6875,
+    "mtime_ns": 1788623476789223332
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs": {
+    "size": 5946,
+    "mtime_ns": 1788630132429334431
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs": {
+    "size": 9952,
+    "mtime_ns": 1788631146870018356
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract.rs": {
+    "size": 4842,
+    "mtime_ns": 1788268657644761459
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract_tests.rs": {
+    "size": 10714,
+    "mtime_ns": 1788491910737093200
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/diagnostics.rs": {
+    "size": 3187,
+    "mtime_ns": 1788268657646424848
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs": {
+    "size": 4431,
+    "mtime_ns": 1788629964443421741
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs": {
+    "size": 4443,
+    "mtime_ns": 1788630086908796850
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/tests.rs": {
+    "size": 4371,
+    "mtime_ns": 1788191279619891529
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/helpers.rs": {
+    "size": 4112,
+    "mtime_ns": 1788080576022308007
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs": {
+    "size": 9436,
+    "mtime_ns": 1788627695440466875
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs": {
+    "size": 8567,
+    "mtime_ns": 1788630071651253833
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs": {
+    "size": 7088,
+    "mtime_ns": 1788628028919639693
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs": {
+    "size": 4802,
+    "mtime_ns": 1788627782510251038
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs": {
+    "size": 15178,
+    "mtime_ns": 1788629885499839134
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/lifecycle.rs": {
+    "size": 4748,
+    "mtime_ns": 1788080576024715859
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs": {
+    "size": 4272,
+    "mtime_ns": 1788630325451560478
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs": {
+    "size": 17221,
+    "mtime_ns": 1788627248010328947
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs": {
+    "size": 6165,
+    "mtime_ns": 1788629964443081781
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs": {
+    "size": 1871,
+    "mtime_ns": 1788623007768521101
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs": {
+    "size": 7646,
+    "mtime_ns": 1788627238534336309
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/tls.rs": {
+    "size": 2508,
+    "mtime_ns": 1788080576002448142
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/port.rs": {
+    "size": 14901,
+    "mtime_ns": 1788415440185830408
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/port/status.rs": {
+    "size": 7192,
+    "mtime_ns": 1788415233994422563
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs": {
+    "size": 782,
+    "mtime_ns": 1788623470985790792
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/runtime_rule_bundle.rs": {
+    "size": 2414,
+    "mtime_ns": 1788192208654634099
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics.rs": {
+    "size": 16362,
+    "mtime_ns": 1788092998074010026
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs": {
+    "size": 7406,
+    "mtime_ns": 1788093009044650037
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/phase7_tests.rs": {
+    "size": 2479,
+    "mtime_ns": 1788092922250946416
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics_tests.rs": {
+    "size": 15287,
+    "mtime_ns": 1788093042069444586
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_plan.rs": {
+    "size": 2794,
+    "mtime_ns": 1788080576023492683
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/start.rs": {
+    "size": 9526,
+    "mtime_ns": 1788415440185436499
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/test_support.rs": {
+    "size": 4242,
+    "mtime_ns": 1788080576019536610
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests.rs": {
+    "size": 1279,
+    "mtime_ns": 1788131126819421260
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/body_codec_cancellation.rs": {
+    "size": 6560,
+    "mtime_ns": 1788080576007433931
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/body_codec_epoch_cleanup.rs": {
+    "size": 4349,
+    "mtime_ns": 1788080576009975326
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/body_codec_lifecycle.rs": {
+    "size": 16020,
+    "mtime_ns": 1788080576016116916
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/certificate_policy.rs": {
+    "size": 5489,
+    "mtime_ns": 1788173914778817744
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/environment_apply_gate_revision16.rs": {
+    "size": 5293,
+    "mtime_ns": 1788192037704900126
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime.rs": {
+    "size": 14138,
+    "mtime_ns": 1788491910740761785
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime/support.rs": {
+    "size": 11638,
+    "mtime_ns": 1788234886131156986
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime/support/peer.rs": {
+    "size": 8628,
+    "mtime_ns": 1788123937736849850
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/fixed_server.rs": {
+    "size": 7054,
+    "mtime_ns": 1788416584661611921
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/forward_proxy.rs": {
+    "size": 9722,
+    "mtime_ns": 1788417295507743196
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs": {
+    "size": 15400,
+    "mtime_ns": 1788658171162097771
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs": {
+    "size": 9636,
+    "mtime_ns": 1788629552298955675
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs": {
+    "size": 9129,
+    "mtime_ns": 1788659202057285864
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs": {
+    "size": 6105,
+    "mtime_ns": 1788631054417577672
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs": {
+    "size": 17374,
+    "mtime_ns": 1788626589057363316
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/request_metadata.rs": {
+    "size": 3244,
+    "mtime_ns": 1788266566853839077
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs": {
+    "size": 13420,
+    "mtime_ns": 1788627454622901950
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/runtime_epoch_aba.rs": {
+    "size": 1189,
+    "mtime_ns": 1788080576004199405
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/socket_runtime.rs": {
+    "size": 10669,
+    "mtime_ns": 1788142911275652218
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/validation.rs": {
+    "size": 3257,
+    "mtime_ns": 1788416584652950544
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tls_material.rs": {
+    "size": 8339,
+    "mtime_ns": 1788415227293175350
+  },
+  "src-tauri/crates/infrastructure/src/adapters/mod.rs": {
+    "size": 3543,
+    "mtime_ns": 1788616900083390675
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline.rs": {
+    "size": 6439,
+    "mtime_ns": 1788625264347561566
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/completion.rs": {
+    "size": 6043,
+    "mtime_ns": 1788617002267210995
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs": {
+    "size": 2546,
+    "mtime_ns": 1788625264347971472
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs": {
+    "size": 2552,
+    "mtime_ns": 1788627635453698198
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs": {
+    "size": 3716,
+    "mtime_ns": 1788627635452535358
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/metrics.rs": {
+    "size": 2520,
+    "mtime_ns": 1788233830473997733
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs": {
+    "size": 15761,
+    "mtime_ns": 1788629141023123624
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs": {
+    "size": 9646,
+    "mtime_ns": 1788627635453138153
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs": {
+    "size": 8241,
+    "mtime_ns": 1788625264348413590
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs": {
+    "size": 10518,
+    "mtime_ns": 1788629308483892967
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs": {
+    "size": 8632,
+    "mtime_ns": 1788626150246415600
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/session.rs": {
+    "size": 6927,
+    "mtime_ns": 1788617012189066106
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests.rs": {
+    "size": 241,
+    "mtime_ns": 1788234081245184925
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/body_codec_persistence.rs": {
+    "size": 6313,
+    "mtime_ns": 1788424906497375192
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_cancellation.rs": {
+    "size": 8747,
+    "mtime_ns": 1788266566851229390
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_lifecycle.rs": {
+    "size": 541,
+    "mtime_ns": 1788234003230126572
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/runtime_support.rs": {
+    "size": 5862,
+    "mtime_ns": 1788234197767746433
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/session_runtime.rs": {
+    "size": 13752,
+    "mtime_ns": 1788234003231179448
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs": {
+    "size": 9066,
+    "mtime_ns": 1788631055351983941
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/support.rs": {
+    "size": 2736,
+    "mtime_ns": 1788234291040388361
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/upstream_security.rs": {
+    "size": 3560,
+    "mtime_ns": 1788080575972368696
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protected_secrets.rs": {
+    "size": 8674,
+    "mtime_ns": 1788080576071848022
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protocol_package_import.rs": {
+    "size": 6370,
+    "mtime_ns": 1788268657652822027
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protocol_package_import/tests.rs": {
+    "size": 14334,
+    "mtime_ns": 1788617616800835832
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protocol_package_runtime.rs": {
+    "size": 5331,
+    "mtime_ns": 1788268657653952245
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protocol_package_usage.rs": {
+    "size": 5553,
+    "mtime_ns": 1788080576085265253
+  },
+  "src-tauri/crates/infrastructure/src/adapters/protocol_package_usage/tests.rs": {
+    "size": 8085,
+    "mtime_ns": 1788188892042686608
+  },
+  "src-tauri/crates/infrastructure/src/adapters/rules.rs": {
+    "size": 6423,
+    "mtime_ns": 1788191472758388211
+  },
+  "src-tauri/crates/infrastructure/src/adapters/rules/conversion.rs": {
+    "size": 1778,
+    "mtime_ns": 1788257916476927707
+  },
+  "src-tauri/crates/infrastructure/src/adapters/settings.rs": {
+    "size": 8846,
+    "mtime_ns": 1788080576089126659
+  },
+  "src-tauri/crates/infrastructure/src/adapters/settings/mapping.rs": {
+    "size": 3024,
+    "mtime_ns": 1788080575968420831
+  },
+  "src-tauri/crates/infrastructure/src/adapters/settings/persistence.rs": {
+    "size": 1799,
+    "mtime_ns": 1788080575967503949
+  },
+  "src-tauri/crates/infrastructure/src/adapters/settings/port.rs": {
+    "size": 1690,
+    "mtime_ns": 1788080575967967578
+  },
+  "src-tauri/crates/infrastructure/src/adapters/settings/tests.rs": {
+    "size": 5702,
+    "mtime_ns": 1788080575968958002
+  },
+  "src-tauri/crates/infrastructure/src/adapters/workspaces.rs": {
+    "size": 7216,
+    "mtime_ns": 1788617616810014764
+  },
+  "src-tauri/crates/infrastructure/src/adapters/workspaces/tests.rs": {
+    "size": 9130,
+    "mtime_ns": 1788617472295208855
+  },
+  "src-tauri/crates/infrastructure/src/adapters/workspaces/tests/persistence_migration.rs": {
+    "size": 2486,
+    "mtime_ns": 1788080576064906509
+  },
+  "src-tauri/crates/infrastructure/src/application_backup.rs": {
+    "size": 16420,
+    "mtime_ns": 1788268657654557625
+  },
+  "src-tauri/crates/infrastructure/src/application_backup/error.rs": {
+    "size": 3895,
+    "mtime_ns": 1788080576093559985
+  },
+  "src-tauri/crates/infrastructure/src/application_backup_export.rs": {
+    "size": 5162,
+    "mtime_ns": 1788080576095442875
+  },
+  "src-tauri/crates/infrastructure/src/application_backup_import.rs": {
+    "size": 13121,
+    "mtime_ns": 1788080576094705078
+  },
+  "src-tauri/crates/infrastructure/src/certificates.rs": {
+    "size": 18830,
+    "mtime_ns": 1788344716124717880
+  },
+  "src-tauri/crates/infrastructure/src/certificates/pem_identity.rs": {
+    "size": 2319,
+    "mtime_ns": 1788080575925167199
+  },
+  "src-tauri/crates/infrastructure/src/certificates/server_identity.rs": {
+    "size": 8633,
+    "mtime_ns": 1788080575923972356
+  },
+  "src-tauri/crates/infrastructure/src/certificates/trust_anchor.rs": {
+    "size": 537,
+    "mtime_ns": 1788080575925658578
+  },
+  "src-tauri/crates/infrastructure/src/certificates/validation.rs": {
+    "size": 10316,
+    "mtime_ns": 1788080575924620778
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests.rs": {
+    "size": 190,
+    "mtime_ns": 1788080576096447841
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/client_identity.rs": {
+    "size": 1890,
+    "mtime_ns": 1788080575921878548
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/fixtures/r09-leaf-cert.pem": {
+    "size": 1176,
+    "mtime_ns": 1787025975667673819
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/fixtures/r09-leaf-key-pkcs1.pem": {
+    "size": 1675,
+    "mtime_ns": 1787025975668173583
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/fixtures/r09-root-cert.pem": {
+    "size": 1147,
+    "mtime_ns": 1787025975667958869
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/generation.rs": {
+    "size": 11329,
+    "mtime_ns": 1788080575922489636
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/pkcs12.rs": {
+    "size": 5808,
+    "mtime_ns": 1788080575921339335
+  },
+  "src-tauri/crates/infrastructure/src/certificates_tests/server_identity.rs": {
+    "size": 14354,
+    "mtime_ns": 1788080575923213850
+  },
+  "src-tauri/crates/infrastructure/src/dpapi.rs": {
+    "size": 6015,
+    "mtime_ns": 1788080576094153073
+  },
+  "src-tauri/crates/infrastructure/src/error.rs": {
+    "size": 4942,
+    "mtime_ns": 1788240409939666634
+  },
+  "src-tauri/crates/infrastructure/src/files.rs": {
+    "size": 10263,
+    "mtime_ns": 1788080575945605693
+  },
+  "src-tauri/crates/infrastructure/src/keychain.rs": {
+    "size": 14342,
+    "mtime_ns": 1788080576097759519
+  },
+  "src-tauri/crates/infrastructure/src/lib.rs": {
+    "size": 2513,
+    "mtime_ns": 1788164346761340996
+  },
+  "src-tauri/crates/infrastructure/src/package_transport.rs": {
+    "size": 13638,
+    "mtime_ns": 1788092191708245230
+  },
+  "src-tauri/crates/infrastructure/src/package_transport/driver.rs": {
+    "size": 7612,
+    "mtime_ns": 1788083149144999104
+  },
+  "src-tauri/crates/infrastructure/src/sqlite.rs": {
+    "size": 11052,
+    "mtime_ns": 1788239588022974097
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/android_runtime_owner.rs": {
+    "size": 13156,
+    "mtime_ns": 1788616877237570242
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/certificates.rs": {
+    "size": 3987,
+    "mtime_ns": 1788080575926146956
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/core.rs": {
+    "size": 14050,
+    "mtime_ns": 1788242173403944889
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/core/tests.rs": {
+    "size": 4939,
+    "mtime_ns": 1788242151180714861
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/environment_configuration.rs": {
+    "size": 17151,
+    "mtime_ns": 1788080575941154408
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/environment_configuration_baseline.rs": {
+    "size": 9921,
+    "mtime_ns": 1788142460642261892
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/executor.rs": {
+    "size": 13848,
+    "mtime_ns": 1788164346761994208
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/external_packages.rs": {
+    "size": 15566,
+    "mtime_ns": 1788268657655247173
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/external_packages/fingerprint.rs": {
+    "size": 1274,
+    "mtime_ns": 1788080575943714095
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/external_packages/rows.rs": {
+    "size": 7592,
+    "mtime_ns": 1788268657655820303
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/schema.rs": {
+    "size": 5557,
+    "mtime_ns": 1788141989134915457
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/android_runtime_owner.rs": {
+    "size": 12255,
+    "mtime_ns": 1788239692129604565
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/corruption_and_certificates.rs": {
+    "size": 11904,
+    "mtime_ns": 1788239692129018147
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_baseline_observer.rs": {
+    "size": 3324,
+    "mtime_ns": 1788142091361197817
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_commit.rs": {
+    "size": 4035,
+    "mtime_ns": 1788080575936741373
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_commit/behavior.rs": {
+    "size": 9784,
+    "mtime_ns": 1788142460653325172
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/environment_configuration_material_arena.rs": {
+    "size": 2418,
+    "mtime_ns": 1788080575932255004
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/external_packages.rs": {
+    "size": 10977,
+    "mtime_ns": 1788141989138303591
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/external_packages/corruption.rs": {
+    "size": 10121,
+    "mtime_ns": 1788106916805641760
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/mod.rs": {
+    "size": 404,
+    "mtime_ns": 1788141877131233972
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/phase14_schema100.rs": {
+    "size": 3074,
+    "mtime_ns": 1788144037128550453
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/tests/workspace_and_settings.rs": {
+    "size": 9892,
+    "mtime_ns": 1788234886210314255
+  },
+  "src-tauri/crates/infrastructure/src/sqlite/workspaces.rs": {
+    "size": 17696,
+    "mtime_ns": 1788268657656825228
+  },
+  "src-tauri/crates/infrastructure/src/windows_process.rs": {
+    "size": 665,
+    "mtime_ns": 1788080576098197522
+  },
+  "src-tauri/crates/infrastructure/tests/phase7_transport_contract.rs": {
+    "size": 8874,
+    "mtime_ns": 1788087986430011744
+  },
+  "src-tauri/crates/infrastructure/tests/r07a_application_backup_archive.rs": {
+    "size": 14965,
+    "mtime_ns": 1788268657657549943
+  },
+  "src-tauri/crates/infrastructure/tests/r07b_application_backup_export.rs": {
+    "size": 10734,
+    "mtime_ns": 1788268657658507409
+  },
+  "src-tauri/crates/infrastructure/tests/r07c_application_backup_import_tokens.rs": {
+    "size": 9591,
+    "mtime_ns": 1788268657659318166
+  },
+  "src-tauri/crates/package-contract/Cargo.toml": {
+    "size": 341,
+    "mtime_ns": 1788035711516356252
+  },
+  "src-tauri/crates/package-contract/examples/validation-metadata.rs": {
+    "size": 1041,
+    "mtime_ns": 1788040063100838757
+  },
+  "src-tauri/crates/package-contract/src/frame.rs": {
+    "size": 4029,
+    "mtime_ns": 1788037819404370791
+  },
+  "src-tauri/crates/package-contract/src/lib.rs": {
+    "size": 424,
+    "mtime_ns": 1788035835918527024
+  },
+  "src-tauri/crates/package-contract/src/manifest.rs": {
+    "size": 9969,
+    "mtime_ns": 1788040091456215271
+  },
+  "src-tauri/crates/package-contract/src/rpc.rs": {
+    "size": 9143,
+    "mtime_ns": 1788077980805058309
+  },
+  "src-tauri/crates/package-contract/tests/frame_result_contract.rs": {
+    "size": 1428,
+    "mtime_ns": 1788037685673940686
+  },
+  "src-tauri/crates/package-contract/tests/golden_parity.rs": {
+    "size": 3019,
+    "mtime_ns": 1788038510076353246
+  },
+  "src-tauri/crates/package-contract/tests/manifest_contract.rs": {
+    "size": 2562,
+    "mtime_ns": 1788041543551665084
+  },
+  "src-tauri/crates/package-contract/tests/rpc_contract.rs": {
+    "size": 2518,
+    "mtime_ns": 1788035889362492162
+  },
+  "src-tauri/crates/package-contract/tests/stable_code_contract.rs": {
+    "size": 604,
+    "mtime_ns": 1788035889363856334
+  },
+  "src-tauri/crates/package-runtime/Cargo.toml": {
+    "size": 710,
+    "mtime_ns": 1788268657660274215
+  },
+  "src-tauri/crates/package-runtime/src/lib.rs": {
+    "size": 135,
+    "mtime_ns": 1788268657660927846
+  },
+  "src-tauri/crates/package-runtime/src/wasm_component.rs": {
+    "size": 17393,
+    "mtime_ns": 1788316869355037586
+  },
+  "src-tauri/crates/package-runtime/src/wasm_component/host.rs": {
+    "size": 7029,
+    "mtime_ns": 1788319472766585567
+  },
+  "src-tauri/crates/package-runtime/tests/fixtures/http-echo/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268657662587277
+  },
+  "src-tauri/crates/package-runtime/tests/fixtures/http-echo/Cargo.lock": {
+    "size": 8970,
+    "mtime_ns": 1788274000414326654
+  },
+  "src-tauri/crates/package-runtime/tests/fixtures/http-echo/Cargo.toml": {
+    "size": 208,
+    "mtime_ns": 1788268657662996530
+  },
+  "src-tauri/crates/package-runtime/tests/fixtures/http-echo/manifest.json": {
+    "size": 227,
+    "mtime_ns": 1788268657663396534
+  },
+  "src-tauri/crates/package-runtime/tests/fixtures/http-echo/src/lib.rs": {
+    "size": 4242,
+    "mtime_ns": 1788268657663827662
+  },
+  "src-tauri/crates/package-runtime/tests/gmofg_payment_dll_component.rs": {
+    "size": 6189,
+    "mtime_ns": 1788425000658378139
+  },
+  "src-tauri/crates/package-runtime/tests/repository_components.rs": {
+    "size": 10071,
+    "mtime_ns": 1788404718085120203
+  },
+  "src-tauri/crates/package-runtime/tests/wasm_component_contract.rs": {
+    "size": 14417,
+    "mtime_ns": 1788268657664516043
+  },
+  "src-tauri/crates/package-runtime/wit/protocol-package.wit": {
+    "size": 2141,
+    "mtime_ns": 1788268657665000964
+  },
+  "src-tauri/crates/product-api/Cargo.toml": {
+    "size": 153,
+    "mtime_ns": 1785575151726530550
+  },
+  "src-tauri/crates/product-api/src/certificates.rs": {
+    "size": 2122,
+    "mtime_ns": 1788344716122890033
+  },
+  "src-tauri/crates/product-api/src/codec.rs": {
+    "size": 666,
+    "mtime_ns": 1785930838562442043
+  },
+  "src-tauri/crates/product-api/src/contracts.rs": {
+    "size": 2784,
+    "mtime_ns": 1788229992415982977
+  },
+  "src-tauri/crates/product-api/src/error.rs": {
+    "size": 615,
+    "mtime_ns": 1785930838562080373
+  },
+  "src-tauri/crates/product-api/src/intercept_profile.rs": {
+    "size": 4146,
+    "mtime_ns": 1788344716122480906
+  },
+  "src-tauri/crates/product-api/src/lib.rs": {
+    "size": 859,
+    "mtime_ns": 1787037075694831865
+  },
+  "src-tauri/crates/product-api/src/profile.rs": {
+    "size": 1080,
+    "mtime_ns": 1787037075694161403
+  },
+  "src-tauri/crates/product-api/src/tests.rs": {
+    "size": 52,
+    "mtime_ns": 1785930997705137323
+  },
+  "src-tauri/crates/product-api/src/tests/intercept_profile.rs": {
+    "size": 815,
+    "mtime_ns": 1788344865996383321
+  },
+  "src-tauri/crates/product-api/src/tests/support.rs": {
+    "size": 4729,
+    "mtime_ns": 1785931030419263794
+  },
+  "src-tauri/crates/product-api/src/tests/validation.rs": {
+    "size": 3461,
+    "mtime_ns": 1785931030419718714
+  },
+  "src-tauri/crates/product-api/src/validation.rs": {
+    "size": 6363,
+    "mtime_ns": 1787037075695878830
+  },
+  "src-tauri/crates/proxy/Cargo.toml": {
+    "size": 1244,
+    "mtime_ns": 1788169631001080498
+  },
+  "src-tauri/crates/proxy/src/fault.rs": {
+    "size": 1913,
+    "mtime_ns": 1786441357186191194
+  },
+  "src-tauri/crates/proxy/src/fault/response.rs": {
+    "size": 9019,
+    "mtime_ns": 1788516151416602642
+  },
+  "src-tauri/crates/proxy/src/fault/tests.rs": {
+    "size": 6361,
+    "mtime_ns": 1786441588287436160
+  },
+  "src-tauri/crates/proxy/src/forward.rs": {
+    "size": 306,
+    "mtime_ns": 1787394668699434599
+  },
+  "src-tauri/crates/proxy/src/forward/body.rs": {
+    "size": 2308,
+    "mtime_ns": 1788626123613431514
+  },
+  "src-tauri/crates/proxy/src/forward/config.rs": {
+    "size": 3070,
+    "mtime_ns": 1787635743263875308
+  },
+  "src-tauri/crates/proxy/src/forward/exchange_connector.rs": {
+    "size": 3583,
+    "mtime_ns": 1788625629298079178
+  },
+  "src-tauri/crates/proxy/src/forward/headers.rs": {
+    "size": 1722,
+    "mtime_ns": 1787394362800509593
+  },
+  "src-tauri/crates/proxy/src/forward/pipeline.rs": {
+    "size": 2156,
+    "mtime_ns": 1788624234601391762
+  },
+  "src-tauri/crates/proxy/src/forward/service.rs": {
+    "size": 8593,
+    "mtime_ns": 1788628542163683978
+  },
+  "src-tauri/crates/proxy/src/forward/service/http.rs": {
+    "size": 7876,
+    "mtime_ns": 1788626123617088115
+  },
+  "src-tauri/crates/proxy/src/forward/service/lifecycle.rs": {
+    "size": 9395,
+    "mtime_ns": 1788626123618765498
+  },
+  "src-tauri/crates/proxy/src/forward/target.rs": {
+    "size": 2892,
+    "mtime_ns": 1787636143500282149
+  },
+  "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs": {
+    "size": 7247,
+    "mtime_ns": 1788626086747197354
+  },
+  "src-tauri/crates/proxy/src/forward/tests/configuration.rs": {
+    "size": 855,
+    "mtime_ns": 1787635873853095574
+  },
+  "src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs": {
+    "size": 4977,
+    "mtime_ns": 1788628542165495239
+  },
+  "src-tauri/crates/proxy/src/forward/tests/listener_lifecycle.rs": {
+    "size": 1109,
+    "mtime_ns": 1785656928461551894
+  },
+  "src-tauri/crates/proxy/src/forward/tests/mod.rs": {
+    "size": 6836,
+    "mtime_ns": 1788173296844201314
+  },
+  "src-tauri/crates/proxy/src/forward/tests/plain_http.rs": {
+    "size": 18503,
+    "mtime_ns": 1787396870678394346
+  },
+  "src-tauri/crates/proxy/src/forward/tests/request_semantics.rs": {
+    "size": 1864,
+    "mtime_ns": 1785656923992991656
+  },
+  "src-tauri/crates/proxy/src/forward/tests/websocket.rs": {
+    "size": 2930,
+    "mtime_ns": 1787391774036500281
+  },
+  "src-tauri/crates/proxy/src/forward/tunnel.rs": {
+    "size": 798,
+    "mtime_ns": 1788624234677191552
+  },
+  "src-tauri/crates/proxy/src/http.rs": {
+    "size": 4021,
+    "mtime_ns": 1788625668130403037
+  },
+  "src-tauri/crates/proxy/src/http/capabilities.rs": {
+    "size": 15964,
+    "mtime_ns": 1788629788819168816
+  },
+  "src-tauri/crates/proxy/src/http/contracts.rs": {
+    "size": 8711,
+    "mtime_ns": 1788629386032084648
+  },
+  "src-tauri/crates/proxy/src/http/egress.rs": {
+    "size": 5333,
+    "mtime_ns": 1788625254082040169
+  },
+  "src-tauri/crates/proxy/src/http/exchange.rs": {
+    "size": 9490,
+    "mtime_ns": 1788625254081615375
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime.rs": {
+    "size": 15743,
+    "mtime_ns": 1788658515503981708
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs": {
+    "size": 17095,
+    "mtime_ns": 1788658408357011194
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs": {
+    "size": 6494,
+    "mtime_ns": 1788628478954706616
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs": {
+    "size": 14077,
+    "mtime_ns": 1788658044967155326
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs": {
+    "size": 2572,
+    "mtime_ns": 1788658066832916751
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs": {
+    "size": 1942,
+    "mtime_ns": 1788658515503470332
+  },
+  "src-tauri/crates/proxy/src/http/helpers.rs": {
+    "size": 11004,
+    "mtime_ns": 1788624234597929575
+  },
+  "src-tauri/crates/proxy/src/http/io.rs": {
+    "size": 3949,
+    "mtime_ns": 1786515866099541605
+  },
+  "src-tauri/crates/proxy/src/http/local_server.rs": {
+    "size": 2656,
+    "mtime_ns": 1788418856883682312
+  },
+  "src-tauri/crates/proxy/src/http/raw_http1.rs": {
+    "size": 10134,
+    "mtime_ns": 1787396511219886872
+  },
+  "src-tauri/crates/proxy/src/http/raw_http1_response.rs": {
+    "size": 6464,
+    "mtime_ns": 1787397813278500636
+  },
+  "src-tauri/crates/proxy/src/http/request_service.rs": {
+    "size": 13677,
+    "mtime_ns": 1788628174089690273
+  },
+  "src-tauri/crates/proxy/src/http/response_write.rs": {
+    "size": 7792,
+    "mtime_ns": 1788626536772365249
+  },
+  "src-tauri/crates/proxy/src/http/schedule.rs": {
+    "size": 2418,
+    "mtime_ns": 1785935495611649219
+  },
+  "src-tauri/crates/proxy/src/http/service.rs": {
+    "size": 6006,
+    "mtime_ns": 1787635743265414857
+  },
+  "src-tauri/crates/proxy/src/http/tests.rs": {
+    "size": 16038,
+    "mtime_ns": 1788625713512229434
+  },
+  "src-tauri/crates/proxy/src/http/tests/tail_write.rs": {
+    "size": 2327,
+    "mtime_ns": 1787083397634214500
+  },
+  "src-tauri/crates/proxy/src/http/tests/unsupported_requests.rs": {
+    "size": 3067,
+    "mtime_ns": 1787541068971332550
+  },
+  "src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs": {
+    "size": 7459,
+    "mtime_ns": 1788626250260385184
+  },
+  "src-tauri/crates/proxy/src/http/tests/write_commit.rs": {
+    "size": 3316,
+    "mtime_ns": 1788628272242168819
+  },
+  "src-tauri/crates/proxy/src/http/tracking.rs": {
+    "size": 8644,
+    "mtime_ns": 1788626442614928012
+  },
+  "src-tauri/crates/proxy/src/http/upstream.rs": {
+    "size": 4378,
+    "mtime_ns": 1788625629297552967
+  },
+  "src-tauri/crates/proxy/src/http/wire.rs": {
+    "size": 3034,
+    "mtime_ns": 1788625443298949826
+  },
+  "src-tauri/crates/proxy/src/lib.rs": {
+    "size": 12047,
+    "mtime_ns": 1788630174734862393
+  },
+  "src-tauri/crates/proxy/src/listener/admission.rs": {
+    "size": 1979,
+    "mtime_ns": 1787636477817957852
+  },
+  "src-tauri/crates/proxy/src/listener/context.rs": {
+    "size": 878,
+    "mtime_ns": 1786513587968880377
+  },
+  "src-tauri/crates/proxy/src/listener/handler.rs": {
+    "size": 1174,
+    "mtime_ns": 1787635699097927090
+  },
+  "src-tauri/crates/proxy/src/listener/mod.rs": {
+    "size": 664,
+    "mtime_ns": 1787555418588092841
+  },
+  "src-tauri/crates/proxy/src/listener/outcome.rs": {
+    "size": 3280,
+    "mtime_ns": 1786514317200860591
+  },
+  "src-tauri/crates/proxy/src/listener/supervisor.rs": {
+    "size": 11376,
+    "mtime_ns": 1788627635450475889
+  },
+  "src-tauri/crates/proxy/src/listener/supervisor/tests.rs": {
+    "size": 14832,
+    "mtime_ns": 1787647305548622703
+  },
+  "src-tauri/crates/proxy/src/listener/supervisor/tests/shutdown.rs": {
+    "size": 4386,
+    "mtime_ns": 1787647315704720407
+  },
+  "src-tauri/crates/proxy/src/listener/task_scope.rs": {
+    "size": 8264,
+    "mtime_ns": 1788628174089109301
+  },
+  "src-tauri/crates/proxy/src/listener/task_scope/tests.rs": {
+    "size": 7056,
+    "mtime_ns": 1787647356559117048
+  },
+  "src-tauri/crates/proxy/src/message.rs": {
+    "size": 15356,
+    "mtime_ns": 1788590054930949086
+  },
+  "src-tauri/crates/proxy/src/message/tests.rs": {
+    "size": 6828,
+    "mtime_ns": 1788589955920940126
+  },
+  "src-tauri/crates/proxy/src/metrics.rs": {
+    "size": 1155,
+    "mtime_ns": 1788233830469458356
+  },
+  "src-tauri/crates/proxy/src/reverse.rs": {
+    "size": 2245,
+    "mtime_ns": 1788415398956342103
+  },
+  "src-tauri/crates/proxy/src/reverse/admission.rs": {
+    "size": 5548,
+    "mtime_ns": 1788415461119659472
+  },
+  "src-tauri/crates/proxy/src/reverse/config.rs": {
+    "size": 2955,
+    "mtime_ns": 1787635743264602354
+  },
+  "src-tauri/crates/proxy/src/reverse/dynamic_identity.rs": {
+    "size": 11319,
+    "mtime_ns": 1788627635450866016
+  },
+  "src-tauri/crates/proxy/src/reverse/dynamic_identity/tests.rs": {
+    "size": 10440,
+    "mtime_ns": 1787832421133467729
+  },
+  "src-tauri/crates/proxy/src/reverse/endpoint.rs": {
+    "size": 3171,
+    "mtime_ns": 1785935478421739086
+  },
+  "src-tauri/crates/proxy/src/reverse/relay.rs": {
+    "size": 1366,
+    "mtime_ns": 1786512761671279928
+  },
+  "src-tauri/crates/proxy/src/reverse/service.rs": {
+    "size": 13263,
+    "mtime_ns": 1788259982752423932
+  },
+  "src-tauri/crates/proxy/src/reverse/tests.rs": {
+    "size": 8982,
+    "mtime_ns": 1787636315179116045
+  },
+  "src-tauri/crates/proxy/src/reverse/tls_config.rs": {
+    "size": 8356,
+    "mtime_ns": 1786513544435686144
+  },
+  "src-tauri/crates/proxy/src/socket_relay.rs": {
+    "size": 1951,
+    "mtime_ns": 1788630519421925605
+  },
+  "src-tauri/crates/proxy/src/socket_relay/config.rs": {
+    "size": 6184,
+    "mtime_ns": 1787635743264932147
+  },
+  "src-tauri/crates/proxy/src/socket_relay/connector.rs": {
+    "size": 17612,
+    "mtime_ns": 1788091586877994477
+  },
+  "src-tauri/crates/proxy/src/socket_relay/handler.rs": {
+    "size": 15776,
+    "mtime_ns": 1788627635451884813
+  },
+  "src-tauri/crates/proxy/src/socket_relay/handler/exchange.rs": {
+    "size": 8122,
+    "mtime_ns": 1788091586878581106
+  },
+  "src-tauri/crates/proxy/src/socket_relay/handler/local_raw.rs": {
+    "size": 3859,
+    "mtime_ns": 1788091586879433695
+  },
+  "src-tauri/crates/proxy/src/socket_relay/handler_support.rs": {
+    "size": 6636,
+    "mtime_ns": 1788121771126846140
+  },
+  "src-tauri/crates/proxy/src/socket_relay/io.rs": {
+    "size": 6214,
+    "mtime_ns": 1788624409486278071
+  },
+  "src-tauri/crates/proxy/src/socket_relay/observer.rs": {
+    "size": 15251,
+    "mtime_ns": 1788663130927660814
+  },
+  "src-tauri/crates/proxy/src/socket_relay/observer/local_request.rs": {
+    "size": 6278,
+    "mtime_ns": 1787346302802135545
+  },
+  "src-tauri/crates/proxy/src/socket_relay/observer/local_request/tests.rs": {
+    "size": 3709,
+    "mtime_ns": 1787396262770051816
+  },
+  "src-tauri/crates/proxy/src/socket_relay/observer/tests.rs": {
+    "size": 1577,
+    "mtime_ns": 1788663285601753011
+  },
+  "src-tauri/crates/proxy/src/socket_relay/output_validation.rs": {
+    "size": 2390,
+    "mtime_ns": 1788630519422190774
+  },
+  "src-tauri/crates/proxy/src/socket_relay/processing.rs": {
+    "size": 15842,
+    "mtime_ns": 1788630533560591804
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs": {
+    "size": 11449,
+    "mtime_ns": 1788631084895675751
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs": {
+    "size": 2634,
+    "mtime_ns": 1788629964442443068
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs": {
+    "size": 4677,
+    "mtime_ns": 1788625861214538300
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs": {
+    "size": 2858,
+    "mtime_ns": 1788630071656366393
+  },
+  "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs": {
+    "size": 10911,
+    "mtime_ns": 1788630326367733118
+  },
+  "src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs": {
+    "size": 6976,
+    "mtime_ns": 1788624355482605441
+  },
+  "src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs": {
+    "size": 1651,
+    "mtime_ns": 1788630071655484135
+  },
+  "src-tauri/crates/proxy/src/socket_relay/service.rs": {
+    "size": 16538,
+    "mtime_ns": 1788091586880970997
+  },
+  "src-tauri/crates/proxy/src/socket_relay/service_tests.rs": {
+    "size": 6990,
+    "mtime_ns": 1787635913085524109
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests.rs": {
+    "size": 14842,
+    "mtime_ns": 1787827747016715546
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/direct.rs": {
+    "size": 6658,
+    "mtime_ns": 1787647150004426007
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/local_responder.rs": {
+    "size": 11569,
+    "mtime_ns": 1788092117928054277
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/local_responder/tls.rs": {
+    "size": 11601,
+    "mtime_ns": 1787647455428253993
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs": {
+    "size": 9406,
+    "mtime_ns": 1788663315549065893
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/scripted_tls.rs": {
+    "size": 11232,
+    "mtime_ns": 1787647315743132028
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/support.rs": {
+    "size": 11318,
+    "mtime_ns": 1788624434991616254
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/tls.rs": {
+    "size": 16967,
+    "mtime_ns": 1787647455429107247
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/tls/probes.rs": {
+    "size": 12174,
+    "mtime_ns": 1787814527142888822
+  },
+  "src-tauri/crates/proxy/src/socket_relay/upstream_tls.rs": {
+    "size": 11345,
+    "mtime_ns": 1787814413548836470
+  },
+  "src-tauri/crates/proxy/src/supervisor.rs": {
+    "size": 1978,
+    "mtime_ns": 1786517198233104300
+  },
+  "src-tauri/crates/proxy/src/supervisor/config.rs": {
+    "size": 5476,
+    "mtime_ns": 1785935495589968313
+  },
+  "src-tauri/crates/proxy/src/supervisor/facade.rs": {
+    "size": 2999,
+    "mtime_ns": 1785935495590321941
+  },
+  "src-tauri/crates/proxy/src/supervisor/factory.rs": {
+    "size": 1266,
+    "mtime_ns": 1785935685089485706
+  },
+  "src-tauri/crates/proxy/src/supervisor/lifecycle.rs": {
+    "size": 12163,
+    "mtime_ns": 1785941303934170514
+  },
+  "src-tauri/crates/proxy/src/supervisor/runtime.rs": {
+    "size": 2356,
+    "mtime_ns": 1785935495592483123
+  },
+  "src-tauri/crates/proxy/src/supervisor/tasks.rs": {
+    "size": 8119,
+    "mtime_ns": 1785935495593619714
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests.rs": {
+    "size": 169,
+    "mtime_ns": 1785936409436348230
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/lifecycle.rs": {
+    "size": 6067,
+    "mtime_ns": 1785942127133586534
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/listener_failures.rs": {
+    "size": 3036,
+    "mtime_ns": 1785942127134332789
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/shutdown.rs": {
+    "size": 2946,
+    "mtime_ns": 1785936409436228062
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/stop_failures.rs": {
+    "size": 4688,
+    "mtime_ns": 1785942127135008459
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/support.rs": {
+    "size": 4639,
+    "mtime_ns": 1788625713512923896
+  },
+  "src-tauri/crates/proxy/src/tls.rs": {
+    "size": 593,
+    "mtime_ns": 1787297944957348015
+  },
+  "src-tauri/crates/proxy/src/tls/client.rs": {
+    "size": 7103,
+    "mtime_ns": 1786441539445081180
+  },
+  "src-tauri/crates/proxy/src/tls/server.rs": {
+    "size": 9143,
+    "mtime_ns": 1788230334871410926
+  },
+  "src-tauri/crates/proxy/src/tls/support.rs": {
+    "size": 2194,
+    "mtime_ns": 1787297944957659892
+  },
+  "src-tauri/crates/proxy/src/traffic/deterministic_rng.rs": {
+    "size": 1294,
+    "mtime_ns": 1785493439068581920
+  },
+  "src-tauri/crates/proxy/src/traffic/mod.rs": {
+    "size": 496,
+    "mtime_ns": 1785493439067787539
+  },
+  "src-tauri/crates/proxy/src/traffic/paced_body.rs": {
+    "size": 14662,
+    "mtime_ns": 1785493439069090382
+  },
+  "src-tauri/crates/proxy/src/traffic/schedule.rs": {
+    "size": 6068,
+    "mtime_ns": 1785493439069795345
+  },
+  "src-tauri/crates/proxy/src/transport.rs": {
+    "size": 677,
+    "mtime_ns": 1787660364576172320
+  },
+  "src-tauri/crates/proxy/src/transport/contracts.rs": {
+    "size": 1362,
+    "mtime_ns": 1788230273766297375
+  },
+  "src-tauri/crates/proxy/src/transport/io.rs": {
+    "size": 212,
+    "mtime_ns": 1786515866098728931
+  },
+  "src-tauri/crates/proxy/src/transport/listener.rs": {
+    "size": 2397,
+    "mtime_ns": 1786517198238702849
+  },
+  "src-tauri/crates/proxy/src/transport/relay.rs": {
+    "size": 9757,
+    "mtime_ns": 1786747281052670791
+  },
+  "src-tauri/crates/proxy/src/transport/relay_tests.rs": {
+    "size": 5828,
+    "mtime_ns": 1786747281053068502
+  },
+  "src-tauri/crates/proxy/tests/fault_semantics.rs": {
+    "size": 3449,
+    "mtime_ns": 1788516199325964825
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy.rs": {
+    "size": 486,
+    "mtime_ns": 1785936409429818809
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy/capacity_and_faults.rs": {
+    "size": 7755,
+    "mtime_ns": 1788516199325504526
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy/lifecycle.rs": {
+    "size": 15060,
+    "mtime_ns": 1788516666006256917
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy/support.rs": {
+    "size": 14953,
+    "mtime_ns": 1788625939115442161
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy/wire_fidelity.rs": {
+    "size": 6422,
+    "mtime_ns": 1787397348540563180
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener.rs": {
+    "size": 342,
+    "mtime_ns": 1786443363459584716
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/downstream_tls.rs": {
+    "size": 8702,
+    "mtime_ns": 1787664159920931204
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/dynamic_sni.rs": {
+    "size": 12037,
+    "mtime_ns": 1787635817212163326
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/forward_downstream_tls.rs": {
+    "size": 3874,
+    "mtime_ns": 1787635817211624865
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/reverse_http.rs": {
+    "size": 11614,
+    "mtime_ns": 1787635817208470058
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/support.rs": {
+    "size": 7164,
+    "mtime_ns": 1786516468767891211
+  },
+  "src-tauri/crates/proxy/tests/reverse_listener/upstream_tls.rs": {
+    "size": 5323,
+    "mtime_ns": 1787635817211090029
+  },
+  "src-tauri/crates/proxy/tests/tls_mtls.rs": {
+    "size": 16489,
+    "mtime_ns": 1788625713513399315
+  },
+  "src-tauri/crates/proxy/tests/upstream_http.rs": {
+    "size": 471,
+    "mtime_ns": 1785936409442636566
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs": {
+    "size": 3419,
+    "mtime_ns": 1788625674126120443
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/disconnects.rs": {
+    "size": 3898,
+    "mtime_ns": 1788625674125668816
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/limits.rs": {
+    "size": 4632,
+    "mtime_ns": 1788625674126559445
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs": {
+    "size": 7141,
+    "mtime_ns": 1788625685309363645
+  },
+  "src-tauri/crates/traffic-observation/Cargo.toml": {
+    "size": 400,
+    "mtime_ns": 1788617401263678846
+  },
+  "src-tauri/crates/traffic-observation/src/lib.rs": {
+    "size": 11614,
+    "mtime_ns": 1788617158462344645
+  },
+  "src-tauri/crates/traffic-observation/src/tests.rs": {
+    "size": 10518,
+    "mtime_ns": 1788617449243845206
+  },
+  "src-tauri/icons/128x128.png": {
+    "size": 17388,
+    "mtime_ns": 1786429874385375498
+  },
+  "src-tauri/icons/128x128@2x.png": {
+    "size": 58037,
+    "mtime_ns": 1786429874390781068
+  },
+  "src-tauri/icons/32x32.png": {
+    "size": 2080,
+    "mtime_ns": 1786429874380646056
+  },
+  "src-tauri/icons/Square107x107Logo.png": {
+    "size": 12998,
+    "mtime_ns": 1786429874436629976
+  },
+  "src-tauri/icons/Square142x142Logo.png": {
+    "size": 20753,
+    "mtime_ns": 1786429874442823800
+  },
+  "src-tauri/icons/Square150x150Logo.png": {
+    "size": 22644,
+    "mtime_ns": 1786429874447990869
+  },
+  "src-tauri/icons/Square284x284Logo.png": {
+    "size": 70505,
+    "mtime_ns": 1786429874454467986
+  },
+  "src-tauri/icons/Square30x30Logo.png": {
+    "size": 1957,
+    "mtime_ns": 1786429874413981148
+  },
+  "src-tauri/icons/Square310x310Logo.png": {
+    "size": 83053,
+    "mtime_ns": 1786429874460531268
+  },
+  "src-tauri/icons/Square44x44Logo.png": {
+    "size": 3318,
+    "mtime_ns": 1786429874418713090
+  },
+  "src-tauri/icons/Square71x71Logo.png": {
+    "size": 6880,
+    "mtime_ns": 1786429874423288614
+  },
+  "src-tauri/icons/Square89x89Logo.png": {
+    "size": 9809,
+    "mtime_ns": 1786429874428930769
+  },
+  "src-tauri/icons/StoreLogo.png": {
+    "size": 4028,
+    "mtime_ns": 1786429874409873585
+  },
+  "src-tauri/icons/icon-source.png": {
+    "size": 1299583,
+    "mtime_ns": 1786429874472533789
+  },
+  "src-tauri/icons/icon.icns": {
+    "size": 1463112,
+    "mtime_ns": 1786429874396963601
+  },
+  "src-tauri/icons/icon.ico": {
+    "size": 72294,
+    "mtime_ns": 1786429874401890043
+  },
+  "src-tauri/icons/icon.png": {
+    "size": 223144,
+    "mtime_ns": 1786429874405971356
+  },
+  "src-tauri/resources/certificates/README.md": {
+    "size": 525,
+    "mtime_ns": 1788344716125031299
+  },
+  "src-tauri/resources/certificates/intercept-proxy-test-root-ca.crt": {
+    "size": 664,
+    "mtime_ns": 1786010496437908059
+  },
+  "src-tauri/resources/certificates/intercept-proxy-test-root-key.TEST-ONLY.pem": {
+    "size": 241,
+    "mtime_ns": 1786010496438350896
+  },
+  "src-tauri/src/app_state.rs": {
+    "size": 3305,
+    "mtime_ns": 1788015403840386824
+  },
+  "src-tauri/src/bin/export-bindings.rs": {
+    "size": 354,
+    "mtime_ns": 1785573673232641289
+  },
+  "src-tauri/src/commands/android.rs": {
+    "size": 8563,
+    "mtime_ns": 1788616973013394675
+  },
+  "src-tauri/src/commands/app.rs": {
+    "size": 3048,
+    "mtime_ns": 1786720174027852383
+  },
+  "src-tauri/src/commands/application_backup.rs": {
+    "size": 3799,
+    "mtime_ns": 1787039290716384338
+  },
+  "src-tauri/src/commands/capture.rs": {
+    "size": 2943,
+    "mtime_ns": 1788234886459345995
+  },
+  "src-tauri/src/commands/certificates.rs": {
+    "size": 2745,
+    "mtime_ns": 1785924966599874736
+  },
+  "src-tauri/src/commands/diagnostics.rs": {
+    "size": 2776,
+    "mtime_ns": 1787283385693280383
+  },
+  "src-tauri/src/commands/e2e_tests/mod.rs": {
+    "size": 5466,
+    "mtime_ns": 1788268657665772762
+  },
+  "src-tauri/src/commands/e2e_tests/support.rs": {
+    "size": 6161,
+    "mtime_ns": 1788268657666346850
+  },
+  "src-tauri/src/commands/listener.rs": {
+    "size": 10193,
+    "mtime_ns": 1788594094527220745
+  },
+  "src-tauri/src/commands/mcp.rs": {
+    "size": 2947,
+    "mtime_ns": 1788015403840901118
+  },
+  "src-tauri/src/commands/mod.rs": {
+    "size": 7883,
+    "mtime_ns": 1788616877238880370
+  },
+  "src-tauri/src/commands/protocol_packages.rs": {
+    "size": 8315,
+    "mtime_ns": 1788271418650466683
+  },
+  "src-tauri/src/commands/protocol_packages/tests.rs": {
+    "size": 8968,
+    "mtime_ns": 1788268657667508985
+  },
+  "src-tauri/src/commands/protocol_rules.rs": {
+    "size": 6435,
+    "mtime_ns": 1788255297692086886
+  },
+  "src-tauri/src/commands/protocol_rules/tests.rs": {
+    "size": 5006,
+    "mtime_ns": 1788231394332622916
+  },
+  "src-tauri/src/commands/rules.rs": {
+    "size": 1409,
+    "mtime_ns": 1787897222114089159
+  },
+  "src-tauri/src/commands/settings.rs": {
+    "size": 1822,
+    "mtime_ns": 1786434093102195637
+  },
+  "src-tauri/src/commands/workspace.rs": {
+    "size": 3024,
+    "mtime_ns": 1787042482211416202
+  },
+  "src-tauri/src/lib.rs": {
+    "size": 12724,
+    "mtime_ns": 1788317303934871644
+  },
+  "src-tauri/src/main.rs": {
+    "size": 280,
+    "mtime_ns": 1785573673232241331
+  },
+  "src-tauri/src/mcp/backend.rs": {
+    "size": 12890,
+    "mtime_ns": 1788268657668930997
+  },
+  "src-tauri/src/mcp/backend/dispatch.rs": {
+    "size": 16616,
+    "mtime_ns": 1788234886468946424
+  },
+  "src-tauri/src/mcp/backend/guidance.rs": {
+    "size": 7250,
+    "mtime_ns": 1787392559765875108
+  },
+  "src-tauri/src/mcp/catalog.rs": {
+    "size": 15537,
+    "mtime_ns": 1788314783530695695
+  },
+  "src-tauri/src/mcp/catalog/contract.rs": {
+    "size": 10548,
+    "mtime_ns": 1788233793020698702
+  },
+  "src-tauri/src/mcp/catalog/tests.rs": {
+    "size": 5853,
+    "mtime_ns": 1788233793023328328
+  },
+  "src-tauri/src/mcp/environment_contract.rs": {
+    "size": 11822,
+    "mtime_ns": 1788027778361263773
+  },
+  "src-tauri/src/mcp/environment_contract/schema/candidate.rs": {
+    "size": 29953,
+    "mtime_ns": 1788416369375919006
+  },
+  "src-tauri/src/mcp/environment_contract/schema/capabilities.rs": {
+    "size": 3335,
+    "mtime_ns": 1787702100448231337
+  },
+  "src-tauri/src/mcp/environment_contract/schema/mod.rs": {
+    "size": 2450,
+    "mtime_ns": 1787701503698886818
+  },
+  "src-tauri/src/mcp/environment_contract/schema/outputs.rs": {
+    "size": 12155,
+    "mtime_ns": 1788027778362057072
+  },
+  "src-tauri/src/mcp/mod.rs": {
+    "size": 892,
+    "mtime_ns": 1788015692076374796
+  },
+  "src-tauri/src/mcp/protocol.rs": {
+    "size": 10345,
+    "mtime_ns": 1788015692075370460
+  },
+  "src-tauri/src/mcp/query.rs": {
+    "size": 1891,
+    "mtime_ns": 1787392393687525739
+  },
+  "src-tauri/src/mcp/query/tests.rs": {
+    "size": 2026,
+    "mtime_ns": 1787392955246268898
+  },
+  "src-tauri/src/mcp/resources.rs": {
+    "size": 7719,
+    "mtime_ns": 1788589949755875356
+  },
+  "src-tauri/src/mcp/server.rs": {
+    "size": 15521,
+    "mtime_ns": 1788015712214530041
+  },
+  "src-tauri/src/mcp/server/capabilities.rs": {
+    "size": 3708,
+    "mtime_ns": 1787769161064958758
+  },
+  "src-tauri/src/mcp/server/error.rs": {
+    "size": 2654,
+    "mtime_ns": 1787769060750192719
+  },
+  "src-tauri/src/mcp/tests.rs": {
+    "size": 12885,
+    "mtime_ns": 1788589949756279857
+  },
+  "src-tauri/src/mcp/tests/environment_configuration_contract.rs": {
+    "size": 12530,
+    "mtime_ns": 1788027778361675526
+  },
+  "src-tauri/src/mcp/tests/environment_configuration_schema_contract.rs": {
+    "size": 14733,
+    "mtime_ns": 1788314783520264788
+  },
+  "src-tauri/src/mcp/tests/environment_configuration_schema_contract/candidate_shape.rs": {
+    "size": 2813,
+    "mtime_ns": 1788314640707374186
+  },
+  "src-tauri/src/mcp/tests/environment_configuration_schema_contract/catalog.rs": {
+    "size": 1012,
+    "mtime_ns": 1788234578145484114
+  },
+  "src-tauri/src/mcp/tests/environment_configuration_schema_support.rs": {
+    "size": 5185,
+    "mtime_ns": 1787702761382949133
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/existing-target-retained-selector.json": {
+    "size": 9528,
+    "mtime_ns": 1788416387231823978
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json": {
+    "size": 6127,
+    "mtime_ns": 1788231693394579362
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json": {
+    "size": 19063,
+    "mtime_ns": 1788416387231395602
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/literal-coverage.json": {
+    "size": 3668,
+    "mtime_ns": 1788027778362464867
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/negative-cases.json": {
+    "size": 2715,
+    "mtime_ns": 1788267492669065496
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/schema.snapshot.json": {
+    "size": 185079,
+    "mtime_ns": 1788417007039745847
+  },
+  "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/weak-network-null.json": {
+    "size": 539,
+    "mtime_ns": 1787699447115204401
+  },
+  "src-tauri/src/mcp/tests/fixtures/package_contract_api1/golden.json": {
+    "size": 3234,
+    "mtime_ns": 1788039780581743028
+  },
+  "src-tauri/src/mcp/tests/fixtures/package_contract_api1/schema.snapshot.json": {
+    "size": 4913,
+    "mtime_ns": 1788234045338789431
+  },
+  "src-tauri/src/mcp/tests/g036_adapter_transport_contract.rs": {
+    "size": 13040,
+    "mtime_ns": 1788234386991468277
+  },
+  "src-tauri/src/mcp/tests/g036_behavior_contract.rs": {
+    "size": 14326,
+    "mtime_ns": 1788015692077107715
+  },
+  "src-tauri/src/mcp/tests/g036_behavior_contract/application_lifecycle.rs": {
+    "size": 15993,
+    "mtime_ns": 1788015692078967555
+  },
+  "src-tauri/src/mcp/tests/g036_behavior_contract/application_lifecycle/production_apply.rs": {
+    "size": 8514,
+    "mtime_ns": 1788416967649821890
+  },
+  "src-tauri/src/mcp/tests/g036_behavior_contract/limits.rs": {
+    "size": 15121,
+    "mtime_ns": 1788015692078527386
+  },
+  "src-tauri/src/mcp/tests/g036_behavior_contract/limits/http.rs": {
+    "size": 5073,
+    "mtime_ns": 1788321652178441208
+  },
+  "src-tauri/src/mcp/tests/g036_protocol_error_contract.rs": {
+    "size": 5168,
+    "mtime_ns": 1787769117627381843
+  },
+  "src-tauri/src/mcp/tests/protocol_contract.rs": {
+    "size": 5093,
+    "mtime_ns": 1787806639864665567
+  },
+  "src-tauri/src/native_dialog.rs": {
+    "size": 6775,
+    "mtime_ns": 1788268657671300684
+  },
+  "src-tauri/src/reproduction_report.rs": {
+    "size": 7460,
+    "mtime_ns": 1787648370072932080
+  },
+  "src-tauri/src/runtime_logs/exchange_ui_layer.rs": {
+    "size": 15802,
+    "mtime_ns": 1788319586258196362
+  },
+  "src-tauri/src/runtime_logs/exchange_ui_layer/fields.rs": {
+    "size": 4745,
+    "mtime_ns": 1787496337031613011
+  },
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs": {
+    "size": 15375,
+    "mtime_ns": 1788149314893037914
+  },
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests/process.rs": {
+    "size": 2660,
+    "mtime_ns": 1788150853307426417
+  },
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests/queue.rs": {
+    "size": 6670,
+    "mtime_ns": 1787649243287610199
+  },
+  "src-tauri/src/runtime_logs/mod.rs": {
+    "size": 445,
+    "mtime_ns": 1787399717029019128
+  },
+  "src-tauri/src/runtime_logs/model.rs": {
+    "size": 2126,
+    "mtime_ns": 1787648370071549369
+  },
+  "src-tauri/src/runtime_logs/nonblocking_queue.rs": {
+    "size": 7808,
+    "mtime_ns": 1787495932340107073
+  },
+  "src-tauri/src/runtime_logs/runtime_log_counters.rs": {
+    "size": 997,
+    "mtime_ns": 1787648370072069162
+  },
+  "src-tauri/src/runtime_logs/store.rs": {
+    "size": 18185,
+    "mtime_ns": 1787648370072594246
+  },
+  "src-tauri/src/runtime_logs/tests.rs": {
+    "size": 11533,
+    "mtime_ns": 1787648763688679805
+  },
+  "src-tauri/src/runtime_logs/tracing_bridge.rs": {
+    "size": 13118,
+    "mtime_ns": 1787648304222382304
+  },
+  "src-tauri/tauri.conf.json": {
+    "size": 1593,
+    "mtime_ns": 1788317083929385516
+  },
+  "src-tauri/tauri.dev.conf.json": {
+    "size": 74,
+    "mtime_ns": 1788317083930395181
+  },
+  "src/app/android-network/page.tsx": {
+    "size": 169,
+    "mtime_ns": 1785575046067258142
+  },
+  "src/app/capture/page.tsx": {
+    "size": 238,
+    "mtime_ns": 1785493809458763587
+  },
+  "src/app/certificates/page.tsx": {
+    "size": 242,
+    "mtime_ns": 1785493809460284557
+  },
+  "src/app/diagnostics/page.tsx": {
+    "size": 255,
+    "mtime_ns": 1786363885486202168
+  },
+  "src/app/favicon.ico": {
+    "size": 72294,
+    "mtime_ns": 1786429874466775009
+  },
+  "src/app/globals.css": {
+    "size": 1945,
+    "mtime_ns": 1786434262321505761
+  },
+  "src/app/layout.tsx": {
+    "size": 1000,
+    "mtime_ns": 1786429903346798236
+  },
+  "src/app/listeners/page.tsx": {
+    "size": 142,
+    "mtime_ns": 1785575223922908046
+  },
+  "src/app/page.tsx": {
+    "size": 182,
+    "mtime_ns": 1787114111772874483
+  },
+  "src/app/protocol-packages/page.tsx": {
+    "size": 407,
+    "mtime_ns": 1786716185660956686
+  },
+  "src/app/rules/page.tsx": {
+    "size": 574,
+    "mtime_ns": 1785493667842551032
+  },
+  "src/app/settings/page.tsx": {
+    "size": 237,
+    "mtime_ns": 1785493809460558767
+  },
+  "src/app/workspaces/page.tsx": {
+    "size": 147,
+    "mtime_ns": 1785575173812830977
+  },
+  "src/features/android-network/advanced-loss-sections.tsx": {
+    "size": 4608,
+    "mtime_ns": 1785676250796384382
+  },
+  "src/features/android-network/advanced-network-card.tsx": {
+    "size": 1949,
+    "mtime_ns": 1786601555487248591
+  },
+  "src/features/android-network/advanced-transport-sections.tsx": {
+    "size": 6510,
+    "mtime_ns": 1786601755670536276
+  },
+  "src/features/android-network/android-network-fields.tsx": {
+    "size": 822,
+    "mtime_ns": 1788420147682869576
+  },
+  "src/features/android-network/android-network-test-profile.ts": {
+    "size": 885,
+    "mtime_ns": 1787892998091178382
+  },
+  "src/features/android-network/android-network-types.ts": {
+    "size": 1165,
+    "mtime_ns": 1787807079848261590
+  },
+  "src/features/android-network/android-network-view-device-isolation.test.tsx": {
+    "size": 6366,
+    "mtime_ns": 1788617811462145003
+  },
+  "src/features/android-network/android-network-view.network-intent.test.tsx": {
+    "size": 9621,
+    "mtime_ns": 1788659785821584013
+  },
+  "src/features/android-network/android-network-view.test-support.ts": {
+    "size": 6296,
+    "mtime_ns": 1788658355360370722
+  },
+  "src/features/android-network/android-network-view.test.tsx": {
+    "size": 14851,
+    "mtime_ns": 1788659202055033997
+  },
+  "src/features/android-network/android-network-view.tsx": {
+    "size": 14448,
+    "mtime_ns": 1788617358927959211
+  },
+  "src/features/android-network/android-runtime-owner-cards.test.tsx": {
+    "size": 7971,
+    "mtime_ns": 1788617341807766485
+  },
+  "src/features/android-network/android-runtime-owner-contract.test.ts": {
+    "size": 2042,
+    "mtime_ns": 1787806561223892844
+  },
+  "src/features/android-network/android-runtime-owner-model.test.ts": {
+    "size": 5420,
+    "mtime_ns": 1787805760567808041
+  },
+  "src/features/android-network/android-runtime-owner-model.ts": {
+    "size": 4177,
+    "mtime_ns": 1787805736021270773
+  },
+  "src/features/android-network/android-runtime-owner-view.test.tsx": {
+    "size": 20802,
+    "mtime_ns": 1788617318327375961
+  },
+  "src/features/android-network/device-control-card.tsx": {
+    "size": 9921,
+    "mtime_ns": 1788617220986963820
+  },
+  "src/features/android-network/network-more-settings.tsx": {
+    "size": 5813,
+    "mtime_ns": 1788420450802266079
+  },
+  "src/features/android-network/network-parameter-cards.tsx": {
+    "size": 10037,
+    "mtime_ns": 1788422326476562193
+  },
+  "src/features/android-network/profile-cards.tsx": {
+    "size": 8442,
+    "mtime_ns": 1788617220986612194
+  },
+  "src/features/android-network/proxy-routes-card.tsx": {
+    "size": 7015,
+    "mtime_ns": 1786601555486885796
+  },
+  "src/features/android-network/runtime-endpoints-card.test.tsx": {
+    "size": 4075,
+    "mtime_ns": 1787034780259106218
+  },
+  "src/features/android-network/runtime-endpoints-card.tsx": {
+    "size": 5604,
+    "mtime_ns": 1787048419532592898
+  },
+  "src/features/android-network/target-applications-card.tsx": {
+    "size": 6145,
+    "mtime_ns": 1786601555486354833
+  },
+  "src/features/android-network/use-android-network-controller.test.tsx": {
+    "size": 2404,
+    "mtime_ns": 1788617122669562330
+  },
+  "src/features/android-network/use-android-network-controller.ts": {
+    "size": 7430,
+    "mtime_ns": 1788618024986722474
+  },
+  "src/features/android-network/use-current-workspace-listeners.ts": {
+    "size": 1238,
+    "mtime_ns": 1788616887022740482
+  },
+  "src/features/android-network/weak-network-scenes.ts": {
+    "size": 3149,
+    "mtime_ns": 1788420868016518415
+  },
+  "src/features/android-network/weak-network-simplification.test.tsx": {
+    "size": 6235,
+    "mtime_ns": 1788422326475533352
+  },
+  "src/features/capture/capture-route.tsx": {
+    "size": 216,
+    "mtime_ns": 1787408652190508826
+  },
+  "src/features/capture/capture-view-ui.test.tsx": {
+    "size": 1456,
+    "mtime_ns": 1787408603972773762
+  },
+  "src/features/capture/capture-view.tsx": {
+    "size": 385,
+    "mtime_ns": 1787408652189552738
+  },
+  "src/features/capture/exchange-observation-detail.test.tsx": {
+    "size": 5937,
+    "mtime_ns": 1788496856487331701
+  },
+  "src/features/capture/exchange-observation-detail.tsx": {
+    "size": 8594,
+    "mtime_ns": 1788496869573596136
+  },
+  "src/features/capture/exchange-observation-list.test.tsx": {
+    "size": 2323,
+    "mtime_ns": 1788421213819611012
+  },
+  "src/features/capture/exchange-observation-list.tsx": {
+    "size": 5657,
+    "mtime_ns": 1788421213818370179
+  },
+  "src/features/capture/exchange-observation-model.test.ts": {
+    "size": 1877,
+    "mtime_ns": 1787884155708023523
+  },
+  "src/features/capture/exchange-observation-model.ts": {
+    "size": 2378,
+    "mtime_ns": 1788148091146629238
+  },
+  "src/features/capture/exchange-observation-test-fixture.ts": {
+    "size": 3876,
+    "mtime_ns": 1788115214342010908
+  },
+  "src/features/capture/exchange-observation-view.test.tsx": {
+    "size": 3624,
+    "mtime_ns": 1787817309102773378
+  },
+  "src/features/capture/exchange-observation-view.tsx": {
+    "size": 5741,
+    "mtime_ns": 1787810338276520027
+  },
+  "src/features/capture/socket-byte-viewer.test.tsx": {
+    "size": 1299,
+    "mtime_ns": 1787402820552939106
+  },
+  "src/features/capture/socket-byte-viewer.tsx": {
+    "size": 1444,
+    "mtime_ns": 1787402820552548310
+  },
+  "src/features/certificates/certificate-overview-section.tsx": {
+    "size": 4392,
+    "mtime_ns": 1788344743416797756
+  },
+  "src/features/certificates/certificate-reset-section.tsx": {
+    "size": 2466,
+    "mtime_ns": 1788344743417266760
+  },
+  "src/features/certificates/certificate-validation-section.tsx": {
+    "size": 4457,
+    "mtime_ns": 1786441495752641019
+  },
+  "src/features/certificates/certificates-view.test.tsx": {
+    "size": 9382,
+    "mtime_ns": 1788344743419289733
+  },
+  "src/features/certificates/certificates-view.tsx": {
+    "size": 8196,
+    "mtime_ns": 1788344743417688179
+  },
+  "src/features/diagnostics/diagnostic-logs-view.test.tsx": {
+    "size": 3270,
+    "mtime_ns": 1787649903188936980
+  },
+  "src/features/diagnostics/diagnostic-logs-view.tsx": {
+    "size": 11734,
+    "mtime_ns": 1787649435479996850
+  },
+  "src/features/faults/fault-configuration-panel.tsx": {
+    "size": 7970,
+    "mtime_ns": 1788259746761913174
+  },
+  "src/features/faults/faults-list-panel.tsx": {
+    "size": 5284,
+    "mtime_ns": 1787105451617735391
+  },
+  "src/features/faults/faults-view.test.tsx": {
+    "size": 5418,
+    "mtime_ns": 1788259765028511628
+  },
+  "src/features/faults/faults-view.tsx": {
+    "size": 5784,
+    "mtime_ns": 1788259746762507388
+  },
+  "src/features/help/diagnostic-page-help-guide.ts": {
+    "size": 1842,
+    "mtime_ns": 1787104170593089415
+  },
+  "src/features/help/general-page-help-guides.ts": {
+    "size": 4266,
+    "mtime_ns": 1788420971024869517
+  },
+  "src/features/help/page-help-content.ts": {
+    "size": 12886,
+    "mtime_ns": 1788502285066490275
+  },
+  "src/features/help/page-help-types.ts": {
+    "size": 357,
+    "mtime_ns": 1786441630094470442
+  },
+  "src/features/help/page-help.test.tsx": {
+    "size": 5214,
+    "mtime_ns": 1788420966086737740
+  },
+  "src/features/help/page-help.tsx": {
+    "size": 4111,
+    "mtime_ns": 1785493778542687406
+  },
+  "src/features/help/protocol-package-help-guide.ts": {
+    "size": 4822,
+    "mtime_ns": 1787086138132888078
+  },
+  "src/features/help/system-page-help-guides.ts": {
+    "size": 11390,
+    "mtime_ns": 1788344743418688228
+  },
+  "src/features/listeners/body-codec-settings.tsx": {
+    "size": 2606,
+    "mtime_ns": 1787042364083151099
+  },
+  "src/features/listeners/downstream-tls-card.tsx": {
+    "size": 10201,
+    "mtime_ns": 1788595290894486867
+  },
+  "src/features/listeners/fixed-server-tls-fields.tsx": {
+    "size": 5741,
+    "mtime_ns": 1787302339272775368
+  },
+  "src/features/listeners/fixed-server-tls-import-modals.tsx": {
+    "size": 8116,
+    "mtime_ns": 1787814086315881707
+  },
+  "src/features/listeners/fixed-server-tls-settings.tsx": {
+    "size": 6986,
+    "mtime_ns": 1788595531893904924
+  },
+  "src/features/listeners/http-protocol-processing-card.test.tsx": {
+    "size": 5929,
+    "mtime_ns": 1788595608245390086
+  },
+  "src/features/listeners/http-protocol-processing-card.tsx": {
+    "size": 6306,
+    "mtime_ns": 1788595303489345068
+  },
+  "src/features/listeners/listener-data-plane.ts": {
+    "size": 1413,
+    "mtime_ns": 1788595159556473633
+  },
+  "src/features/listeners/listener-editor.socket.test.tsx": {
+    "size": 6956,
+    "mtime_ns": 1788595812205257036
+  },
+  "src/features/listeners/listener-editor.test.tsx": {
+    "size": 11397,
+    "mtime_ns": 1788596311385349274
+  },
+  "src/features/listeners/listener-editor.tsx": {
+    "size": 14506,
+    "mtime_ns": 1788596927332186930
+  },
+  "src/features/listeners/listener-feedback.tsx": {
+    "size": 2842,
+    "mtime_ns": 1788596369976069571
+  },
+  "src/features/listeners/listener-list-panel.tsx": {
+    "size": 4023,
+    "mtime_ns": 1788595308578150552
+  },
+  "src/features/listeners/listener-runtime-card.tsx": {
+    "size": 2349,
+    "mtime_ns": 1788590147957942609
+  },
+  "src/features/listeners/listener-view-model.ts": {
+    "size": 1643,
+    "mtime_ns": 1788596369975714569
+  },
+  "src/features/listeners/listener-workspace-draft.test.ts": {
+    "size": 3906,
+    "mtime_ns": 1788590459952886582
+  },
+  "src/features/listeners/listener-workspace-draft.ts": {
+    "size": 9145,
+    "mtime_ns": 1788595132775867623
+  },
+  "src/features/listeners/listeners-view.certificate-details.test.tsx": {
+    "size": 14248,
+    "mtime_ns": 1788616977541474657
+  },
+  "src/features/listeners/listeners-view.certificates.test.tsx": {
+    "size": 14725,
+    "mtime_ns": 1788617675209412421
+  },
+  "src/features/listeners/listeners-view.codecs.test.tsx": {
+    "size": 3353,
+    "mtime_ns": 1788616977542570119
+  },
+  "src/features/listeners/listeners-view.external-refresh.test.tsx": {
+    "size": 7879,
+    "mtime_ns": 1788616977545139667
+  },
+  "src/features/listeners/listeners-view.pending.test.tsx": {
+    "size": 2475,
+    "mtime_ns": 1788616977543032828
+  },
+  "src/features/listeners/listeners-view.socket-contracts.test.tsx": {
+    "size": 9179,
+    "mtime_ns": 1788616977543664205
+  },
+  "src/features/listeners/listeners-view.test-support.ts": {
+    "size": 13794,
+    "mtime_ns": 1788596689063044147
+  },
+  "src/features/listeners/listeners-view.test.tsx": {
+    "size": 24612,
+    "mtime_ns": 1788617931949281781
+  },
+  "src/features/listeners/listeners-view.transition-races.test.tsx": {
+    "size": 5298,
+    "mtime_ns": 1788616977544564666
+  },
+  "src/features/listeners/listeners-view.tsx": {
+    "size": 5150,
+    "mtime_ns": 1788617508858244833
+  },
+  "src/features/listeners/request-routing-card.tsx": {
+    "size": 4139,
+    "mtime_ns": 1788595224175578259
+  },
+  "src/features/listeners/socket-listener-model.test.ts": {
+    "size": 4586,
+    "mtime_ns": 1788596129062783509
+  },
+  "src/features/listeners/socket-listener-model.ts": {
+    "size": 7708,
+    "mtime_ns": 1788596462609039416
+  },
+  "src/features/listeners/socket-listener-settings.test.tsx": {
+    "size": 13791,
+    "mtime_ns": 1788597185190765797
+  },
+  "src/features/listeners/socket-listener-settings.tsx": {
+    "size": 7604,
+    "mtime_ns": 1788596927332651058
+  },
+  "src/features/listeners/socket-processing-card.test.tsx": {
+    "size": 10954,
+    "mtime_ns": 1788596089730155220
+  },
+  "src/features/listeners/socket-processing-card.tsx": {
+    "size": 9439,
+    "mtime_ns": 1788595550239264873
+  },
+  "src/features/listeners/socket-protocol-package-dialog.test.tsx": {
+    "size": 6295,
+    "mtime_ns": 1788595608243817576
+  },
+  "src/features/listeners/socket-protocol-package-dialog.tsx": {
+    "size": 2698,
+    "mtime_ns": 1787070670356401168
+  },
+  "src/features/listeners/socket-security-cards.test-support.tsx": {
+    "size": 3984,
+    "mtime_ns": 1788595681849977192
+  },
+  "src/features/listeners/socket-security-cards.test.tsx": {
+    "size": 20715,
+    "mtime_ns": 1788596081118152494
+  },
+  "src/features/listeners/socket-security-cards.tsx": {
+    "size": 15677,
+    "mtime_ns": 1788595531894742904
+  },
+  "src/features/listeners/socket-working-mode.test.ts": {
+    "size": 1059,
+    "mtime_ns": 1788595657081270230
+  },
+  "src/features/listeners/upstream-tls-card.tsx": {
+    "size": 8149,
+    "mtime_ns": 1788595479066240307
+  },
+  "src/features/listeners/use-draft-certificate-leases.ts": {
+    "size": 3635,
+    "mtime_ns": 1785928552719540276
+  },
+  "src/features/listeners/use-listener-certificates.ts": {
+    "size": 10273,
+    "mtime_ns": 1788595365887271319
+  },
+  "src/features/listeners/use-listener-controller.tsx": {
+    "size": 19548,
+    "mtime_ns": 1788617454649173490
+  },
+  "src/features/listeners/use-listener-draft-transition.test.tsx": {
+    "size": 7062,
+    "mtime_ns": 1788596927333658481
+  },
+  "src/features/listeners/use-listener-draft-transition.ts": {
+    "size": 5170,
+    "mtime_ns": 1788596927331760803
+  },
+  "src/features/listeners/use-listener-persistence.ts": {
+    "size": 5217,
+    "mtime_ns": 1788595339413711209
+  },
+  "src/features/protocol-packages/protocol-package-detail.tsx": {
+    "size": 13884,
+    "mtime_ns": 1788268657674710379
+  },
+  "src/features/protocol-packages/protocol-package-dialog.test.tsx": {
+    "size": 24139,
+    "mtime_ns": 1788343168224180912
+  },
+  "src/features/protocol-packages/protocol-package-dialog.tsx": {
+    "size": 13553,
+    "mtime_ns": 1788268657675738180
+  },
+  "src/features/protocol-packages/protocol-package-import-dialog.test.tsx": {
+    "size": 16993,
+    "mtime_ns": 1788268657676367685
+  },
+  "src/features/protocol-packages/protocol-package-import-dialog.tsx": {
+    "size": 9660,
+    "mtime_ns": 1788268657676968607
+  },
+  "src/features/protocol-packages/protocol-package-import-model.test.ts": {
+    "size": 4437,
+    "mtime_ns": 1788402989624586022
+  },
+  "src/features/protocol-packages/protocol-package-import-model.ts": {
+    "size": 7548,
+    "mtime_ns": 1788402989623550712
+  },
+  "src/features/protocol-packages/protocol-package-local-lifecycle.test.tsx": {
+    "size": 3681,
+    "mtime_ns": 1788268657677991157
+  },
+  "src/features/protocol-packages/protocol-package-model.test.ts": {
+    "size": 5541,
+    "mtime_ns": 1788402989624998613
+  },
+  "src/features/protocol-packages/protocol-package-model.ts": {
+    "size": 10213,
+    "mtime_ns": 1788402989623986928
+  },
+  "src/features/protocol-packages/protocol-package-row.tsx": {
+    "size": 1925,
+    "mtime_ns": 1788268736132139145
+  },
+  "src/features/protocol-packages/protocol-package-source.test.ts": {
+    "size": 2222,
+    "mtime_ns": 1788268657679535962
+  },
+  "src/features/protocol-packages/protocol-package-source.ts": {
+    "size": 2020,
+    "mtime_ns": 1788268657679969132
+  },
+  "src/features/protocol-packages/protocol-package-version-list.tsx": {
+    "size": 1951,
+    "mtime_ns": 1787229770614406927
+  },
+  "src/features/protocol-packages/protocol-packages-test-support.ts": {
+    "size": 4730,
+    "mtime_ns": 1788315354481172911
+  },
+  "src/features/protocol-packages/protocol-packages-view.test.tsx": {
+    "size": 14094,
+    "mtime_ns": 1788271387804148681
+  },
+  "src/features/protocol-packages/protocol-packages-view.tsx": {
+    "size": 16365,
+    "mtime_ns": 1788271358806657390
+  },
+  "src/features/rules/rule-creation-editor.tsx": {
+    "size": 5371,
+    "mtime_ns": 1788663202090513027
+  },
+  "src/features/rules/rule-definition-editor.test.tsx": {
+    "size": 25406,
+    "mtime_ns": 1788502148193136345
+  },
+  "src/features/rules/rule-definition-editor.tsx": {
+    "size": 4842,
+    "mtime_ns": 1788663202091783952
+  },
+  "src/features/rules/rule-definition-list.tsx": {
+    "size": 2439,
+    "mtime_ns": 1788490060299821239
+  },
+  "src/features/rules/rule-definition-model.test.ts": {
+    "size": 11073,
+    "mtime_ns": 1788494591216851091
+  },
+  "src/features/rules/rule-definition-model.ts": {
+    "size": 11348,
+    "mtime_ns": 1788494687694217181
+  },
+  "src/features/rules/rule-document-schema.ts": {
+    "size": 783,
+    "mtime_ns": 1788177170588854903
+  },
+  "src/features/rules/rule-http-action-parameters-form.tsx": {
+    "size": 7046,
+    "mtime_ns": 1788502696070211205
+  },
+  "src/features/rules/rule-http-action-parameters.test.ts": {
+    "size": 4761,
+    "mtime_ns": 1788503163159312231
+  },
+  "src/features/rules/rule-http-action-parameters.ts": {
+    "size": 9630,
+    "mtime_ns": 1788502696069722620
+  },
+  "src/features/rules/rule-metadata-fields.tsx": {
+    "size": 2938,
+    "mtime_ns": 1788490702528726738
+  },
+  "src/features/rules/rule-single-pair-editor.tsx": {
+    "size": 29327,
+    "mtime_ns": 1788663202088466597
+  },
+  "src/features/rules/rules-view-test-fixtures.ts": {
+    "size": 5556,
+    "mtime_ns": 1788267333870331094
+  },
+  "src/features/rules/rules-view.test.tsx": {
+    "size": 19680,
+    "mtime_ns": 1788663265308770430
+  },
+  "src/features/rules/rules-view.tsx": {
+    "size": 8305,
+    "mtime_ns": 1788663308850896177
+  },
+  "src/features/rules/rules-workspace-shell.tsx": {
+    "size": 287,
+    "mtime_ns": 1787103509052556599
+  },
+  "src/features/rules/use-async-request-slots.ts": {
+    "size": 1426,
+    "mtime_ns": 1787897360946059964
+  },
+  "src/features/rules/use-rule-definition-source.ts": {
+    "size": 1792,
+    "mtime_ns": 1788616909526234608
+  },
+  "src/features/settings/application-data-reset-dialog.tsx": {
+    "size": 2736,
+    "mtime_ns": 1787104139707246327
+  },
+  "src/features/settings/external-package-service-settings.test.tsx": {
+    "size": 5567,
+    "mtime_ns": 1788080930472879148
+  },
+  "src/features/settings/external-package-service-settings.tsx": {
+    "size": 7811,
+    "mtime_ns": 1788079486159130974
+  },
+  "src/features/settings/mcp-settings.tsx": {
+    "size": 7936,
+    "mtime_ns": 1788233712442218781
+  },
+  "src/features/settings/settings-content.tsx": {
+    "size": 65,
+    "mtime_ns": 1786429903346200817
+  },
+  "src/features/settings/settings-editor-tabs.tsx": {
+    "size": 7243,
+    "mtime_ns": 1788233712446560575
+  },
+  "src/features/settings/settings-view.test.tsx": {
+    "size": 14405,
+    "mtime_ns": 1788080930473342026
+  },
+  "src/features/settings/settings-view.tsx": {
+    "size": 8392,
+    "mtime_ns": 1788079486160080814
+  },
+  "src/features/shared/http-inspection.test.tsx": {
+    "size": 6930,
+    "mtime_ns": 1787083301160625678
+  },
+  "src/features/shared/http-inspection.tsx": {
+    "size": 12894,
+    "mtime_ns": 1787103481771105129
+  },
+  "src/features/shared/http-protocol-body.test.tsx": {
+    "size": 5481,
+    "mtime_ns": 1788127089980252553
+  },
+  "src/features/shared/http-protocol-body.tsx": {
+    "size": 4806,
+    "mtime_ns": 1788184632382480717
+  },
+  "src/features/shared/protocol-safe-display.test.tsx": {
+    "size": 10680,
+    "mtime_ns": 1788424923090515030
+  },
+  "src/features/shared/protocol-safe-display.tsx": {
+    "size": 9901,
+    "mtime_ns": 1788424958656261582
+  },
+  "src/features/shared/protocol-workspace-tabs.test.tsx": {
+    "size": 3795,
+    "mtime_ns": 1787066825184942675
+  },
+  "src/features/shared/protocol-workspace-tabs.tsx": {
+    "size": 1659,
+    "mtime_ns": 1787047594560027984
+  },
+  "src/features/shell/app-providers.tsx": {
+    "size": 575,
+    "mtime_ns": 1785493667840039097
+  },
+  "src/features/shell/app-runtime.tsx": {
+    "size": 912,
+    "mtime_ns": 1785493667839433426
+  },
+  "src/features/shell/app-shell.tsx": {
+    "size": 12122,
+    "mtime_ns": 1788616887021668145
+  },
+  "src/features/shell/bootstrap-context.test.tsx": {
+    "size": 8674,
+    "mtime_ns": 1788590034870821222
+  },
+  "src/features/shell/bootstrap-context.tsx": {
+    "size": 7011,
+    "mtime_ns": 1788590147957565232
+  },
+  "src/features/shell/navigation.test.tsx": {
+    "size": 6815,
+    "mtime_ns": 1788616950015057616
+  },
+  "src/features/shell/selected-workspace-context.test.tsx": {
+    "size": 3007,
+    "mtime_ns": 1788616821568714234
+  },
+  "src/features/shell/selected-workspace-context.tsx": {
+    "size": 2093,
+    "mtime_ns": 1788616909525586565
+  },
+  "src/features/shell/workspace-content.tsx": {
+    "size": 1768,
+    "mtime_ns": 1787115231715016218
+  },
+  "src/features/shell/workspace-navigation.test.tsx": {
+    "size": 1879,
+    "mtime_ns": 1786716119048516134
+  },
+  "src/features/shell/workspace-navigation.tsx": {
+    "size": 4848,
+    "mtime_ns": 1787885221519898969
+  },
+  "src/features/shell/workspace-query-invalidation.test.tsx": {
+    "size": 8670,
+    "mtime_ns": 1787888414000436691
+  },
+  "src/features/switch-composition.test.ts": {
+    "size": 2443,
+    "mtime_ns": 1785676577208135153
+  },
+  "src/features/theme/theme-provider.test.tsx": {
+    "size": 3608,
+    "mtime_ns": 1786429947086987484
+  },
+  "src/features/theme/theme-provider.tsx": {
+    "size": 3438,
+    "mtime_ns": 1786429947086338522
+  },
+  "src/features/theme/theme-settings.tsx": {
+    "size": 2151,
+    "mtime_ns": 1787046326673254884
+  },
+  "src/features/workspaces/workspaces-external-refresh.test.tsx": {
+    "size": 6349,
+    "mtime_ns": 1787923728644105895
+  },
+  "src/features/workspaces/workspaces-view.test-support.ts": {
+    "size": 2838,
+    "mtime_ns": 1787922450210564215
+  },
+  "src/features/workspaces/workspaces-view.test.tsx": {
+    "size": 11284,
+    "mtime_ns": 1787922562561412774
+  },
+  "src/features/workspaces/workspaces-view.tsx": {
+    "size": 13462,
+    "mtime_ns": 1787923741954891330
+  },
+  "src/generated/rust-types.ts": {
+    "size": 116540,
+    "mtime_ns": 1788618609288572007
+  },
+  "src/lib/format.test.ts": {
+    "size": 635,
+    "mtime_ns": 1787117317885728392
+  },
+  "src/lib/format.ts": {
+    "size": 1530,
+    "mtime_ns": 1787554593897685028
+  },
+  "src/lib/ipc/client.test.ts": {
+    "size": 996,
+    "mtime_ns": 1785753747906788907
+  },
+  "src/lib/ipc/client.ts": {
+    "size": 3522,
+    "mtime_ns": 1788617675208918919
+  },
+  "src/lib/ipc/use-ipc-query.test.tsx": {
+    "size": 4352,
+    "mtime_ns": 1785743930597665577
+  },
+  "src/lib/ipc/use-ipc-query.ts": {
+    "size": 4980,
+    "mtime_ns": 1785743815122164144
+  },
+  "src/lib/message-content.test.ts": {
+    "size": 805,
+    "mtime_ns": 1785828577636028980
+  },
+  "src/lib/message-content.ts": {
+    "size": 3013,
+    "mtime_ns": 1786500114912594580
+  },
+  "src/lib/package-contract.test.ts": {
+    "size": 5215,
+    "mtime_ns": 1788041543550715954
+  },
+  "src/lib/package-contract.ts": {
+    "size": 7680,
+    "mtime_ns": 1788040091456981400
+  },
+  "src/lib/protocol-package-identity.ts": {
+    "size": 185,
+    "mtime_ns": 1787024088914608817
+  },
+  "src/lib/protocol-package-schema.test.ts": {
+    "size": 671,
+    "mtime_ns": 1788030648128296426
+  },
+  "src/lib/protocol-package-schema.ts": {
+    "size": 2863,
+    "mtime_ns": 1788030627933474852
+  },
+  "src/test/overlay-contracts.test.tsx": {
+    "size": 5076,
+    "mtime_ns": 1788233712447519117
+  },
+  "src/test/setup.ts": {
+    "size": 932,
+    "mtime_ns": 1785493809461135605
+  },
+  "templates/socket-protocol/API.md": {
+    "size": 1644,
+    "mtime_ns": 1788268657682276777
+  },
+  "templates/socket-protocol/AUTHORING.md": {
+    "size": 1657,
+    "mtime_ns": 1788268657682724031
+  },
+  "templates/socket-protocol/README.md": {
+    "size": 700,
+    "mtime_ns": 1788268657683331078
+  },
+  "templates/socket-protocol/iso8583-standard/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1788268657683527621
+  },
+  "templates/socket-protocol/iso8583-standard/Cargo.lock": {
+    "size": 8536,
+    "mtime_ns": 1788268947942383710
+  },
+  "templates/socket-protocol/iso8583-standard/Cargo.toml": {
+    "size": 281,
+    "mtime_ns": 1788268657683826373
+  },
+  "templates/socket-protocol/iso8583-standard/README.md": {
+    "size": 1313,
+    "mtime_ns": 1788268657684203627
+  },
+  "templates/socket-protocol/iso8583-standard/manifest.json": {
+    "size": 670,
+    "mtime_ns": 1788130479293018206
+  },
+  "templates/socket-protocol/iso8583-standard/samples/README.md": {
+    "size": 166,
+    "mtime_ns": 1788268657684557505
+  },
+  "templates/socket-protocol/iso8583-standard/samples/financial-request.json": {
+    "size": 693,
+    "mtime_ns": 1786610124386287279
+  },
+  "templates/socket-protocol/iso8583-standard/samples/financial-response.json": {
+    "size": 694,
+    "mtime_ns": 1786692486393268337
+  },
+  "templates/socket-protocol/iso8583-standard/src/lib.rs": {
+    "size": 6314,
+    "mtime_ns": 1788268657685023759
+  },
+  "test-support/android-control-client.rb": {
+    "size": 3657,
+    "mtime_ns": 1785906655906508501
+  },
+  "test-support/android-vpn-gate/README.md": {
+    "size": 2554,
+    "mtime_ns": 1785669274245042104
+  },
+  "test-support/android-vpn-gate/reports/latest.json": {
+    "size": 40120,
+    "mtime_ns": 1785670871990439923
+  },
+  "test-support/android-vpn-gate/run.rb": {
+    "size": 26103,
+    "mtime_ns": 1787892230894189933
+  },
+  "test-support/android-vpn-gate/run.sh": {
+    "size": 1750,
+    "mtime_ns": 1785819846659318881
+  },
+  "test-support/emulator-proxy-gate/.gitignore": {
+    "size": 19,
+    "mtime_ns": 1785580431381681394
+  },
+  "test-support/emulator-proxy-gate/Cargo.toml": {
+    "size": 656,
+    "mtime_ns": 1788322184523032250
+  },
+  "test-support/emulator-proxy-gate/README.md": {
+    "size": 3444,
+    "mtime_ns": 1788174218385764833
+  },
+  "test-support/emulator-proxy-gate/run.sh": {
+    "size": 6141,
+    "mtime_ns": 1785906655907092671
+  },
+  "test-support/emulator-proxy-gate/src/main.rs": {
+    "size": 31710,
+    "mtime_ns": 1788322499118279686
+  },
+  "test-support/emulator-proxy-gate/vpn_joint_probe.rb": {
+    "size": 12217,
+    "mtime_ns": 1787892230893555056
+  },
+  "test-support/fixtures/task-20260829-002/phase-1/current-contract-inventory.json": {
+    "size": 4958,
+    "mtime_ns": 1788317137131745721
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/display.js": {
+    "size": 10,
+    "mtime_ns": 1788144121848137462
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/golden.json": {
+    "size": 3234,
+    "mtime_ns": 1788037685672633224
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/http-manifest.json": {
+    "size": 386,
+    "mtime_ns": 1788041521011178152
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/inventory.json": {
+    "size": 4387,
+    "mtime_ns": 1788138137521518860
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/protocol.js": {
+    "size": 10,
+    "mtime_ns": 1788144121847855003
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/register-notification.json": {
+    "size": 316,
+    "mtime_ns": 1788041521011742988
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/rpc-examples.json": {
+    "size": 805,
+    "mtime_ns": 1788035857441291637
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/socket-manifest.json": {
+    "size": 461,
+    "mtime_ns": 1788035711517545798
+  },
+  "test-support/fixtures/task-20260829-002/phase-4/package-contract/validation-corpus.json": {
+    "size": 1245,
+    "mtime_ns": 1788041241000596149
+  },
+  "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/contract-inventory.json": {
+    "size": 3097,
+    "mtime_ns": 1788264982713592404
+  },
+  "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/generated-wire-golden.json": {
+    "size": 994,
+    "mtime_ns": 1788265031310719844
+  },
+  "test-support/fixtures/task-20260829-002/phase-6/rule-chain-transaction/contract-inventory.json": {
+    "size": 1562,
+    "mtime_ns": 1788255959854718359
+  },
+  "test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json": {
+    "size": 1108,
+    "mtime_ns": 1788130479295164630
+  },
+  "test-support/socket-relay-gate/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1786522969483735369
+  },
+  "test-support/socket-relay-gate/Cargo.toml": {
+    "size": 725,
+    "mtime_ns": 1788322184524264625
+  },
+  "test-support/socket-relay-gate/src/certificates.rs": {
+    "size": 3707,
+    "mtime_ns": 1786516191677046197
+  },
+  "test-support/socket-relay-gate/src/harness.rs": {
+    "size": 10480,
+    "mtime_ns": 1787647092074461758
+  },
+  "test-support/socket-relay-gate/src/lib.rs": {
+    "size": 106,
+    "mtime_ns": 1786516191678699753
+  },
+  "test-support/socket-relay-gate/src/tests.rs": {
+    "size": 9906,
+    "mtime_ns": 1787647356559540234
+  },
+  "test-support/windows-platform-gate/.gitignore": {
+    "size": 9,
+    "mtime_ns": 1786587904197722894
+  },
+  "test-support/windows-platform-gate/Cargo.toml": {
+    "size": 566,
+    "mtime_ns": 1788322184525490208
+  },
+  "test-support/windows-platform-gate/src/lib.rs": {
+    "size": 1431,
+    "mtime_ns": 1787912119314229081
+  },
+  "tsconfig.json": {
+    "size": 711,
+    "mtime_ns": 1788596172137868860
+  },
+  "vitest.config.ts": {
+    "size": 2244,
+    "mtime_ns": 1788320520103923260
+  }
+}

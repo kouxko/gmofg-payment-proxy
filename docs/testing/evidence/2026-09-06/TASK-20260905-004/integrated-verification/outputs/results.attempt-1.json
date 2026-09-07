@@ -1,0 +1,141 @@
+[
+  {
+    "check": "rust-check",
+    "command": [
+      "cargo",
+      "check",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T01:17:44.979904+08:00",
+    "finished_at": "2026-09-06T01:18:13.730516+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "write-commit-proof",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "--lib",
+      "write_commit",
+      "--",
+      "--nocapture"
+    ],
+    "started_at": "2026-09-06T01:18:13.731386+08:00",
+    "finished_at": "2026-09-06T01:18:14.625625+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "rust-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T01:18:14.626150+08:00",
+    "finished_at": "2026-09-06T01:20:06.717209+08:00",
+    "exit_code": 101
+  },
+  {
+    "check": "rust-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-06T01:20:06.720917+08:00",
+    "finished_at": "2026-09-06T01:20:32.818535+08:00",
+    "exit_code": 101
+  },
+  {
+    "check": "rust-fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "started_at": "2026-09-06T01:20:32.819026+08:00",
+    "finished_at": "2026-09-06T01:20:33.880154+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-06T01:20:33.880618+08:00",
+    "finished_at": "2026-09-06T01:20:36.400715+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "pipeline-guards",
+    "command": [
+      "deno",
+      "test",
+      "-A",
+      "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+      "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs"
+    ],
+    "started_at": "2026-09-06T01:20:36.401145+08:00",
+    "finished_at": "2026-09-06T01:21:33.236680+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "source-size",
+    "command": [
+      "deno",
+      "run",
+      "-A",
+      "scripts/check-source-file-sizes.mjs"
+    ],
+    "started_at": "2026-09-06T01:21:33.237450+08:00",
+    "finished_at": "2026-09-06T01:21:33.618718+08:00",
+    "exit_code": 1
+  },
+  {
+    "check": "script-lint",
+    "command": [
+      "deno",
+      "task",
+      "lint"
+    ],
+    "started_at": "2026-09-06T01:21:33.619110+08:00",
+    "finished_at": "2026-09-06T01:21:41.691444+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "diff-check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-06T01:21:41.691902+08:00",
+    "finished_at": "2026-09-06T01:21:41.765996+08:00",
+    "exit_code": 0
+  }
+]

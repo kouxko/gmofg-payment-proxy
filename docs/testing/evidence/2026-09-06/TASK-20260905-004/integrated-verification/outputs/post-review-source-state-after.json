@@ -1,0 +1,432 @@
+{
+  "docs/architecture/data-flow.md": {
+    "size": 14797,
+    "mtime_ns": 1788626983018365211
+  },
+  "docs/architecture/exchange-pipeline.md": {
+    "size": 13274,
+    "mtime_ns": 1788630411493841564
+  },
+  "docs/architecture/modules.md": {
+    "size": 14771,
+    "mtime_ns": 1788630411494383860
+  },
+  "docs/architecture/rules-and-protocol-packages.md": {
+    "size": 8807,
+    "mtime_ns": 1788627627364400932
+  },
+  "docs/architecture/runtime-observability.md": {
+    "size": 15980,
+    "mtime_ns": 1788626983018845130
+  },
+  "scripts/check-task-20260829-002-phase10-http-pipeline.mjs": {
+    "size": 8556,
+    "mtime_ns": 1788629444227415788
+  },
+  "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs": {
+    "size": 7480,
+    "mtime_ns": 1788629444227721332
+  },
+  "scripts/check-task-20260829-002-phase11-socket-pipeline.mjs": {
+    "size": 7984,
+    "mtime_ns": 1788627142226302371
+  },
+  "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs": {
+    "size": 6866,
+    "mtime_ns": 1788627340449643873
+  },
+  "src-tauri/crates/application/src/requirements_tests/unified_rules.rs": {
+    "size": 11777,
+    "mtime_ns": 1788622935755992759
+  },
+  "src-tauri/crates/domain/src/unified_rule/validation.rs": {
+    "size": 1246,
+    "mtime_ns": 1788622987113866973
+  },
+  "src-tauri/crates/domain/tests/unified_rule_contract.rs": {
+    "size": 14201,
+    "mtime_ns": 1788623047746013433
+  },
+  "src-tauri/crates/exchange/src/endpoint.rs": {
+    "size": 4156,
+    "mtime_ns": 1788625460421641874
+  },
+  "src-tauri/crates/exchange/src/error.rs": {
+    "size": 3997,
+    "mtime_ns": 1788624396980848768
+  },
+  "src-tauri/crates/exchange/src/exchange.rs": {
+    "size": 8462,
+    "mtime_ns": 1788629795667749931
+  },
+  "src-tauri/crates/exchange/src/lib.rs": {
+    "size": 1248,
+    "mtime_ns": 1788625020021236744
+  },
+  "src-tauri/crates/exchange/src/local_server.rs": {
+    "size": 5624,
+    "mtime_ns": 1788625475000679597
+  },
+  "src-tauri/crates/exchange/src/observation.rs": {
+    "size": 17702,
+    "mtime_ns": 1788624449775789745
+  },
+  "src-tauri/crates/exchange/src/pipeline.rs": {
+    "size": 14694,
+    "mtime_ns": 1788626946332410326
+  },
+  "src-tauri/crates/exchange/src/tests/exchange.rs": {
+    "size": 13715,
+    "mtime_ns": 1788629788820486282
+  },
+  "src-tauri/crates/exchange/src/tests/pipeline.rs": {
+    "size": 9106,
+    "mtime_ns": 1788625845309759552
+  },
+  "src-tauri/crates/exchange/src/tests/support.rs": {
+    "size": 2172,
+    "mtime_ns": 1788625845309243800
+  },
+  "src-tauri/crates/infrastructure/src/adapters/bundle.rs": {
+    "size": 17731,
+    "mtime_ns": 1788625540397231836
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs": {
+    "size": 16865,
+    "mtime_ns": 1788629885500993100
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs": {
+    "size": 6875,
+    "mtime_ns": 1788623476789223332
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs": {
+    "size": 5946,
+    "mtime_ns": 1788630132429334431
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs": {
+    "size": 9952,
+    "mtime_ns": 1788631146870018356
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs": {
+    "size": 4431,
+    "mtime_ns": 1788629964443421741
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs": {
+    "size": 4443,
+    "mtime_ns": 1788630086908796850
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs": {
+    "size": 9436,
+    "mtime_ns": 1788627695440466875
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs": {
+    "size": 8567,
+    "mtime_ns": 1788630071651253833
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs": {
+    "size": 7088,
+    "mtime_ns": 1788628028919639693
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs": {
+    "size": 4802,
+    "mtime_ns": 1788627782510251038
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs": {
+    "size": 15178,
+    "mtime_ns": 1788629885499839134
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document/error.rs": {
+    "deleted": true
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs": {
+    "size": 4272,
+    "mtime_ns": 1788630325451560478
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs": {
+    "size": 17221,
+    "mtime_ns": 1788627248010328947
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs": {
+    "size": 6165,
+    "mtime_ns": 1788629964443081781
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs": {
+    "size": 1871,
+    "mtime_ns": 1788623007768521101
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs": {
+    "size": 7646,
+    "mtime_ns": 1788627238534336309
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs": {
+    "size": 782,
+    "mtime_ns": 1788623470985790792
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs": {
+    "size": 15318,
+    "mtime_ns": 1788631054416826396
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs": {
+    "size": 9636,
+    "mtime_ns": 1788629552298955675
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs": {
+    "size": 6105,
+    "mtime_ns": 1788631054417577672
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs": {
+    "size": 17374,
+    "mtime_ns": 1788626589057363316
+  },
+  "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs": {
+    "size": 13420,
+    "mtime_ns": 1788627454622901950
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline.rs": {
+    "size": 6439,
+    "mtime_ns": 1788625264347561566
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs": {
+    "size": 2546,
+    "mtime_ns": 1788625264347971472
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs": {
+    "size": 2552,
+    "mtime_ns": 1788627635453698198
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs": {
+    "size": 3716,
+    "mtime_ns": 1788627635452535358
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs": {
+    "size": 15761,
+    "mtime_ns": 1788629141023123624
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs": {
+    "size": 9646,
+    "mtime_ns": 1788627635453138153
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs": {
+    "size": 8241,
+    "mtime_ns": 1788625264348413590
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs": {
+    "size": 10518,
+    "mtime_ns": 1788629308483892967
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs": {
+    "size": 8632,
+    "mtime_ns": 1788626150246415600
+  },
+  "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs": {
+    "size": 9066,
+    "mtime_ns": 1788631055351983941
+  },
+  "src-tauri/crates/proxy/src/forward/body.rs": {
+    "size": 2308,
+    "mtime_ns": 1788626123613431514
+  },
+  "src-tauri/crates/proxy/src/forward/exchange_connector.rs": {
+    "size": 3583,
+    "mtime_ns": 1788625629298079178
+  },
+  "src-tauri/crates/proxy/src/forward/pipeline.rs": {
+    "size": 2156,
+    "mtime_ns": 1788624234601391762
+  },
+  "src-tauri/crates/proxy/src/forward/pipeline/drop_response.rs": {
+    "deleted": true
+  },
+  "src-tauri/crates/proxy/src/forward/service.rs": {
+    "size": 8593,
+    "mtime_ns": 1788628542163683978
+  },
+  "src-tauri/crates/proxy/src/forward/service/http.rs": {
+    "size": 7876,
+    "mtime_ns": 1788626123617088115
+  },
+  "src-tauri/crates/proxy/src/forward/service/lifecycle.rs": {
+    "size": 9395,
+    "mtime_ns": 1788626123618765498
+  },
+  "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs": {
+    "size": 7247,
+    "mtime_ns": 1788626086747197354
+  },
+  "src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs": {
+    "size": 4977,
+    "mtime_ns": 1788628542165495239
+  },
+  "src-tauri/crates/proxy/src/forward/tunnel.rs": {
+    "size": 798,
+    "mtime_ns": 1788624234677191552
+  },
+  "src-tauri/crates/proxy/src/http.rs": {
+    "size": 4021,
+    "mtime_ns": 1788625668130403037
+  },
+  "src-tauri/crates/proxy/src/http/capabilities.rs": {
+    "size": 15964,
+    "mtime_ns": 1788629788819168816
+  },
+  "src-tauri/crates/proxy/src/http/contracts.rs": {
+    "size": 8711,
+    "mtime_ns": 1788629386032084648
+  },
+  "src-tauri/crates/proxy/src/http/egress.rs": {
+    "size": 5333,
+    "mtime_ns": 1788625254082040169
+  },
+  "src-tauri/crates/proxy/src/http/exchange.rs": {
+    "size": 9490,
+    "mtime_ns": 1788625254081615375
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime.rs": {
+    "size": 17884,
+    "mtime_ns": 1788629807913947591
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs": {
+    "size": 16571,
+    "mtime_ns": 1788629567955187531
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs": {
+    "size": 6494,
+    "mtime_ns": 1788628478954706616
+  },
+  "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs": {
+    "size": 15340,
+    "mtime_ns": 1788628354915665462
+  },
+  "src-tauri/crates/proxy/src/http/helpers.rs": {
+    "size": 11004,
+    "mtime_ns": 1788624234597929575
+  },
+  "src-tauri/crates/proxy/src/http/request_service.rs": {
+    "size": 13677,
+    "mtime_ns": 1788628174089690273
+  },
+  "src-tauri/crates/proxy/src/http/response_write.rs": {
+    "size": 7792,
+    "mtime_ns": 1788626536772365249
+  },
+  "src-tauri/crates/proxy/src/http/tests.rs": {
+    "size": 16038,
+    "mtime_ns": 1788625713512229434
+  },
+  "src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs": {
+    "size": 7459,
+    "mtime_ns": 1788626250260385184
+  },
+  "src-tauri/crates/proxy/src/http/tests/write_commit.rs": {
+    "size": 3316,
+    "mtime_ns": 1788628272242168819
+  },
+  "src-tauri/crates/proxy/src/http/tracking.rs": {
+    "size": 8644,
+    "mtime_ns": 1788626442614928012
+  },
+  "src-tauri/crates/proxy/src/http/upstream.rs": {
+    "size": 4378,
+    "mtime_ns": 1788625629297552967
+  },
+  "src-tauri/crates/proxy/src/http/wire.rs": {
+    "size": 3034,
+    "mtime_ns": 1788625443298949826
+  },
+  "src-tauri/crates/proxy/src/lib.rs": {
+    "size": 12047,
+    "mtime_ns": 1788630174734862393
+  },
+  "src-tauri/crates/proxy/src/listener/supervisor.rs": {
+    "size": 11376,
+    "mtime_ns": 1788627635450475889
+  },
+  "src-tauri/crates/proxy/src/listener/task_scope.rs": {
+    "size": 8264,
+    "mtime_ns": 1788628174089109301
+  },
+  "src-tauri/crates/proxy/src/reverse/dynamic_identity.rs": {
+    "size": 11319,
+    "mtime_ns": 1788627635450866016
+  },
+  "src-tauri/crates/proxy/src/socket_relay.rs": {
+    "size": 1951,
+    "mtime_ns": 1788630519421925605
+  },
+  "src-tauri/crates/proxy/src/socket_relay/handler.rs": {
+    "size": 15776,
+    "mtime_ns": 1788627635451884813
+  },
+  "src-tauri/crates/proxy/src/socket_relay/io.rs": {
+    "size": 6214,
+    "mtime_ns": 1788624409486278071
+  },
+  "src-tauri/crates/proxy/src/socket_relay/output_validation.rs": {
+    "size": 2390,
+    "mtime_ns": 1788630519422190774
+  },
+  "src-tauri/crates/proxy/src/socket_relay/processing.rs": {
+    "size": 15842,
+    "mtime_ns": 1788630533560591804
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs": {
+    "size": 11449,
+    "mtime_ns": 1788631084895675751
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs": {
+    "size": 2634,
+    "mtime_ns": 1788629964442443068
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs": {
+    "size": 4677,
+    "mtime_ns": 1788625861214538300
+  },
+  "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs": {
+    "size": 2858,
+    "mtime_ns": 1788630071656366393
+  },
+  "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs": {
+    "size": 10911,
+    "mtime_ns": 1788630326367733118
+  },
+  "src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs": {
+    "size": 6976,
+    "mtime_ns": 1788624355482605441
+  },
+  "src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs": {
+    "size": 1651,
+    "mtime_ns": 1788630071655484135
+  },
+  "src-tauri/crates/proxy/src/socket_relay/tests/support.rs": {
+    "size": 11318,
+    "mtime_ns": 1788624434991616254
+  },
+  "src-tauri/crates/proxy/src/supervisor/tests/support.rs": {
+    "size": 4639,
+    "mtime_ns": 1788625713512923896
+  },
+  "src-tauri/crates/proxy/tests/raw_http_proxy/support.rs": {
+    "size": 14953,
+    "mtime_ns": 1788625939115442161
+  },
+  "src-tauri/crates/proxy/tests/tls_mtls.rs": {
+    "size": 16489,
+    "mtime_ns": 1788625713513399315
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs": {
+    "size": 3419,
+    "mtime_ns": 1788625674126120443
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/disconnects.rs": {
+    "size": 3898,
+    "mtime_ns": 1788625674125668816
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/limits.rs": {
+    "size": 4632,
+    "mtime_ns": 1788625674126559445
+  },
+  "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs": {
+    "size": 7141,
+    "mtime_ns": 1788625685309363645
+  }
+}

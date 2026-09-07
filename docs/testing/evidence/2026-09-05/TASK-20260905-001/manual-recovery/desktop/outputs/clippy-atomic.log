@@ -1,0 +1,48 @@
+    Blocking waiting for file lock on build directory
+    Checking intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+error: this function has too many lines (102/100)
+  --> crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs:16:5
+   |
+16 | /     pub(super) async fn reconcile_runtime_endpoints(
+17 | |         &self,
+18 | |         serial: String,
+19 | |         activation: Option<AndroidNetworkActivation>,
+20 | |     ) -> AppResult<Vec<AndroidRuntimeEndpointViewModel>> {
+   | |________________________________________________________^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#too_many_lines
+   = note: `-D clippy::too-many-lines` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::too_many_lines)]`
+
+error: could not compile `intercept-proxy-infrastructure` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: boolean to int conversion using if
+  --> crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:80:43
+   |
+80 |                     "active_route_count": if is_apply { 1 } else { 0 },
+   |                                           ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ help: replace with from: `i32::from(is_apply)`
+   |
+   = note: `is_apply as i32` or `is_apply.into()` can also be valid options
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#bool_to_int_with_if
+   = note: `-D clippy::bool-to-int-with-if` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::bool_to_int_with_if)]`
+
+error: calling `Arc::default()` is more clear than this expression
+   --> crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:105:19
+    |
+105 |         requests: Default::default(),
+    |                   ^^^^^^^^^^^^^^^^^^ help: try: `Arc::default()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#default_trait_access
+    = note: `-D clippy::default-trait-access` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(clippy::default_trait_access)]`
+
+error: calling `Mutex::default()` is more clear than this expression
+   --> crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:106:18
+    |
+106 |         servers: Default::default(),
+    |                  ^^^^^^^^^^^^^^^^^^ help: try: `Mutex::default()`
+    |
+    = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#default_trait_access
+
+error: could not compile `intercept-proxy-infrastructure` (lib test) due to 4 previous errors

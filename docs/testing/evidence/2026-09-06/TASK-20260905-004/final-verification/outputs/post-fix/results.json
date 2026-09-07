@@ -1,0 +1,134 @@
+[
+  {
+    "name": "cargo-check",
+    "command": [
+      "cargo",
+      "check",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T09:47:36.453349+08:00",
+    "finished_at": "2026-09-06T09:47:55.689448+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "cargo-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--no-fail-fast"
+    ],
+    "started_at": "2026-09-06T09:47:55.690205+08:00",
+    "finished_at": "2026-09-06T09:50:33.380722+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-06T09:50:33.381782+08:00",
+    "finished_at": "2026-09-06T09:50:52.968715+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "rustfmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "started_at": "2026-09-06T09:50:52.969280+08:00",
+    "finished_at": "2026-09-06T09:50:54.173949+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "source-size",
+    "command": [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    "started_at": "2026-09-06T09:50:54.174510+08:00",
+    "finished_at": "2026-09-06T09:50:54.564250+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-06T09:50:54.564694+08:00",
+    "finished_at": "2026-09-06T09:50:57.166674+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "frontend-tests",
+    "command": [
+      "deno",
+      "task",
+      "test",
+      "src/features/android-network/android-network-view.test.tsx",
+      "src/features/android-network/android-network-view.network-intent.test.tsx"
+    ],
+    "started_at": "2026-09-06T09:50:57.167250+08:00",
+    "finished_at": "2026-09-06T09:51:14.082411+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "started_at": "2026-09-06T09:51:14.082958+08:00",
+    "finished_at": "2026-09-06T09:51:17.675615+08:00",
+    "exit_code": 2
+  },
+  {
+    "name": "lint",
+    "command": [
+      "deno",
+      "task",
+      "lint"
+    ],
+    "started_at": "2026-09-06T09:51:17.676288+08:00",
+    "finished_at": "2026-09-06T09:51:28.079592+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "diff-check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-06T09:51:28.080044+08:00",
+    "finished_at": "2026-09-06T09:51:28.142482+08:00",
+    "exit_code": 0
+  }
+]

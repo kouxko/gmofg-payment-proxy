@@ -1,0 +1,6 @@
+500de58abd4efb2e3d35527699443844cdd9391778784ceda03093aa2436e6d6  src-tauri/crates/application/src/facade/lifecycle.rs
+e617aaba11dd18723bbca272402d367dbaea834fadf5268c764837c07765a623  src-tauri/crates/application/src/requirements_tests/events.rs
+0aaa49e03ebea507c7c34e7d1a99314c5f0ba5b837548edafefcb0523cdc0d4a  src-tauri/crates/application/src/requirements_tests/support/fake_ports.rs
+016760fef15c54434279d8adf850b5631e14dead63db2581856a91c21932282b  src-tauri/crates/proxy/src/message.rs
+3f1181dc892ed5f1ab511f3f47a9d52e55dc8a74decdac30846e1a365cb0cd30  src-tauri/crates/proxy/src/message/tests.rs
+157b33755ac7787d7bed755b7e63e746a0b8d43e03444d09b7d020f844e2c160  src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs

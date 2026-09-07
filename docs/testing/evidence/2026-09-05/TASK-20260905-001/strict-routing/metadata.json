@@ -1,0 +1,51 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "STRICT-ROUTING-001",
+  "executed_at": "2026-09-05T14:40:45.894980+08:00",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "source_state": [
+    {
+      "source": "src-tauri/crates/android-engine/src/routing.rs",
+      "snapshot": "resources/routing.rs",
+      "sha256": "55ba476d11367385749b2e4b5cf137e0bb3bbafece9eb7e7d21e914c32d9dab6",
+      "required": true,
+      "purpose": "current regression fixture and implementation"
+    },
+    {
+      "source": "src-tauri/crates/android-engine/src/routing_tests.rs",
+      "snapshot": "resources/routing_tests.rs",
+      "sha256": "4492c083e4a737387e7f555ef30480dd47eeece91ec7614bc6a4f9e3d61b39f0",
+      "required": true,
+      "purpose": "current regression fixture and implementation"
+    },
+    {
+      "source": "src-tauri/crates/android-engine/src/socks5/tests/tcp.rs",
+      "snapshot": "resources/tcp.rs",
+      "sha256": "6700e35c34c9e46b6ad97960a65089f2d36347cdc4617d341779f74261341444",
+      "required": true,
+      "purpose": "current regression fixture and implementation"
+    }
+  ],
+  "source_stable_during_final_test": true,
+  "result": "PASS_WITH_ANDROID_DEVICE_NOT_RUN",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-android-engine routing::tests --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-android-engine unknown_ip_on_a_unique_domain_port --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-android-engine --lib -- --nocapture"
+  ],
+  "comparison": {
+    "legacy_baseline": "8 passed",
+    "new_unit_before_fix": "1 expected failure / 7 passed",
+    "wire_before_fix": "expected ORIG [79,82,73,71], actual PROX [80,82,79,88]",
+    "final": "48 passed / 0 failed; original received PING [80,73,78,71], response ORIG"
+  },
+  "derived_from": null,
+  "historical_behavior_commit": "864ef524",
+  "not_applicable": {
+    "TLS": "plain localhost SOCKS5/TCP regression",
+    "UI": "Rust route selection only",
+    "external_service": "two local ephemeral TCP listeners",
+    "device": "NOT_RUN: adb devices returned empty list"
+  }
+}

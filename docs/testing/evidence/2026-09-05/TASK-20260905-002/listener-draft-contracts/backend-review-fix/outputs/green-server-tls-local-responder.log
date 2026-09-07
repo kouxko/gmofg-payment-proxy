@@ -1,0 +1,33 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 16.09s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-c8c37ca5c1a6cffd)
+
+running 1 test
+test requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 430 filtered out; finished in 0.00s
+
+     Running tests/environment_configuration_contract.rs (src-tauri/target/debug/deps/environment_configuration_contract-703465e653ae9668)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/environment_configuration_document_contract.rs (src-tauri/target/debug/deps/environment_configuration_document_contract-dbd285d44fcb60e8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/environment_configuration_negative_contract.rs (src-tauri/target/debug/deps/environment_configuration_negative_contract-00854a0be5c9774f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/r07a_application_backup_wire.rs (src-tauri/target/debug/deps/r07a_application_backup_wire-0f04299912a80045)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+

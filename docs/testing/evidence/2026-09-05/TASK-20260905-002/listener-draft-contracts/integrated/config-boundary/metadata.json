@@ -1,0 +1,18 @@
+{
+  "task_id": "TASK-20260905-002",
+  "case_id": "archive-source-discovery",
+  "result": "PASS",
+  "checked_at": "2026-09-05T16:16:58.393912+08:00",
+  "red_exit": 1,
+  "green_exit": 0,
+  "environment": "macOS; Deno 2.9.6; repository-installed TypeScript and ESLint",
+  "source_state": {
+    "tsconfig.json": "ec1fc97d0fc38951c8db9833407cb8184896f59923056a1da2898df36dac539c",
+    "eslint.config.mjs": "68962e7bacb6f7505cdb9a2bad699d8699828da08baf34e3dd8df639e8b89366"
+  },
+  "replay": "deno run -A docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/integrated/config-boundary/check.mjs",
+  "not_applicable": {
+    "protocol": "configuration discovery only",
+    "device": "configuration discovery only"
+  }
+}

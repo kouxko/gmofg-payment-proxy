@@ -1,0 +1,34 @@
+    Checking intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Checking intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+warning: type does not implement `Debug`; consider adding `#[derive(Debug)]` or a manual implementation
+   --> crates/exchange/src/pipeline.rs:301:1
+    |
+301 | / pub struct SequentialPrepare<P: Protocol, D: Direction> {
+302 | |     rules: Box<dyn Rules>,
+303 | |     encode: Box<dyn Encode<P, D>>,
+304 | | }
+    | |_^
+    |
+    = note: requested on the command line with `-W missing-debug-implementations`
+
+warning: `intercept-proxy-exchange` (lib) generated 1 warning
+    Checking intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.44s
+cargo check exit: 0
+    Checking intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+error: type does not implement `std::fmt::Debug`; consider adding `#[derive(Debug)]` or a manual implementation
+   --> crates/exchange/src/pipeline.rs:301:1
+    |
+301 | / pub struct SequentialPrepare<P: Protocol, D: Direction> {
+302 | |     rules: Box<dyn Rules>,
+303 | |     encode: Box<dyn Encode<P, D>>,
+304 | | }
+    | |_^
+    |
+    = note: `-D missing-debug-implementations` implied by `-D warnings`
+    = help: to override `-D warnings` add `#[allow(missing_debug_implementations)]`
+
+error: could not compile `intercept-proxy-exchange` (lib) due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
+error: could not compile `intercept-proxy-exchange` (lib test) due to 1 previous error
+cargo clippy exit: 101

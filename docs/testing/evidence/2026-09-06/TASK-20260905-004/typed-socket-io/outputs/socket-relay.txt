@@ -1,0 +1,80 @@
+warning: type does not implement `Debug`; consider adding `#[derive(Debug)]` or a manual implementation
+   --> crates/exchange/src/pipeline.rs:301:1
+    |
+301 | / pub struct SequentialPrepare<P: Protocol, D: Direction> {
+302 | |     rules: Box<dyn Rules>,
+303 | |     encode: Box<dyn Encode<P, D>>,
+304 | | }
+    | |_^
+    |
+    = note: requested on the command line with `-W missing-debug-implementations`
+
+warning: `intercept-proxy-exchange` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 61 tests
+test socket_relay::handler::tests::relay_failures_preserve_stage_direction_and_partial_counters ... ok
+test socket_relay::handler::tests::framed_cancellation_uses_the_standard_connection_cancel_code ... ok
+test socket_relay::handler_support::tests::capture_processing_kinds_keep_distinct_terminal_stages ... ok
+test socket_relay::observer::local_request::tests::origin_and_document_previews_stay_within_their_exact_budgets ... ok
+test socket_relay::observer::tests::bounded_retention_rejects_zero_limits ... ok
+test socket_relay::observer::tests::bounded_retention_evicts_oldest_without_blocking_and_counts_drops ... ok
+test socket_relay::observer::local_request::tests::observer_evicts_oldest_event_by_count_and_logical_bytes ... ok
+test socket_relay::observer::local_request::tests::debug_never_prints_origin_or_document_values ... ok
+test socket_relay::protocol_exchange::tests::exchange_failure_uses_structured_code_and_direction_instead_of_message_text ... ok
+test socket_relay::connector::tests::downstream_only_tcp_accept_never_needs_an_upstream_endpoint ... ok
+test socket_relay::raw_exchange::tests::flush_failure_preserves_structured_error_direction_and_written_bytes ... ok
+test socket_relay::service::tests::metrics_reset_is_per_run_and_preserves_exact_partial_bytes ... ok
+test socket_relay::service::tests::metrics_snapshot_includes_active_connection_progress_without_double_counting_on_close ... ok
+test socket_relay::service::tests::lifecycle_capacity_rejections_are_typed ... ok
+test socket_relay::service::tests::panic_and_forced_shutdown_have_typed_terminal_failures ... ok
+test socket_relay::processing::observation_tests::exchange_parent_span_exports_stable_primitive_metadata ... ok
+test socket_relay::service::tests::panic_fallback_emits_the_tracked_partial_byte_counters ... ok
+test socket_relay::raw_exchange::tests::cancellation_interrupts_a_pending_raw_half_close ... ok
+test socket_relay::raw_exchange::tests::cancellation_interrupts_a_pending_raw_flush ... ok
+test socket_relay::tests::endpoint_and_capacity_validation_reject_url_shaped_hosts_and_invalid_limits ... ok
+test socket_relay::connector::tests::connect_tries_all_resolved_addresses_under_one_deadline ... ok
+test socket_relay::tests::cancellation_before_first_ingress_never_opens_upstream_and_resets_metrics ... ok
+test socket_relay::tests::local_responder::local_processor_failure_writes_nothing_and_emits_one_stable_terminal ... ok
+test socket_relay::tests::local_responder::local_processor_panic_writes_nothing_and_emits_one_stable_terminal ... ok
+test socket_relay::tests::capacity_rejections_are_typed_and_counted ... ok
+test socket_relay::tests::local_responder::local_raw_server_echoes_each_app_read_without_an_upstream ... ok
+test socket_relay::tests::local_responder::local_responder_observer_contains_no_upstream_evidence ... ok
+test socket_relay::tests::local_responder::local_responder_records_responses_as_server_to_client_bytes ... ok
+test socket_relay::tests::local_responder::local_responder_rejects_upstream_probe_but_still_serves_locally ... ok
+test socket_relay::tests::local_responder::local_server_rejects_pipelined_requests_under_strict_exchange_ordering ... ok
+test socket_relay::tests::local_responder::local_stop_while_reading_maps_to_cancelled_and_emits_one_terminal ... ok
+test socket_relay::raw_exchange::tests::partial_write_timeout_preserves_structured_error_and_progress ... ok
+test socket_relay::tests::local_responder::tls::direct_mtls_local_responder_rejects_an_app_without_identity ... ok
+test socket_relay::tests::local_responder::tls::direct_tls_local_responder_echoes_binary_after_app_half_close ... ok
+test socket_relay::tests::local_responder::tls::direct_mtls_local_responder_echoes_for_a_trusted_app_identity ... ok
+test socket_relay::tests::local_responder::tls::tls_app_connection_receives_the_local_response ... ok
+test socket_relay::tests::scripted_relay::scripted_exchange_processes_multiple_interactions_sequentially ... ok
+test socket_relay::tests::scripted_relay::scripted_relay_transforms_both_directions_and_creates_each_processor_once ... ok
+test socket_relay::tests::local_responder::tls::required_mtls_rejects_missing_and_accepts_the_trusted_app_identity ... ok
+test socket_relay::tests::direct::transparent_relay_supports_simultaneous_bidirectional_binary_traffic ... ok
+test socket_relay::tests::scripted_tls::scripted_tls_to_tcp_transforms_both_directions ... ok
+test socket_relay::tests::read_timeout_is_directional_and_terminal_is_unique ... ok
+test socket_relay::tests::scripted_tls::scripted_tcp_to_tls_transforms_both_directions ... ok
+test socket_relay::tests::scripted_tls::scripted_tls_to_tls_fails_closed_when_upstream_requires_missing_client_identity ... ok
+test socket_relay::tests::scripted_tls::scripted_tls_to_tls_accepts_trusted_identities_on_both_sides ... ok
+test socket_relay::tests::tls::probes::upstream_mtls_probe_fails_closed_without_client_identity ... ok
+test socket_relay::tests::tls::probes::upstream_mtls_uses_the_configured_client_identity ... ok
+test socket_relay::tests::tls::probes::upstream_tls_automatically_negotiates_modern_tls13 ... ok
+test socket_relay::tests::direct::transparent_relay_dials_upstream_only_after_the_first_app_bytes ... ok
+test socket_relay::tests::tls::probes::upstream_tls_connects_to_an_ip_using_an_explicit_server_name ... ok
+test socket_relay::tests::tls::probes::upstream_tls_bundle_supplies_an_intermediate_omitted_by_the_server ... ok
+test socket_relay::tests::tls::all_tls_bridge_modes_preserve_binary_and_half_close ... ok
+test socket_relay::tests::tls::probes::upstream_tls_probe_discovers_dns_names_without_reporting_strict_verification ... ok
+test socket_relay::tests::transparent_mode_relays_an_end_to_end_tls_client_hello_opaquely ... ok
+test socket_relay::tests::tls::required_downstream_mtls_rejects_missing_then_accepts_trusted_client ... ok
+test socket_relay::tests::transparent_relay_preserves_binary_and_asymmetric_half_close ... ok
+test socket_relay::tests::direct::transparent_relay_preserves_arbitrary_write_boundaries_and_coalesced_frames ... ok
+test socket_relay::tests::scripted_relay::scripted_exchange_rejects_pipelined_app_frames_and_emits_one_terminal_event ... ok
+test socket_relay::tests::scripted_tls::scripted_tls_to_tls_rejects_an_app_without_required_identity_before_upstream_dial ... ok
+test socket_relay::tests::tls::probes::upstream_tls_automatically_negotiates_static_rsa_aes_gcm ... ok
+test socket_relay::tests::pre_open_dns_and_connect_failures_have_typed_stages ... ok
+
+test result: ok. 61 passed; 0 failed; 0 ignored; 0 measured; 128 filtered out; finished in 1.03s
+

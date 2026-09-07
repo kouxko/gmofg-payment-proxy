@@ -1,0 +1,166 @@
+"use client";
+
+import { useCallback, useEffect, useRef, useState } from "react";
+import type {
+  ListenerDraft,
+  ListenerDraftTransition,
+  ProtocolPackageRef,
+} from "@/generated/rust-types";
+import { commands } from "@/generated/rust-types";
+import { callCommand } from "@/lib/ipc/client";
+
+export interface ListenerDraftTransitionContext {
+  workspaceId: string;
+  workspaceRevision: number;
+  listener: ListenerDraft;
+  scopeVersion: number;
+}
+
+interface QueuedTransition {
+  transition: ListenerDraftTransition;
+  recommendedPackage: ProtocolPackageRef | null;
+}
+
+interface TransitionBatch {
+  context: ListenerDraftTransitionContext;
+  sourceFingerprint: string;
+  currentDraft: ListenerDraft;
+  queue: QueuedTransition[];
+  latestDataPlane?: "http" | "socket";
+  latestTopology?: "relay" | "local_responder";
+}
+
+interface TransitionGuards {
+  dataPlane: boolean;
+  serverControls: boolean;
+}
+
+const idleGuards: TransitionGuards = { dataPlane: false, serverControls: false };
+
+export function useListenerDraftTransition({ getContext, apply, onError }: {
+  getContext: () => ListenerDraftTransitionContext | undefined;
+  apply: (draft: ListenerDraft) => void;
+  onError: (reason: unknown) => void;
+}) {
+  const mounted = useRef(true);
+  const active = useRef<TransitionBatch | undefined>(undefined);
+  const transitioningRef = useRef(false);
+  const [transitioning, setTransitioning] = useState(false);
+  const [guards, setGuards] = useState(idleGuards);
+
+  const finish = useCallback((batch: TransitionBatch) => {
+    if (active.current !== batch) return;
+    active.current = undefined;
+    transitioningRef.current = false;
+    if (mounted.current) {
+      setTransitioning(false);
+      setGuards(idleGuards);
+    }
+  }, []);
+
+  const invalidate = useCallback(() => {
+    active.current = undefined;
+    transitioningRef.current = false;
+    if (mounted.current) {
+      setTransitioning(false);
+      setGuards(idleGuards);
+    }
+  }, []);
+
+  const drain = useCallback(async (batch: TransitionBatch) => {
+    while (active.current === batch && batch.queue.length > 0) {
+      const next = batch.queue.shift()!;
+      try {
+        batch.currentDraft = await callCommand(commands.listenerDraftTransition(
+          batch.currentDraft,
+          next.transition,
+          next.recommendedPackage,
+        ));
+      } catch (reason) {
+        if (active.current === batch && mounted.current) onError(reason);
+        finish(batch);
+        return;
+      }
+    }
+    if (active.current !== batch || !mounted.current) return;
+    const latest = getContext();
+    if (!latest || !sameContext(batch, latest)) {
+      finish(batch);
+      return;
+    }
+    finish(batch);
+    apply(batch.currentDraft);
+  }, [apply, finish, getContext, onError]);
+
+  const enqueue = useCallback((
+    transition: ListenerDraftTransition,
+    recommendedPackage: ProtocolPackageRef | null,
+  ) => {
+    const context = getContext();
+    if (!context) return;
+    const current = active.current;
+    if (current && sameContext(current, context)) {
+      if (current.latestDataPlane && transition.type !== "data_plane") return;
+      if (current.latestTopology === "local_responder" && transition.type === "server_tls") return;
+      current.queue.push({ transition, recommendedPackage });
+      trackGuard(current, transition);
+      setGuards(guardsFor(current));
+      return;
+    }
+    if (current) invalidate();
+    const batch: TransitionBatch = {
+      context,
+      sourceFingerprint: fingerprint(context.listener),
+      currentDraft: context.listener,
+      queue: [{ transition, recommendedPackage }],
+    };
+    trackGuard(batch, transition);
+    active.current = batch;
+    transitioningRef.current = true;
+    setTransitioning(true);
+    setGuards(guardsFor(batch));
+    void drain(batch);
+  }, [drain, getContext, invalidate]);
+
+  useEffect(() => {
+    mounted.current = true;
+    return () => {
+      mounted.current = false;
+      active.current = undefined;
+    };
+  }, []);
+
+  return {
+    enqueue,
+    invalidate,
+    transitioning,
+    isTransitioning: () => transitioningRef.current,
+    dataPlanePending: guards.dataPlane,
+    serverControlsBlocked: guards.serverControls,
+  };
+}
+
+function trackGuard(batch: TransitionBatch, transition: ListenerDraftTransition) {
+  if (transition.type === "data_plane") batch.latestDataPlane = transition.kind;
+  if (transition.type === "socket_topology") batch.latestTopology = transition.mode;
+}
+
+function guardsFor(batch: TransitionBatch): TransitionGuards {
+  return {
+    dataPlane: batch.latestDataPlane !== undefined,
+    serverControls: batch.latestDataPlane !== undefined
+      || batch.latestTopology === "local_responder",
+  };
+}
+
+function sameContext(batch: TransitionBatch, context: ListenerDraftTransitionContext) {
+  return batch.context.workspaceId === context.workspaceId
+    && batch.context.workspaceRevision === context.workspaceRevision
+    && batch.context.listener.id === context.listener.id
+    && batch.context.scopeVersion === context.scopeVersion
+    && batch.sourceFingerprint === fingerprint(context.listener);
+}
+
+function fingerprint(listener: ListenerDraft) {
+  return JSON.stringify(listener);
+}

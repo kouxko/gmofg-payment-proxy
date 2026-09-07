@@ -1,0 +1,14 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.21s
+     Running tests/upstream_http.rs (src-tauri/target/debug/deps/upstream_http-d92d3acfba650ddc)
+
+running 7 tests
+test close_after_request_write_sends_the_complete_request_without_waiting_for_response ... ok
+test upstream_mid_body_disconnect_writes_exact_prefix_and_is_classified ... ok
+test upstream_informational_heads_do_not_replace_the_final_raw_response_head ... ok
+test oversized_upstream_body_is_classified ... ok
+test injected_read_timeout_starts_after_the_complete_request_write ... ok
+test upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed ... ok
+test backpressured_request_body_timeout_releases_connection ... ok
+
+test result: ok. 7 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.21s
+

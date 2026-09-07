@@ -1,0 +1,80 @@
+{
+  "kind": "planned_acceptance_scenarios_not_execution_results",
+  "cases": [
+    {
+      "id": "draft_missing_package",
+      "input": "Scripted draft with package=null, current workspace revision",
+      "expected": "editable/copyable; validate returns field error and normalized=null; save/start not called"
+    },
+    {
+      "id": "draft_missing_identity",
+      "input": "Socket App TLS draft with server_identity=null",
+      "expected": "editable; validate returns identity field error and normalized=null"
+    },
+    {
+      "id": "draft_missing_trust",
+      "input": "Optional/Required client auth with trust=null for HTTP or Socket",
+      "expected": "editable; validate returns trust field error and normalized=null"
+    },
+    {
+      "id": "stale_revision_precedes_field_errors",
+      "input": "Missing draft field and stale workspace revision together",
+      "expected": "existing revision conflict error; no ordinary field-error success result"
+    },
+    {
+      "id": "valid_uses_single_save",
+      "input": "Complete valid draft and current revision",
+      "expected": "normalized strict Workspace; UI calls existing listener_save transaction"
+    },
+    {
+      "id": "domain_stays_strict",
+      "input": "Malformed nonempty UUID/package/enum or existing strict API empty sentinel",
+      "expected": "typed input rejected; no domain serde relaxation"
+    },
+    {
+      "id": "strict_roundtrip",
+      "input": "Complete existing ProxyListener",
+      "expected": "Draft conversion and normalization preserve every field"
+    },
+    {
+      "id": "transition_latest_only",
+      "input": "Request A followed by B, responses arrive B then A",
+      "expected": "only B applies, preserving other Listener drafts"
+    },
+    {
+      "id": "transition_leaf_edit",
+      "input": "Transition starts, user edits name or other leaf, old response arrives",
+      "expected": "new leaf remains; old transition response does not apply"
+    },
+    {
+      "id": "transition_external_refresh",
+      "input": "Transition starts, authority changes, old response arrives",
+      "expected": "authority/reconcile wins, old response cannot overwrite"
+    },
+    {
+      "id": "transition_scope_change",
+      "input": "Transition starts, A→B→A selection, workspace change or unmount",
+      "expected": "old scope response rejected despite same final Listener ID"
+    },
+    {
+      "id": "transition_submission_race",
+      "input": "Transition in flight and save/start/TLS probe requested",
+      "expected": "cannot submit the old mode while latest transition is pending; editors remain available for leaf/rapid transitions"
+    },
+    {
+      "id": "certificate_lease_preservation",
+      "input": "Transition removes current reference while another draft still uses it",
+      "expected": "only truly unreachable unpersisted material discarded; other draft/lease retained"
+    },
+    {
+      "id": "existing_mode_matrix",
+      "input": "Original 53 model/working-mode tests and source snapshots",
+      "expected": "same mode idempotence, exact package and TLS retain/clear behavior preserved; no hidden restore"
+    },
+    {
+      "id": "transition_preserves_sequential_intents",
+      "input": "App TLS enable then Server TLS enable before first response; separately Direct→Scripted with recommended P then LocalResponder with recommended Q",
+      "expected": "Rust transitions compose in user order on intermediate returned Draft; final has both TLS sides and preserves exact P binding; intermediate responses do not overwrite UI; cancellation invalidates whole chain"
+    }
+  ]
+}

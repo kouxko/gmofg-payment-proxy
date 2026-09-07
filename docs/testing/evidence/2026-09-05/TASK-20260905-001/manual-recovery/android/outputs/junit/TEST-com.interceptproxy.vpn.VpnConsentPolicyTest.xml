@@ -1,0 +1,8 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.VpnConsentPolicyTest" tests="2" skipped="0" failures="0" errors="0" timestamp="2026-09-05T09:29:18.628Z" hostname="KQR.local" time="0.001">
+  <properties/>
+  <testcase name="alreadyGrantedPermissionOnlyFinishesAuthorizationActivity" classname="com.interceptproxy.vpn.VpnConsentPolicyTest" time="0.0"/>
+  <testcase name="authorizationResultNeverStartsVpnService" classname="com.interceptproxy.vpn.VpnConsentPolicyTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

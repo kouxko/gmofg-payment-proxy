@@ -1,0 +1,13 @@
+{
+  "incident": "An independent reviewer mistakenly launched a second copy of verify.py against the same output directory.",
+  "affected_files": [
+    "outputs/source-before.json",
+    "outputs/cargo-check.log",
+    "outputs/cargo-tests.log"
+  ],
+  "disposition": "Original main-run results report success but the overwritten Cargo logs are incomplete and are not accepted as final evidence. Post-fix reruns in a fresh directory are authoritative.",
+  "source_changes_during_initial_run": false,
+  "source_evidence": "Root directly compared all 124 file snapshots (the initial index additionally records two deleted source paths) with current source bytes before applying the final formatting/test-support path changes; no mismatch.",
+  "recovery": "Reviewer terminated the duplicate process group and root observed no remaining matrix processes before starting post-fix. Replay now requires a fresh output directory.",
+  "retained_evidence": "All initial logs and results remain preserved; no prior failure output was overwritten by the repair."
+}

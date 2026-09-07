@@ -1,0 +1,6 @@
+GET / HTTP/1.1
+X-Preserved:	 exact 	
+Host: upstream.test
+Connection: close
+Content-Length: 0
+

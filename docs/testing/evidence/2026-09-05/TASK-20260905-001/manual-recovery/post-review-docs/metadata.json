@@ -1,0 +1,14 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "MANUAL-RECOVERY-001/post-review-docs",
+  "result": "PASS",
+  "executed_at": "2026-09-05T17:59:37.736618+08:00",
+  "source": "android-companion/README.md",
+  "resource": "resources/android-companion-README.md",
+  "commands": [
+    "git diff --check",
+    "deno run -A scripts/check-architecture-docs.mjs"
+  ],
+  "change": "remove stale planned wording only",
+  "not_applicable": "runtime, network and screenshots: documentation-only correction"
+}

@@ -1,0 +1,29 @@
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/android-engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.51s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_android_engine-66d329b0732e7481)
+
+running 8 tests
+test routing::tests::domain_route_matches_desktop_resolved_ip_without_device_dns ... ok
+test routing::tests::missing_runtime_route_blocks_start_instead_of_bypassing_proxy ... ok
+test routing::tests::domain_route_compiles_offline_and_matches_virtual_dns_domain ... ok
+test routing::tests::routes_multiple_original_targets_to_independent_runtime_endpoints ... ok
+test routing::tests::same_port_domain_routes_do_not_guess_when_ip_does_not_match ... ok
+test routing::tests::runtime_shape_uses_the_same_destination_normalization_as_profile_validation ... ok
+test routing::tests::trailing_dot_ipv4_route_compiles_as_an_ip_network ... ok
+test routing::tests::unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique ... FAILED
+
+failures:
+
+---- routing::tests::unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique stdout ----
+
+thread 'routing::tests::unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique' (4172936) panicked at crates/android-engine/src/routing_tests.rs:124:9:
+assertion failed: table.for_ip(unknown.parse().unwrap(), 16_127).is_none()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    routing::tests::unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique
+
+test result: FAILED. 7 passed; 1 failed; 0 ignored; 0 measured; 39 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-android-engine --lib`

@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.ControlLeaseWatchdogTest" tests="10" skipped="0" failures="0" errors="0" timestamp="2026-09-05T09:29:18.497Z" hostname="KQR.local" time="0.004">
+  <properties/>
+  <testcase name="leaseDoesNotExpireBeforeFiveSecondsAndExpiresAtBoundary" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="disabledPolicyNeverArmsLease" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="claimedOldLeaseStopWithoutServiceCannotStopInterleavedNewGeneration" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="replacementEnqueueFailureRestoresRunningGenerationAndOldLease" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.001"/>
+  <testcase name="staleHeartbeatCannotRenewNewGeneration" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="staleTimeoutCannotStopReplacementGeneration" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="claimedOldLeaseStopCannotReleaseTunAfterInterleavedNewStart" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <testcase name="successfulEnqueueArmsLeaseFromCompletionTime" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.001"/>
+  <testcase name="enqueueFailureAfterNewGenerationPublishesClaimsGenerationAwareFailOpenStop" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.001"/>
+  <testcase name="heartbeatAfterLeaseClearCannotRenewStoppedGeneration" classname="com.interceptproxy.vpn.ControlLeaseWatchdogTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

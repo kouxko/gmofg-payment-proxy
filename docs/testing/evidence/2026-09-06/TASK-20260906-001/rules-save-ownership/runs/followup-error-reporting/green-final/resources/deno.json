@@ -1,0 +1,16 @@
+{
+  "nodeModulesDir": "auto",
+  "allowScripts": [
+    "npm:unrs-resolver"
+  ],
+  "unstable": [
+    "detect-cjs",
+    "node-globals",
+    "unsafe-proto",
+    "sloppy-imports"
+  ],
+  "tasks": {
+    "dev": "deno run -A --unstable-detect-cjs node_modules/next/dist/bin/next dev --webpack",
+    "tauri:dev": "deno run -A --unstable-detect-cjs node_modules/@tauri-apps/cli/tauri.js dev --config src-tauri/tauri.dev.conf.json"
+  }
+}

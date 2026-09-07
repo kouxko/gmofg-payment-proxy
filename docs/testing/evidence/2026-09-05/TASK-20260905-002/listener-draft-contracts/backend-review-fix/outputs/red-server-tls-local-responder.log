@@ -1,0 +1,22 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.15s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-c8c37ca5c1a6cffd)
+
+running 1 test
+test requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs ... FAILED
+
+failures:
+
+---- requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs stdout ----
+
+thread 'requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs' (4662561) panicked at crates/application/src/requirements_tests/listener_draft.rs:197:14:
+Server TLS is unavailable without a Relay upstream: ListenerDraft { id: ListenerId(7df7c7e4-8038-447f-838c-489298bacba0), name: "默认代理监听", enabled: false, bind_address: "127.0.0.1", port: 8080, connect_timeout_ms: 30000, read_timeout_ms: 70000, write_timeout_ms: 70000, data_plane: Socket(SocketRelayDraftSettings { topology: LocalResponder(SocketLocalResponderTopologyDraft { downstream_security: Tcp }), maximum_connections: 500, runtime_limits: SocketRuntimeLimits { read_chunk_bytes: 16384, diagnostic_event_capacity: 256, diagnostic_memory_bytes: 1048576 }, processing: Scripted(ScriptedSocketProcessingDraft { package: Some(ProtocolPackageRef { id: ProtocolPackageId("iso8583-ascii-standard"), version: ProtocolPackageVersion("1.0.0") }) }) }) }
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    requirements_tests::listener_draft::server_tls_transition_rejects_local_responder_for_both_boolean_inputs
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 430 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-application --lib`

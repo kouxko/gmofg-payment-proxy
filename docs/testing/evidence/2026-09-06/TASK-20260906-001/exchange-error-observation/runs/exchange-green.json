@@ -1,0 +1,19 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "-p",
+    "intercept-proxy-exchange",
+    "--lib",
+    "--all-features",
+    "--",
+    "--nocapture"
+  ],
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "started_at": "2026-09-06T10:55:38.542581+08:00",
+  "completed_at": "2026-09-06T10:56:04.733026+08:00",
+  "exit_code": 0
+}

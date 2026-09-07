@@ -1,0 +1,2 @@
+9d048db17a263d6392c0ede32178ccd12920efc3046566169859939c1d233b28  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend-review-fix/resources/after/listener_draft.rs
+b6dabdb09f48d5590f6d327def11c51ba4b5d81bfc06d87de7493d9f90660293  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend-review-fix/resources/after/transition.rs

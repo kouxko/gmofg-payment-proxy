@@ -1,0 +1,38 @@
+{
+  "source": "independent code-reviewer final messages, transcribed by leader",
+  "original_output_files": null,
+  "notes": "Reviewer rechecks below exist only in tool transcript; do not treat this summary as raw stdout. Full leader verification raw logs are under ../validation/review-fixes/.",
+  "batch_started_at_approximate": "2026-09-06 15:17:43 +08:00",
+  "batch_wall_seconds": 28,
+  "checks": [
+    {
+      "command": "deno task test src/features/rules/rules-view-session-races.test.tsx src/features/rules/rules-view.test.tsx --reporter=dot",
+      "result": "2 files / 15 PASS",
+      "started_at_from_stdout": "2026-09-06 15:17:43 +08:00",
+      "duration_seconds": 9.94
+    },
+    {
+      "command": "cargo test --offline --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange observation::tests",
+      "result": "7 PASS",
+      "test_duration_seconds": 1.19,
+      "absolute_start_not_embedded": true
+    },
+    {
+      "command": "cargo check --offline --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features",
+      "result": "PASS",
+      "duration_seconds": 26.74
+    },
+    {
+      "command": "deno task typecheck",
+      "result": "PASS",
+      "duration_seconds": null
+    }
+  ],
+  "same_turn_reproduction": {
+    "raw_log": "same-turn-interleaving/reproduction.log",
+    "modified_resource": "same-turn-interleaving/src/features/rules/rules-view-session-races.test.tsx",
+    "started_at_from_stdout": "2026-09-06 15:17:14 +08:00",
+    "duration_seconds": 2.36,
+    "other_config": "Reviewer cmp matched current snapshot; no other modified resource. node_modules was an existing dependency symlink."
+  }
+}

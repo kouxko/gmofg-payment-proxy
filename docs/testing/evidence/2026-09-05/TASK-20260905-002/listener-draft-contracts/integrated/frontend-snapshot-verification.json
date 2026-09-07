@@ -1,0 +1,191 @@
+{
+  "result": "PASS",
+  "method": "All final F1 snapshot digests verified; each snapshot byte-compared to src/features/listeners/<original filename> after source freeze and final Next build",
+  "resources": [
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/downstream-tls-card.tsx.txt",
+      "source": "src/features/listeners/downstream-tls-card.tsx",
+      "sha256": "dfa40566dba2adde910a46e9178b3a4a7113e76a2ccadc09d89d87b80c036396"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/fixed-server-tls-settings.tsx.txt",
+      "source": "src/features/listeners/fixed-server-tls-settings.tsx",
+      "sha256": "d8f6429648563d270322f6a66085cfcb488eb41ad40a94dd5e1ccac475521f1b"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/http-protocol-processing-card.tsx.txt",
+      "source": "src/features/listeners/http-protocol-processing-card.tsx",
+      "sha256": "6605d3f5a136c8301183e011424bc0e1f07eac7fbf07f187007c5509ee13e6b8"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-data-plane.ts.txt",
+      "source": "src/features/listeners/listener-data-plane.ts",
+      "sha256": "641c9666dc7c064b473200db1840caf5b82bfd9b6da95654f66374d15128d0cd"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-editor.socket.test.tsx.txt",
+      "source": "src/features/listeners/listener-editor.socket.test.tsx",
+      "sha256": "5af8f0041ba6584af67cb11d20f9123e21dfb9ff51469fec3dad9a8dae1b52f4"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-editor.test.tsx.txt",
+      "source": "src/features/listeners/listener-editor.test.tsx",
+      "sha256": "4faf87bcffd3b97cf7a9706bd93811f66b9f1cac473b024efa1f0050e20c3977"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-editor.tsx.txt",
+      "source": "src/features/listeners/listener-editor.tsx",
+      "sha256": "0b9219e512a0e34c7c91e475019cae050653194b8d110dede4ef13900963145f"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-feedback.tsx.txt",
+      "source": "src/features/listeners/listener-feedback.tsx",
+      "sha256": "e54a9f313e8afc22d2380927c1429e482a61cc24fd4d6f81032f48968571eb00"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-list-panel.tsx.txt",
+      "source": "src/features/listeners/listener-list-panel.tsx",
+      "sha256": "8f1b261d5eeac204c0616317cb4fb886827ee75a00c84e8bb25dc4bbd795e820"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-runtime-card.tsx.txt",
+      "source": "src/features/listeners/listener-runtime-card.tsx",
+      "sha256": "e880377866e711442644ac741b36a39219f63130e5b31516d22a2e15da0399c0"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-view-model.ts.txt",
+      "source": "src/features/listeners/listener-view-model.ts",
+      "sha256": "c10fa83aa4ada5df5d646aa0206aee962941608cc9ea1ca702d8103a9f72a502"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-workspace-draft.test.ts.txt",
+      "source": "src/features/listeners/listener-workspace-draft.test.ts",
+      "sha256": "cfe198e6c98e6b80b7ee750e021dec02cc0acf5b2adf4b96e9bde82cf153edc2"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listener-workspace-draft.ts.txt",
+      "source": "src/features/listeners/listener-workspace-draft.ts",
+      "sha256": "b9d423785c90110b89e3d688d6af695bcc2d15400a4be8e0e3eb28646d371934"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.certificate-details.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.certificate-details.test.tsx",
+      "sha256": "a02eb0b33e5fff1ddd1dfeb738438503c43fdac48813cf43ff34fed7d4c17b62"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.certificates.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.certificates.test.tsx",
+      "sha256": "da5f748b948218863ee6b01cfd768a6994d9dd778e0ecd1217670d6d9ff8880a"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.external-refresh.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.external-refresh.test.tsx",
+      "sha256": "336d10c76fa5d70a62d2b9b4cf2e225d3e6b407364392a1c6ac811af0312a7a7"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.socket-contracts.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.socket-contracts.test.tsx",
+      "sha256": "3a2fe0cab5cbc2e939397d6c767acdc453b28d3ca0b63de284f00b21bdd09ea4"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.test-support.ts.txt",
+      "source": "src/features/listeners/listeners-view.test-support.ts",
+      "sha256": "788b47dcae1e3be75f84b40ea0d27fa6b40a8f470dbcb45ef0a1be763ccd82e7"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.test.tsx",
+      "sha256": "cb15f2542fb892271e13da49e1a0acc23d3a1d35ea0248c1bbf9ad9f83a5cc52"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.transition-races.test.tsx.txt",
+      "source": "src/features/listeners/listeners-view.transition-races.test.tsx",
+      "sha256": "c3d43c2bfd79d18752d50db45e42fc20b661820885aa5442ab79370268ffcfa9"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/listeners-view.tsx.txt",
+      "source": "src/features/listeners/listeners-view.tsx",
+      "sha256": "1f6ef6194c55db773f17d06b0763c7a615b615428c784abe713aaec2825595ff"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/request-routing-card.tsx.txt",
+      "source": "src/features/listeners/request-routing-card.tsx",
+      "sha256": "b5e05a7adf5fa6b22e07d0571a878c6e85949823fcbfd4e4cf8b973d9b38a6c9"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-listener-model.test.ts.txt",
+      "source": "src/features/listeners/socket-listener-model.test.ts",
+      "sha256": "af26a6855f4a008f06820b4b35b7a20f91a5efeb428ddbf2f4b71105ce7fb2e4"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-listener-model.ts.txt",
+      "source": "src/features/listeners/socket-listener-model.ts",
+      "sha256": "5aa71ed7338b0fc57394e6277d0d90332e84978a4391ae248da5dd084af5a34c"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-listener-settings.test.tsx.txt",
+      "source": "src/features/listeners/socket-listener-settings.test.tsx",
+      "sha256": "81714b3a2e15045b9ac7c49f6412410451575b1649a4307d1e9ad52dc65f6bc4"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-listener-settings.tsx.txt",
+      "source": "src/features/listeners/socket-listener-settings.tsx",
+      "sha256": "e5e48f99223b7b1b3ab1523ac9554c765d6583c47ff5761faa615a42fd10b963"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-processing-card.test.tsx.txt",
+      "source": "src/features/listeners/socket-processing-card.test.tsx",
+      "sha256": "686948356a58b4648bee629ffdb7451e80e18a930b96aa52eca95f87320edf8a"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-processing-card.tsx.txt",
+      "source": "src/features/listeners/socket-processing-card.tsx",
+      "sha256": "8c30ed1aa0eafde005a80a96dc2072a206674cde4aa5d551a93da569d6c7316d"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-security-cards.test-support.tsx.txt",
+      "source": "src/features/listeners/socket-security-cards.test-support.tsx",
+      "sha256": "f6e1b9de98c123206dc9b96f539acfbfc72974e2d277593c9a2388a8c7853f9d"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-security-cards.test.tsx.txt",
+      "source": "src/features/listeners/socket-security-cards.test.tsx",
+      "sha256": "088778c48111f54bf2c8b36b3486dda5d01074620b707d7c86297bc21ba87061"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-security-cards.tsx.txt",
+      "source": "src/features/listeners/socket-security-cards.tsx",
+      "sha256": "3f23bd2a28ed5e9d885d1fbcef998b574700abd446dc074a91988323ae245c43"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/socket-working-mode.test.ts.txt",
+      "source": "src/features/listeners/socket-working-mode.test.ts",
+      "sha256": "1d990f5cad2e239e5d77599841c4ddc74473942c4baf75c12339cf809ed5c32a"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/upstream-tls-card.tsx.txt",
+      "source": "src/features/listeners/upstream-tls-card.tsx",
+      "sha256": "9f768c790e09df851136495dc1afbca6937dd5459d21568d2738689cd2b4ebb0"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/use-listener-certificates.ts.txt",
+      "source": "src/features/listeners/use-listener-certificates.ts",
+      "sha256": "574ea2d065167d0fead5eb1b65def66e65692bc2213e75754987107e9f99cb4e"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/use-listener-draft-transition.test.tsx.txt",
+      "source": "src/features/listeners/use-listener-draft-transition.test.tsx",
+      "sha256": "51438e727e622fce4fa4991eb91d8eccdf7481c948018ad6b399ba6db40ceaf4"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/use-listener-draft-transition.ts.txt",
+      "source": "src/features/listeners/use-listener-draft-transition.ts",
+      "sha256": "dd6e0e7f0af3aa3938ddc8370aaaa9f265271ee3edab9befb8f0831d900b8c96"
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/frontend/resources/source-after-v4-final/use-listener-persistence.ts.txt",
+      "source": "src/features/listeners/use-listener-persistence.ts",
+      "sha256": "b6fd1e4d00c0d46440e4f4c021063c89127d2559040c757940d411b43d2a52ce"
+    }
+  ]
+}

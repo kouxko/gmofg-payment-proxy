@@ -1,0 +1,90 @@
+{
+  "result": "PASS",
+  "original_manifest_defect": "The original manifest includes its own empty-file digest. That self-entry is invalid; original file is preserved. This independent inventory checks every actual archived source, omits only the manifest self-entry, and maps exact repository origins.",
+  "resources": [
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-facade/draft.rs",
+      "source": "src-tauri/crates/application/src/facade/listeners/draft.rs",
+      "sha256": "68adb5e149e4c742a3da3ba11bcba2d0a91ee60dfe14e9d24e84b264c31ac409",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-facade/listeners.rs",
+      "source": "src-tauri/crates/application/src/facade/listeners.rs",
+      "sha256": "8879afbeb00da8160871b202ecd56d87a4de33fc0c16bd1f2bc828e482dab3d5",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/listener_draft.rs",
+      "source": "src-tauri/crates/application/src/models/listener_draft.rs",
+      "sha256": "48955c540bbb20e5f546e35ee9b734835a5f9669ab21e315d0cebfd12d6a0a8c",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/models.rs",
+      "source": "src-tauri/crates/application/src/models.rs",
+      "sha256": "1348929714c8b6b41f1a9993e11a702132a6ee95aa4c2414aa1b4ef81e239447",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/normalization.rs",
+      "source": "src-tauri/crates/application/src/models/listener_draft/normalization.rs",
+      "sha256": "b8d684c387a88b42f74c3fe3b66a05c70875852ffd954b2ebad30456e0998bf9",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/transition.rs",
+      "source": "src-tauri/crates/application/src/models/listener_draft/transition.rs",
+      "sha256": "6a8515bee810aa41d1e4724b8c6b31e826b0de5e75f38386ca9403f89337284d",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/listener_draft.rs",
+      "source": "src-tauri/crates/application/src/requirements_tests/listener_draft.rs",
+      "sha256": "cd5c1c6db75d449b3f4b7c8d87c952f8a0b9d73fcb5b51ec4ac3e10d6bf96d40",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/requirements_tests.rs",
+      "source": "src-tauri/crates/application/src/requirements_tests.rs",
+      "sha256": "99970b930f8569e7edc2f7d3f11d543e08417e2cbf37d0474af4c017ab2d31b3",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/validation.rs",
+      "source": "src-tauri/crates/application/src/requirements_tests/listener_draft/validation.rs",
+      "sha256": "b9063a5c7f8848de1731d32f713d6f8144e1eb17f858d5471cce6298d6e76da6",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/generated/rust-types.ts",
+      "source": "src/generated/rust-types.ts",
+      "sha256": "3ab8e68e2ea469b5aa575193922285e3299ff8ae79c49a753da38ef091c59d36",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/tauri-commands/listener.rs",
+      "source": "src-tauri/src/commands/listener.rs",
+      "sha256": "2b0c8d06809a7b38a51ffebdde571c0f31505292996d64613f2d5d6aa0671a5d",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    },
+    {
+      "archive": "docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/tauri-commands/mod.rs",
+      "source": "src-tauri/src/commands/mod.rs",
+      "sha256": "998e198d20b045e40d42dc5ff30bd72dea162b5ac69d14c833114af3c83f9a53",
+      "matches_recorded_digest": true,
+      "matches_current_source": true
+    }
+  ]
+}

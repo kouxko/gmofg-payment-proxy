@@ -1,0 +1,17 @@
+{
+  "phase": "initial integrated matrix",
+  "tracked_source_files": 1352,
+  "changed_during_matrix": [],
+  "rust": {
+    "groups": 45,
+    "passed": 1645,
+    "failed": 0,
+    "ignored": 0
+  },
+  "frontend": {
+    "files": 72,
+    "passed": 546,
+    "failed": 0
+  },
+  "followup": "Test-only semicolon fix for Clippy and rules stale-save failure notification regression follow after this stable run."
+}

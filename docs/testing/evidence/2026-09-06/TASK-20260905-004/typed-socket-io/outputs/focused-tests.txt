@@ -1,0 +1,44 @@
+    Blocking waiting for file lock on build directory
+warning: type does not implement `Debug`; consider adding `#[derive(Debug)]` or a manual implementation
+   --> crates/exchange/src/pipeline.rs:301:1
+    |
+301 | / pub struct SequentialPrepare<P: Protocol, D: Direction> {
+302 | |     rules: Box<dyn Rules>,
+303 | |     encode: Box<dyn Encode<P, D>>,
+304 | | }
+    | |_^
+    |
+    = note: requested on the command line with `-W missing-debug-implementations`
+
+warning: `intercept-proxy-exchange` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 34.78s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_exchange-3ca7282c79de92ad)
+
+running 1 test
+test error::tests::structured_annotations_do_not_modify_the_human_message ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 25 filtered out; finished in 0.00s
+
+warning: type does not implement `Debug`; consider adding `#[derive(Debug)]` or a manual implementation
+   --> crates/exchange/src/pipeline.rs:301:1
+    |
+301 | / pub struct SequentialPrepare<P: Protocol, D: Direction> {
+302 | |     rules: Box<dyn Rules>,
+303 | |     encode: Box<dyn Encode<P, D>>,
+304 | | }
+    | |_^
+    |
+    = note: requested on the command line with `-W missing-debug-implementations`
+
+warning: `intercept-proxy-exchange` (lib) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.42s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 4 tests
+test socket_relay::raw_exchange::tests::flush_failure_preserves_structured_error_direction_and_written_bytes ... ok
+test socket_relay::raw_exchange::tests::cancellation_interrupts_a_pending_raw_half_close ... ok
+test socket_relay::raw_exchange::tests::cancellation_interrupts_a_pending_raw_flush ... ok
+test socket_relay::raw_exchange::tests::partial_write_timeout_preserves_structured_error_and_progress ... ok
+
+test result: ok. 4 passed; 0 failed; 0 ignored; 0 measured; 185 filtered out; finished in 0.01s
+

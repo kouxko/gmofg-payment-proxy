@@ -1,0 +1,5 @@
+Application path dependencies: intercept-proxy-domain, intercept-proxy-product-api
+README.md: current tool count 34
+src-tauri/src/mcp/resources.rs: current tool count 34
+docs/mcp/tool-reference.md: current tool count 34
+PASS

@@ -1,0 +1,13 @@
+e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/SHA256SUMS.txt
+68adb5e149e4c742a3da3ba11bcba2d0a91ee60dfe14e9d24e84b264c31ac409  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-facade/draft.rs
+8879afbeb00da8160871b202ecd56d87a4de33fc0c16bd1f2bc828e482dab3d5  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-facade/listeners.rs
+48955c540bbb20e5f546e35ee9b734835a5f9669ab21e315d0cebfd12d6a0a8c  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/listener_draft.rs
+1348929714c8b6b41f1a9993e11a702132a6ee95aa4c2414aa1b4ef81e239447  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/models.rs
+b8d684c387a88b42f74c3fe3b66a05c70875852ffd954b2ebad30456e0998bf9  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/normalization.rs
+6a8515bee810aa41d1e4724b8c6b31e826b0de5e75f38386ca9403f89337284d  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-models/transition.rs
+cd5c1c6db75d449b3f4b7c8d87c952f8a0b9d73fcb5b51ec4ac3e10d6bf96d40  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/listener_draft.rs
+99970b930f8569e7edc2f7d3f11d543e08417e2cbf37d0474af4c017ab2d31b3  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/requirements_tests.rs
+b9063a5c7f8848de1731d32f713d6f8144e1eb17f858d5471cce6298d6e76da6  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/application-tests/validation.rs
+3ab8e68e2ea469b5aa575193922285e3299ff8ae79c49a753da38ef091c59d36  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/generated/rust-types.ts
+2b0c8d06809a7b38a51ffebdde571c0f31505292996d64613f2d5d6aa0671a5d  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/tauri-commands/listener.rs
+998e198d20b045e40d42dc5ff30bd72dea162b5ac69d14c833114af3c83f9a53  docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/backend/resources/after/tauri-commands/mod.rs

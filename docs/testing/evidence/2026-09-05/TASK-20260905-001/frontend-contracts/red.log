@@ -1,0 +1,10 @@
+Command: deno task test src/features/listeners/listener-workspace-draft.test.ts src/features/shell/bootstrap-context.test.tsx
+Exit: 1
+
+Test Files  2 failed (2)
+Tests       5 failed | 4 passed (9)
+
+Observed failures:
+- reconcileListenerDraft is not a function (three draft reconciliation cases).
+- Unable to find refreshed bootstrap value after exchange_observation_changed invalidated the in-flight request.
+- Expected appBootstrap to be called 3 times after workspace_changed, but it was called 2 times.

@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260906-001",
+  "case_id": "android-active-profile",
+  "recorded_at": "2026-09-06T15:18:00.294496+08:00",
+  "execution_date": "2026-09-06",
+  "environment": "macOS 27.0 arm64; tool versions in ../integrated-verification/resources/environment.txt",
+  "source": {
+    "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+    "snapshot": "../integrated-verification/resources/source-snapshot.zip",
+    "inventory": "../integrated-verification/resources/source-inventory.json",
+    "phase_resources": "runs/ contains actual RED/GREEN/follow-up resources and logs",
+    "stability": "../integrated-verification/outputs/validation/review-fixes/source-stability.json"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "MANUAL-RECOVERY-001",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/manual-recovery"
+  },
+  "commands": [
+    [
+      "cargo",
+      "test",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "manual_recovery",
+      "--",
+      "--nocapture"
+    ]
+  ],
+  "result": "LOCAL_PASS_DEVICE_NOT_RUN",
+  "purpose": "保存 Profile 漂移不隐式应用；合法 LAN 更新只改变冻结路由的 proxy_host",
+  "expected": [
+    "目标应用或 100% 丢包保存后 status 不发送 apply_active/apply",
+    "纯 LAN 地址变化保留冻结 IP、原始地址/端口、Listener、proxy_port、Profile 指纹、route_count、owner epoch；仅改 proxy_host 并重算 route fingerprint",
+    "失活、过期租约、serial/epoch 不匹配仍等待显式操作"
+  ],
+  "actual": [
+    "RED 两项请求列表非空失败；修复后 manual_recovery 7 项通过",
+    "冻结路由补强回归 1 项通过；整体验证中当前测试再次通过"
+  ],
+  "not_run": {
+    "android_device": "无真实设备/TUN/跨设备 LAN 切换测试；使用 RecoveryRunner/模拟控制应答",
+    "ui": "不涉及本用例 UI",
+    "binary_frames": "控制请求的字段级逻辑测试，无真实网络帧；输入、expected 与比较见实际 test source"
+  }
+}

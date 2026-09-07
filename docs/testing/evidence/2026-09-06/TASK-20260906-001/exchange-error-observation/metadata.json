@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260906-001",
+  "case_id": "exchange-error-observation",
+  "recorded_at": "2026-09-06T15:18:00.294496+08:00",
+  "execution_date": "2026-09-06",
+  "environment": "macOS 27.0 arm64; tool versions in ../integrated-verification/resources/environment.txt",
+  "source": {
+    "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+    "snapshot": "../integrated-verification/resources/source-snapshot.zip",
+    "inventory": "../integrated-verification/resources/source-inventory.json",
+    "phase_resources": "runs/ contains actual RED/GREEN/follow-up resources and logs",
+    "stability": "../integrated-verification/outputs/validation/review-fixes/source-stability.json"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260905-004",
+    "case_id": "final-verification",
+    "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260905-004/final-verification"
+  },
+  "commands": [
+    [
+      "cargo",
+      "test",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-exchange",
+      "--lib",
+      "--",
+      "--nocapture"
+    ],
+    [
+      "cargo",
+      "test",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "socket_relay",
+      "--",
+      "--nocapture"
+    ]
+  ],
+  "result": "LOCAL_UNIT_AND_LOOPBACK_TCP_PASS",
+  "purpose": "必需应答 EOF 保留 Read/Downstream；Socket external 字段完整且所有失败投影遵守既有 16 MiB",
+  "expected": [
+    "Server 应答前 EOF 返回 READ_FAILED/Read/Downstream；Socket 只有一个 RelayRead/ServerToClient 终态",
+    "HTTP/Socket/no-context 的 Context+message+external 文本总 UTF-8 字节恰好16MiB允许，超1字节 observation_lost",
+    "6MiB Socket Context +5MiB remote message 拒绝生成超预算投影；业务错误不被改写"
+  ],
+  "actual": [
+    "初始 Exchange 25 pass/2 fail；真实 TCP EOF 初次终态错误，修复后 Socket63项通过",
+    "预算新增两项先RED失败，修复后 Exchange29项通过，6个临界投影断言全部通过",
+    "本机TCP实收 55616263，Server EOF，App未收到响应；计数4/4/0/0"
+  ],
+  "not_run": {
+    "external_package_process": "测试使用 ScriptedFactory；外部 RPC 实机超大消息路径未重放",
+    "android_and_business": "N/A，本机合成协议，不是Android/远端业务验收",
+    "screenshots": "N/A，无UI交互"
+  }
+}

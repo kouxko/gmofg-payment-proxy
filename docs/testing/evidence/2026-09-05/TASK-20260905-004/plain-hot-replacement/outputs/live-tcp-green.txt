@@ -1,0 +1,39 @@
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 36.72s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 1 test
+origin exchange 0: received=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101]
+client exchange 0: sent=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101] received=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101]
+origin exchange 1: received=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 99, 114, 101, 97, 116, 101, 100, 34, 125]
+client exchange 1: sent=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 111, 108, 100, 34, 125] received=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 99, 114, 101, 97, 116, 101, 100, 34, 125]
+origin exchange 2: received=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114]
+client exchange 2: sent=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114] received=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114]
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::live_plain_hot_replacement::live_plain_keep_alive_connection_observes_document_rule_add_and_remove ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 476 filtered out; finished in 0.02s
+
+     Running tests/phase7_transport_contract.rs (src-tauri/target/debug/deps/phase7_transport_contract-50448e5c9cf73d8f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/r07a_application_backup_archive.rs (src-tauri/target/debug/deps/r07a_application_backup_archive-6c21d95ccedd95ba)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+
+     Running tests/r07b_application_backup_export.rs (src-tauri/target/debug/deps/r07b_application_backup_export-232ec0a21c97bfbb)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/r07c_application_backup_import_tokens.rs (src-tauri/target/debug/deps/r07c_application_backup_import_tokens-8c06e9b02988f35e)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+

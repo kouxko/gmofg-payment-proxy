@@ -1,0 +1,38 @@
+{
+  "connection": {
+    "runtime_epoch": 1033,
+    "connection_id": 1034,
+    "peer": "127.0.0.1:1902",
+    "capability_instances": 1,
+    "body_processing": "plain"
+  },
+  "phases": [
+    {
+      "generation": 1,
+      "rules": [],
+      "content_type": "text/plain",
+      "body": "plain-before",
+      "expected_body": "plain-before"
+    },
+    {
+      "generation": 2,
+      "rules": [
+        {
+          "condition": "Document /value equals old",
+          "action": "Document set /value to created"
+        }
+      ],
+      "content_type": "application/json; charset=utf-8",
+      "body": "{\"value\":\"old\"}",
+      "expected_body": "{\"value\":\"created\"}"
+    },
+    {
+      "generation": 3,
+      "rules": [],
+      "content_type": "text/plain",
+      "body": "plain-after-removal",
+      "expected_body": "plain-after-removal"
+    }
+  ]
+}
+

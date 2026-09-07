@@ -1,0 +1,10 @@
+Task test vitest run 'src/features/listeners'
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+
+
+ Test Files  18 passed (18)
+      Tests  168 passed (168)
+   Start at  16:25:06
+   Duration  22.71s (transform 17.92s, setup 5.88s, import 44.63s, tests 67.11s, environment 17.38s)
+

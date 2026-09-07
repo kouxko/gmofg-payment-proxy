@@ -1,0 +1,120 @@
+[
+  {
+    "check": "frame-rejection-green",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "external_relay::capabilities",
+      "--",
+      "--nocapture"
+    ],
+    "started_at": "2026-09-06T01:59:35.502651+08:00",
+    "finished_at": "2026-09-06T02:00:18.928948+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "infrastructure-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T02:00:18.929598+08:00",
+    "finished_at": "2026-09-06T02:00:47.192813+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "runtime-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "--lib",
+      "--all-features"
+    ],
+    "started_at": "2026-09-06T02:00:47.193399+08:00",
+    "finished_at": "2026-09-06T02:01:07.304385+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "rust-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-06T02:01:07.305005+08:00",
+    "finished_at": "2026-09-06T02:01:31.421001+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "rust-fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "started_at": "2026-09-06T02:01:31.421537+08:00",
+    "finished_at": "2026-09-06T02:01:32.463233+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-06T02:01:32.463858+08:00",
+    "finished_at": "2026-09-06T02:01:34.896250+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "pipeline-guards",
+    "command": [
+      "deno",
+      "test",
+      "-A",
+      "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+      "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs"
+    ],
+    "started_at": "2026-09-06T02:01:34.896681+08:00",
+    "finished_at": "2026-09-06T02:02:12.326842+08:00",
+    "exit_code": 0
+  },
+  {
+    "check": "diff-check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-06T02:02:12.327645+08:00",
+    "finished_at": "2026-09-06T02:02:12.383716+08:00",
+    "exit_code": 0
+  }
+]

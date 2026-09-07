@@ -1,0 +1,674 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+error[E0422]: cannot find struct, variant or union type `ListenerDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:93:27
+   |
+93 |     let expected_socket = ListenerDraft {
+   |                           ^^^^^^^^^^^^^ not found in this scope
+
+error[E0422]: cannot find struct, variant or union type `ScriptedSocketProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:151:48
+    |
+151 |         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/listener_model.rs:434:1
+    |
+434 | pub struct ScriptedSocketProcessing {
+    | ----------------------------------- similarly named struct `ScriptedSocketProcessing` defined here
+    |
+help: a struct with a similar name exists
+    |
+151 -         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+151 +         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessing {
+    |
+
+error[E0422]: cannot find struct, variant or union type `ScriptedSocketProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:192:48
+    |
+192 |         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |                                                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/listener_model.rs:434:1
+    |
+434 | pub struct ScriptedSocketProcessing {
+    | ----------------------------------- similarly named struct `ScriptedSocketProcessing` defined here
+    |
+help: a struct with a similar name exists
+    |
+192 -         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+192 +         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessing {
+    |
+
+error[E0425]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:208:38
+    |
+208 |     assert!(serde_json::from_value::<ListenerDraft>(value.clone()).is_ok());
+    |                                      ^^^^^^^^^^^^^ not found in this scope
+    |
+help: you might be missing a type parameter
+    |
+199 | fn draft_wire_rejects_malformed_typed_values_but_accepts_missing_edit_fields<ListenerDraft>() {
+    |                                                                             +++++++++++++++
+
+error[E0425]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:211:38
+    |
+211 |     assert!(serde_json::from_value::<ListenerDraft>(value).is_err());
+    |                                      ^^^^^^^^^^^^^ not found in this scope
+    |
+help: you might be missing a type parameter
+    |
+199 | fn draft_wire_rejects_malformed_typed_values_but_accepts_missing_edit_fields<ListenerDraft>() {
+    |                                                                             +++++++++++++++
+
+error[E0422]: cannot find struct, variant or union type `SocketRelayDraftSettings` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:219:55
+    |
+219 |     draft.data_plane = ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings {
+    |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/socket_topology.rs:73:1
+    |
+ 73 | pub struct SocketRelaySettings {
+    | ------------------------------ similarly named struct `SocketRelaySettings` defined here
+    |
+help: a struct with a similar name exists
+    |
+219 -     draft.data_plane = ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings {
+219 +     draft.data_plane = ListenerDataPlaneDraft::Socket(SocketRelaySettings {
+    |
+
+error[E0422]: cannot find struct, variant or union type `SocketLocalResponderTopologyDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:220:55
+    |
+220 |         topology: SocketTopologyDraft::LocalResponder(SocketLocalResponderTopologyDraft {
+    |                                                       ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/socket_topology.rs:45:1
+    |
+ 45 | pub struct SocketLocalResponderTopology {
+    | --------------------------------------- similarly named struct `SocketLocalResponderTopology` defined here
+    |
+help: a struct with a similar name exists
+    |
+220 -         topology: SocketTopologyDraft::LocalResponder(SocketLocalResponderTopologyDraft {
+220 +         topology: SocketTopologyDraft::LocalResponder(SocketLocalResponderTopology {
+    |
+
+error[E0422]: cannot find struct, variant or union type `SocketDownstreamTlsDraftSettings` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:222:33
+    |
+222 |                 downstream_tls: SocketDownstreamTlsDraftSettings {
+    |                                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/listener_model.rs:317:1
+    |
+317 | pub struct SocketDownstreamTlsSettings {
+    | -------------------------------------- similarly named struct `SocketDownstreamTlsSettings` defined here
+    |
+help: a struct with a similar name exists
+    |
+222 -                 downstream_tls: SocketDownstreamTlsDraftSettings {
+222 +                 downstream_tls: SocketDownstreamTlsSettings {
+    |
+
+error[E0422]: cannot find struct, variant or union type `ScriptedSocketProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:230:60
+    |
+230 |         processing: SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |                                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/domain/src/workspace/listener_model.rs:434:1
+    |
+434 | pub struct ScriptedSocketProcessing {
+    | ----------------------------------- similarly named struct `ScriptedSocketProcessing` defined here
+    |
+help: a struct with a similar name exists
+    |
+230 -         processing: SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+230 +         processing: SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessing {
+    |
+
+warning: unused imports: `SocketDownstreamSecurity` and `SocketLocalResponderTopology`
+ --> crates/application/src/requirements_tests/listener_draft.rs:4:5
+  |
+4 |     SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketEndpoint,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^
+5 |     SocketLocalResponderTopology, SocketPayloadProcessing, SocketRelaySecurity,
+  |     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+  |
+  = note: `#[warn(unused_imports)]` (part of `#[warn(unused)]`) on by default
+
+error[E0433]: cannot find type `SocketRuntimeLimits` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:46:29
+   |
+46 |             runtime_limits: SocketRuntimeLimits::default(),
+   |                             ^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketRuntimeLimits`
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:57:21
+   |
+57 |         let draft = ListenerDraft::from(listener.clone());
+   |                     ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:59:20
+   |
+59 |         assert_eq!(ListenerDraft::from(draft.try_into_listener(0).unwrap()), draft);
+   |                    ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:66:18
+   |
+66 |     let source = ListenerDraft::from(full_socket_listener());
+   |                  ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0599]: no method named `listener_draft_copy` found for struct `facade::Application` in the current scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:67:28
+   |
+67 |     let copy = application.listener_draft_copy(source.clone()).unwrap();
+   |                            ^^^^^^^^^^^^^^^^^^^
+   |
+  ::: crates/application/src/facade.rs:56:1
+   |
+56 | pub struct Application {
+   | ---------------------- method `listener_draft_copy` not found for this struct
+   |
+help: there is a method `listener_copy` with a similar name
+   |
+67 -     let copy = application.listener_draft_copy(source.clone()).unwrap();
+67 +     let copy = application.listener_copy(source.clone()).unwrap();
+   |
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:83:20
+   |
+83 |     let original = ListenerDraft::from(ProxyListener::default());
+   |                    ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:85:10
+   |
+84 |       let socket = application
+   |  __________________-
+85 | |         .listener_draft_transition(
+   | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^
+   |
+  ::: crates/application/src/facade.rs:56:1
+   |
+56 |   pub struct Application {
+   |   ---------------------- method `listener_draft_transition` not found for this struct
+   |
+help: there is a method `listener_stop` with a similar name
+   |
+85 -         .listener_draft_transition(
+85 +         .listener_stop(
+   |
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:94:21
+   |
+94 |         data_plane: ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings::default()),
+   |                     ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+   |
+help: an enum with a similar name exists
+   |
+94 -         data_plane: ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings::default()),
+94 +         data_plane: ListenerDataPlane::Socket(SocketRelayDraftSettings::default()),
+   |
+
+error[E0433]: cannot find type `SocketRelayDraftSettings` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:94:52
+   |
+94 |         data_plane: ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings::default()),
+   |                                                    ^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketRelayDraftSettings`
+   |
+help: a struct with a similar name exists
+   |
+94 -         data_plane: ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings::default()),
+94 +         data_plane: ListenerDataPlaneDraft::Socket(SocketRelaySettings::default()),
+   |
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:100:14
+    |
+ 99 | /         application
+100 | |             .listener_draft_transition(
+    | |_____________-^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_transition` not found for this struct
+    |
+help: there is a method `listener_stop` with a similar name
+    |
+100 -             .listener_draft_transition(
+100 +             .listener_stop(
+    |
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:112:10
+    |
+111 |       let fixed = application
+    |  _________________-
+112 | |         .listener_draft_transition(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_transition` not found for this struct
+    |
+help: there is a method `listener_stop` with a similar name
+    |
+112 -         .listener_draft_transition(
+112 +         .listener_stop(
+    |
+
+error[E0433]: cannot find type `HttpResponseMode` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:115:23
+    |
+115 |                 mode: HttpResponseMode::FixedServer,
+    |                       ^^^^^^^^^^^^^^^^ use of undeclared type `HttpResponseMode`
+
+error[E0433]: cannot find type `HttpTopology` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:125:9
+    |
+125 |         HttpTopology::remote(Some(FixedServerSettings {
+    |         ^^^^^^^^^^^^ use of undeclared type `HttpTopology`
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:135:17
+    |
+135 |     let relay = ListenerDraft::from(full_socket_listener());
+    |                 ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:137:10
+    |
+136 |       let local = application
+    |  _________________-
+137 | |         .listener_draft_transition(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_transition` not found for this struct
+    |
+help: there is a method `listener_stop` with a similar name
+    |
+137 -         .listener_draft_transition(
+137 +         .listener_stop(
+    |
+
+error[E0433]: cannot find type `SocketTopologyMode` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:140:23
+    |
+140 |                 mode: SocketTopologyMode::LocalResponder,
+    |                       ^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketTopologyMode`
+    |
+help: an enum with a similar name exists
+    |
+140 -                 mode: SocketTopologyMode::LocalResponder,
+140 +                 mode: SocketTopology::LocalResponder,
+    |
+
+error[E0433]: cannot find type `SocketPayloadProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:151:9
+    |
+151 |         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketPayloadProcessingDraft`
+    |
+help: an enum with a similar name exists
+    |
+151 -         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+151 +         SocketPayloadProcessing::Scripted(ScriptedSocketProcessingDraft {
+    |
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:157:10
+    |
+156 |       let relay_again = application
+    |  _______________________-
+157 | |         .listener_draft_transition(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_transition` not found for this struct
+    |
+help: there is a method `listener_stop` with a similar name
+    |
+157 -         .listener_draft_transition(
+157 +         .listener_stop(
+    |
+
+error[E0433]: cannot find type `SocketTopologyMode` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:160:23
+    |
+160 |                 mode: SocketTopologyMode::Relay,
+    |                       ^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketTopologyMode`
+    |
+help: an enum with a similar name exists
+    |
+160 -                 mode: SocketTopologyMode::Relay,
+160 +                 mode: SocketTopology::Relay,
+    |
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:174:18
+    |
+174 |     let direct = ListenerDraft::from(ProxyListener {
+    |                  ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0599]: no method named `listener_draft_transition` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:179:10
+    |
+178 |       let scripted = application
+    |  ____________________-
+179 | |         .listener_draft_transition(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_transition` not found for this struct
+    |
+help: there is a method `listener_stop` with a similar name
+    |
+179 -         .listener_draft_transition(
+179 +         .listener_stop(
+    |
+
+error[E0433]: cannot find type `SocketProcessingMode` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:182:23
+    |
+182 |                 mode: SocketProcessingMode::Scripted,
+    |                       ^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketProcessingMode`
+
+error[E0433]: cannot find type `SocketPayloadProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:192:9
+    |
+192 |         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |         ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketPayloadProcessingDraft`
+    |
+help: an enum with a similar name exists
+    |
+192 -         SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+192 +         SocketPayloadProcessing::Scripted(ScriptedSocketProcessingDraft {
+    |
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:201:42
+    |
+201 |     let mut value = serde_json::to_value(ListenerDraft::from(listener)).unwrap();
+    |                                          ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:218:21
+    |
+218 |     let mut draft = ListenerDraft::from(workspace.listeners[0].clone());
+    |                     ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:219:24
+    |
+219 |     draft.data_plane = ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings {
+    |                        ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+    |
+help: an enum with a similar name exists
+    |
+219 -     draft.data_plane = ListenerDataPlaneDraft::Socket(SocketRelayDraftSettings {
+219 +     draft.data_plane = ListenerDataPlane::Socket(SocketRelayDraftSettings {
+    |
+
+error[E0433]: cannot find type `SocketTopologyDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:220:19
+    |
+220 |         topology: SocketTopologyDraft::LocalResponder(SocketLocalResponderTopologyDraft {
+    |                   ^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketTopologyDraft`
+    |
+help: an enum with a similar name exists
+    |
+220 -         topology: SocketTopologyDraft::LocalResponder(SocketLocalResponderTopologyDraft {
+220 +         topology: SocketTopology::LocalResponder(SocketLocalResponderTopologyDraft {
+    |
+
+error[E0433]: cannot find type `SocketPayloadProcessingDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:230:21
+    |
+230 |         processing: SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+    |                     ^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketPayloadProcessingDraft`
+    |
+help: an enum with a similar name exists
+    |
+230 -         processing: SocketPayloadProcessingDraft::Scripted(ScriptedSocketProcessingDraft {
+230 +         processing: SocketPayloadProcessing::Scripted(ScriptedSocketProcessingDraft {
+    |
+
+error[E0433]: cannot find type `SocketRelayDraftSettings` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:233:11
+    |
+233 |         ..SocketRelayDraftSettings::default()
+    |           ^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketRelayDraftSettings`
+    |
+help: a struct with a similar name exists
+    |
+233 -         ..SocketRelayDraftSettings::default()
+233 +         ..SocketRelaySettings::default()
+    |
+
+error[E0599]: no method named `listener_draft_validate` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:237:10
+    |
+236 |       let error = application
+    |  _________________-
+237 | |         .listener_draft_validate(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_validate` not found for this struct
+    |
+help: there is a method `listener_validate` with a similar name
+    |
+237 -         .listener_draft_validate(
+237 +         .listener_validate(
+    |
+
+error[E0599]: no method named `listener_draft_validate` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:248:10
+    |
+247 |       let validation = application
+    |  ______________________-
+248 | |         .listener_draft_validate(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_validate` not found for this struct
+    |
+help: there is a method `listener_validate` with a similar name
+    |
+248 -         .listener_draft_validate(
+248 +         .listener_validate(
+    |
+
+error[E0599]: no method named `listener_draft_validate` found for struct `facade::Application` in the current scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:271:10
+    |
+270 |       let validation = application
+    |  ______________________-
+271 | |         .listener_draft_validate(
+    | |_________-^^^^^^^^^^^^^^^^^^^^^^^
+    |
+   ::: crates/application/src/facade.rs:56:1
+    |
+ 56 |   pub struct Application {
+    |   ---------------------- method `listener_draft_validate` not found for this struct
+    |
+help: there is a method `listener_validate` with a similar name
+    |
+271 -         .listener_draft_validate(
+271 +         .listener_validate(
+    |
+
+error[E0433]: cannot find type `ListenerDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:274:13
+    |
+274 |             ListenerDraft::from(listener.clone()),
+    |             ^^^^^^^^^^^^^ use of undeclared type `ListenerDraft`
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:187:9
+    |
+187 |     let ListenerDataPlaneDraft::Socket(settings) = scripted.data_plane else {
+    |         ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+    |
+help: an enum with a similar name exists
+    |
+187 -     let ListenerDataPlaneDraft::Socket(settings) = scripted.data_plane else {
+187 +     let ListenerDataPlane::Socket(settings) = scripted.data_plane else {
+    |
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:145:9
+    |
+145 |     let ListenerDataPlaneDraft::Socket(local_settings) = &local.data_plane else {
+    |         ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+    |
+help: an enum with a similar name exists
+    |
+145 -     let ListenerDataPlaneDraft::Socket(local_settings) = &local.data_plane else {
+145 +     let ListenerDataPlane::Socket(local_settings) = &local.data_plane else {
+    |
+
+error[E0433]: cannot find type `SocketTopologyDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:148:47
+    |
+148 |     assert!(matches!(local_settings.topology, SocketTopologyDraft::LocalResponder(_)));
+    |                                               ^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketTopologyDraft`
+    |
+help: an enum with a similar name exists
+    |
+148 -     assert!(matches!(local_settings.topology, SocketTopologyDraft::LocalResponder(_)));
+148 +     assert!(matches!(local_settings.topology, SocketTopology::LocalResponder(_)));
+    |
+
+error[E0433]: cannot find type `DownstreamClientAuthenticationDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:224:44
+    |
+224 |                     client_authentication: DownstreamClientAuthenticationDraft::Required {
+    |                                            ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `DownstreamClientAuthenticationDraft`
+    |
+help: an enum with a similar name exists
+    |
+224 -                     client_authentication: DownstreamClientAuthenticationDraft::Required {
+224 +                     client_authentication: DownstreamClientAuthentication::Required {
+    |
+
+error[E0433]: cannot find type `SocketDownstreamSecurityDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:221:34
+    |
+221 |             downstream_security: SocketDownstreamSecurityDraft::Tls {
+    |                                  ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketDownstreamSecurityDraft`
+    |
+help: an enum with a similar name exists
+    |
+221 -             downstream_security: SocketDownstreamSecurityDraft::Tls {
+221 +             downstream_security: SocketDownstreamSecurity::Tls {
+    |
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+  --> crates/application/src/requirements_tests/listener_draft.rs:87:13
+   |
+87 |             ListenerDraftTransition::DataPlane {
+   |             ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+error[E0433]: cannot find type `SocketRelaySecurityDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:172:41
+    |
+172 |     assert!(matches!(topology.security, SocketRelaySecurityDraft::TlsToTcp { .. }));
+    |                                         ^^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketRelaySecurityDraft`
+    |
+help: an enum with a similar name exists
+    |
+172 -     assert!(matches!(topology.security, SocketRelaySecurityDraft::TlsToTcp { .. }));
+172 +     assert!(matches!(topology.security, SocketRelaySecurity::TlsToTcp { .. }));
+    |
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:159:13
+    |
+159 |             ListenerDraftTransition::SocketTopology {
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:102:17
+    |
+102 |                 ListenerDraftTransition::DataPlane {
+    |                 ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:114:13
+    |
+114 |             ListenerDraftTransition::HttpResponseMode {
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:181:13
+    |
+181 |             ListenerDraftTransition::Processing {
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:120:9
+    |
+120 |     let ListenerDataPlaneDraft::Http(settings) = &fixed.data_plane else {
+    |         ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+    |
+help: an enum with a similar name exists
+    |
+120 -     let ListenerDataPlaneDraft::Http(settings) = &fixed.data_plane else {
+120 +     let ListenerDataPlane::Http(settings) = &fixed.data_plane else {
+    |
+
+error[E0433]: cannot find type `ListenerDataPlaneDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:165:9
+    |
+165 |     let ListenerDataPlaneDraft::Socket(settings) = relay_again.data_plane else {
+    |         ^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDataPlaneDraft`
+    |
+help: an enum with a similar name exists
+    |
+165 -     let ListenerDataPlaneDraft::Socket(settings) = relay_again.data_plane else {
+165 +     let ListenerDataPlane::Socket(settings) = relay_again.data_plane else {
+    |
+
+error[E0433]: cannot find type `SocketTopologyDraft` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:168:9
+    |
+168 |     let SocketTopologyDraft::Relay(topology) = settings.topology else {
+    |         ^^^^^^^^^^^^^^^^^^^ use of undeclared type `SocketTopologyDraft`
+    |
+help: an enum with a similar name exists
+    |
+168 -     let SocketTopologyDraft::Relay(topology) = settings.topology else {
+168 +     let SocketTopology::Relay(topology) = settings.topology else {
+    |
+
+error[E0433]: cannot find type `ListenerDraftTransition` in this scope
+   --> crates/application/src/requirements_tests/listener_draft.rs:139:13
+    |
+139 |             ListenerDraftTransition::SocketTopology {
+    |             ^^^^^^^^^^^^^^^^^^^^^^^ use of undeclared type `ListenerDraftTransition`
+
+Some errors have detailed explanations: E0422, E0425, E0433, E0599.
+For more information about an error, try `rustc --explain E0422`.
+warning: `intercept-proxy-application` (lib test) generated 1 warning
+error: could not compile `intercept-proxy-application` (lib test) due to 57 previous errors; 1 warning emitted

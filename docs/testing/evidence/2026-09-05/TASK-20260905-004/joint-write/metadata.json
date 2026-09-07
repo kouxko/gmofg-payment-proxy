@@ -1,0 +1,56 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "joint-write",
+  "executed_at": "2026-09-06 01:50:27 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime http::exchange_runtime::endpoints::tests -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure production_snapshot_uses_shared_provider_for_both_directions_and_joint_encode -- --nocapture",
+    "cargo check --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --tests",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime http::exchange_runtime:: -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure socket_encode_failure_rolls_back_lifecycle_before_successful_commit -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure socket_frame_waits_for_listener_gate_before_reading_rule_generation -- --nocapture"
+  ],
+  "expected": {
+    "write_preparation": "Rules and protocol Encode execute once against the authoritative transaction message",
+    "completion": "real flush returns Committed; legal early response returns ReadReady",
+    "encode_failure": "stable code, Encode stage, direction and external detail survive rollback",
+    "socket_output_transaction": "typed Encode, empty and oversized output fail before lifecycle commit; valid output commits once"
+  },
+  "actual": {
+    "proxy_endpoint_tests": "6 passed, 0 failed",
+    "joint_encode_rollback": "1 passed, 0 failed",
+    "infrastructure_check_tests": "PASS",
+    "proxy_exchange_runtime_tests": "9 passed, 0 failed",
+    "socket_bounded_transaction": "1 passed, 0 failed; three failure branches kept original bytes, zero commits and zero hits; valid output committed one hit",
+    "socket_joint_prepare_with_limits": "1 passed, 0 failed",
+    "infrastructure_check_tests_final": "PASS"
+  },
+  "evidence": [
+    "README.md",
+    "outputs/proxy-endpoint-tests.txt",
+    "outputs/joint-encode-rollback.txt",
+    "outputs/infrastructure-check-tests.txt",
+    "outputs/proxy-exchange-runtime-tests.txt",
+    "outputs/socket-typed-error-red.txt",
+    "outputs/socket-typed-error-green.txt",
+    "outputs/socket-bounded-transaction.txt",
+    "outputs/socket-joint-prepare-bounded.txt",
+    "outputs/infrastructure-check-tests-final.txt",
+    "resources/socket-output-validation.rs",
+    "resources/joint-socket-prepare.rs",
+    "resources/socket-joint-transaction-test.rs"
+  ],
+  "not_applicable": {
+    "ui_device_external_service_tls": "not exercised by this contract slice"
+  },
+  "not_run": {
+    "full_workspace_clippy_guards": "root agent owns final whole-task verification",
+    "ci_commit_push_publish": "outside assigned scope"
+  },
+  "red_green": {
+    "typed_error": "RED then GREEN; RED lacked exchange_code and GREEN preserved code/stage/direction/external detail",
+    "empty_and_oversized_output": "first recorded execution GREEN after independent review; no behavioral RED execution claimed"
+  }
+}

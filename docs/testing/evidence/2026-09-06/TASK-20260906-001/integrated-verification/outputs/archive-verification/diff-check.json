@@ -1,0 +1,11 @@
+{
+  "command": [
+    "git",
+    "diff",
+    "--check"
+  ],
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "started_at": "2026-09-06T15:31:47.414420+08:00",
+  "completed_at": "2026-09-06T15:31:47.450411+08:00",
+  "exit_code": 0
+}

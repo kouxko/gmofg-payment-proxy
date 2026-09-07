@@ -1,0 +1,44 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 15.81s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-c8c37ca5c1a6cffd)
+
+running 12 tests
+test requirements_tests::listener_draft::complete_listener_round_trips_through_application_draft_exactly ... ok
+test requirements_tests::listener_draft::socket_tls_transition_matrix_uses_defaults_and_changes_only_one_side ... ok
+test requirements_tests::listener_draft::socket_processing_and_topology_matrix_preserves_exact_package_rules ... ok
+test requirements_tests::listener_draft::transition_rejects_intents_for_the_wrong_data_plane ... ok
+test requirements_tests::listener_draft::data_plane_and_http_response_transitions_use_domain_defaults ... ok
+test requirements_tests::listener_draft::socket_transitions_preserve_package_and_keep_tls_sides_independent ... ok
+test requirements_tests::listener_draft::draft_copy_changes_only_identity_name_and_enabled_state ... ok
+test requirements_tests::listener_draft::validation::http_client_auth_missing_trust_is_a_draft_field_error ... ok
+test requirements_tests::listener_draft::validation::strict_domain_errors_also_clear_draft_normalized_workspace ... ok
+test requirements_tests::listener_draft::validation::stale_revision_precedes_missing_draft_fields ... ok
+test requirements_tests::listener_draft::validation::valid_draft_returns_normalized_workspace_and_preserves_old_save_path ... ok
+test requirements_tests::listener_draft::validation::draft_wire_rejects_malformed_typed_values_but_accepts_missing_edit_fields ... ok
+
+test result: ok. 12 passed; 0 failed; 0 ignored; 0 measured; 418 filtered out; finished in 0.01s
+
+     Running tests/environment_configuration_contract.rs (src-tauri/target/debug/deps/environment_configuration_contract-703465e653ae9668)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 15 filtered out; finished in 0.00s
+
+     Running tests/environment_configuration_document_contract.rs (src-tauri/target/debug/deps/environment_configuration_document_contract-dbd285d44fcb60e8)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/environment_configuration_negative_contract.rs (src-tauri/target/debug/deps/environment_configuration_negative_contract-00854a0be5c9774f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 5 filtered out; finished in 0.00s
+
+     Running tests/r07a_application_backup_wire.rs (src-tauri/target/debug/deps/r07a_application_backup_wire-0f04299912a80045)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 12 filtered out; finished in 0.00s
+

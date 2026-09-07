@@ -1,0 +1,63 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-002",
+  "case_id": "listener-draft-contracts-backend",
+  "result": "PASS",
+  "executed_at": "2026-09-05 15:54:12 +08:00",
+  "execution_window": {
+    "started_at": "2026-09-05 15:27:59 +08:00",
+    "finished_at": "2026-09-05 15:54:12 +08:00"
+  },
+  "environment": {
+    "repository": "/Users/codin/Code/gmofg-payment-proxy",
+    "git_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "deno": "2.9.6 aarch64-apple-darwin",
+    "worktree": "shared and dirty before B1; tested B1 files stable during each final verification command"
+  },
+  "tested_objects": [
+    "application ListenerDraft DTO and strict normalization",
+    "application pure ListenerDraft transitions",
+    "CAS-first ListenerDraft validation",
+    "Tauri listener draft commands and command registry",
+    "generated src/generated/rust-types.ts"
+  ],
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application requirements_tests::listener_draft --no-fail-fast",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy commands::listener::tests::generated_bindings_expose_only_the_three_draft_commands --no-fail-fast",
+    "deno run -A scripts/check-generated-bindings.mjs",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --tests -- -D warnings",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib -- -D warnings",
+    "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check"
+  ],
+  "results": {
+    "red_exit_code": 101,
+    "application_tests": "12 passed, 0 failed",
+    "command_tests": "1 passed, 0 failed",
+    "existing_listener_validation_tests": "2 passed, 0 failed",
+    "bindings": "fresh and deterministic",
+    "clippy_application": "PASS",
+    "clippy_tauri": "PASS",
+    "format_and_diff": "PASS",
+    "source_500_line_gate": "PASS"
+  },
+  "resources": {
+    "task_scenarios": "inputs/contract-scenarios.json",
+    "backend_contract": "inputs/backend-contract-input.json",
+    "expected": "inputs/expected.json",
+    "actual": "outputs/actual.json",
+    "comparison": "outputs/comparison.json",
+    "source_snapshot": "resources/after/",
+    "source_hashes": "resources/after/SHA256SUMS.txt",
+    "replay": "replay/run.sh"
+  },
+  "not_applicable": {
+    "protocol_binary": "No protocol data-plane behavior changed.",
+    "network": "No runtime listener or external endpoint was used.",
+    "certificate_material": "Draft transitions are pure and validation fixtures used no imported certificate material.",
+    "ui_screenshot": "B1 contains no frontend implementation.",
+    "real_device": "No Android behavior is in B1.",
+    "ci_push_commit": "Outside authorization and not executed."
+  }
+}

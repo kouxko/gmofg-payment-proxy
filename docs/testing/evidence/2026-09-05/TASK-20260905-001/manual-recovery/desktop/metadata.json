@@ -1,0 +1,34 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "manual-recovery/desktop",
+  "result": "PASS",
+  "verified_at": "2026-09-05 17:46:45 +08:00",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "android-contracts",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/android-contracts"
+  },
+  "tests": {
+    "application": 432,
+    "infrastructure": 474,
+    "manual_recovery_final": 5,
+    "clippy": "PASS",
+    "fmt": "PASS",
+    "runtime_architecture": "PASS",
+    "architecture_docs": "PASS",
+    "source_size": "6 pre-existing violations; no new violation"
+  },
+  "replay": "replay/run.sh",
+  "source_mapping": "source-snapshots.json",
+  "frames": "frames.json",
+  "frame_capture": "JSON bytes were emitted directly from bytes read/written by the loopback server. bin/hex preserve that UTF-8 payload and its 4-byte big-endian length; runtime read_exact uses the actual prefix to allocate the payload.",
+  "stability": "Production Rust held stable during final full tests and Clippy. Afterwards only fake Companion error_code/message aligned to actual Kotlin codes, then focused 5-case test and Clippy rerun.",
+  "not_run": [
+    "real ADB/LocalSocket",
+    "Android TUN",
+    "real device instrumentation",
+    "upstream business transaction",
+    "UI screenshot"
+  ]
+}

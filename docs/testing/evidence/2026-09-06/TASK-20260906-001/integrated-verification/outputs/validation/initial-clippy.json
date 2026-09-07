@@ -1,0 +1,19 @@
+{
+  "command": [
+    "cargo",
+    "clippy",
+    "--offline",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "--workspace",
+    "--all-targets",
+    "--all-features",
+    "--",
+    "-D",
+    "warnings"
+  ],
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "started_at": "2026-09-06T11:06:20.147343+08:00",
+  "completed_at": "2026-09-06T11:06:27.211184+08:00",
+  "exit_code": 101
+}

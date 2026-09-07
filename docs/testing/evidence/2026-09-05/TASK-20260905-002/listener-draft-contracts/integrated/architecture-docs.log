@@ -1,0 +1,2 @@
+Task scan:architecture-docs deno run -A scripts/check-architecture-docs.mjs
+Architecture documentation gate passed (9 current documents, 10 ADRs, 5 MCP documents).

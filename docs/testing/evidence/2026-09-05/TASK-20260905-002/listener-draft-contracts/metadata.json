@@ -1,0 +1,157 @@
+{
+  "task_id": "TASK-20260905-002",
+  "case_id": "LISTENER-DRAFT-CONTRACTS-001",
+  "result": "PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_NATIVE_UI_NOT_RUN",
+  "created_at": "2026-09-05T15:15:51.964426+08:00",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "frontend-contracts",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/frontend-contracts"
+  },
+  "resources": [
+    {
+      "source": "src/features/listeners/listener-data-plane.ts",
+      "snapshot": "resources/before/src/features/listeners/listener-data-plane.ts",
+      "sha256": "fe06d6c7d99ddf7825196209d8414b0f63fe90f8945fc27bbe49f9557e9af253",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/request-routing-card.tsx",
+      "snapshot": "resources/before/src/features/listeners/request-routing-card.tsx",
+      "sha256": "25698e289cd8df82cd3a33878038ff9b7ac8a4b0e91b6716f695d4254a8542a5",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/socket-listener-model.ts",
+      "snapshot": "resources/before/src/features/listeners/socket-listener-model.ts",
+      "sha256": "ea2eb50ae48c9f773afb1e80ecde6604ac6eec33937d1b49c031b7d9cdb163e1",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/socket-listener-model.test.ts",
+      "snapshot": "resources/before/src/features/listeners/socket-listener-model.test.ts",
+      "sha256": "4ba23a27b37b463d15a25d315dc201c902c189166bd6458999b65a0f04cc8c36",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/socket-working-mode.test.ts",
+      "snapshot": "resources/before/src/features/listeners/socket-working-mode.test.ts",
+      "sha256": "7f81ee13a1d94c3adf7c4594a2ac01acb245f05ea2d459a8a21994d89d7e2304",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/domain/src/workspace/listener_model.rs",
+      "snapshot": "resources/before/src-tauri/crates/domain/src/workspace/listener_model.rs",
+      "sha256": "99e93bedda7ef61811412fc21d35e6b7d86ff59d64b342626c957c5d8ecc9677",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/domain/src/workspace/socket_topology.rs",
+      "snapshot": "resources/before/src-tauri/crates/domain/src/workspace/socket_topology.rs",
+      "sha256": "d68affebed961dd61adc7c2b5e64d46314a5007fef7fcdce9f82485566bc4779",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/domain/src/protocol_package/identity.rs",
+      "snapshot": "resources/before/src-tauri/crates/domain/src/protocol_package/identity.rs",
+      "sha256": "b3905196a9c07bed5cb8d63c4a9d74d615b86fecb25241241f6e98b34152ad18",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/application/src/facade/listeners.rs",
+      "snapshot": "resources/before/src-tauri/crates/application/src/facade/listeners.rs",
+      "sha256": "191770a79b456605c90cc86fc4361e190583589ae21985acc39bde57bae77c7e",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/commands/listener.rs",
+      "snapshot": "resources/before/src-tauri/src/commands/listener.rs",
+      "sha256": "f6010e69ed52b3db7b7ec435dab9efca76d411e98f752f49fdb09b2e64fecf08",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/use-listener-persistence.ts",
+      "snapshot": "resources/before/src/features/listeners/use-listener-persistence.ts",
+      "sha256": "38114e458c25e777adec6d830b15ca4c0d43456297ef8f1ebc00d106e1aef362",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/use-listener-certificates.ts",
+      "snapshot": "resources/before/src/features/listeners/use-listener-certificates.ts",
+      "sha256": "7dc7d69e5b71fdd8d0727c48bd2b526897381a7a9fe3b3c02e0752a41eb18a86",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/use-draft-certificate-leases.ts",
+      "snapshot": "resources/before/src/features/listeners/use-draft-certificate-leases.ts",
+      "sha256": "c4341c31d5d6da09a767898f8aef551f5f1065f651086a507a9cfa52b340080e",
+      "purpose": "original behavior and strict-domain boundary before DTO change",
+      "required": true
+    }
+  ],
+  "not_applicable": {
+    "Android_device": "Listener editor/application DTO change has no Android engine behavior",
+    "external_business_transaction": "No protocol data path change"
+  },
+  "validation": "Implemented and verified: original Rust library baseline 969; frontend full 536 and final affected 72/39; final review repair Draft13/legacy2/command1 and strict Clippy/fmt; build/typecheck/lint/architecture PASS; independent overall review APPROVE. Six unrelated source-size failures and native UI/device NOT_RUN remain disclosed.",
+  "baseline": {
+    "command": "deno task test src/features/listeners/socket-listener-model.test.ts src/features/listeners/socket-working-mode.test.ts",
+    "result": "PASS",
+    "tests": 53,
+    "files": 2,
+    "log": "baseline-transition-tests.log",
+    "purpose": "preserve source-confirmed synchronous transition behavior before moving ownership to Rust"
+  },
+  "design_contract": "Three additive draft APIs (copy/transition/validate), existing new/save reused; dedicated validation VM; CAS precedes missing-field validation; scope/sequence guard for async transitions; certificate leases remain UI-owned",
+  "design_review": {
+    "result": "APPROVE",
+    "reviewer": "/root/final_architecture_review",
+    "report": "design-review.md",
+    "implementation_started_at": "2026-09-05 15:23:24 +08:00"
+  },
+  "updated_at": "2026-09-05 17:01:03 +08:00",
+  "completed_at": "2026-09-05 16:56:09 +08:00",
+  "final_evidence": {
+    "backend": "backend/README.md",
+    "frontend": "frontend/README.md",
+    "integrated": "integrated/README.md",
+    "review_fix": "backend-review-fix/README.md",
+    "independent_review": "integrated/independent-review.md",
+    "final_source_state": "integrated/final-source-state-after-archive.json"
+  },
+  "acceptance": {
+    "independent_review": "APPROVE",
+    "remaining_in_scope_findings": 0,
+    "preserved_contracts": [
+      "Display 1 MiB",
+      "111 existing command declarations",
+      "strict domain",
+      "unique save transaction",
+      "Task001 conflict and certificate lease behavior"
+    ],
+    "limitations": [
+      "6 existing unrelated source-size failures",
+      "native desktop UI not run",
+      "real device not run",
+      "no CI/push/commit/install/release"
+    ]
+  },
+  "metadata_correction": {
+    "corrected_at": "2026-09-05 17:01:03 +08:00",
+    "reason": "Final consistency check found a stale design-stage validation label and update timestamp. Test outputs, resources and historical execution results are unchanged.",
+    "original_validation": "No new DTO implemented or tested yet; baseline source snapshots only",
+    "original_metadata": "integrated/metadata-before-final-label-correction.json"
+  }
+}

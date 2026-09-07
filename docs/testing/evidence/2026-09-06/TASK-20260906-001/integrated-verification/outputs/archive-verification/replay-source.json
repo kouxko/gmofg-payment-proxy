@@ -1,0 +1,13 @@
+{
+  "command": [
+    "python3",
+    "docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/replay/run.py",
+    "/Users/codin/Code/gmofg-payment-proxy",
+    "integrated-verification",
+    "--verify-only"
+  ],
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "started_at": "2026-09-06T15:31:47.451004+08:00",
+  "completed_at": "2026-09-06T15:31:47.656019+08:00",
+  "exit_code": 0
+}

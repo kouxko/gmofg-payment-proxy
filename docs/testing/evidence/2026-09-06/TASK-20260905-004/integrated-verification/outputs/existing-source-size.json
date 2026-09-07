@@ -1,0 +1,26 @@
+[
+  {
+    "path": "src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "head_line_count": 546,
+    "current_line_count": 546,
+    "changed": false
+  },
+  {
+    "path": "src/features/android-network/android-network-view.test.tsx",
+    "head_line_count": 516,
+    "current_line_count": 516,
+    "changed": false
+  },
+  {
+    "path": "src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "head_line_count": 516,
+    "current_line_count": 516,
+    "changed": false
+  },
+  {
+    "path": "src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "head_line_count": 504,
+    "current_line_count": 504,
+    "changed": false
+  }
+]

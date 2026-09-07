@@ -1,0 +1,58 @@
+{
+  "task_id": "TASK-20260905-002",
+  "case_id": "listener-draft-contracts-integrated",
+  "result": "PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_NATIVE_UI_NOT_RUN",
+  "checked_at": "2026-09-05 16:56:09 +08:00",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application -p intercept-proxy-domain -p intercept-proxy-infrastructure --lib",
+    "deno task build",
+    "deno task scan:architecture",
+    "deno task scan:source-size",
+    "git diff --check"
+  ],
+  "results": {
+    "application": 430,
+    "domain": 70,
+    "infrastructure": 469,
+    "total": 969,
+    "failures": 0,
+    "frontend_full": 536,
+    "frontend_final_affected": 72,
+    "frontend_final_pending_controls": 39,
+    "next_build": "PASS",
+    "architecture": "PASS",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "source_size": "FAIL: 6 pre-existing unrelated files; 0 new oversized files",
+    "frontend_snapshots": 37,
+    "backend_snapshots": 12,
+    "existing_commands_unchanged": 111
+  },
+  "source_state": "Final frozen source checked by final-source-state.json: 58 resources, original B1 inventory with exactly two review-fix replacements, F1 v4-final, current architecture/user documents and frontend configurations.",
+  "source_snapshots": "../backend/resources/after/",
+  "not_run_yet": [],
+  "not_applicable": {
+    "Android": "No Android implementation in TASK-20260905-002",
+    "external_transactions": "No business protocol change"
+  },
+  "limitations": {
+    "native_desktop_ui": "NOT_RUN; jsdom state/accessibility tests used for affected UI contracts",
+    "real_device": "NOT_RUN; no device change in Task002",
+    "ci_push_release": "NOT_RUN; outside authorized scope"
+  },
+  "review": {
+    "round_1": "REQUEST CHANGES: one P2",
+    "round_2": "APPROVE",
+    "remaining_p0": 0,
+    "remaining_p1": 0,
+    "remaining_in_scope_p2": 0,
+    "report": "independent-review.md"
+  },
+  "validation_phases": {
+    "initial_rust_libraries": "969 passed before the review repair; not relabeled as a post-fix run",
+    "frontend": "536 full-suite; later affected 72 and pending-control 39 passed, with exact windows in ../frontend/README.md",
+    "final_review_repair": "Draft 13, existing validation 2, command binding 1, Clippy/fmt/diff passed; one production file and one test file changed",
+    "integration": "Next production build, architecture boundaries, TypeScript/lint passed at unchanged frontend/public interface state; no repeat after Rust-only applicability repair"
+  },
+  "final_source_check": "python3 docs/testing/evidence/2026-09-05/TASK-20260905-002/listener-draft-contracts/integrated/check-final-source-state.py"
+}

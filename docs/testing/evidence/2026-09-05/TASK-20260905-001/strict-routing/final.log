@@ -1,0 +1,57 @@
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/android-engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.99s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_android_engine-66d329b0732e7481)
+
+running 48 tests
+test data_plane::tests::builds_valid_icmpv4_fragmentation_needed ... ok
+test data_plane::tests::builds_valid_icmpv6_packet_too_big ... ok
+test data_plane::tests::parses_ipv6_udp_remote_metadata_in_both_directions ... ok
+test data_plane::tests::parses_ipv4_tcp_metadata ... ok
+test data_plane::tests::fragments_ipv4_packet_to_requested_path_mtu ... ok
+test data_plane::tests::pmtu_construction_failure_is_an_explicit_data_plane_error ... ok
+test data_plane::tests::data_plane_drop_cancels_and_reaps_cooperative_thread ... ok
+test engine::tests::duplicate_reorder_jitter_and_stats_are_observable ... ok
+test engine::tests::corruption_changes_payload_but_not_length ... ok
+test engine::tests::blackout_and_dns_are_terminal ... ok
+test engine::tests::fail_open_wrapper_returns_original_payload ... ok
+test engine::tests::ipv4_fragment_signal_and_blackhole_are_distinct ... ok
+test engine::tests::every_supported_tcp_flag_and_direction_can_be_dropped_exactly_at_n ... ok
+test engine::tests::multiple_destination_targets_apply_faults_only_to_matching_remote_addresses ... ok
+test engine::tests::nth_syn_is_dropped_exactly_once ... ok
+test engine::tests::pmtu_and_mss_actions_are_explicit ... ok
+test engine::tests::random_and_burst_loss_support_certain_drop_profiles ... ok
+test engine::tests::rate_limit_schedules_following_packet ... ok
+test jni_bridge::tests::negative_tun_fd_is_rejected_before_jni_work ... ok
+test jni_bridge::tests::owned_tun_fd_closes_when_pre_start_work_fails ... ok
+test engine::tests::same_seed_produces_same_sequence ... ok
+test routing::tests::domain_route_compiles_offline_and_matches_virtual_dns_domain ... ok
+test routing::tests::domain_route_matches_desktop_resolved_ip_without_device_dns ... ok
+test routing::tests::missing_runtime_route_blocks_start_instead_of_bypassing_proxy ... ok
+test routing::tests::routes_multiple_original_targets_to_independent_runtime_endpoints ... ok
+test routing::tests::runtime_shape_uses_the_same_destination_normalization_as_profile_validation ... ok
+test routing::tests::same_port_domain_routes_do_not_guess_when_ip_does_not_match ... ok
+test routing::tests::trailing_dot_ipv4_route_compiles_as_an_ip_network ... ok
+test routing::tests::unique_domain_route_requires_a_matching_target_even_when_the_port_is_unique ... ok
+test data_plane::tests::scheduler_preserves_sequence_without_reorder ... ok
+strict-routing original=127.0.0.1:54874 received=[80, 73, 78, 71] response=ORIG
+test socks5::tests::tcp::connect_protects_outbound_socket_before_relay ... ok
+test socks5::tests::tcp::matched_original_target_uses_listener_when_original_is_unreachable ... ok
+test socks5::tests::udp::encodes_ipv6_udp_response ... ok
+test socks5::tests::tcp::unmatched_target_still_connects_original_directly ... ok
+test validation::tests::changed_uid_is_rejected_before_vpn_start ... ok
+test validation::tests::companion_cannot_be_selected ... ok
+test socks5::tests::tcp::unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy ... ok
+test validation::tests::complete_shared_uid_group_needs_explicit_confirmation ... ok
+test validation::tests::destination_targets_reject_invalid_cidr_ports_duplicates_and_limits ... ok
+test validation::tests::more_than_sixty_four_targets_are_rejected ... ok
+test validation::tests::partial_shared_uid_group_is_rejected ... ok
+test validation::tests::uninstalled_target_is_rejected_before_vpn_start ... ok
+test validation::tests::proxy_routes_reject_equivalent_destination_spellings ... ok
+test socks5::tests::udp::associate_protects_both_families_and_rejects_attacker_first ... ok
+test data_plane::tests::data_plane_shutdown_releases_tun_before_its_wait_bound ... ok
+test socks5::tests::lifecycle::stalled_handshake_times_out_without_stopping_server ... ok
+test socks5::tests::lifecycle::idle_relay_times_out_and_releases_the_session ... ok
+test socks5::tests::lifecycle::server_limits_concurrent_clients_and_reuses_released_permit ... ok
+
+test result: ok. 48 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.08s
+

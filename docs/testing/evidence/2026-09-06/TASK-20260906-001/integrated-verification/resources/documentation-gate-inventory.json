@@ -1,0 +1,673 @@
+{
+  "captured_at": "2026-09-06T15:22:55.973812+08:00",
+  "files": {
+    ".github/workflows": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    ".github/workflows/ci.yml": {
+      "kind": "file",
+      "sha256": "0fbe5443a12f1171e3d3d998ce8c77be08f52e4921cf58fccc52f190b9bea072",
+      "bytes": 8730,
+      "use": "actual linked file; existence checked"
+    },
+    ".github/workflows/windows-quick-build.yml": {
+      "kind": "file",
+      "sha256": "3125d47dfbf6ac089ce9b06eb347a8ac1f3db51c8cca1b7fa1e37e90fd45e66c",
+      "bytes": 4334,
+      "use": "actual linked file; existence checked"
+    },
+    ".github/workflows/windows-release.yml": {
+      "kind": "file",
+      "sha256": "7e861ca50e1c60c4b59da9e7317390679dd91a30a98493ec738ef05d78001e86",
+      "bytes": 21193,
+      "use": "actual linked file; existence checked"
+    },
+    "DESIGN.md": {
+      "kind": "file",
+      "sha256": "abb03d7db4ec3a0764db57aa58b09cd255db0c0e48af7563a908a937ba0497c2",
+      "bytes": 20061,
+      "use": "actual linked file; existence checked"
+    },
+    "README.md": {
+      "kind": "file",
+      "sha256": "30c95da7bede82a2691c7c71d68a3ec9edfe7b727b7fa4e4afe5bf06cb3b9261",
+      "bytes": 7633,
+      "use": "content read by checker"
+    },
+    "android-companion/README.md": {
+      "kind": "file",
+      "sha256": "1dc32db41f9eba8d65e4a32d3be46d30740b6d83f41b0cffc15627f3d65f916d",
+      "bytes": 6108,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/README.md": {
+      "kind": "file",
+      "sha256": "5b9749023d597a34bffdce1389dcfb7ecf96a5803ab8f20d623bfe19bdef17c5",
+      "bytes": 5189,
+      "use": "content read by checker"
+    },
+    "docs/architecture/README.md": {
+      "kind": "file",
+      "sha256": "b744489226bd96b3f49b140db48222e6fa743954e3b0b0d76d6390c3b93b8c12",
+      "bytes": 5384,
+      "use": "content read by checker"
+    },
+    "docs/architecture/android-vpn-transparent-routing.md": {
+      "kind": "file",
+      "sha256": "53804834a0c87e19dfee171ad4bd051bc8ed31bbac5e074b6b20a1c472846697",
+      "bytes": 14661,
+      "use": "content read by checker"
+    },
+    "docs/architecture/data-flow.md": {
+      "kind": "file",
+      "sha256": "8d8dcaa5ef2fdb9c0e3ca41ecc3e4c3adfa88646d8ca626d023404ba8db49547",
+      "bytes": 14929,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-001-http-socket-boundary.md": {
+      "kind": "file",
+      "sha256": "66d95321bd3c750bb3cafda6deb9bc7e83b6502a85aebb670fad789072244f4e",
+      "bytes": 1581,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-002-protocol-packages-http.md": {
+      "kind": "file",
+      "sha256": "2d8cd767daf2c96e89328e885331b469b7a48f66c85c196e2dd9f9989dc90ea6",
+      "bytes": 3101,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-003-application-zip-ownership.md": {
+      "kind": "file",
+      "sha256": "c166e3712004a2be93e6b34905fcd71ed662aca2694ce10ed630e1916cc72f6d",
+      "bytes": 2224,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-004-embedded-read-only-mcp.md": {
+      "kind": "file",
+      "sha256": "5a08df20538390cdc861ce3893af0273b4b251d055ca0c242c1d636e4b15137b",
+      "bytes": 4367,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-005-runtime-evidence-and-reproduction-report.md": {
+      "kind": "file",
+      "sha256": "52700c15990b410338e2abb12de4019d576d3e566b97fb781aab3237ca3f5229",
+      "bytes": 5007,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-006-unified-exchange-observation.md": {
+      "kind": "file",
+      "sha256": "3b53e746a1853132466fac01ef9b9208eb5e1fe4090a6e5619f3bc92a6fe510b",
+      "bytes": 13672,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-007-exchange-pipeline-runtime-boundary.md": {
+      "kind": "file",
+      "sha256": "63c679ecc7937253a705675d84df3d98ceab65fd680cda5b4bf9eea7c200f047",
+      "bytes": 4818,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-008-mcp-environment-configuration.md": {
+      "kind": "file",
+      "sha256": "2c461aeab768f834c85851f341b26c436fe670c96784a8b09319ba58b5c3695a",
+      "bytes": 5678,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md": {
+      "kind": "file",
+      "sha256": "57a50085ec800cef397ea106061181e964a0fbdd60d04346e1558e3260864cf5",
+      "bytes": 4017,
+      "use": "content read by checker"
+    },
+    "docs/architecture/decisions/ADR-010-in-process-webassembly-protocol-packages.md": {
+      "kind": "file",
+      "sha256": "98b1d6c603e4d199b967c12a5996e4dcde57aac7f584d10b7f30f05d850cdf20",
+      "bytes": 3376,
+      "use": "content read by checker"
+    },
+    "docs/architecture/development-guide.md": {
+      "kind": "file",
+      "sha256": "dd452552e0706a163555cfdf4baf7435b64fe2a633fed99409048656341b499e",
+      "bytes": 11164,
+      "use": "content read by checker"
+    },
+    "docs/architecture/exchange-pipeline-template/README.md": {
+      "kind": "file",
+      "sha256": "a8a2fb05cab3ee64677fe56486b92a55ca567a30864a49a2b9a83670e0379061",
+      "bytes": 19426,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/architecture/exchange-pipeline.md": {
+      "kind": "file",
+      "sha256": "b252cfc660e2a8e0a9a1a70c03bc056e16aed2537981193e21253fb7eb6c6309",
+      "bytes": 14117,
+      "use": "content read by checker"
+    },
+    "docs/architecture/modules.md": {
+      "kind": "file",
+      "sha256": "37d0d5a3cd1d31cd2ce94c8a4a5ad45ea02791c36862b20ae5f0c1f573cbaa67",
+      "bytes": 14771,
+      "use": "content read by checker"
+    },
+    "docs/architecture/rules-and-protocol-packages.md": {
+      "kind": "file",
+      "sha256": "39daf081e8586bdabe263cc946e4e7c92be7ea80070c833465ff4f02e98c3f9e",
+      "bytes": 9309,
+      "use": "content read by checker"
+    },
+    "docs/architecture/runtime-observability.md": {
+      "kind": "file",
+      "sha256": "a632188cb07dee0a237768e39471d4e616ccc0baf67566e8545bb30b7f99032a",
+      "bytes": 15980,
+      "use": "content read by checker"
+    },
+    "docs/architecture/security-and-persistence.md": {
+      "kind": "file",
+      "sha256": "a0350231b943c0a0c1bf4c9f869a5747b5f228ae7ce0e4a3cfd05af4bbb2e532",
+      "bytes": 11101,
+      "use": "content read by checker"
+    },
+    "docs/mcp/app-integration-guide.md": {
+      "kind": "file",
+      "sha256": "aacfd0db38a7480514aec061f8bd05ad8700902d00d87d8d5e6120f4c29970ea",
+      "bytes": 5177,
+      "use": "content read by checker"
+    },
+    "docs/mcp/certificate-concepts.md": {
+      "kind": "file",
+      "sha256": "b3ae35840e677ae46a5e148ad66cd62af88df532cc7606bc8f13c3eaa644db0d",
+      "bytes": 4020,
+      "use": "content read by checker"
+    },
+    "docs/mcp/diagnostic-architecture.md": {
+      "kind": "file",
+      "sha256": "2571c065299d6361251e3741e711f66c7a6e8aa9c7668b1db124faccea567025",
+      "bytes": 9327,
+      "use": "content read by checker"
+    },
+    "docs/mcp/external-package-integration-guide.md": {
+      "kind": "file",
+      "sha256": "819bb64888a1fe182b4fb162a61f1a4afda0f97afdca25e2ba8a64fed3717279",
+      "bytes": 8360,
+      "use": "content read by checker"
+    },
+    "docs/mcp/tool-reference.md": {
+      "kind": "file",
+      "sha256": "4c7a0fd79eeb69410dfda706b5c23e24b9cce2601f51b8c1fba73e4b8cc66457",
+      "bytes": 14698,
+      "use": "content read by checker"
+    },
+    "docs/onboarding-guide.md": {
+      "kind": "file",
+      "sha256": "a0416d9291c06c0fc65ae6f8ba767f998075918dcde1f5e766f1369ccfd072a0",
+      "bytes": 37580,
+      "use": "content read by checker"
+    },
+    "docs/requirements.md": {
+      "kind": "file",
+      "sha256": "1e4028d6a6b3cebc11388971ef22e981c3d9c2aabfe14fdd2b687892c6085071",
+      "bytes": 28682,
+      "use": "content read by checker"
+    },
+    "docs/tasks/pending/2026-08-29/establish-database-version-100-baseline.md": {
+      "kind": "file",
+      "sha256": "7fb38a2f395c764c35c7b1edf9db373e31dc04256ab3d13d33ef3a56e21df079",
+      "bytes": 11702,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md": {
+      "kind": "file",
+      "sha256": "26ddf0408a602569191f2c2265c4fe0405175367993b9febc006716b8367d0b1",
+      "bytes": 151464,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md": {
+      "kind": "file",
+      "sha256": "a2400fc653d0e92f276c4f2a339f2a2af3c5723e54e85058f27cb9a5beafd5cd",
+      "bytes": 64408,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/tasks/pending/2026-09-04/github-quick-android-windows-package.md": {
+      "kind": "file",
+      "sha256": "e93a5566f489cf0cde15b1efe39170a9697dc7e68958aa523544ada115d8e092",
+      "bytes": 6974,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md": {
+      "kind": "file",
+      "sha256": "2d0680730fdcdb68f0f78643e3254ff2038a6cf0236dd1cb69cc7a717df95925",
+      "bytes": 26303,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/tasks/pending/2026-09-06/fix-six-architecture-review-findings.md": {
+      "kind": "file",
+      "sha256": "ca132f83f792a3ce9696c1fb45f567448ad7dbf9b857953a27914f3fa2f8b005",
+      "bytes": 11361,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/testing/evidence/README.md": {
+      "kind": "file",
+      "sha256": "275c7fcdec6aff6b22308dc6c0e7486e4e5a8514cc8695d40daf7172a4c3fb82",
+      "bytes": 42196,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/testing/quick-validations/README.md": {
+      "kind": "file",
+      "sha256": "7465f06ced23f22a39e102b875d35987829c0f65865a5a663b266d57c375cad3",
+      "bytes": 1728,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/testing/release-validation-matrix.md": {
+      "kind": "file",
+      "sha256": "e2c081aeb2cf64957cb562125651a8fffe3de61555aef7951c49ccc13fa09beb",
+      "bytes": 18594,
+      "use": "content read by checker"
+    },
+    "docs/testing/release-validation-results-20260824.md": {
+      "kind": "file",
+      "sha256": "6e6c291ef0fede8519c373d8894967c4596e4890d5b503d1bda732a84c710d7c",
+      "bytes": 10704,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/testing/release-validation-results-20260825.md": {
+      "kind": "file",
+      "sha256": "094e88ba86cba1e4aced8da3e64ed9e62ed368452ea34918fc684e439304e95e",
+      "bytes": 890,
+      "use": "actual linked file; existence checked"
+    },
+    "docs/user-operation-guide.md": {
+      "kind": "file",
+      "sha256": "ff9cafb094ec0c862e6e0d901bcffd98060964d4ba5691f1adc7653e2ad3006a",
+      "bytes": 22625,
+      "use": "content read by checker"
+    },
+    "examples/external-packages": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "scripts/check-architecture-boundaries.mjs": {
+      "kind": "file",
+      "sha256": "5e9f02d07136dc883a39a5e30789e69403de025b2bb5501f8652a86bfa1cbc53",
+      "bytes": 64608,
+      "use": "actual linked file; existence checked"
+    },
+    "scripts/check-source-file-sizes.mjs": {
+      "kind": "file",
+      "sha256": "c5a7d0abe1588fc08dd365be90d2a4159e5ad31fef73215a697ed512991b7943",
+      "bytes": 2250,
+      "use": "actual linked file; existence checked"
+    },
+    "src/app": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src/features": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src/features/capture/exchange-observation-view.test.tsx": {
+      "kind": "file",
+      "sha256": "f12dadd12f97218a08956175c7ade523cc044ca429a62d996c5244327302bf8d",
+      "bytes": 3624,
+      "use": "actual linked file; existence checked"
+    },
+    "src/features/rules/rules-view.test.tsx": {
+      "kind": "file",
+      "sha256": "104818e8e3daee0c4f85a0304b358e08ac36460b9bd23a76657731259242fb49",
+      "bytes": 23137,
+      "use": "actual linked file; existence checked"
+    },
+    "src/features/shell/app-runtime.tsx": {
+      "kind": "file",
+      "sha256": "839899cf8da9220960393500d0139fb94fb58e16692f37028acf03edf78d6ce9",
+      "bytes": 912,
+      "use": "actual linked file; existence checked"
+    },
+    "src/generated": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src/generated/rust-types.ts": {
+      "kind": "file",
+      "sha256": "af47e2dd76c56a8e11952c476d21050f94db5889abd815d14737244c9bcf27c7",
+      "bytes": 116540,
+      "use": "actual linked file; existence checked"
+    },
+    "src/lib/ipc": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src/lib/ipc/client.ts": {
+      "kind": "file",
+      "sha256": "dac2def210f6608a89334bc8d3d4b3a1187f97fd44d28fde62694f12801a9b21",
+      "bytes": 3522,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/Cargo.toml": {
+      "kind": "file",
+      "sha256": "ac74ead484a999b3da25c219514d520830f374841b1d9b2b54ebf50f33eb8b7b",
+      "bytes": 5161,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/android-control-protocol/src/lib.rs": {
+      "kind": "file",
+      "sha256": "d586d61af6944ebb31dc0abf2978741a8b6f800cebc8895bb8926198a8f568c5",
+      "bytes": 4338,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/android-engine": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/application": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/application/src": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/application/src/facade.rs": {
+      "kind": "file",
+      "sha256": "89cf5424bf77d08bb2634ab5907476c881b41b88b1cd27d79309c34231a0a647",
+      "bytes": 8252,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/application/src/requirements_tests/settings_lifecycle.rs": {
+      "kind": "file",
+      "sha256": "84bd73b31009dae09a155b0f6746f39a92d34575de0e4a6ffae0e6ec6912e3ec",
+      "bytes": 12088,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/domain": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/domain/src": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/domain/src/lib.rs": {
+      "kind": "file",
+      "sha256": "87863de4de846900df0ffea0f76a412d6450d9a6d9fafcc5f086c630b16f72d9",
+      "bytes": 1051,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/exchange/src": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/exchange/src/envelope.rs": {
+      "kind": "file",
+      "sha256": "416b88b4d9e46b4fec178b81d772fb1d342f6e1e7c22644f71d91afcfbbaac74",
+      "bytes": 1192,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/exchange.rs": {
+      "kind": "file",
+      "sha256": "cc8ee777a55fa85c74a7ae25eff83974505a1f269dcb31ad9a8474f9c231e6b8",
+      "bytes": 8051,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/lib.rs": {
+      "kind": "file",
+      "sha256": "1c4a662b5b305a760883c24af0a16c3376fc2148fe80ec49b32a12f2bfaecbcf",
+      "bytes": 1248,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/pipeline.rs": {
+      "kind": "file",
+      "sha256": "4e9e3859753bbb1d993a0124bbde7e7049af864389e229f2b9268d3c7bb5afcd",
+      "bytes": 14694,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/tests": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/exchange/src/tests/exchange.rs": {
+      "kind": "file",
+      "sha256": "dff720f24c221a724962ef7aa566ebfe9c049d25dac8e7352c56e53c71f002f1",
+      "bytes": 13944,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/tests/pipeline.rs": {
+      "kind": "file",
+      "sha256": "85255a9bff1b65c38127654c6167716eda5ded2b108e886740c48e6cb9eba663",
+      "bytes": 9106,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/tests/raw.rs": {
+      "kind": "file",
+      "sha256": "d675343bf12a6ef3ed9db66a27a08eb4ef33c17ef7d3db660fb572c5b029e866",
+      "bytes": 8625,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/exchange/src/transparent.rs": {
+      "kind": "file",
+      "sha256": "c1a7bfcc2240022bf30ff8542eaa7095f51c1afde2bad742d681ab543d18bf43",
+      "bytes": 4069,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/host": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/host/src/lib.rs": {
+      "kind": "file",
+      "sha256": "ce5a061229272183fb532bc878ba6c745d7fa9023556ad9cf0b246046070ca25",
+      "bytes": 12531,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/infrastructure/src/adapters/exchange_observation/tests.rs": {
+      "kind": "file",
+      "sha256": "abbb3ec02d1934d9c8fd2b4d65b38e0acd95ae4d5a4b2f61c55c9795ddfc3518",
+      "bytes": 8803,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure/src/adapters/exchange_observation.rs": {
+      "kind": "file",
+      "sha256": "5db43197702cd71b9d0942f1a80dee1d9e86ee0688cd1cd1d73cb5fc12d82472",
+      "bytes": 10418,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/external_package_runtime.rs": {
+      "kind": "file",
+      "sha256": "be30a0cdc244180a6935b05cc2b8407b8552d258bfd329d6e7ac34838e616138",
+      "bytes": 14138,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs": {
+      "kind": "file",
+      "sha256": "bb43906451afdab61aa404975b8b52693c029b45b85eb001852d6a2a2da4b43c",
+      "bytes": 15400,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/socket_runtime.rs": {
+      "kind": "file",
+      "sha256": "ee5759011e17bf5c0905baa03e4e9e01f2874c07e58ef58f09e849f3d4361a23",
+      "bytes": 10669,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/infrastructure/src/lib.rs": {
+      "kind": "file",
+      "sha256": "cdef03660d24e7c3152283b306f1b2b49cc13c5eadfe3ae425e6a8026c8f916b",
+      "bytes": 2513,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/package-contract": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/package-contract/src/lib.rs": {
+      "kind": "file",
+      "sha256": "75425a59858f8271cee4125ce3cff565a9b1e98d98786fcd6d87403db40f2bb8",
+      "bytes": 424,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/package-runtime": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/package-runtime/src/lib.rs": {
+      "kind": "file",
+      "sha256": "50feb75bd727089dd2418f323b7e7c21a8f522bc77031ce3915e3c5d7db80f36",
+      "bytes": 135,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/product-api": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/proxy": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs": {
+      "kind": "file",
+      "sha256": "b35136e567a76a015298405ddf14bbd5b05237779011ca269da3c1190881f7ae",
+      "bytes": 7247,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/src/http/exchange_runtime.rs": {
+      "kind": "file",
+      "sha256": "64309aaa5cfb4a407869740b868df7df559d505a76c11966b5834f8cebcb4621",
+      "bytes": 15743,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/src/lib.rs": {
+      "kind": "file",
+      "sha256": "74333a07837f8b18337ec30ea1c5d8083b1133c5cc94afabbc9f52a12931572a",
+      "bytes": 12047,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs": {
+      "kind": "file",
+      "sha256": "b85e0b333e8c055684c93e57a76417438ce39ae4268ace644df0136d9df85b7c",
+      "bytes": 11449,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs": {
+      "kind": "file",
+      "sha256": "8c676ac5cccdbe870dd4afc30b790229088f8872ad8a5fda0673d566a8809a56",
+      "bytes": 10911,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/src/socket_relay/tests": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/proxy/tests/raw_http_proxy/lifecycle.rs": {
+      "kind": "file",
+      "sha256": "931f87e70d9c16a3f4f04f4a942fa4c65096d4cf1f9cc1f3ba242b0a80075d70",
+      "bytes": 15060,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/tests/raw_http_proxy/wire_fidelity.rs": {
+      "kind": "file",
+      "sha256": "c84ffbb40772abd647fd59679f81924f830bf6dc96007bd07fc37bc43b1f9af6",
+      "bytes": 6422,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/proxy/tests/reverse_listener": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/crates/proxy/tests/tls_mtls.rs": {
+      "kind": "file",
+      "sha256": "230d367221aa6a81342ba01b6bab3a7e5b6e7218d0f60da8b4f99c1d31a0b180",
+      "bytes": 16489,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/crates/traffic-observation/src/lib.rs": {
+      "kind": "file",
+      "sha256": "e9134cb22a932d9300857aa3fb3b111d49eada995a5ec15aebadc6c937f5dccc",
+      "bytes": 11614,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/src": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/src/commands": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/src/lib.rs": {
+      "kind": "file",
+      "sha256": "20d7f02e6ff278b2ebd09e47b648fc4151f58910e29b311ae7a48ab53570110b",
+      "bytes": 12724,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/src/main.rs": {
+      "kind": "file",
+      "sha256": "bcbefdaffb22029506bd0eaed422aabce72902cde884e4dd15dd5be5d4f2be1e",
+      "bytes": 280,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/src/mcp": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs": {
+      "kind": "file",
+      "sha256": "027befe065204f6cfbdebdb4ab069c116e5e206d73d246f320ee88a3b65c6796",
+      "bytes": 15375,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/src/runtime_logs/exchange_ui_layer.rs": {
+      "kind": "file",
+      "sha256": "c4691b94da08131e020294ccdf40b753cba8e940df003b0a2b79d67165496a04",
+      "bytes": 15802,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/src/runtime_logs/store.rs": {
+      "kind": "file",
+      "sha256": "0d994268266250b80dc20ac9559e638a491067fba28dd31f40dcf5e8ff58a0c6",
+      "bytes": 18185,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/tauri.conf.json": {
+      "kind": "file",
+      "sha256": "342c2cf2d45dc68f380b81fc20b31c62fa7c161534fb057dbb1332de0e5f882e",
+      "bytes": 1593,
+      "use": "actual linked file; existence checked"
+    },
+    "src-tauri/tauri.dev.conf.json": {
+      "kind": "file",
+      "sha256": "5c77e5c340f278733947b79ec199fb6adcd346e5838b6a7631eda4bda925f525",
+      "bytes": 74,
+      "use": "actual linked file; existence checked"
+    },
+    "templates/socket-protocol": {
+      "kind": "directory",
+      "use": "actual existence anchor; directory contents not read by this check"
+    },
+    "templates/socket-protocol/API.md": {
+      "kind": "file",
+      "sha256": "a990f755d94040ae8f92b5962de914e602637dc012b94ea14d39e2f9d133b310",
+      "bytes": 1644,
+      "use": "actual linked file; existence checked"
+    },
+    "templates/socket-protocol/AUTHORING.md": {
+      "kind": "file",
+      "sha256": "4b494d0607236da2761b91866dde07dd781760af6efb3481c657ca7975785152",
+      "bytes": 1657,
+      "use": "actual linked file; existence checked"
+    },
+    "templates/socket-protocol/README.md": {
+      "kind": "file",
+      "sha256": "77b42ca383213dcbf2ebfab7a5c4608ec47da22cc198942e2330bfd31314b101",
+      "bytes": 700,
+      "use": "actual linked file; existence checked"
+    }
+  }
+}

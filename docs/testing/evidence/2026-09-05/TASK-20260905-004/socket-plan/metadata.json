@@ -1,0 +1,66 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "socket-plan",
+  "verified_at": "2026-09-05 23:47:17 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "environment": {
+    "os": "Darwin arm64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)"
+  },
+  "inputs": {
+    "mapping_regression": {
+      "bind_addr": "127.0.0.1:19090",
+      "relay_upstream": "upstream.example:443",
+      "maximum_connections": 17,
+      "read_chunk_bytes": 4097,
+      "connect_timeout_ms": 101,
+      "read_timeout_ms": 202,
+      "write_timeout_ms": 303,
+      "relay_security": "transparent",
+      "local_security": "tcp"
+    },
+    "behavioral_regressions": "existing localhost Direct Relay, scripted Relay/LocalResponder, TLS reference selection, probe isolation, frame limit, metrics, stop and port release cases"
+  },
+  "expected": "Direct and Scripted plans obtain Relay or LocalResponder endpoint, TLS, limits, and timeout configuration from one builder while preserving probe behavior, default values, fail-closed TLS admission, and error codes.",
+  "actual": "The focused common mapping regression passed 1/1; all listener_runtime unit and integration cases passed 84/84; cargo check and strict Clippy passed; source search leaves runtime endpoint config construction and read-chunk conversion in one module.",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure adapters::listener_runtime::tests:: --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure common_socket_settings_map_identically_to_relay_and_local_configs --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure adapters::listener_runtime --lib",
+    "cargo check --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib --tests -- -D warnings",
+    "rustfmt --edition 2024 src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "git diff --check -- <owned Rust files>",
+    "rg -n 'SocketRelayConfig \\{|SocketLocalResponderConfig \\{|Socket 单次读取字节数超出平台范围' src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan -g '*.rs'"
+  ],
+  "evidence": [
+    "README.md",
+    "outputs/baseline.log",
+    "outputs/verification.log",
+    "outputs/source-size-follow-up.log",
+    "outputs/source-size-listener-test.log"
+  ],
+  "source_size_follow_up": {
+    "executed_at": "2026-09-06 00:56:45 +08:00",
+    "change": "Moved socket_observer and its exclusive SocketDiagnosticObserver import from plan.rs to plan/socket_config.rs without changing behavior.",
+    "line_counts": {
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs": 473,
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs": 210
+    },
+    "cargo_check_lib": "PASS",
+    "diff_check": "PASS",
+    "listener_test": "BLOCKED_BY_CONCURRENT_UNRELATED_HTTP_TEST_EDITS",
+    "listener_test_output": "outputs/source-size-listener-test.log"
+  },
+  "not_applicable": {
+    "tls_resources": "reference-selection regression uses no archived key material",
+    "ui_screenshots_device": "no UI or device behavior changed",
+    "external_service_payment": "localhost transport/configuration regression only"
+  },
+  "not_run": {
+    "ci_commit_push_publish": "outside the assigned slice and not authorized"
+  },
+  "derived_from": null
+}

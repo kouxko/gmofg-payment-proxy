@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.44s
+     Running tests/upstream_http.rs (src-tauri/target/debug/deps/upstream_http-d92d3acfba650ddc)
+
+running 1 test
+
+thread 'upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed' (4229878) panicked at crates/proxy/tests/upstream_http/support_and_fidelity.rs:81:9:
+hop-by-hop request field must not reach the upstream
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed' (4229878) panicked at crates/proxy/tests/upstream_http/support_and_fidelity.rs:182:10:
+called `Result::unwrap()` on an `Err` value: ProxyError { code: "IO_ERROR", message: "connection closed before message completed", external_package_call: None }
+test upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed ... FAILED
+
+failures:
+
+failures:
+    upstream_is_http11_single_use_host_rewritten_and_redirect_not_followed
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-runtime --test upstream_http`

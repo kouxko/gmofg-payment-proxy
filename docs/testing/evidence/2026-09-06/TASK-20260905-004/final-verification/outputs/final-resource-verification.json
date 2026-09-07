@@ -1,0 +1,12 @@
+{
+  "result": "PASS",
+  "byte_equal_count": 124,
+  "source_state_files": 122,
+  "removed_paths": [
+    "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document/error.rs",
+    "src-tauri/crates/proxy/src/forward/pipeline/drop_response.rs",
+    "src/features/android-network/android-network-view.test-fixtures.ts"
+  ],
+  "source_state_unchanged_since_review_cleanup": true,
+  "only_change_after_post_fix": "Removed unused profile import from Android network intent test; 18 tests, typecheck, zero-warning lint and diff check rerun successfully."
+}

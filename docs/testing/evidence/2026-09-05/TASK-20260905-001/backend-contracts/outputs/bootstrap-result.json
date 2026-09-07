@@ -1,0 +1,6 @@
+{
+  "bootstrap_event_cursor": 0,
+  "subscription_replay_event_ids": [1],
+  "comparison": "exact match"
+}
+

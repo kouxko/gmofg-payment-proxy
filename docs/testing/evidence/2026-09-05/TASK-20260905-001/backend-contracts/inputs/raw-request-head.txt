@@ -1,0 +1,9 @@
+GET / HTTP/1.1
+Host: client.test
+Connection: keep-alive, X-Private-Hop
+connection:	X-Second-Hop 	
+X-Private-Hop:	 secret 	
+x-second-hop: second
+Proxy-Connection: keep-alive
+X-Preserved:	 exact 	
+

@@ -1,0 +1,8 @@
+Task scan:source-size deno run -A scripts/check-source-file-sizes.mjs
+手写源码文件不得超过 500 行：
+- src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs: 566 行
+- src-tauri/crates/domain/src/workspace/listener_model.rs: 546 行
+- src/features/android-network/android-network-view.test.tsx: 516 行
+- src-tauri/crates/application/src/requirements_tests/listener_certificates.rs: 516 行
+- src-tauri/crates/application/src/environment_configuration/listener.rs: 504 行
+- src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs: 504 行

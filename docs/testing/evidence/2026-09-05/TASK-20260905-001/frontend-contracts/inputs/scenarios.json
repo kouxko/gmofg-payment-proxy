@@ -1,0 +1,35 @@
+{
+  "listener_drafts": [
+    {
+      "base": "Listener A and B at Workspace revision 1",
+      "local": "Listener A name changed and optional draft certificate retained",
+      "authoritative": "revision 2 changes only Listener B",
+      "expected": "show A draft and updated B; save A using revision 2; no conflict"
+    },
+    {
+      "base": "Listener A at Workspace revision 1",
+      "local": "Listener A name changed",
+      "authoritative": "revision 2 also changes or removes Listener A",
+      "expected": "preserve local A; display conflict; block save, start and delete; retain conflict across later unrelated revisions; only an explicit action replaces A with authority or accepts its deletion"
+    },
+    {
+      "base": "Listeners A and B at Workspace revision 1",
+      "local": "A and B names changed; B also references an imported draft CA",
+      "authoritative": "revision 2 changes only A",
+      "action": "discard A draft and load latest configuration",
+      "expected": "A becomes authoritative; B name and imported CA remain; no reachable B certificate is discarded"
+    }
+  ],
+  "bootstrap": [
+    {
+      "in_flight": "manual app bootstrap refresh",
+      "event": "exchange_observation_changed",
+      "expected": "the in-flight result remains eligible to replace the snapshot"
+    },
+    {
+      "in_flight": "manual app bootstrap refresh",
+      "event": "workspace_changed",
+      "expected": "the old result is rejected and a replacement app bootstrap request is queued"
+    }
+  ]
+}

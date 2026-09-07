@@ -1,0 +1,117 @@
+[
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseCoordinator.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlLeaseCoordinator.kt",
+    "sha256": "81f5a2d86c55f9df1bab8de4d0c2bee7d9ff286e18fbdfe454d932981f46a839"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlLeaseManager.kt",
+    "sha256": "9f92a4a57bb7ef9172ab3a18f1ed2e64aa428a52a333d5c021e78f0dbead3ddc"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnServiceControl.kt",
+    "snapshot": "android/resources/after/InterceptVpnServiceControl.kt",
+    "sha256": "96d60d2cd9be776f1ec2d8d1a10a0987f69de363db7c3c8916253d498e27239b"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt",
+    "snapshot": "android/resources/after/InterceptVpnService.kt",
+    "sha256": "121b01ef214352e60955c38d5c4bb39119f365ac795ed81a167d4221e46bbd40"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/ResumeVpnJobService.kt",
+    "snapshot": "android/resources/after/ResumeVpnJobService.kt",
+    "sha256": "a0d89a2251098cba618e1509bab3aa481763d4f5dd5364c43eff4e70dd7f9d9b"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/VpnRuntimeRegistry.kt",
+    "sha256": "0cb1fa94e72bb4baa3d8d40847ec73b7d9d44fc49a69b227c3a574971aaf8e7e"
+  },
+  {
+    "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseRecoveryTest.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlLeaseRecoveryTest.kt",
+    "sha256": "68dabaa91f49eb36b049eec77d5e6c6cbdc0c6da8c2ff21dbc96aac8e1e73e29"
+  },
+  {
+    "source": "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/SavedRecoveryAdmissionInstrumentedTest.kt",
+    "snapshot": "android/resources/after/SavedRecoveryAdmissionInstrumentedTest.kt",
+    "sha256": "87ccd4add6959b4ba8948b6f11c70b0d823f42d1b850a39757c688c319a00be8"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseWatchdog.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlLeaseWatchdog.kt",
+    "sha256": "df6a7421bbdd7a3dd53402ae10ba2f65501210a7671a39782b4ff2bf1c06a1a8"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/CompanionControlServer.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/CompanionControlServer.kt",
+    "sha256": "37a0e99aa8063a388c1b7e5bc4240f2fc0d5fb32da54194f189c6bb08773d946"
+  },
+  {
+    "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlProtocol.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlProtocol.kt",
+    "sha256": "121b1861736355c64d2b032963864ccb092c7764dc4f7bbdde29cc9b5468fde7"
+  },
+  {
+    "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlProtocolTest.kt",
+    "snapshot": "android-atomic-hot-apply/resources/after/ControlProtocolTest.kt",
+    "sha256": "424c5628f8bf453f28dbe44813a36d7f4cc0407c70030b99ee0f6381d09e74ce"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs",
+    "sha256": "3e8eab96f4a88033481e3d4f5758d9552e94b19412ddbe0d375925785c5c8701"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs",
+    "sha256": "c549d494b788f7ad56881f93870b477904ef820782eca0b171c35a4a037230bf"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+    "sha256": "bdc9ab3445734dee9e64ce78596dc67c966225bbc5fc532bae1babc0261a855b"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs",
+    "sha256": "931e5f22776f01b0f11f4fd7c6b7835ee30497aaf753feeabf0e3e2bb7b021a5"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs",
+    "sha256": "6872ed58f67d25893b2ded9231548bfc7836c6acdd07b7b9cf8368f343e54ea9"
+  },
+  {
+    "source": "src-tauri/crates/application/src/android.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/application/src/android.rs",
+    "sha256": "ed6b51abc5b4e768329cdd7d198413a80618608004a48f046f35db4cfa2e5593"
+  },
+  {
+    "source": "src-tauri/crates/application/src/android/tests.rs",
+    "snapshot": "desktop/resources/after/src-tauri/crates/application/src/android/tests.rs",
+    "sha256": "ba530d1fad992c640f98a382e00a8627ed005aa89fffa8af329c410059a19d94"
+  },
+  {
+    "source": "android-companion/README.md",
+    "snapshot": "post-review-docs/resources/android-companion-README.md",
+    "sha256": "1dc32db41f9eba8d65e4a32d3be46d30740b6d83f41b0cffc15627f3d65f916d"
+  },
+  {
+    "source": "docs/requirements.md",
+    "snapshot": "desktop/resources/after/docs/requirements.md",
+    "sha256": "34aea9dd0d196f556594cd5f689d7d7dded8eb2d1b7be5612b2cf1b54e987aad"
+  },
+  {
+    "source": "docs/architecture/android-vpn-transparent-routing.md",
+    "snapshot": "desktop/resources/after/docs/architecture/android-vpn-transparent-routing.md",
+    "sha256": "07709460387cef2aec7c2798de9d6fe9470e6e578202600feb765b8239481b4f"
+  },
+  {
+    "source": "docs/user-operation-guide.md",
+    "snapshot": "desktop/resources/after/docs/user-operation-guide.md",
+    "sha256": "91722e08b75d12ff371f47d8e512be1865aa3690bf4c28161c272ac3375c1b8b"
+  }
+]

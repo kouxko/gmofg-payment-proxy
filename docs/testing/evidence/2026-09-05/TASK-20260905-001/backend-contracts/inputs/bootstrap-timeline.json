@@ -1,0 +1,12 @@
+{
+  "initial_event_cursor": 0,
+  "sequence": [
+    "start app_bootstrap",
+    "block CaptureRepositoryPort.query",
+    "publish ResourceWarning event_id=1",
+    "release CaptureRepositoryPort.query",
+    "complete remaining snapshot reads",
+    "subscribe using bootstrap.event_cursor"
+  ]
+}
+

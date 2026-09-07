@@ -1,0 +1,11 @@
+{
+  "passed": 1634,
+  "failed": 3,
+  "ignored": 0,
+  "test_targets": 45,
+  "failed_test_lines": [
+    "test mcp::tests::g036_behavior_contract::limits::production_bind_is_reachable_on_current_platform_interfaces_without_false_availability ... FAILED",
+    "test adapters::listener_runtime::tests::phase10_http_pipeline_tests::http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding ... FAILED",
+    "test adapters::listener_runtime::tests::phase10_http_pipeline_tests::plain_json_rules::plain_http_document_rule_rejects_invalid_json_without_fallback ... FAILED"
+  ]
+}

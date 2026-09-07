@@ -1,0 +1,40 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "rule-compilation",
+  "executed_at_start": "2026-09-05 23:47:39 +08:00",
+  "executed_at_end": "2026-09-05 23:53:25 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "environment": {
+    "os": "Darwin 27.0.0 arm64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)"
+  },
+  "input": "Existing HTTP and Socket per-direction rule definitions, optional Document Schema, and protocol-specific filtering/binding decisions.",
+  "expected": "One shared function validates condition/action Schema compatibility and constructs RuleProgramEntry while every HTTP/Socket selection, binding, error, ordering, and schema-free contract remains unchanged.",
+  "actual": "The repeated validation and entry construction were replaced by compile_rule_entry. Baseline and post-refactor schema-free tests passed 2/2; Socket replacement and HTTP hot-replacement tests passed 1/1 each; the full Infrastructure library passed 475/475; Clippy passed with warnings denied.",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure absent_ -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure adapters::listener_runtime::external_relay::contract::tests::replace_document_rules_installs_new_rules_for_the_running_snapshot -- --exact --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::schema_free_http_hot_replace_keeps_root_rule_program -- --exact --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib -- -D warnings"
+  ],
+  "evidence": [
+    "README.md",
+    "outputs/baseline.log",
+    "outputs/green-focused.log",
+    "outputs/green-full.log",
+    "outputs/clippy.log"
+  ],
+  "not_applicable": {
+    "resources": "existing typed Rust tests construct all inputs; no external fixture",
+    "network_tls_frames": "rule-program compilation refactor has no transport I/O",
+    "ui_screenshots_device": "no UI or device behavior changed"
+  },
+  "not_run": {
+    "ci_commit_push_publish": "outside the assigned slice"
+  },
+  "derived_from": null
+}
+

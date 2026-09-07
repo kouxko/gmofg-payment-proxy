@@ -1,0 +1,7 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.PackageInventoryTest" tests="1" skipped="0" failures="0" errors="0" timestamp="2026-09-05T09:29:18.626Z" hostname="KQR.local" time="0.001">
+  <properties/>
+  <testcase name="快照只保存包名与 UID" classname="com.interceptproxy.vpn.PackageInventoryTest" time="0.001"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

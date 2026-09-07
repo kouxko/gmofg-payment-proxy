@@ -1,0 +1,23 @@
+[
+  {
+    "path": "src/features/android-network/android-network-view.test.tsx",
+    "change": "modified"
+  },
+  {
+    "path": "src/features/android-network/android-network-view.network-intent.test.tsx",
+    "change": "modified"
+  },
+  {
+    "path": "src/features/android-network/android-network-view.test-fixtures.ts",
+    "change": "removed",
+    "replacement": "src/features/android-network/android-network-view.test-support.ts"
+  },
+  {
+    "path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+    "change": "modified"
+  },
+  {
+    "path": "src/features/android-network/android-network-view.test-support.ts",
+    "change": "added"
+  }
+]

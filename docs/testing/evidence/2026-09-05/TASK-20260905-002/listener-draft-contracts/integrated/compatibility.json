@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "comparison_base": "HEAD c7a70d3e",
+  "legacy_command_count": 111,
+  "added_commands": [
+    "listenerDraftCopy",
+    "listenerDraftTransition",
+    "listenerDraftValidate"
+  ],
+  "removed_commands": [],
+  "changed_existing_command_declarations": [],
+  "protected_paths_unchanged": [
+    "src-tauri/crates/domain",
+    "src/features/shared/protocol-safe-display.tsx",
+    "src/features/shared/protocol-safe-display.test.tsx",
+    "src-tauri/crates/package-runtime",
+    "src-tauri/crates/infrastructure/src/sqlite"
+  ],
+  "method": "exact generated command declaration comparison plus targeted git diff; no claim that unmodified runtime was re-executed"
+}

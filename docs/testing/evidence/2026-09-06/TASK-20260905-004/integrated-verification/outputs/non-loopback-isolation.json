@@ -1,0 +1,10 @@
+{
+  "purpose": "isolate MCP failure from bare current-interface TCP reachability",
+  "route_selected_ipv4": "172.20.10.2",
+  "listener": [
+    "0.0.0.0",
+    52887
+  ],
+  "timeout_seconds": 2,
+  "result": "TCP_CONNECTED"
+}

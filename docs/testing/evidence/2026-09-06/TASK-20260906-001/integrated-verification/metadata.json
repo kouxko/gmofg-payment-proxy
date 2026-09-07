@@ -1,0 +1,297 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260906-001",
+  "case_id": "integrated-verification",
+  "result": "CHECKS_PASS_IMPLEMENTED_SUBSET_APPROVED_READ_CHUNK_CAP_PENDING",
+  "recorded_at": "2026-09-06T15:19:32.416482+08:00",
+  "execution_date": "2026-09-06",
+  "executions": [
+    {
+      "command": [
+        "cargo",
+        "test",
+        "--offline",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--workspace",
+        "--all-targets",
+        "--all-features"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:08:58.268382+08:00",
+      "completed_at": "2026-09-06T15:13:26.315742+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "test",
+        "--reporter=dot"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:08:58.268133+08:00",
+      "completed_at": "2026-09-06T15:10:25.237922+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "typecheck"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:10:25.241861+08:00",
+      "completed_at": "2026-09-06T15:10:33.373343+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "lint",
+        "--max-warnings",
+        "0"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:10:33.377710+08:00",
+      "completed_at": "2026-09-06T15:10:55.458704+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:13:26.317055+08:00",
+      "completed_at": "2026-09-06T15:13:27.410912+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "cargo",
+        "clippy",
+        "--offline",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--workspace",
+        "--all-targets",
+        "--all-features",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:13:27.411689+08:00",
+      "completed_at": "2026-09-06T15:13:53.500609+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "scan:architecture"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:10:55.460542+08:00",
+      "completed_at": "2026-09-06T15:11:00.174130+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "scan:source-size"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:11:00.174948+08:00",
+      "completed_at": "2026-09-06T15:11:00.654857+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "build"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:11:00.655468+08:00",
+      "completed_at": "2026-09-06T15:11:34.206294+08:00",
+      "exit_code": 0
+    },
+    {
+      "command": [
+        "deno",
+        "task",
+        "scan:architecture-docs"
+      ],
+      "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+      "started_at": "2026-09-06T15:11:34.207628+08:00",
+      "completed_at": "2026-09-06T15:11:34.315058+08:00",
+      "exit_code": 0
+    }
+  ],
+  "commands": [
+    [
+      "cargo",
+      "test",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    [
+      "deno",
+      "task",
+      "test",
+      "--reporter=dot"
+    ],
+    [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    [
+      "deno",
+      "task",
+      "lint",
+      "--max-warnings",
+      "0"
+    ],
+    [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    [
+      "cargo",
+      "clippy",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    [
+      "deno",
+      "task",
+      "build"
+    ],
+    [
+      "deno",
+      "task",
+      "scan:architecture-docs"
+    ]
+  ],
+  "counts": {
+    "rust": {
+      "groups": 45,
+      "passed": 1647,
+      "failed": 0,
+      "ignored": 0
+    },
+    "frontend": {
+      "files": 73,
+      "passed": 550
+    },
+    "checks": {
+      "source-size": 0,
+      "clippy": 0,
+      "architecture-docs": 0,
+      "rust-tests": 0,
+      "lint": 0,
+      "architecture": 0,
+      "frontend-tests": 0,
+      "typecheck": 0,
+      "diff-check": 0,
+      "rust-fmt": 0,
+      "build": 0
+    }
+  },
+  "source": {
+    "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+    "snapshot": "resources/source-snapshot.zip",
+    "inventory": "resources/source-inventory.json",
+    "stability": "outputs/validation/review-fixes/source-stability.json",
+    "comparison": "outputs/validation/review-fixes/snapshot-comparison.json",
+    "changed_during_tests": false,
+    "additional_documentation_inputs": "resources/documentation-gate-inputs.zip",
+    "documentation_inventory": "resources/documentation-gate-inventory.json"
+  },
+  "environment": {
+    "os": "macOS 27.0",
+    "architecture": "arm64",
+    "rustc": "1.98.0",
+    "cargo": "1.98.0",
+    "deno": "2.9.6",
+    "typescript": "6.0.3",
+    "details": "resources/environment.txt",
+    "prerequisites": [
+      "Existing Cargo cache for --offline; pinned src-tauri/Cargo.lock",
+      "Deno dependencies from deno.lock/package.json; deno install --frozen-lockfile when rebuilding an isolated snapshot",
+      "macOS Xcode command line SDK and Tauri/system build dependencies as in repository documentation"
+    ]
+  },
+  "derived_from": {
+    "task_id": "TASK-20260905-004",
+    "case_id": "final-verification",
+    "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260905-004/final-verification"
+  },
+  "not_run": {
+    "android_device": "No Android device/TUN or real LAN switching validation",
+    "native_app": "No installed App UI acceptance; component interaction and frontend build only",
+    "cross_platform": "No Windows/Android target build or long-duration stress",
+    "external_business": "No real external service/business endpoint",
+    "remote_ci": "Not requested; not triggered"
+  },
+  "limits": [
+    "Socket read_chunk_bytes absolute maximum awaits user numeric decision; whole task not complete",
+    "Engineering score is judgment, not formal proof of 100 percent correctness or code coverage"
+  ],
+  "replay_notes": [
+    "Replay validates exact archive files before execution and writes new logs to a fresh temporary directory",
+    "Original git diff --check PASS is archived separately; it requires the original Git worktree and is not included in extracted-source replay",
+    "Historical tests retain their own resources/outputs; only review-fixes identifies the final tested implementation"
+  ],
+  "review": {
+    "code": "APPROVE",
+    "architecture": "CLEAR",
+    "new_findings": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0
+    },
+    "whole_task": "BLOCK: user numeric read chunk cap decision remains",
+    "reports": [
+      "outputs/reviews/code-followup-approve.md",
+      "outputs/reviews/architecture-followup-clear.md"
+    ]
+  },
+  "documentation_replay": "outputs/documentation-archive-replay.json"
+}

@@ -1,0 +1,7 @@
+[
+  "src-tauri/crates/exchange/src/exchange.rs",
+  "src-tauri/crates/exchange/src/observation.rs",
+  "src-tauri/crates/exchange/src/tests/exchange.rs",
+  "src-tauri/crates/exchange/src/observation/tests.rs",
+  "src-tauri/crates/proxy/src/socket_relay/tests/scripted_relay.rs"
+]

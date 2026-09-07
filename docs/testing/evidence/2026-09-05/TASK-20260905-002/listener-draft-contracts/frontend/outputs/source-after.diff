@@ -1,0 +1,3603 @@
+diff --git a/src/features/listeners/downstream-tls-card.tsx b/src/features/listeners/downstream-tls-card.tsx
+index 5a6281f0..58ef813d 100644
+--- a/src/features/listeners/downstream-tls-card.tsx
++++ b/src/features/listeners/downstream-tls-card.tsx
+@@ -4,7 +4,7 @@ import { Button, Card, Input, Label, ListBox, Select, Switch } from "@heroui/rea
+ import type {
+   CertificateItemViewModel,
+   CertificateReference,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
+   ListenerCertificateDetailViewModel,
+ } from "@/generated/rust-types";
+ import {
+@@ -13,12 +13,12 @@ import {
+ } from "./fixed-server-tls-fields";
+ 
+ type Props = {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   certificateReferences: CertificateReference[];
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   installationRoot?: CertificateItemViewModel;
+   busy: boolean;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+   onOpenIdentityImport: () => void;
+   onOpenTrustImport: () => void;
+ };
+@@ -58,7 +58,7 @@ export function DownstreamTlsCard({
+     : findReference(trusts, authentication.trust);
+ 
+   function changeAuthentication(mode: string) {
+-    const trust = trusts[0]?.id ?? "";
++    const trust = trusts[0]?.id ?? null;
+     onChange({
+       downstream_tls: {
+         ...tls,
+@@ -178,8 +178,8 @@ export function DownstreamTlsCard({
+                         downstream_tls: {
+                           ...tls,
+                           client_authentication: authentication.mode === "required"
+-                            ? { mode: "required", trust: trust ?? "" }
+-                            : { mode: "optional", trust: trust ?? "" },
++                            ? { mode: "required", trust }
++                            : { mode: "optional", trust },
+                         },
+                       })}
+                     />
+diff --git a/src/features/listeners/fixed-server-tls-settings.tsx b/src/features/listeners/fixed-server-tls-settings.tsx
+index 72b07877..97101da4 100644
+--- a/src/features/listeners/fixed-server-tls-settings.tsx
++++ b/src/features/listeners/fixed-server-tls-settings.tsx
+@@ -11,7 +11,7 @@ import { useState } from "react";
+ import type {
+   CertificateItemViewModel,
+   CertificateReference,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
+   ListenerCertificateDetailViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+ } from "@/generated/rust-types";
+@@ -24,15 +24,16 @@ import {
+ import { UpstreamTlsCard } from "./upstream-tls-card";
+ 
+ type Props = {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   certificateReferences: CertificateReference[];
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   installationRoot?: CertificateItemViewModel;
+   busy: boolean;
++  testBlocked: boolean;
+   testing: boolean;
+   testResult?: ListenerUpstreamConnectionTestViewModel;
+   testError?: string;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
+   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
+   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
+@@ -106,6 +107,7 @@ export function FixedServerTlsSettings(props: Props) {
+         certificateReferences={props.certificateReferences}
+         certificateDetails={props.certificateDetails}
+         busy={props.busy}
++        testBlocked={props.testBlocked}
+         testing={props.testing}
+         testResult={props.testResult}
+         testError={props.testError}
+diff --git a/src/features/listeners/http-protocol-processing-card.tsx b/src/features/listeners/http-protocol-processing-card.tsx
+index a2c4d86b..19cbda2f 100644
+--- a/src/features/listeners/http-protocol-processing-card.tsx
++++ b/src/features/listeners/http-protocol-processing-card.tsx
+@@ -5,7 +5,7 @@ import { useState, type Key } from "react";
+ import type {
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerProtocolPackageOptionViewModel,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
+ } from "@/generated/rust-types";
+ import {
+   exactPackageKey,
+@@ -22,10 +22,10 @@ interface ProtocolCatalogState {
+ const PLAIN_KEY = "__plain_body__";
+ 
+ export function HttpProtocolProcessingCard({ settings, catalog, locked, onChange }: {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   catalog: ProtocolCatalogState;
+   locked: boolean;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+ }) {
+   const [announcement, setAnnouncement] = useState("");
+   const body = settings.body_processing;
+diff --git a/src/features/listeners/listener-data-plane.ts b/src/features/listeners/listener-data-plane.ts
+index aeed5fbd..13528433 100644
+--- a/src/features/listeners/listener-data-plane.ts
++++ b/src/features/listeners/listener-data-plane.ts
+@@ -1,109 +1,45 @@
+ import type {
+-  HttpListenerSettings,
+   FixedServerSettings,
+-  ListenerDataPlane,
+-  ProxyListener,
+-  SocketDownstreamTlsSettings,
+-  SocketRelaySecurity,
+-  SocketRelaySettings,
+-  SocketRuntimeLimits,
++  HttpListenerDraftSettings,
++  ListenerDraft,
++  SocketDownstreamTlsDraftSettings,
++  SocketRelayDraftSettings,
++  SocketRelaySecurityDraft,
+   SocketUpstreamTlsSettings,
+ } from "@/generated/rust-types";
+ 
+-export function defaultHttpDataPlane(): ListenerDataPlane {
+-  return {
+-    kind: "http",
+-    settings: {
+-      authentication: { mode: "none" },
+-      mitm: {
+-        enabled: false,
+-        authority_allowlist: [],
+-        root_ca: null,
+-        maximum_cached_leaf_certificates: 256,
+-      },
+-      downstream_tls: {
+-        enabled: false,
+-        server_identity: null,
+-        dynamic_sni_allowlist: [],
+-        client_authentication: { mode: "disabled" },
+-      },
+-      request_body_codec: "auto",
+-      response_body_codec: "auto",
+-      body_processing: { mode: "plain" },
+-      topology: { mode: "remote_server", settings: { fixed_server: null } },
+-    },
+-  };
+-}
+-
+ export function httpFixedServer(
+-  settings: HttpListenerSettings,
++  settings: HttpListenerDraftSettings,
+ ): FixedServerSettings | null {
+   return settings.topology.mode === "remote_server"
+     ? settings.topology.settings.fixed_server
+     : null;
+ }
+ 
+-export function defaultSocketDataPlane(): ListenerDataPlane {
+-  return {
+-    kind: "socket",
+-    settings: {
+-      topology: {
+-        mode: "relay",
+-        settings: {
+-          upstream: { host: "", port: 0 },
+-          security: { mode: "transparent" },
+-        },
+-      },
+-      maximum_connections: 500,
+-      runtime_limits: defaultSocketRuntimeLimits(),
+-      processing: { mode: "direct" },
+-    },
+-  };
+-}
+-
+-/** 与 Rust `SocketRuntimeLimits::default()` 完全一致的显式运行时资源配置。 */
+-export function defaultSocketRuntimeLimits(): SocketRuntimeLimits {
+-  return {
+-    read_chunk_bytes: 16 * 1024,
+-    diagnostic_event_capacity: 256,
+-    diagnostic_memory_bytes: 1024 * 1024,
+-  };
+-}
+-
+-export function changeDataPlaneKind(
+-  listener: ProxyListener,
+-  kind: ListenerDataPlane["kind"],
+-): Partial<ProxyListener> {
+-  if (listener.data_plane.kind === kind) return {};
+-  return {
+-    data_plane: kind === "http" ? defaultHttpDataPlane() : defaultSocketDataPlane(),
+-  };
+-}
+-
+ export function changeHttpSettings(
+-  settings: HttpListenerSettings,
+-  changes: Partial<HttpListenerSettings>,
+-): Partial<ProxyListener> {
++  settings: HttpListenerDraftSettings,
++  changes: Partial<HttpListenerDraftSettings>,
++): Partial<ListenerDraft> {
+   return { data_plane: { kind: "http", settings: { ...settings, ...changes } } };
+ }
+ 
+ export function changeSocketSettings(
+-  settings: SocketRelaySettings,
+-  changes: Partial<SocketRelaySettings>,
+-): Partial<ProxyListener> {
++  settings: SocketRelayDraftSettings,
++  changes: Partial<SocketRelayDraftSettings>,
++): Partial<ListenerDraft> {
+   return { data_plane: { kind: "socket", settings: { ...settings, ...changes } } };
+ }
+ 
+ export function socketDownstreamTls(
+-  security: SocketRelaySecurity,
+-): SocketDownstreamTlsSettings | undefined {
++  security: SocketRelaySecurityDraft,
++): SocketDownstreamTlsDraftSettings | undefined {
+   return security.mode === "tls_to_tcp" || security.mode === "tls_to_tls"
+     ? security.downstream_tls
+     : undefined;
+ }
+ 
+ export function socketUpstreamTls(
+-  security: SocketRelaySecurity,
++  security: SocketRelaySecurityDraft,
+ ): SocketUpstreamTlsSettings | undefined {
+   return security.mode === "tcp_to_tls" || security.mode === "tls_to_tls"
+     ? security.upstream_tls
+diff --git a/src/features/listeners/listener-editor.socket.test.tsx b/src/features/listeners/listener-editor.socket.test.tsx
+index 5fee81b3..3a3a08d9 100644
+--- a/src/features/listeners/listener-editor.socket.test.tsx
++++ b/src/features/listeners/listener-editor.socket.test.tsx
+@@ -6,8 +6,7 @@ import userEvent from "@testing-library/user-event";
+ import type { ComponentProps } from "react";
+ import { describe, expect, it, vi } from "vitest";
+ import { ListenerEditor } from "./listener-editor";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
+-import type { ProxyListener } from "@/generated/rust-types";
++import type { ListenerDraft } from "@/generated/rust-types";
+ import {
+   dynamicListener,
+   localResponderListener,
+@@ -15,7 +14,7 @@ import {
+ } from "./listeners-view.test-support";
+ 
+ function props(
+-  listener: ProxyListener = socketListener(),
++  listener: ListenerDraft = socketListener(),
+   overrides: Partial<ComponentProps<typeof ListenerEditor>> = {},
+ ): ComponentProps<typeof ListenerEditor> {
+   return {
+@@ -29,6 +28,7 @@ function props(
+     onBasicUsernameChange: vi.fn(),
+     onBasicPasswordChange: vi.fn(),
+     onChange: vi.fn(),
++    onTransition: vi.fn(),
+     onStoreBasicCredential: vi.fn().mockResolvedValue(undefined),
+     onImportDownstreamServerIdentity: vi.fn().mockResolvedValue(true),
+     onImportDownstreamClientTrust: vi.fn().mockResolvedValue(true),
+@@ -49,22 +49,9 @@ describe("Socket listener editor", () => {
+     await user.click(screen.getByRole("button", { name: /监听数据平面/ }));
+     await user.click(await screen.findByRole("option", { name: "Socket 转发" }));
+ 
+-    expect(editor.onChange).toHaveBeenLastCalledWith({
+-      data_plane: {
+-        kind: "socket",
+-        settings: {
+-          topology: {
+-            mode: "relay",
+-            settings: {
+-              upstream: { host: "", port: 0 },
+-              security: { mode: "transparent" },
+-            },
+-          },
+-          maximum_connections: 500,
+-          runtime_limits: defaultSocketRuntimeLimits(),
+-          processing: { mode: "direct" },
+-        },
+-      },
++    expect(editor.onTransition).toHaveBeenLastCalledWith({
++      type: "data_plane",
++      kind: "socket",
+     });
+   });
+ 
+@@ -114,7 +101,7 @@ describe("Socket listener editor", () => {
+       if (security.mode !== "tls_to_tcp" && security.mode !== "tls_to_tls") {
+         throw new Error("downstream TLS fixture expected");
+       }
+-      const withMtls: ProxyListener = {
++      const withMtls: ListenerDraft = {
+         ...listener,
+         data_plane: {
+           kind: "socket",
+@@ -176,7 +163,7 @@ describe("Socket listener editor", () => {
+   });
+ 
+   it("LocalResponder 安全渲染且不挂载任何 Server 上游控件", () => {
+-    const editor = props(localResponderListener() as ProxyListener);
++    const editor = props(localResponderListener());
+     render(<ListenerEditor {...editor} />);
+ 
+     expect(screen.getByText("2. App 接入安全")).toBeVisible();
+diff --git a/src/features/listeners/listener-editor.test.tsx b/src/features/listeners/listener-editor.test.tsx
+index e840b93e..27e3cb2d 100644
+--- a/src/features/listeners/listener-editor.test.tsx
++++ b/src/features/listeners/listener-editor.test.tsx
+@@ -23,6 +23,7 @@ function editorProps(
+     onBasicUsernameChange: vi.fn(),
+     onBasicPasswordChange: vi.fn(),
+     onChange: vi.fn(),
++    onTransition: vi.fn(),
+     onStoreBasicCredential: vi.fn().mockResolvedValue(undefined),
+     onImportDownstreamServerIdentity: vi.fn().mockResolvedValue(true),
+     onImportDownstreamClientTrust: vi.fn().mockResolvedValue(true),
+@@ -237,6 +238,19 @@ describe("ListenerEditor", () => {
+     expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeEnabled();
+   });
+ 
++  it("数据平面转换在途时只禁用旧平面控件并保留公共编辑与快速切换", () => {
++    const props = editorProps({
++      listener: fixedListener("fixed-1", "固定 Server", 9443, "https://server.test:443"),
++      dataPlanePending: true,
++    });
++    render(<ListenerEditor {...props} />);
++
++    expect(screen.getByLabelText("监听数据平面")).toBeEnabled();
++    expect(screen.getByRole("textbox", { name: "代理监听名称" })).toBeEnabled();
++    expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toBeDisabled();
++    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
++  });
++
+   it("pending 状态禁用所有异步凭据和 TLS 操作", () => {
+     const listener: ProxyListener = fixedListener(
+       "fixed-1",
+diff --git a/src/features/listeners/listener-editor.tsx b/src/features/listeners/listener-editor.tsx
+index af848b69..c38b93a5 100644
+--- a/src/features/listeners/listener-editor.tsx
++++ b/src/features/listeners/listener-editor.tsx
+@@ -5,16 +5,17 @@ import type { ReactNode } from "react";
+ import type {
+   CertificateItemViewModel,
+   CertificateReference,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
+   ListenerCertificateDetailViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+-  ProxyListener,
++  ListenerDraft,
++  ListenerDraftTransition,
++  ProtocolPackageRef,
+ } from "@/generated/rust-types";
+ import { BodyCodecSettings } from "./body-codec-settings";
+ import { FixedServerTlsSettings } from "./fixed-server-tls-settings";
+ import { HttpProtocolProcessingCard } from "./http-protocol-processing-card";
+ import {
+-  changeDataPlaneKind,
+   changeHttpSettings,
+   changeSocketSettings,
+ } from "./listener-data-plane";
+@@ -29,7 +30,7 @@ const timeoutFields = [
+ ] as const;
+ 
+ type Props = {
+-  listener: ProxyListener;
++  listener: ListenerDraft;
+   protocolCatalog?: ProtocolCatalogState;
+   locked?: boolean;
+   fieldErrors?: Record<string, string[]>;
+@@ -37,13 +38,20 @@ type Props = {
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   installationRoot?: CertificateItemViewModel;
+   pending?: string;
++  transitionPending?: boolean;
++  dataPlanePending?: boolean;
++  serverControlsBlocked?: boolean;
+   tlsTest?: ListenerUpstreamConnectionTestViewModel;
+   tlsTestError?: string;
+   basicUsername: string;
+   basicPassword: string;
+   onBasicUsernameChange: (value: string) => void;
+   onBasicPasswordChange: (value: string) => void;
+-  onChange: (changes: Partial<ProxyListener>) => void;
++  onChange: (changes: Partial<ListenerDraft>) => void;
++  onTransition: (
++    transition: ListenerDraftTransition,
++    recommendedPackage?: ProtocolPackageRef | null,
++  ) => void;
+   onStoreBasicCredential: () => Promise<void>;
+   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
+   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
+@@ -61,7 +69,7 @@ export function ListenerEditor(props: Props): ReactNode {
+   };
+   const http = listener.data_plane.kind === "http" ? listener.data_plane.settings : undefined;
+   const socket = listener.data_plane.kind === "socket" ? listener.data_plane.settings : undefined;
+-  const changeHttp = (changes: Partial<HttpListenerSettings>) => {
++  const changeHttp = (changes: Partial<HttpListenerDraftSettings>) => {
+     if (http) props.onChange(changeHttpSettings(http, changes));
+   };
+ 
+@@ -75,7 +83,7 @@ export function ListenerEditor(props: Props): ReactNode {
+           selectedKey={listener.data_plane.kind}
+           onSelectionChange={(key) => {
+             if (key === "http" || key === "socket") {
+-              props.onChange(changeDataPlaneKind(listener, key));
++              props.onTransition({ type: "data_plane", kind: key });
+             }
+           }}
+         >
+@@ -86,7 +94,7 @@ export function ListenerEditor(props: Props): ReactNode {
+             <ListBox.Item id="socket" textValue="Socket 转发">Socket 转发</ListBox.Item>
+           </ListBox></Select.Popover>
+         </Select>
+-        {http && <fieldset disabled={locked} className="contents">
++        {http && <fieldset disabled={locked || props.dataPlanePending} className="contents">
+           <HttpSettings
+             {...props}
+             settings={http}
+@@ -100,13 +108,16 @@ export function ListenerEditor(props: Props): ReactNode {
+             certificateReferences={props.certificateReferences}
+             certificateDetails={props.certificateDetails}
+             protocolCatalog={protocolCatalog}
+-            locked={locked}
++            locked={locked || Boolean(props.dataPlanePending)}
+             fieldErrors={props.fieldErrors}
+             busy={Boolean(props.pending)}
++            transitionPending={Boolean(props.transitionPending)}
++            serverControlsBlocked={Boolean(props.serverControlsBlocked)}
+             testing={props.pending === "tls-test"}
+             testResult={props.tlsTest}
+             testError={props.tlsTestError}
+             onChange={(changes) => props.onChange(changeSocketSettings(socket, changes))}
++            onTransition={props.onTransition}
+             onImportDownstreamServerIdentity={props.onImportDownstreamServerIdentity}
+             onImportDownstreamClientTrust={props.onImportDownstreamClientTrust}
+             onImportClientIdentity={props.onImportClientIdentity}
+@@ -167,16 +178,20 @@ function CommonFields({ listener, locked = false, onChange }: Pick<Props, "liste
+ }
+ 
+ function HttpSettings(props: Props & {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   protocolCatalog: ProtocolCatalogState;
+-  onSettingsChange: (changes: Partial<HttpListenerSettings>) => void;
++  onSettingsChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+ }): ReactNode {
+   const { settings, onSettingsChange } = props;
+   const credential = settings.authentication.mode === "basic"
+     ? settings.authentication.credential
+     : undefined;
+   return <>
+-    <RequestRoutingCard settings={settings} onChange={onSettingsChange} />
++    <RequestRoutingCard
++      settings={settings}
++      onChange={onSettingsChange}
++      onTransition={props.onTransition}
++    />
+     <HttpAuthentication
+       settings={settings}
+       pending={props.pending}
+@@ -207,6 +222,7 @@ function HttpSettings(props: Props & {
+       certificateDetails={props.certificateDetails}
+       installationRoot={props.installationRoot}
+       busy={Boolean(props.pending)}
++      testBlocked={Boolean(props.transitionPending)}
+       testing={props.pending === "tls-test"}
+       testResult={props.tlsTest}
+       testError={props.tlsTestError}
+@@ -232,7 +248,7 @@ function HttpAuthentication({
+   onChange,
+   onStore,
+ }: {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   pending?: string;
+   username: string;
+   password: string;
+@@ -240,7 +256,7 @@ function HttpAuthentication({
+   credentialProvider?: string;
+   onUsernameChange: (value: string) => void;
+   onPasswordChange: (value: string) => void;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+   onStore: () => Promise<void>;
+ }): ReactNode {
+   return <div className={[
+@@ -298,8 +314,8 @@ function HttpAuthentication({
+ }
+ 
+ function MitmSwitch({ settings, onChange }: {
+-  settings: HttpListenerSettings;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  settings: HttpListenerDraftSettings;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+ }): ReactNode {
+   return <Switch isSelected={settings.mitm.enabled} onChange={(enabled) => onChange({
+     mitm: { ...settings.mitm, enabled },
+@@ -310,8 +326,8 @@ function MitmSwitch({ settings, onChange }: {
+ }
+ 
+ function MitmFields({ settings, onChange }: {
+-  settings: HttpListenerSettings;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  settings: HttpListenerDraftSettings;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+ }): ReactNode {
+   return <>
+     <div className="col-span-2 grid gap-1 max-[700px]:col-span-1">
+diff --git a/src/features/listeners/listener-list-panel.tsx b/src/features/listeners/listener-list-panel.tsx
+index 2b91ec50..19a51c87 100644
+--- a/src/features/listeners/listener-list-panel.tsx
++++ b/src/features/listeners/listener-list-panel.tsx
+@@ -1,5 +1,5 @@
+ import { Alert, Button, Spinner, Table } from "@heroui/react";
+-import type { ProxyListener } from "@/generated/rust-types";
++import type { ListenerDraft } from "@/generated/rust-types";
+ 
+ export function ListenerListPanel({
+   listeners,
+@@ -11,7 +11,7 @@ export function ListenerListPanel({
+   onSelect,
+   onNavigate,
+ }: {
+-  listeners: ProxyListener[];
++  listeners: ListenerDraft[];
+   selectedIndex: number;
+   loading: boolean;
+   error?: string;
+@@ -48,7 +48,7 @@ export function ListenerListPanel({
+ }
+ 
+ function ListenerTable({ listeners, selectedIndex, onSelect }: {
+-  listeners: ProxyListener[];
++  listeners: ListenerDraft[];
+   selectedIndex: number;
+   onSelect: (index: number) => void;
+ }) {
+@@ -67,7 +67,7 @@ function ListenerTable({ listeners, selectedIndex, onSelect }: {
+   </Table.Content></Table.ScrollContainer></Table>;
+ }
+ 
+-function listenerDestination(listener: ProxyListener) {
++function listenerDestination(listener: ListenerDraft) {
+   if (listener.data_plane.kind === "socket") {
+     const topology = listener.data_plane.settings.topology;
+     if (topology.mode === "local_responder") return "本地应答";
+diff --git a/src/features/listeners/listener-runtime-card.tsx b/src/features/listeners/listener-runtime-card.tsx
+index cb1e02e8..099e5a90 100644
+--- a/src/features/listeners/listener-runtime-card.tsx
++++ b/src/features/listeners/listener-runtime-card.tsx
+@@ -6,11 +6,12 @@ export type ListenerPending = "validate" | "save" | "delete" | "start" | "stop"
+   | "import-downstream-identity" | "import-downstream-trust"
+   | "import-upstream-identity" | "import-upstream-trust";
+ 
+-export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggle, onRetry }: {
++export function ListenerRuntimeCard({ status, isLoading, error, pending, startBlocked, onToggle, onRetry }: {
+   status?: ListenerMonitorRowViewModel;
+   isLoading: boolean;
+   error?: string;
+   pending?: ListenerPending;
++  startBlocked?: boolean;
+   onToggle: () => Promise<void>;
+   onRetry: () => Promise<void>;
+ }) {
+@@ -34,7 +35,7 @@ export function ListenerRuntimeCard({ status, isLoading, error, pending, onToggl
+     <div className="flex items-center gap-2">
+       {error && <Button size="sm" variant="outline" onPress={() => void onRetry()}>重试状态查询</Button>}
+       <Button variant={operation === "stop" ? "danger-soft" : "primary"}
+-        isDisabled={Boolean(pending) || unavailable || !operation} onPress={() => void onToggle()}>
++        isDisabled={Boolean(pending) || unavailable || !operation || (operation === "start" && startBlocked)} onPress={() => void onToggle()}>
+         {actionText}
+       </Button>
+     </div>
+diff --git a/src/features/listeners/listener-workspace-draft.ts b/src/features/listeners/listener-workspace-draft.ts
+index 44f2e5be..9eb99063 100644
+--- a/src/features/listeners/listener-workspace-draft.ts
++++ b/src/features/listeners/listener-workspace-draft.ts
+@@ -1,11 +1,91 @@
+ import type {
+   CertificateReference,
++  ListenerDraft,
+   ListenerCertificateDetailViewModel,
+   ProxyListener,
+   ProxyWorkspace,
+ } from "@/generated/rust-types";
+ 
+-export function sameWorkspace(left: ProxyWorkspace, right: ProxyWorkspace) {
++export type ListenerWorkspaceDraft = Omit<ProxyWorkspace, "listeners"> & {
++  listeners: ListenerDraft[];
++};
++
++export function toListenerWorkspaceDraft(workspace: ProxyWorkspace): ListenerWorkspaceDraft {
++  return workspace;
++}
++
++export function sameWorkspace(left: ListenerWorkspaceDraft, right: ProxyWorkspace) {
++  return JSON.stringify(left) === JSON.stringify(right);
++}
++
++/**
++ * Rebase listener-local drafts onto the newest authoritative workspace.
++ * A workspace revision can advance because a different listener changed, so conflicts are
++ * detected from the listener values themselves instead of the aggregate revision.
++ */
++export function reconcileListenerDraft(
++  draft: ListenerWorkspaceDraft,
++  base: ProxyWorkspace,
++  latest: ProxyWorkspace,
++  existingConflictingListenerIds: readonly string[] = [],
++) {
++  const baseById = new Map(base.listeners.map((listener) => [listener.id, listener]));
++  const latestById = new Map(latest.listeners.map((listener) => [listener.id, listener]));
++  const draftIds = new Set(draft.listeners.map((listener) => listener.id));
++  const conflicts = new Set(existingConflictingListenerIds);
++  const listeners = draft.listeners.flatMap((draftListener) => {
++    const baseListener = baseById.get(draftListener.id);
++    const latestListener = latestById.get(draftListener.id);
++    if (!latestListener) {
++      if (!baseListener) return [draftListener];
++      if (!sameListener(draftListener, baseListener)) {
++        conflicts.add(draftListener.id);
++        return [draftListener];
++      }
++      return [];
++    }
++    if (!baseListener) {
++      if (sameListener(draftListener, latestListener)) {
++        conflicts.delete(draftListener.id);
++        return [latestListener];
++      }
++      conflicts.add(latestListener.id);
++      return [draftListener];
++    }
++    const draftChanged = !sameListener(draftListener, baseListener);
++    const authorityChanged = !sameListener(latestListener, baseListener);
++    if (!draftChanged || sameListener(draftListener, latestListener)) {
++      conflicts.delete(draftListener.id);
++      return [latestListener];
++    }
++    if (authorityChanged) conflicts.add(latestListener.id);
++    return [draftListener];
++  });
++
++  for (const latestListener of latest.listeners) {
++    if (!draftIds.has(latestListener.id)) listeners.push(latestListener);
++  }
++
++  const reachableIds = listenerCertificateReferenceIds(listeners);
++  const references = new Map(
++    latest.certificate_references.map((reference) => [reference.id, reference]),
++  );
++  for (const reference of draft.certificate_references) {
++    if (reachableIds.has(reference.id) && !references.has(reference.id)) {
++      references.set(reference.id, reference);
++    }
++  }
++  return {
++    workspace: {
++      ...latest,
++      listeners,
++      certificate_references: [...references.values()],
++    },
++    conflictingListenerIds: [...conflicts],
++  };
++}
++
++function sameListener(left: ListenerDraft | ProxyListener, right: ListenerDraft | ProxyListener) {
+   return JSON.stringify(left) === JSON.stringify(right);
+ }
+ 
+@@ -14,7 +94,7 @@ export function sameWorkspace(left: ProxyWorkspace, right: ProxyWorkspace) {
+  * 用新的 revision、证书引用和当前监听覆盖本地草稿，避免保存 B 时丢失 A 的输入。
+  */
+ export function mergePersistedListener(
+-  draft: ProxyWorkspace,
++  draft: ListenerWorkspaceDraft,
+   persisted: ProxyWorkspace,
+   listenerId: string,
+ ) {
+@@ -31,7 +111,7 @@ export function mergePersistedListener(
+ 
+ /** 保留被删除监听以外的本地草稿与它们尚未保存的托管证书引用。 */
+ export function mergePersistedListenerDeletion(
+-  draft: ProxyWorkspace,
++  draft: ListenerWorkspaceDraft,
+   persisted: ProxyWorkspace,
+   deletedListenerId: string,
+ ) {
+@@ -44,9 +124,9 @@ export function mergePersistedListenerDeletion(
+ }
+ 
+ function mergeReachableCertificateReferences(
+-  draft: ProxyWorkspace,
++  draft: ListenerWorkspaceDraft,
+   persisted: ProxyWorkspace,
+-  listeners: ProxyListener[],
++  listeners: ListenerDraft[],
+ ) {
+   const reachableIds = listenerCertificateReferenceIds(listeners);
+   const references = new Map(
+@@ -76,14 +156,14 @@ export function mergeCertificateDetails(
+ 
+ /** Listener 级命令只携带当前监听实际可达的安全引用。 */
+ export function listenerCertificateReferences(
+-  listener: ProxyListener,
++  listener: ListenerDraft | ProxyListener,
+   references: ProxyWorkspace["certificate_references"],
+ ) {
+   const referencedIds = listenerCertificateReferenceIds([listener]);
+   return references.filter((reference) => referencedIds.has(reference.id));
+ }
+ 
+-function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
++function listenerCertificateReferenceIds(listeners: readonly (ListenerDraft | ProxyListener)[]) {
+   const referencedIds = new Set<string>();
+   for (const listener of listeners) {
+     if (listener.data_plane.kind === "http") {
+@@ -123,7 +203,7 @@ function listenerCertificateReferenceIds(listeners: ProxyListener[]) {
+ 
+ function collectDownstream(
+   serverIdentity: string | null,
+-  authentication: { mode: "disabled" } | { mode: "optional" | "required"; trust: string },
++  authentication: { mode: "disabled" } | { mode: "optional" | "required"; trust: string | null },
+   ids: Set<string>,
+ ) {
+   if (serverIdentity) ids.add(serverIdentity);
+@@ -142,8 +222,8 @@ function collectUpstream(
+  * 导入命令先把证书写入系统安全存储。若草稿不再引用且尚未持久化，则返回待清理引用。
+  */
+ export function pruneDetachedDraftCertificates(
+-  previous: ProxyWorkspace,
+-  next: ProxyWorkspace,
++  previous: ListenerWorkspaceDraft,
++  next: ListenerWorkspaceDraft,
+   persistedReferences: CertificateReference[],
+ ) {
+   const reachableIds = listenerCertificateReferenceIds(next.listeners);
+diff --git a/src/features/listeners/listeners-view.certificate-details.test.tsx b/src/features/listeners/listeners-view.certificate-details.test.tsx
+index a1ee2582..6b5c166b 100644
+--- a/src/features/listeners/listeners-view.certificate-details.test.tsx
++++ b/src/features/listeners/listeners-view.certificate-details.test.tsx
+@@ -294,7 +294,7 @@ describe("统一代理监听编辑器", () => {
+     await user.click(await screen.findByRole("button", { name: "保存当前监听" }));
+ 
+     await waitFor(() => expect(mocks.listenerSave).toHaveBeenCalledTimes(1));
+-    expect(mocks.listenerValidate.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
++    expect(mocks.listenerDraftValidate.mock.calls[0][3].map((item: { id: string }) => item.id)).toEqual([
+       downstreamIdentity.id,
+       upstreamTrust.id,
+     ]);
+diff --git a/src/features/listeners/listeners-view.certificates.test.tsx b/src/features/listeners/listeners-view.certificates.test.tsx
+index 602e6053..cac38391 100644
+--- a/src/features/listeners/listeners-view.certificates.test.tsx
++++ b/src/features/listeners/listeners-view.certificates.test.tsx
+@@ -21,6 +21,30 @@ import { ListenersView } from "./listeners-view";
+ describe("统一代理监听编辑器", () => {
+   beforeEach(setupListenerMocks);
+ 
++  it("结构转换未完成时阻止保存、启动和 TLS 探测", async () => {
++    const fixedWorkspace = {
++      ...workspace,
++      listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
++    };
++    mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
++    mocks.listenerDraftTransition.mockReturnValue(new Promise(() => undefined));
++    const user = userEvent.setup();
++    render(<ListenersView />);
++
++    await user.click(await screen.findByLabelText("HTTP 响应方式"));
++    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
++
++    expect(await screen.findByText("正在切换模式…")).toBeVisible();
++    expect(screen.getByRole("button", { name: "保存当前监听" })).toBeDisabled();
++    expect(screen.getByRole("button", { name: "校验当前监听" })).toBeDisabled();
++    expect(screen.getByRole("button", { name: "启动监听" })).toBeDisabled();
++    expect(screen.getByRole("button", { name: "测试 Server 连接" })).toBeDisabled();
++    expect(mocks.listenerSave).not.toHaveBeenCalled();
++    expect(mocks.listenerDraftValidate).not.toHaveBeenCalled();
++    expect(mocks.listenerStart).not.toHaveBeenCalled();
++    expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
++  });
++
+   it("其他监听运行时仍可使用当前草稿测试固定 Server TLS", async () => {
+     const fixedWorkspace = {
+       ...workspace,
+@@ -33,7 +57,7 @@ describe("统一代理监听编辑器", () => {
+     mocks.listenerOverview.mockReturnValue(
+       ok(listenerOverview([listenerStatus("running-1", "running"), listenerStatus("fixed-1")])),
+     );
+-    mocks.listenerValidate.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
++    mocks.listenerDraftValidate.mockImplementation((_workspaceId, _revision, listener, certificateReferences) => ok({
+       valid: true,
+       normalized: {
+         ...fixedWorkspace,
+@@ -45,7 +69,7 @@ describe("统一代理监听编辑器", () => {
+     const user = userEvent.setup(); render(<ListenersView />);
+     await user.click(await screen.findByText("交易"));
+     await user.click(await screen.findByRole("button", { name: "测试 Server 连接" }));
+-    await waitFor(() => expect(mocks.listenerValidate).toHaveBeenCalledWith(
++    await waitFor(() => expect(mocks.listenerDraftValidate).toHaveBeenCalledWith(
+       fixedWorkspace.id,
+       fixedWorkspace.revision,
+       fixedWorkspace.listeners[1],
+@@ -135,6 +159,9 @@ describe("统一代理监听编辑器", () => {
+       listeners: [fixedListener("fixed-1", "交易", 16627, "https://server.test:443")],
+     };
+     mocks.workspaceGet.mockReturnValue(ok(fixedWorkspace));
++    mocks.listenerDraftTransition.mockReturnValueOnce(ok(
++      dynamicListener("fixed-1", "交易", 16627),
++    ));
+     const user = userEvent.setup();
+     render(<ListenersView />);
+ 
+diff --git a/src/features/listeners/listeners-view.socket-contracts.test.tsx b/src/features/listeners/listeners-view.socket-contracts.test.tsx
+index 72fdee22..48a76447 100644
+--- a/src/features/listeners/listeners-view.socket-contracts.test.tsx
++++ b/src/features/listeners/listeners-view.socket-contracts.test.tsx
+@@ -1,7 +1,7 @@
+ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+-import type { ProxyListener, ProxyWorkspace } from "@/generated/rust-types";
++import type { ListenerDraft, ProxyListener, ProxyWorkspace } from "@/generated/rust-types";
+ import {
+   bootstrap, certificateReference, commandError, listenerOverview, listenerStatus,
+   localResponderListener, mocks, navigationMocks, ok, setupListenerMocks,
+@@ -30,7 +30,7 @@ function deferred<T>() {
+ }
+ 
+ function scriptedSocketWorkspace(): ProxyWorkspace {
+-  const listener: ProxyListener = socketListener("socket-1", "Socket TLS", 9443, "tls_to_tls");
++  const listener: ListenerDraft = socketListener("socket-1", "Socket TLS", 9443, "tls_to_tls");
+   if (listener.data_plane.kind !== "socket") throw new Error("expected Socket fixture");
+   listener.data_plane.settings.processing = {
+     mode: "scripted",
+@@ -48,7 +48,7 @@ function scriptedSocketWorkspace(): ProxyWorkspace {
+   topology.settings.security.upstream_tls.server_trust = "server-ca";
+   return {
+     ...workspace,
+-    listeners: [listener],
++    listeners: [listener as ProxyListener],
+     certificate_references: references,
+     android_network_profiles: [],
+   };
+@@ -164,7 +164,7 @@ describe("Listener Socket integration contracts", () => {
+   it("locks the entire Listener editor while validation is pending", async () => {
+     setupScriptedSocket();
+     const request = deferred<unknown>();
+-    mocks.listenerValidate.mockReturnValue(request.promise as never);
++    mocks.listenerDraftValidate.mockReturnValue(request.promise as never);
+     const user = userEvent.setup(); render(<ListenersView />);
+     await user.click(await screen.findByRole("button", { name: "校验当前监听" }));
+     expect(await screen.findByRole("button", { name: "校验中…" })).toBeDisabled();
+diff --git a/src/features/listeners/listeners-view.test-support.ts b/src/features/listeners/listeners-view.test-support.ts
+index b318cd1c..338ccc5f 100644
+--- a/src/features/listeners/listeners-view.test-support.ts
++++ b/src/features/listeners/listeners-view.test-support.ts
+@@ -1,9 +1,16 @@
+ import { vi } from "vitest";
+ import type { HttpListenerSettings, ProxyListener } from "@/generated/rust-types";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
+ 
+ export const navigationMocks = { navigate: vi.fn() };
+ 
++export function socketRuntimeLimits() {
++  return {
++    read_chunk_bytes: 16 * 1024,
++    diagnostic_event_capacity: 256,
++    diagnostic_memory_bytes: 1024 * 1024,
++  };
++}
++
+ export const bootstrap = {
+   certificate: {
+         items: [{
+@@ -32,8 +39,8 @@ export const bootstrap = {
+ 
+ export const mocks = {
+   workspaceList: vi.fn(), workspaceGet: vi.fn(), workspaceValidate: vi.fn(), workspaceSave: vi.fn(),
+-  listenerValidate: vi.fn(),
+-  listenerNew: vi.fn(), listenerCopy: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
++  listenerDraftValidate: vi.fn(), listenerDraftTransition: vi.fn(), listenerDraftCopy: vi.fn(),
++  listenerNew: vi.fn(), listenerSave: vi.fn(), listenerDelete: vi.fn(),
+   listenerOverview: vi.fn(), listenerStart: vi.fn(), listenerStop: vi.fn(),
+   listenerTestUpstreamConnection: vi.fn(), listenerImportUpstreamClientIdentity: vi.fn(), listenerImportUpstreamServerTrust: vi.fn(),
+   listenerImportDownstreamServerIdentity: vi.fn(), listenerImportDownstreamClientTrust: vi.fn(),
+@@ -104,7 +111,7 @@ export function socketListener(
+ ) {
+   const upstreamTls = { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null };
+   const downstreamTls = {
+-    server_identity: "",
++    server_identity: null,
+     client_authentication: { mode: "disabled" as const },
+   };
+   const security = mode === "tcp_to_tls"
+@@ -127,7 +134,7 @@ export function socketListener(
+           },
+         },
+         maximum_connections: 500,
+-        runtime_limits: defaultSocketRuntimeLimits(),
++        runtime_limits: socketRuntimeLimits(),
+         processing: { mode: "direct" as const },
+       },
+     },
+@@ -149,7 +156,7 @@ export function localResponderListener(
+           settings: { downstream_security: { mode: "tcp" as const } },
+         },
+         maximum_connections: 100,
+-        runtime_limits: defaultSocketRuntimeLimits(),
++        runtime_limits: socketRuntimeLimits(),
+         processing: {
+           mode: "scripted" as const,
+           settings: {
+@@ -264,7 +271,7 @@ export function setupListenerMocks() {
+     mocks.workspaceList.mockReturnValue(ok([{ id: "workspace-1", name: "API Lab", revision: 1, listener_count: 1, enabled_listener_count: 0, selected: true }]));
+     mocks.workspaceGet.mockReturnValue(ok(workspace));
+     mocks.workspaceValidate.mockImplementation((draft) => ok({ valid: true, normalized: draft, field_errors: {} }));
+-    mocks.listenerValidate.mockImplementation((workspaceId, revision, listener, certificateReferences) => ok({
++    mocks.listenerDraftValidate.mockImplementation((workspaceId, revision, listener, certificateReferences) => ok({
+       valid: true,
+       normalized: {
+         ...workspace,
+@@ -284,7 +291,8 @@ export function setupListenerMocks() {
+     }));
+     mocks.listenerDelete.mockReturnValue(ok({ success: true, cancelled: false, message: "Listener 已删除。", ui_tone: "positive", entity_id: null, revision: 2, requires_restart: false }));
+     mocks.listenerNew.mockReturnValue(ok(dynamicListener("listener-new", "新建代理监听", 8081)));
+-    mocks.listenerCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
++    mocks.listenerDraftCopy.mockImplementation((source) => ok({ ...source, id: "listener-copy", name: `${source.name} 副本`, enabled: false }));
++    mocks.listenerDraftTransition.mockImplementation((source) => ok(source));
+     // 页面现在对缺失 runtime 行的持久化 Listener fail-closed 锁定。通用 fixture
+     // 覆盖各测试文件常用 id，避免与测试目标无关的“未知状态”误锁表单。
+     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([
+diff --git a/src/features/listeners/listeners-view.test.tsx b/src/features/listeners/listeners-view.test.tsx
+index 50b9f907..090c0e5d 100644
+--- a/src/features/listeners/listeners-view.test.tsx
++++ b/src/features/listeners/listeners-view.test.tsx
+@@ -1,7 +1,7 @@
+ // @vitest-environment jsdom
+ 
+ import "@testing-library/jest-dom/vitest";
+-import { render, screen, waitFor } from "@testing-library/react";
++import { act, render, screen, waitFor } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { beforeEach, describe, expect, it, vi } from "vitest";
+ import { bootstrap, setupListenerMocks, mocks, workspace, dynamicListener, fixedListener, socketListener, localResponderListener, ok, commandError, listenerStatus, listenerOverview, navigationMocks } from "./listeners-view.test-support";
+@@ -50,6 +50,10 @@ describe("统一代理监听编辑器", () => {
+   });
+ 
+   it("默认按请求目标转发，并可在同一监听启用固定 Server", async () => {
++    const fixed = fixedListener("listener-1", "默认代理监听", 8080, "");
++    mocks.listenerDraftTransition
++      .mockReturnValueOnce(ok(fixed))
++      .mockReturnValueOnce(ok(dynamicListener()));
+     const user = userEvent.setup();
+     render(<ListenersView />);
+     expect(await screen.findByText("1. 响应方式")).toBeVisible();
+@@ -81,7 +85,42 @@ describe("统一代理监听编辑器", () => {
+     expect(responseMode).toHaveTextContent("按原请求目标转发");
+   });
+ 
++  it("叶字段编辑同步取消旧结构转换且迟到响应不能覆盖草稿", async () => {
++    const fixed = fixedListener("listener-1", "默认代理监听", 8080, "https://server.test:443");
++    const requestTarget = dynamicListener();
++    let resolveTransition!: (listener: typeof requestTarget) => void;
++    mocks.workspaceGet.mockReturnValue(ok({ ...workspace, listeners: [fixed] }));
++    mocks.listenerDraftTransition.mockReturnValue(new Promise((resolve) => {
++      resolveTransition = resolve;
++    }));
++    const user = userEvent.setup();
++    render(<ListenersView />);
++
++    await user.click(await screen.findByLabelText("HTTP 响应方式"));
++    await user.click(await screen.findByRole("option", { name: "按原请求目标转发" }));
++    const name = screen.getByRole("textbox", { name: "代理监听名称" });
++    await user.clear(name);
++    await user.type(name, "保留叶字段草稿");
++    await act(async () => resolveTransition(requestTarget));
++
++    expect(screen.getByRole("textbox", { name: "代理监听名称" })).toHaveValue("保留叶字段草稿");
++    expect(screen.getByRole("textbox", { name: "固定 Server URL" })).toHaveValue("https://server.test:443");
++    expect(screen.queryByText("正在切换模式…")).not.toBeInTheDocument();
++  });
++
+   it("使用与 Socket 一致的响应方式下拉切换并保存 HTTP topology", async () => {
++    const fixed = fixedListener("listener-1", "默认代理监听", 8080, "");
++    const local = {
++      ...fixed,
++      data_plane: { kind: "http" as const, settings: {
++        ...fixed.data_plane.settings,
++        topology: { mode: "local_server" as const },
++      } },
++    };
++    mocks.listenerDraftTransition
++      .mockReturnValueOnce(ok(fixed))
++      .mockReturnValueOnce(ok(local))
++      .mockReturnValueOnce(ok(dynamicListener()));
+     const user = userEvent.setup();
+     render(<ListenersView />);
+ 
+@@ -142,7 +181,7 @@ describe("统一代理监听编辑器", () => {
+     await user.click(screen.getByRole("button", { name: "启动监听" }));
+ 
+     await waitFor(() => expect(mocks.listenerStart).toHaveBeenCalledWith("workspace-1", 1, "stopped-2"));
+-    expect(mocks.listenerValidate).not.toHaveBeenCalled();
++    expect(mocks.listenerDraftValidate).not.toHaveBeenCalled();
+     expect(mocks.listenerSave).not.toHaveBeenCalled();
+   });
+ 
+@@ -182,7 +221,7 @@ describe("统一代理监听编辑器", () => {
+       listenerStatus("listener-a"),
+       listenerStatus("listener-b"),
+     ])));
+-    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
++    mocks.listenerDraftValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+       valid: true,
+       normalized: {
+         ...multiple,
+@@ -216,7 +255,7 @@ describe("统一代理监听编辑器", () => {
+     const persisted = { ...workspace, listeners: [listenerB] };
+     mocks.workspaceGet.mockReturnValue(ok(persisted));
+     mocks.listenerOverview.mockReturnValue(ok(listenerOverview([listenerStatus("listener-b")] )));
+-    mocks.listenerValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
++    mocks.listenerDraftValidate.mockImplementation((_workspaceId, revision, listener, certificateReferences) => ok({
+       valid: true,
+       normalized: {
+         ...persisted,
+@@ -232,6 +271,9 @@ describe("统一代理监听编辑器", () => {
+       listeners: [listener],
+       certificate_references: certificateReferences,
+     }));
++    mocks.listenerDraftTransition.mockReturnValueOnce(ok(
++      fixedListener("listener-new", "新建代理监听", 8081, ""),
++    ));
+     const user = userEvent.setup();
+     render(<ListenersView />);
+ 
+@@ -415,7 +457,7 @@ describe("统一代理监听编辑器", () => {
+     await user.click(testButton);
+ 
+     expect(await screen.findByRole("button", { name: "正在探测 Server…" })).toBeDisabled();
+-    expect(mocks.listenerValidate).toHaveBeenCalledOnce();
++    expect(mocks.listenerDraftValidate).toHaveBeenCalledOnce();
+     expect(mocks.listenerTestUpstreamConnection).toHaveBeenCalledOnce();
+   });
+ 
+@@ -500,7 +542,7 @@ describe("统一代理监听编辑器", () => {
+     expect(screen.queryByRole("textbox", { name: "Socket Server 主机" })).not.toBeInTheDocument();
+     expect(screen.queryByRole("button", { name: "测试 Server 连接" })).not.toBeInTheDocument();
+     await user.click(screen.getByRole("button", { name: "复制监听" }));
+-    expect(mocks.listenerCopy).toHaveBeenCalledWith(local);
++    expect(mocks.listenerDraftCopy).toHaveBeenCalledWith(local);
+     expect(mocks.listenerTestUpstreamConnection).not.toHaveBeenCalled();
+   });
+ 
+diff --git a/src/features/listeners/listeners-view.tsx b/src/features/listeners/listeners-view.tsx
+index e08eb2bf..50011fb3 100644
+--- a/src/features/listeners/listeners-view.tsx
++++ b/src/features/listeners/listeners-view.tsx
+@@ -1,17 +1,17 @@
+ "use client";
+ 
+-import { useState } from "react";
++import { useEffect, useRef, useState } from "react";
+ import { Alert, Button, Chip, toast } from "@heroui/react";
+ import type {
+   CertificateItemViewModel,
+   ListenerCertificateDetailViewModel,
++  ListenerDraft,
++  ListenerDraftValidationViewModel,
+   ListenerOverviewViewModel,
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+-  ProxyListener,
+   ProxyWorkspace,
+   WorkspaceSummaryViewModel,
+-  WorkspaceValidationViewModel,
+ } from "@/generated/rust-types";
+ import { commands } from "@/generated/rust-types";
+ import { useAppEventRefresh, useBootstrap } from "@/features/shell/bootstrap-context";
+@@ -23,22 +23,24 @@ import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
+ import { useIpcQuery } from "@/lib/ipc/use-ipc-query";
+ import { toneColor } from "@/lib/format";
+ import { ListenerEditor } from "./listener-editor";
++import { ListenerFeedback, type ListenerOperationError } from "./listener-feedback";
+ import { socketUpstreamTls } from "./listener-data-plane";
+ import { ListenerListPanel } from "./listener-list-panel";
+ import { ListenerRuntimeCard, type ListenerPending } from "./listener-runtime-card";
+ import {
+   listenerCertificateReferences,
++  type ListenerWorkspaceDraft,
+   mergeCertificateDetails,
+   mergePersistedListenerDeletion,
++  reconcileListenerDraft,
+   sameWorkspace,
++  toListenerWorkspaceDraft,
+ } from "./listener-workspace-draft";
+ import { useListenerCertificates } from "./use-listener-certificates";
+ import { useListenerPersistence } from "./use-listener-persistence";
+-import {
+-  isListenerProtocolPackageCatalog,
+-  setServerTls,
+-  socketWorkingMode,
+-} from "./socket-listener-model";
++import { useListenerDraftTransition } from "./use-listener-draft-transition";
++import { isListenerProtocolPackageCatalog, updateServerTls } from "./socket-listener-model";
++import { hasUpstream, isFieldErrorRecord, isLocalResponder, listenerKind } from "./listener-view-model";
+ 
+ export function ListenersView() {
+   const { navigate } = useWorkspaceNavigation();
+@@ -79,33 +81,34 @@ export function ListenersView() {
+       return catalog;
+     },
+   );
+-  const [workspace, setWorkspace] = useState<ProxyWorkspace>();
++  const [workspace, setWorkspace] = useState<ListenerWorkspaceDraft>();
++  const workspaceRef = useRef<ListenerWorkspaceDraft | undefined>(undefined);
++  const authoritativeWorkspace = useRef<ProxyWorkspace | undefined>(undefined);
++  const [conflictingListenerIds, setConflictingListenerIds] = useState<string[]>([]);
++  const conflictingListenerIdsRef = useRef<string[]>([]);
+   const [selectedIndex, setSelectedIndex] = useState(0);
+-  const [validation, setValidation] = useState<WorkspaceValidationViewModel>();
++  const selectionScopeVersion = useRef(0);
++  const [validation, setValidation] = useState<ListenerDraftValidationViewModel>();
+   const [pending, setPending] = useState<ListenerPending>();
+   const [tlsTest, setTlsTest] = useState<ListenerUpstreamConnectionTestViewModel>();
+   const [tlsTestError, setTlsTestError] = useState<string>();
+   const [basicUsername, setBasicUsername] = useState("");
+   const [basicPassword, setBasicPassword] = useState("");
+-  const [operationError, setOperationError] = useState<{
+-    message: string;
+-    fieldErrors: Record<string, string[]>;
+-  }>();
++  const [operationError, setOperationError] = useState<ListenerOperationError>();
+ 
+   useWorkspaceQueryInvalidation({
+     workspaceId: currentId,
+     collection: [workspaces],
+     current: [workspaceQuery, listenerOverview, certificateDetails],
+   });
+-  useAppEventRefresh(["listener_status_changed"], listenerOverview.refresh);
+-  useAppEventRefresh(
+-    ["workspace_changed", "protocol_package_catalog_changed", "snapshot_required"],
+-    protocolCatalog.refresh,
+-  );
+-
+-  const effectiveWorkspace = workspace?.id === currentId ? workspace : workspaceQuery.data;
++  const effectiveWorkspace: ListenerWorkspaceDraft | undefined = workspace?.id === currentId
++    ? workspace
++    : workspaceQuery.data ? toListenerWorkspaceDraft(workspaceQuery.data) : undefined;
+   const effectiveIndex = Math.min(selectedIndex, Math.max(0, (effectiveWorkspace?.listeners.length ?? 1) - 1));
+   const selected = effectiveWorkspace?.listeners[effectiveIndex];
++  const selectedHasDraftConflict = Boolean(
++    selected && conflictingListenerIds.includes(selected.id),
++  );
+   const selectedStatus = listenerOverview.data?.rows.find((row) => row.listener_id === selected?.id);
+   const selectedStatusKnown = Boolean(selectedStatus)
+     && !listenerOverview.error
+@@ -120,8 +123,10 @@ export function ListenersView() {
+   // 命令进行中也冻结编辑器，避免 deferred save/start 返回后覆盖用户刚输入的新草稿。
+   const editorLocked = snapshotLocked || Boolean(pending);
+   const selectedCanDelete = Boolean(selected) && (
+-    !selectedIsPersisted
+-    || (!snapshotLocked && selectedStatus?.state === "stopped")
++    !selectedHasDraftConflict && (
++      !selectedIsPersisted
++      || (!snapshotLocked && selectedStatus?.state === "stopped")
++    )
+   );
+   const hasUnsavedChanges = workspace !== undefined
+     && workspace.id === currentId
+@@ -138,6 +143,30 @@ export function ListenersView() {
+     clearDerivedResults,
+     runPending: withPending,
+   });
++  const draftTransitions = useListenerDraftTransition({
++    getContext: () => {
++      if (!effectiveWorkspace || !selected || pending || snapshotLocked) return undefined;
++      return {
++        workspaceId: effectiveWorkspace.id,
++        workspaceRevision: effectiveWorkspace.revision,
++        listener: selected,
++        scopeVersion: selectionScopeVersion.current,
++      };
++    },
++    apply: (draft) => {
++      const current = workspaceRef.current ?? effectiveWorkspace;
++      if (!current || current.id !== effectiveWorkspace?.id) return;
++      const next = {
++        ...current,
++        listeners: current.listeners.map((listener) =>
++          listener.id === draft.id ? draft : listener),
++      };
++      workspaceRef.current = certificateActions.applyDraftWorkspace(next, current);
++      clearDerivedResults();
++    },
++    onError: reportOperationError,
++  });
++  const invalidateDraftTransitions = draftTransitions.invalidate;
+   const persistenceActions = useListenerPersistence({
+     workspace: effectiveWorkspace,
+     selected,
+@@ -146,6 +175,8 @@ export function ListenersView() {
+     snapshotLocked,
+     pending,
+     hasUnsavedChanges,
++    hasDraftConflict: selectedHasDraftConflict,
++    transitionPending: draftTransitions.isTransitioning,
+     leases: certificateActions.leases,
+     setWorkspace,
+     setPersistedWorkspace: workspaceQuery.setData,
+@@ -154,6 +185,53 @@ export function ListenersView() {
+     refreshWorkspaces: workspaces.refresh,
+     runPending: withPending,
+   });
++
++  useAppEventRefresh(
++    ["listener_status_changed"],
++    async () => {
++      draftTransitions.invalidate();
++      await listenerOverview.refresh();
++    },
++  );
++  useAppEventRefresh(
++    ["workspace_changed", "protocol_package_catalog_changed", "snapshot_required"],
++    async () => {
++      draftTransitions.invalidate();
++      await protocolCatalog.refresh();
++    },
++  );
++
++  useEffect(() => {
++    workspaceRef.current = workspace;
++  }, [workspace]);
++
++  useEffect(() => {
++    conflictingListenerIdsRef.current = conflictingListenerIds;
++  }, [conflictingListenerIds]);
++
++  useEffect(() => {
++    const latest = workspaceQuery.data;
++    if (!latest) return;
++    invalidateDraftTransitions();
++    const base = authoritativeWorkspace.current;
++    authoritativeWorkspace.current = latest;
++    const draft = workspaceRef.current;
++    if (!base || base.id !== latest.id || !draft || draft.id !== latest.id) {
++      conflictingListenerIdsRef.current = [];
++      setConflictingListenerIds([]);
++      return;
++    }
++    const reconciled = reconcileListenerDraft(
++      draft,
++      base,
++      latest,
++      conflictingListenerIdsRef.current,
++    );
++    workspaceRef.current = reconciled.workspace;
++    conflictingListenerIdsRef.current = reconciled.conflictingListenerIds;
++    setWorkspace(reconciled.workspace);
++    setConflictingListenerIds(reconciled.conflictingListenerIds);
++  }, [workspaceQuery.data, invalidateDraftTransitions]);
+   const effectiveCertificateDetails = mergeCertificateDetails(
+     certificateDetails.data ?? [],
+     certificateActions.importedDetails,
+@@ -179,9 +257,10 @@ export function ListenersView() {
+     clearDerivedResults();
+   }
+ 
+-  function replaceSelected(changes: Partial<ProxyListener>) {
++  function replaceSelected(changes: Partial<ListenerDraft>) {
+     if (!effectiveWorkspace || !selected || editorLocked) return;
+-    certificateActions.applyDraftWorkspace({
++    draftTransitions.invalidate();
++    workspaceRef.current = certificateActions.applyDraftWorkspace({
+       ...effectiveWorkspace,
+       listeners: effectiveWorkspace.listeners.map((listener, index) =>
+         index === effectiveIndex ? { ...listener, ...changes } : listener,
+@@ -190,6 +269,29 @@ export function ListenersView() {
+     clearDerivedResults();
+   }
+ 
++  function discardSelectedConflictingDraft() {
++    if (!effectiveWorkspace || !selected || !selectedHasDraftConflict) return;
++    const latest = authoritativeWorkspace.current;
++    if (!latest || latest.id !== effectiveWorkspace.id) return;
++    const authoritativeListener = latest.listeners.find((listener) => listener.id === selected.id);
++    const listeners = authoritativeListener
++      ? effectiveWorkspace.listeners.map((listener) =>
++        listener.id === selected.id ? authoritativeListener : listener)
++      : effectiveWorkspace.listeners.filter((listener) => listener.id !== selected.id);
++    certificateActions.applyDraftWorkspace({
++      ...effectiveWorkspace,
++      revision: latest.revision,
++      listeners,
++    }, effectiveWorkspace);
++    const remainingConflicts = conflictingListenerIds.filter((id) => id !== selected.id);
++    conflictingListenerIdsRef.current = remainingConflicts;
++    setConflictingListenerIds(remainingConflicts);
++    if (!authoritativeListener) {
++      setSelectedIndex(Math.min(effectiveIndex, Math.max(0, listeners.length - 1)));
++    }
++    clearDerivedResults();
++  }
++
+   async function addListener() {
+     if (!effectiveWorkspace || pending) return;
+     await withPending("save", async () => {
+@@ -204,7 +306,7 @@ export function ListenersView() {
+     if (!effectiveWorkspace || !selected || pending) return;
+     const copiedLocalResponder = isLocalResponder(selected);
+     await withPending("save", async () => {
+-      const draft = await callCommand(commands.listenerCopy(selected));
++      const draft = await callCommand(commands.listenerDraftCopy(selected));
+       setWorkspace({ ...effectiveWorkspace, listeners: [...effectiveWorkspace.listeners, draft] });
+       setSelectedIndex(effectiveWorkspace.listeners.length);
+       clearDerivedResults();
+@@ -260,7 +362,7 @@ export function ListenersView() {
+   }
+ 
+   async function testUpstreamTls() {
+-    if (!effectiveWorkspace || !selected || !hasUpstream(selected) || snapshotLocked || pending) return;
++    if (!effectiveWorkspace || !selected || !hasUpstream(selected) || snapshotLocked || pending || draftTransitions.isTransitioning()) return;
+     setTlsTest(undefined);
+     setTlsTestError(undefined);
+     await withPending("tls-test", async () => {
+@@ -268,14 +370,14 @@ export function ListenersView() {
+         selected,
+         effectiveWorkspace.certificate_references,
+       );
+-      const result = await callCommand(commands.listenerValidate(
++      const result = await callCommand(commands.listenerDraftValidate(
+         effectiveWorkspace.id,
+         effectiveWorkspace.revision,
+         selected,
+         certificateReferences,
+       ));
+       setValidation(result);
+-      if (!result.valid) return;
++      if (!result.valid || !result.normalized) return;
+       // 连接测试只读取当前草稿并建立一次临时上游连接，不持久化 Workspace。
+       // 因此其他 Listener 正在运行时也可以安全测试当前 Listener 的证书配置。
+       const normalizedListener = result.normalized.listeners.find(
+@@ -303,7 +405,7 @@ export function ListenersView() {
+               ...selected,
+               data_plane: {
+                 kind: "socket" as const,
+-                settings: setServerTls(settings, {
++                settings: updateServerTls(settings, {
+                   ...upstreamTls,
+                   tls_server_name: tlsServerName,
+                 }),
+@@ -323,32 +425,35 @@ export function ListenersView() {
+   }
+ 
+   async function withPending(kind: ListenerPending, action: () => Promise<void>, onError?: (reason: unknown) => void) {
++    draftTransitions.invalidate();
+     setOperationError(undefined);
+     setPending(kind);
+     try { await action(); }
+     catch (reason) {
+       onError?.(reason);
+-      const appError = appErrorViewModel(reason);
+-      const fieldErrors = appError && isFieldErrorRecord(appError.field_errors)
+-        ? appError.field_errors
+-        : undefined;
+-      if (appError && fieldErrors && Object.keys(fieldErrors).length > 0) {
+-        // 保存/启动错误不是 WorkspaceValidation，独立保存 Rust 原始字段路径与消息。
+-        setOperationError({ message: appError.message, fieldErrors });
+-      }
+-      const socketFieldError = selected?.data_plane.kind === "socket"
+-        && fieldErrors
+-        && Object.keys(fieldErrors).length > 0;
+-      toast(socketFieldError
+-        ? "操作未完成，请按页面提示修正 Socket 配置。"
+-        : appError && !fieldErrors
+-          ? "应用核心返回的错误结构不完整，请刷新后重试。"
+-          : errorMessage(reason), { variant: "danger" });
++      reportOperationError(reason);
+     }
+     finally { setPending(undefined); }
+   }
+ 
+-  const errors = Object.entries(validation?.field_errors ?? {});
++  function reportOperationError(reason: unknown) {
++    const appError = appErrorViewModel(reason);
++    const fieldErrors = appError && isFieldErrorRecord(appError.field_errors)
++      ? appError.field_errors
++      : undefined;
++    if (appError && fieldErrors && Object.keys(fieldErrors).length > 0) {
++      setOperationError({ message: appError.message, fieldErrors });
++    }
++    const socketFieldError = selected?.data_plane.kind === "socket"
++      && fieldErrors
++      && Object.keys(fieldErrors).length > 0;
++    toast(socketFieldError
++      ? "操作未完成，请按页面提示修正 Socket 配置。"
++      : appError && !fieldErrors
++        ? "应用核心返回的错误结构不完整，请刷新后重试。"
++        : errorMessage(reason), { variant: "danger" });
++  }
++
+   const editorFieldErrors = selected?.data_plane.kind === "socket"
+     ? operationError?.fieldErrors ?? validation?.field_errors
+     : validation?.field_errors;
+@@ -362,65 +467,25 @@ export function ListenersView() {
+         error={workspaceQuery.error}
+         disabled={!effectiveWorkspace || Boolean(pending)}
+         onAdd={() => void addListener()}
+-        onSelect={(index) => { setSelectedIndex(index); clearDerivedResults(); }}
++        onSelect={(index) => {
++          selectionScopeVersion.current += 1;
++          draftTransitions.invalidate();
++          setSelectedIndex(index);
++          clearDerivedResults();
++        }}
+         onNavigate={navigate}
+       />
+       <main className="min-w-0 space-y-5 overflow-auto p-5">
+         <div className="flex flex-wrap items-center gap-3">
+           <h2 className="text-xl font-semibold">监听配置</h2>
+           {selected && <Chip color="accent" variant="soft">{listenerKind(selected)}</Chip>}
+-          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || snapshotLocked || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void persistenceActions.validate()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || snapshotLocked || Boolean(pending)} onPress={() => void persistenceActions.save()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
++          <div className="ml-auto flex flex-wrap gap-2"><Button variant="outline" isDisabled={!selected || Boolean(pending)} onPress={() => void copySelectedListener()}>复制监听</Button><Button variant="danger-soft" isDisabled={!selected || !selectedCanDelete || snapshotLocked || Boolean(pending)} onPress={() => void removeSelectedListener()}>{pending === "delete" ? "删除中…" : "删除监听"}</Button><Button variant="outline" isDisabled={!selected || Boolean(pending) || draftTransitions.transitioning} onPress={() => void persistenceActions.validate()}>{pending === "validate" ? "校验中…" : "校验当前监听"}</Button><Button variant="primary" isDisabled={!selected || snapshotLocked || selectedHasDraftConflict || Boolean(pending) || draftTransitions.transitioning} onPress={() => void persistenceActions.save()}>{pending === "save" ? "保存中…" : "保存当前监听"}</Button></div>
+         </div>
+-        {validation && (validation.valid ? <Alert status="success"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验通过</Alert.Title><Alert.Description>{isLocalResponder(selected) ? "配置结构有效，可保存并启动；收到请求后将由本机生成响应。" : "当前监听可保存、启动或执行上游 TLS 测试。"}</Alert.Description></Alert.Content></Alert> : <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>当前监听校验未通过</Alert.Title><Alert.Description>{selected?.data_plane.kind === "socket" ? "请按下方分类修正 Socket 配置。" : errors.map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description></Alert.Content></Alert>)}
+-        {operationError && <Alert status="danger"><Alert.Indicator /><Alert.Content>
+-          <Alert.Title>{selected?.data_plane.kind === "socket" ? "操作未完成" : operationError.message}</Alert.Title>
+-          <Alert.Description>{selected?.data_plane.kind === "socket" ? <>
+-            <p>请按下方分类修正 Socket 配置。</p>
+-            <details className="mt-2"><summary className="cursor-pointer font-medium">高级诊断</summary>
+-              <p className="mt-1">{operationError.message}</p>
+-              <ul>{Object.entries(operationError.fieldErrors).map(([field, messages]) => <li key={field}>{field}: {messages.join("，")}</li>)}</ul>
+-            </details>
+-          </> : Object.entries(operationError.fieldErrors).map(([field, messages]) => `${field}: ${messages.join("，")}`).join("；")}</Alert.Description>
+-        </Alert.Content></Alert>}
++        {draftTransitions.transitioning && <p role="status" className="text-sm text-[var(--telemetry-muted)]">正在切换模式…</p>}
++        <ListenerFeedback listener={selected} validation={validation} operationError={operationError} conflict={selectedHasDraftConflict} pending={Boolean(pending)} onDiscardConflict={discardSelectedConflictingDraft} />
+         {certificateDetails.error && <Alert status="danger"><Alert.Indicator /><Alert.Content><Alert.Title>证书详情读取失败</Alert.Title><Alert.Description>{certificateDetails.error}</Alert.Description></Alert.Content></Alert>}
+-        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} onToggle={persistenceActions.toggleRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} protocolCatalog={{ data: protocolCatalog.data, error: protocolCatalog.error, loading: protocolCatalog.isLoading, refresh: protocolCatalog.refresh }} locked={editorLocked} fieldErrors={editorFieldErrors} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationRoot={installationRoot} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={changeBasicUsername} onBasicPasswordChange={changeBasicPassword} onChange={replaceSelected} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={certificateActions.importDownstreamIdentity} onImportDownstreamClientTrust={certificateActions.importDownstreamTrust} onImportClientIdentity={certificateActions.importUpstreamIdentity} onImportServerTrust={certificateActions.importUpstreamTrust} onTestUpstreamTls={testUpstreamTls} /></>}
++        {!selected ? <p className="py-12 text-center text-sm text-[var(--telemetry-muted)]">选择一个代理监听进行编辑。</p> : <><ListenerRuntimeCard status={selectedStatus} isLoading={listenerOverview.isLoading} error={listenerOverview.error} pending={pending} startBlocked={selectedHasDraftConflict || draftTransitions.transitioning} onToggle={persistenceActions.toggleRuntime} onRetry={listenerOverview.refresh} /><ListenerEditor listener={selected} protocolCatalog={{ data: protocolCatalog.data, error: protocolCatalog.error, loading: protocolCatalog.isLoading, refresh: protocolCatalog.refresh }} locked={editorLocked} transitionPending={draftTransitions.transitioning} dataPlanePending={draftTransitions.dataPlanePending} serverControlsBlocked={draftTransitions.serverControlsBlocked} fieldErrors={editorFieldErrors} certificateReferences={effectiveWorkspace.certificate_references} certificateDetails={effectiveCertificateDetails} installationRoot={installationRoot} pending={pending} tlsTest={tlsTest} tlsTestError={tlsTestError} basicUsername={basicUsername} basicPassword={basicPassword} onBasicUsernameChange={changeBasicUsername} onBasicPasswordChange={changeBasicPassword} onChange={replaceSelected} onTransition={(transition, recommendedPackage) => draftTransitions.enqueue(transition, recommendedPackage ?? null)} onStoreBasicCredential={storeBasicCredential} onImportDownstreamServerIdentity={certificateActions.importDownstreamIdentity} onImportDownstreamClientTrust={certificateActions.importDownstreamTrust} onImportClientIdentity={certificateActions.importUpstreamIdentity} onImportServerTrust={certificateActions.importUpstreamTrust} onTestUpstreamTls={testUpstreamTls} /></>}
+       </main>
+     </section>
+   );
+ }
+-
+-function isLocalResponder(listener?: ProxyListener): boolean {
+-  return listener?.data_plane.kind === "socket"
+-    && listener.data_plane.settings.topology.mode === "local_responder";
+-}
+-
+-function hasUpstream(listener: ProxyListener) {
+-  if (listener.data_plane.kind === "socket") {
+-    return listener.data_plane.settings.topology.mode === "relay";
+-  }
+-  return listener.data_plane.settings.topology.mode === "remote_server"
+-    && listener.data_plane.settings.topology.settings.fixed_server !== null;
+-}
+-
+-function listenerKind(listener: ProxyListener) {
+-  if (listener.data_plane.kind === "socket") {
+-    const mode = socketWorkingMode(listener.data_plane.settings);
+-    if (mode === "raw_relay") return "Socket · 透明转发";
+-    if (mode === "protocol_relay") return "Socket · 按协议转发";
+-    if (mode === "local_response") return "Socket · 本地应答";
+-    return "Socket · 配置不兼容";
+-  }
+-  if (listener.data_plane.settings.topology.mode === "local_server") return "HTTP · LocalServer";
+-  return listener.data_plane.settings.topology.settings.fixed_server
+-    ? "HTTP · 固定 Server"
+-    : "HTTP · 按请求目标";
+-}
+-
+-function isFieldErrorRecord(value: unknown): value is Record<string, string[]> {
+-  return typeof value === "object"
+-    && value !== null
+-    && !Array.isArray(value)
+-    && Object.entries(value).every(([field, messages]) => field.length > 0
+-      && Array.isArray(messages)
+-      && messages.every((message) => typeof message === "string"));
+-}
+diff --git a/src/features/listeners/request-routing-card.tsx b/src/features/listeners/request-routing-card.tsx
+index 074cabf5..d9f2d559 100644
+--- a/src/features/listeners/request-routing-card.tsx
++++ b/src/features/listeners/request-routing-card.tsx
+@@ -2,13 +2,14 @@
+ 
+ import { Card, Input, Label, ListBox, Select } from "@heroui/react";
+ import type {
+-  FixedServerSettings,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
++  ListenerDraftTransition,
+ } from "@/generated/rust-types";
+ 
+ type Props = {
+-  settings: HttpListenerSettings;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  settings: HttpListenerDraftSettings;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
++  onTransition: (transition: ListenerDraftTransition) => void;
+ };
+ 
+ /**
+@@ -17,7 +18,7 @@ type Props = {
+  * 这里切换进程内 LocalServer 或真实 Server；真实 Server 再区分请求目标与固定目标。
+  * 固定 Server 的 TLS/mTLS 配置仍由同页的“上游 Server 连接安全”卡片负责。
+  */
+-export function RequestRoutingCard({ settings, onChange }: Props) {
++export function RequestRoutingCard({ settings, onChange, onTransition }: Props) {
+   const localServer = settings.topology.mode === "local_server";
+   const fixedServer = settings.topology.mode === "remote_server"
+     ? settings.topology.settings.fixed_server
+@@ -28,19 +29,6 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
+       ? "fixed_server"
+       : "request_target";
+ 
+-  function changeResponseMode(mode: "request_target" | "fixed_server" | "local_server") {
+-    onChange({
+-      topology: mode === "local_server"
+-        ? { mode: "local_server" }
+-        : {
+-            mode: "remote_server",
+-            settings: {
+-              fixed_server: mode === "fixed_server" ? defaultFixedServer() : null,
+-            },
+-          },
+-    });
+-  }
+-
+   return (
+     <Card className="col-span-2 max-[700px]:col-span-1">
+       <Card.Header>
+@@ -56,7 +44,7 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
+             selectedKey={responseMode}
+             onSelectionChange={(key) => {
+               if (key === "request_target" || key === "fixed_server" || key === "local_server") {
+-                changeResponseMode(key);
++                onTransition({ type: "http_response_mode", mode: key });
+               }
+             }}
+           >
+@@ -114,14 +102,3 @@ export function RequestRoutingCard({ settings, onChange }: Props) {
+     </Card>
+   );
+ }
+-
+-function defaultFixedServer(): FixedServerSettings {
+-  return {
+-    upstream_url: "",
+-    upstream_tls: {
+-      verify_hostname: true,
+-      server_trust: null,
+-      client_identity: null,
+-    },
+-  };
+-}
+diff --git a/src/features/listeners/socket-listener-model.test.ts b/src/features/listeners/socket-listener-model.test.ts
+index 5501174b..9f17bdbc 100644
+--- a/src/features/listeners/socket-listener-model.test.ts
++++ b/src/features/listeners/socket-listener-model.test.ts
+@@ -2,7 +2,7 @@ import { describe, expect, it } from "vitest";
+ import type {
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerProtocolPackageOptionViewModel,
+-  SocketRelaySettings,
++  SocketRelayDraftSettings,
+ } from "@/generated/rust-types";
+ import {
+   appSecurity,
+@@ -10,417 +10,116 @@ import {
+   exactPackageKey,
+   isListenerProtocolPackageCatalog,
+   matchingOption,
+-  setAppTls,
+-  setAppTransport,
+-  setProcessingMode,
+-  setServerTls,
+-  setServerTransport,
+-  setSocketTopology,
+   socketCatalogOptions,
++  updateAppTls,
++  updateServerTls,
+ } from "./socket-listener-model";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
++import { socketListener } from "./listeners-view.test-support";
+ 
+-function option(
+-  version = "1.0.0",
+-  capabilities = {
+-    upstream: { frame: true, decode: true, encode: true },
+-    downstream: { frame: true, decode: true, encode: true },
+-    display: true,
+-  },
+-): ListenerProtocolPackageOptionViewModel {
++function option(kind: "http" | "socket" = "socket"): ListenerProtocolPackageOptionViewModel {
+   return {
+-    package: { id: "iso-8583", version },
+-    name: `ISO 8583 ${version}`,
++    package: { id: "iso-8583", version: "1.0.0" },
++    name: "ISO 8583",
+     package_source: { type: "external", online: true },
+-    kind: "socket",
+-    capabilities,
+-    upstream_schema: { root: { type: "object", title: "ISO Request", properties: { mti: { type: "string", title: "MTI" } } } },
+-    downstream_schema: { root: { type: "object", title: "ISO Response", properties: { response_code: { type: "string", title: "Response" } } } },
+-  };
+-}
+-
+-function relaySettings(): SocketRelaySettings {
+-  return {
+-    topology: {
+-      mode: "relay",
+-      settings: {
+-        upstream: { host: "server.test", port: 9443 },
+-        security: { mode: "transparent" },
+-      },
+-    },
+-    maximum_connections: 64,
+-    runtime_limits: defaultSocketRuntimeLimits(),
+-    processing: {
+-      mode: "scripted",
+-      settings: {
+-        package: { id: "iso-8583", version: "1.0.0" },
+-      },
++    kind,
++    capabilities: {
++      upstream: { frame: kind === "socket", decode: true, encode: true },
++      downstream: { frame: kind === "socket", decode: true, encode: true },
++      display: true,
+     },
++    upstream_schema: kind === "socket" ? { root: { type: "object", title: "Request", properties: {} } } : null,
++    downstream_schema: kind === "socket" ? { root: { type: "object", title: "Response", properties: {} } } : null,
+   };
+ }
+ 
+-function localSettings(): SocketRelaySettings {
+-  return {
+-    ...relaySettings(),
+-    topology: {
+-      mode: "local_responder",
+-      settings: { downstream_security: { mode: "tcp" } },
+-    },
+-  };
++function settings(): SocketRelayDraftSettings {
++  const listener = socketListener();
++  if (listener.data_plane.kind !== "socket") throw new Error("expected Socket");
++  return listener.data_plane.settings;
+ }
+ 
+-describe("Socket Listener model", () => {
+-  it("accepts a complete internally consistent Listener package catalog", () => {
+-    const candidate = option();
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate],
++describe("Socket Listener presentation model", () => {
++  it("validates and filters the authoritative package catalog", () => {
++    const socket = option();
++    const http = { ...option("http"), package: { id: "http-package", version: "1.0.0" } };
++    const catalog: ListenerProtocolPackageCatalogViewModel = {
++      options: [socket, http],
+       installed_version_count: 2,
+-      unavailable_version_count: 1,
++      unavailable_version_count: 0,
+       recommended_package: null,
+-    })).toBe(true);
+-  });
+-
+-  it("accepts complete HTTP and Socket package descriptions", () => {
+-    const candidate = option("1.0.0", {
+-      upstream: { frame: false, decode: true, encode: true },
+-      downstream: { frame: false, decode: true, encode: true },
+-      display: true,
+-    });
+-    candidate.kind = "http";
+-    candidate.upstream_schema = null;
+-    candidate.downstream_schema = null;
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+-    })).toBe(true);
+-
+-    candidate.capabilities.downstream.encode = false;
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+-    })).toBe(false);
+-    candidate.capabilities.downstream.encode = true;
+-    candidate.capabilities.upstream.frame = true;
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+-    })).toBe(false);
++    };
+ 
+-    const socketWithoutSchema = option();
+-    socketWithoutSchema.upstream_schema = null;
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [socketWithoutSchema], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+-    })).toBe(false);
++    expect(isListenerProtocolPackageCatalog(catalog)).toBe(true);
++    expect(socketCatalogOptions(catalog)).toEqual([socket]);
++    expect(matchingOption(catalog, socket.package)).toEqual(socket);
++    expect(matchingOption(catalog, null)).toBeUndefined();
++    expect(exactPackageKey(socket.package)).toBe("iso-8583\u00001.0.0");
+   });
+ 
+-  it("accepts only a recommended exact package that exists in the available options", () => {
++  it("rejects malformed or duplicate package identities", () => {
+     const candidate = option();
+-    candidate.package = { id: "iso8583-ascii-standard", version: "1.0.0" };
+     expect(isListenerProtocolPackageCatalog({
+-      options: [candidate],
+-      installed_version_count: 1,
+-      unavailable_version_count: 0,
+-      recommended_package: candidate.package,
+-    })).toBe(true);
+-    const wrongKind = { ...candidate, kind: "http" as const };
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [wrongKind],
+-      installed_version_count: 1,
++      options: [candidate, candidate],
++      installed_version_count: 2,
+       unavailable_version_count: 0,
+-      recommended_package: wrongKind.package,
++      recommended_package: null,
+     })).toBe(false);
+     expect(isListenerProtocolPackageCatalog({
+-      options: [candidate],
++      options: [{ ...candidate, package: { id: "", version: "1.0.0" } }],
+       installed_version_count: 1,
+       unavailable_version_count: 0,
+-      recommended_package: { id: candidate.package.id, version: "9.0.0" },
+-    })).toBe(false);
+-    const userCandidate = option();
+-    userCandidate.package = { id: "user-package", version: "1.0.0" };
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate, userCandidate],
+-      installed_version_count: 2,
+-      unavailable_version_count: 0,
+-      recommended_package: userCandidate.package,
++      recommended_package: null,
+     })).toBe(false);
+   });
+ 
+-  it.each([
+-    ["non-object", null],
+-    ["missing field", { options: [], installed_version_count: 0 }],
+-    ["negative count", { options: [], installed_version_count: -1, unavailable_version_count: -1, recommended_package: null }],
+-    ["fractional count", { options: [], installed_version_count: 0.5, unavailable_version_count: 0.5, recommended_package: null }],
+-    ["inconsistent counts", { options: [], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null }],
+-    ["duplicate exact identity", (() => {
+-      const candidate = option();
+-      return { options: [candidate, candidate], installed_version_count: 2, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-    ["invalid package identity", (() => {
+-      const candidate = option();
+-      candidate.package.id = "";
+-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-    ["invalid Schema", (() => {
+-      const candidate = option();
+-      candidate.upstream_schema!.root = { type: "array", items: null as never };
+-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-    ["invalid capabilities", (() => {
+-      const candidate = option();
+-      candidate.capabilities.upstream.decode = "yes" as never;
+-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-    ["missing required Frame capability", (() => {
+-      const candidate = option();
+-      candidate.capabilities.downstream.frame = false;
+-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-    ["missing required Decode capability", (() => {
+-      const candidate = option();
+-      candidate.capabilities.upstream.decode = false;
+-      return { options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null };
+-    })()],
+-  ])("rejects the entire catalog for %s", (_case, value) => {
+-    expect(isListenerProtocolPackageCatalog(value)).toBe(false);
+-  });
+-
+-  it("binds an exact package as the whole processing configuration", () => {
+-    expect(bindPackage({ mode: "direct" }, option("2.0.0"), false)).toEqual({
++  it("binds an explicitly selected exact package without constructing mode defaults", () => {
++    const selected = option();
++    expect(bindPackage({ mode: "scripted", settings: { package: null } }, selected)).toEqual({
+       mode: "scripted",
+-      settings: { package: { id: "iso-8583", version: "2.0.0" } },
++      settings: { package: selected.package },
+     });
+   });
+ 
+-  it("removes Relay-only endpoint and Server security when switching to LocalResponder", () => {
+-    const settings = relaySettings();
+-    settings.topology = {
+-      mode: "relay",
+-      settings: {
+-        upstream: { host: "private.example", port: 443 },
+-        security: {
+-          mode: "tls_to_tls",
+-          downstream_tls: { server_identity: "app-cert", client_authentication: { mode: "disabled" } },
+-          upstream_tls: { verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "server-ca", client_identity: "client-cert" },
+-        },
+-      },
+-    };
+-
+-    expect(setSocketTopology(settings, "local_responder")).toEqual({
+-      maximum_connections: 64,
+-      runtime_limits: defaultSocketRuntimeLimits(),
++  it("updates only fields inside already-enabled App and Server TLS branches", () => {
++    const current = settings();
++    const both: SocketRelayDraftSettings = {
++      ...current,
+       topology: {
+-        mode: "local_responder",
++        mode: "relay",
+         settings: {
+-          downstream_security: {
+-            mode: "tls",
+-            downstream_tls: { server_identity: "app-cert", client_authentication: { mode: "disabled" } },
++          ...current.topology.mode === "relay" ? current.topology.settings : {
++            upstream: { host: "", port: 0 },
++            security: { mode: "transparent" as const },
++          },
++          security: {
++            mode: "tls_to_tls",
++            downstream_tls: {
++              server_identity: null,
++              client_authentication: { mode: "disabled" },
++            },
++            upstream_tls: {
++              verify_hostname: true,
++              tls_server_name: null,
++              server_trust: null,
++              client_identity: null,
++            },
+           },
+         },
+       },
+-      processing: {
+-        mode: "scripted",
+-        settings: {
+-          package: { id: "iso-8583", version: "1.0.0" },
+-        },
+-      },
+-    });
+-  });
+-
+-  it("creates an empty Relay endpoint without inventing Server TLS when leaving LocalResponder", () => {
+-    const settings = localSettings();
+-    settings.topology = {
+-      mode: "local_responder",
+-      settings: {
+-        downstream_security: {
+-          mode: "tls",
+-          downstream_tls: { server_identity: "app-cert", client_authentication: { mode: "disabled" } },
+-        },
+-      },
+-    };
+-
+-    expect(setSocketTopology(settings, "relay").topology).toEqual({
+-      mode: "relay",
+-      settings: {
+-        upstream: { host: "", port: 0 },
+-        security: {
+-          mode: "tls_to_tcp",
+-          downstream_tls: { server_identity: "app-cert", client_authentication: { mode: "disabled" } },
+-        },
+-      },
+-    });
+-  });
+-
+-  it("emits an exact Direct Relay payload when Direct is selected from LocalResponder", () => {
+-    expect(setProcessingMode(localSettings(), "direct")).toEqual({
+-      topology: {
+-        mode: "relay",
+-        settings: { upstream: { host: "", port: 0 }, security: { mode: "transparent" } },
+-      },
+-      maximum_connections: 64,
+-      runtime_limits: defaultSocketRuntimeLimits(),
+-      processing: { mode: "direct" },
+-    });
+-  });
+-
+-  it("emits an exact Scripted payload with no hidden defaults when Scripted is selected", () => {
+-    const settings = relaySettings();
+-    settings.processing = { mode: "direct" };
+-
+-    expect(setProcessingMode(settings, "scripted").processing).toEqual({
+-      mode: "scripted",
+-      settings: {
+-        package: { id: "", version: "" },
+-      },
+-    });
+-  });
+-
+-  it("matches package versions by exact id and version instead of id alone", () => {
+-    const catalog: ListenerProtocolPackageCatalogViewModel = {
+-      options: [option("1.0.0"), option("2.0.0")],
+-      installed_version_count: 2,
+-      unavailable_version_count: 0,
+-      recommended_package: null,
+-    };
+-
+-    expect(matchingOption(catalog, { id: "iso-8583", version: "1.0.0" })?.package.version).toBe("1.0.0");
+-    expect(matchingOption(catalog, { id: "iso-8583", version: "3.0.0" })).toBeUndefined();
+-    expect(exactPackageKey({ id: "a@b", version: "c" })).not.toBe(exactPackageKey({ id: "a", version: "b@c" }));
+-  });
+-
+-  it("keeps HTTP packages out of Socket package selection", () => {
+-    const socket = option("1.0.0");
+-    const http = option("2.0.0");
+-    http.kind = "http";
+-    const catalog: ListenerProtocolPackageCatalogViewModel = {
+-      options: [http, socket],
+-      installed_version_count: 2,
+-      unavailable_version_count: 0,
+-      recommended_package: null,
+     };
++    const appTls = { server_identity: "app-id", client_authentication: { mode: "optional" as const, trust: null } };
++    const serverTls = { verify_hostname: false, tls_server_name: "server.test", server_trust: null, client_identity: null };
+ 
+-    expect(socketCatalogOptions(catalog)).toEqual([socket]);
+-    expect(matchingOption(catalog, http.package)).toBeUndefined();
+-  });
+-
+-  it("preserves App TLS while changing Server transport independently", () => {
+-    const appTls = setAppTransport(relaySettings(), "tls");
+-    const bothTls = setServerTransport(appTls, "tls");
+-
+-    expect(appSecurity(bothTls)).toEqual({
+-      mode: "tls",
+-      downstream_tls: { server_identity: "", client_authentication: { mode: "disabled" } },
+-    });
+-    expect(bothTls.topology).toMatchObject({
+-      settings: { security: { mode: "tls_to_tls", upstream_tls: { verify_hostname: true } } },
+-    });
+-  });
+-
+-  it("updates LocalResponder App TLS without creating Relay fields", () => {
+-    const tls = { server_identity: "local-id", client_authentication: { mode: "disabled" as const } };
+-
+-    expect(setAppTls(localSettings(), tls).topology).toEqual({
+-      mode: "local_responder",
+-      settings: { downstream_security: { mode: "tls", downstream_tls: tls } },
+-    });
+-  });
+-
+-  it("updates Relay App TLS while preserving Server TLS", () => {
+-    const current = setServerTransport(relaySettings(), "tls");
+-    const tls = { server_identity: "app-id", client_authentication: { mode: "disabled" as const } };
+-
+-    expect(setAppTls(current, tls).topology).toMatchObject({
+-      settings: {
+-        security: {
+-          mode: "tls_to_tls",
+-          downstream_tls: tls,
+-          upstream_tls: { verify_hostname: true },
+-        },
+-      },
+-    });
+-  });
+-
+-  it("updates Relay Server TLS while preserving App TLS", () => {
+-    const current = setAppTransport(relaySettings(), "tls");
+-    const tls = { verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "ca", client_identity: "identity" };
+-
+-    expect(setServerTls(current, tls).topology).toMatchObject({
+-      settings: {
+-        security: {
+-          mode: "tls_to_tls",
+-          downstream_tls: { server_identity: "", client_authentication: { mode: "disabled" } },
+-          upstream_tls: tls,
+-        },
+-      },
+-    });
+-  });
+-
+-  it("ignores Server TLS changes for LocalResponder", () => {
+-    const current = localSettings();
+-
+-    expect(setServerTls(current, { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null })).toBe(current);
+-  });
+-
+-  it("ignores invalid or unavailable Server transport selections", () => {
+-    const local = localSettings();
+-    const relay = relaySettings();
+-
+-    expect(setServerTransport(local, "tls")).toBe(local);
+-    expect(setServerTransport(relay, null as never)).toBe(relay);
+-  });
+-
+-  it("preserves existing Server TLS settings when TLS is selected again", () => {
+-    const current = setServerTls(setServerTransport(relaySettings(), "tls"), {
+-      verify_hostname: false, tls_server_name: "payments.example.test", server_trust: "ca", client_identity: "identity",
+-    });
+-
+-    expect(setServerTransport(current, "tls")).toEqual(current);
+-  });
+-
+-  it("returns the same settings when topology or processing mode already matches", () => {
+-    const relay = relaySettings();
+-
+-    expect(setSocketTopology(relay, "relay")).toBe(relay);
+-    expect(setProcessingMode(relay, "scripted")).toBe(relay);
+-  });
+-
+-  it("creates Scripted package state when binding from Direct processing", () => {
+-    expect(bindPackage({ mode: "direct" }, option(), false)).toMatchObject({
+-      mode: "scripted",
+-      settings: { package: { id: "iso-8583", version: "1.0.0" } },
+-    });
+-  });
+-
+-  it("returns no package match when the catalog has not loaded", () => {
+-    expect(matchingOption(undefined, { id: "iso-8583", version: "1.0.0" })).toBeUndefined();
+-  });
+-
+-  it.each([
+-    ["unknown Schema node type", { type: "float" }],
+-    ["missing array item Schema", { type: "array" }],
+-    ["empty Schema title", { type: "string", title: "" }],
+-  ])("rejects a catalog with %s", (_case, root) => {
+-    const candidate = option();
+-    candidate.upstream_schema!.root = root as never;
+-
+-    expect(isListenerProtocolPackageCatalog({
+-      options: [candidate], installed_version_count: 1, unavailable_version_count: 0, recommended_package: null,
+-    })).toBe(false);
+-  });
+-
+-  it("ignores a cleared processing Select instead of creating an unintended Scripted payload", () => {
+-    const current = relaySettings();
+-    current.processing = { mode: "direct" };
+-
+-    expect(setProcessingMode(current, null as never)).toEqual(current);
+-  });
+-
+-  it("ignores a cleared topology Select instead of changing topology", () => {
+-    const current = localSettings();
++    const appUpdated = updateAppTls(both, appTls);
++    const serverUpdated = updateServerTls(appUpdated, serverTls);
+ 
+-    expect(setSocketTopology(current, null as never)).toEqual(current);
++    expect(appSecurity(serverUpdated)).toEqual({ mode: "tls", downstream_tls: appTls });
++    expect(serverUpdated.topology.mode).toBe("relay");
++    if (serverUpdated.topology.mode === "relay") {
++      expect(serverUpdated.topology.settings.security).toMatchObject({
++        mode: "tls_to_tls",
++        upstream_tls: serverTls,
++      });
++    }
+   });
+-
+-  it("ignores a cleared transport Select instead of changing App security", () => {
+-    const current = setAppTransport(localSettings(), "tls");
+-
+-    expect(setAppTransport(current, null as never)).toEqual(current);
+-  });
+-
+ });
+diff --git a/src/features/listeners/socket-listener-model.ts b/src/features/listeners/socket-listener-model.ts
+index 2fcb329a..ed7de372 100644
+--- a/src/features/listeners/socket-listener-model.ts
++++ b/src/features/listeners/socket-listener-model.ts
+@@ -2,62 +2,29 @@ import type {
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerProtocolPackageOptionViewModel,
+   ProtocolPackageRef,
+-  ScriptedSocketProcessing,
+-  SocketDownstreamSecurity,
+-  SocketDownstreamTlsSettings,
+-  SocketPayloadProcessing,
+-  SocketRelaySecurity,
+-  SocketRelaySettings,
++  SocketDownstreamSecurityDraft,
++  SocketDownstreamTlsDraftSettings,
++  SocketPayloadProcessingDraft,
++  SocketRelayDraftSettings,
+   SocketUpstreamTlsSettings,
+ } from "@/generated/rust-types";
+ import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
+ import { isProtocolPackageSchema } from "@/lib/protocol-package-schema";
+ import { isProtocolPackageSource } from "@/features/protocol-packages/protocol-package-source";
+-import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
++import { socketDownstreamTls } from "./listener-data-plane";
+ 
+ export type SocketWorkingMode = "raw_relay" | "protocol_relay" | "local_response";
+ 
+-export function socketWorkingMode(settings: SocketRelaySettings): SocketWorkingMode {
+-  if (settings.topology.mode === "local_responder") {
+-    return "local_response";
+-  }
++export function socketWorkingMode(settings: SocketRelayDraftSettings): SocketWorkingMode {
++  if (settings.topology.mode === "local_responder") return "local_response";
+   return settings.processing.mode === "scripted" ? "protocol_relay" : "raw_relay";
+ }
+ 
+-export function setSocketWorkingMode(
+-  settings: SocketRelaySettings,
+-  mode: SocketWorkingMode,
+-  recommendedPackage?: ProtocolPackageRef | null,
+-): SocketRelaySettings {
+-  if (socketWorkingMode(settings) === mode) return settings;
+-  if (mode === "raw_relay") return setProcessingMode(settings, "direct");
+-  if (mode === "protocol_relay") {
+-    return setProcessingMode(setSocketTopology(settings, "relay"), "scripted", recommendedPackage);
+-  }
+-  if (mode === "local_response") {
+-    return setSocketTopology(
+-      setProcessingMode(settings, "scripted", recommendedPackage),
+-      "local_responder",
+-    );
+-  }
+-  return settings;
+-}
+-
+ export function exactPackageKey(value: ProtocolPackageRef): string {
+   return `${value.id}\u0000${value.version}`;
+ }
+ 
+-export function defaultDownstreamTls(): SocketDownstreamTlsSettings {
+-  return { server_identity: "", client_authentication: { mode: "disabled" } };
+-}
+-
+-function emptyScripted(packageRef?: ProtocolPackageRef): ScriptedSocketProcessing {
+-  return {
+-    package: packageRef ?? { id: "", version: "" },
+-  };
+-}
+-
+-export function appSecurity(settings: SocketRelaySettings): SocketDownstreamSecurity {
++export function appSecurity(settings: SocketRelayDraftSettings): SocketDownstreamSecurityDraft {
+   if (settings.topology.mode === "local_responder") {
+     return settings.topology.settings.downstream_security;
+   }
+@@ -65,134 +32,61 @@ export function appSecurity(settings: SocketRelaySettings): SocketDownstreamSecu
+   return tls ? { mode: "tls", downstream_tls: tls } : { mode: "tcp" };
+ }
+ 
+-function relaySecurity(
+-  appTls: SocketDownstreamTlsSettings | undefined,
+-  upstreamTls: SocketUpstreamTlsSettings | undefined,
+-): SocketRelaySecurity {
+-  if (appTls && upstreamTls) return { mode: "tls_to_tls", downstream_tls: appTls, upstream_tls: upstreamTls };
+-  if (appTls) return { mode: "tls_to_tcp", downstream_tls: appTls };
+-  if (upstreamTls) return { mode: "tcp_to_tls", upstream_tls: upstreamTls };
+-  return { mode: "transparent" };
+-}
+-
+-export function setAppTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
+-  if (mode !== "tcp" && mode !== "tls") return settings;
+-  const existing = appSecurity(settings);
+-  const appTls = mode === "tls"
+-    ? existing.mode === "tls" ? existing.downstream_tls : defaultDownstreamTls()
+-    : undefined;
++export function updateAppTls(
++  settings: SocketRelayDraftSettings,
++  tls: SocketDownstreamTlsDraftSettings,
++): SocketRelayDraftSettings {
+   if (settings.topology.mode === "local_responder") {
+     return {
+       ...settings,
+-      topology: { mode: "local_responder", settings: {
+-        downstream_security: appTls ? { mode: "tls", downstream_tls: appTls } : { mode: "tcp" },
+-      } },
++      topology: {
++        mode: "local_responder",
++        settings: { downstream_security: { mode: "tls", downstream_tls: tls } },
++      },
+     };
+   }
+   const relay = settings.topology.settings;
+-  return { ...settings, topology: { mode: "relay", settings: {
+-    ...relay,
+-    security: relaySecurity(appTls, socketUpstreamTls(relay.security)),
+-  } } };
+-}
+-
+-export function setAppTls(settings: SocketRelaySettings, tls: SocketDownstreamTlsSettings): SocketRelaySettings {
+-  if (settings.topology.mode === "local_responder") {
+-    return { ...settings, topology: { mode: "local_responder", settings: {
+-      downstream_security: { mode: "tls", downstream_tls: tls },
+-    } } };
+-  }
+-  const relay = settings.topology.settings;
+-  return { ...settings, topology: { mode: "relay", settings: {
+-    ...relay,
+-    security: relaySecurity(tls, socketUpstreamTls(relay.security)),
+-  } } };
+-}
+-
+-export function setServerTransport(settings: SocketRelaySettings, mode: "tcp" | "tls"): SocketRelaySettings {
+-  if (mode !== "tcp" && mode !== "tls") return settings;
+-  if (settings.topology.mode !== "relay") return settings;
+-  const relay = settings.topology.settings;
+-  const upstreamTls = mode === "tls"
+-    ? socketUpstreamTls(relay.security) ?? { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null }
+-    : undefined;
+-  const downstream = socketDownstreamTls(relay.security);
+-  return { ...settings, topology: { mode: "relay", settings: {
+-    ...relay,
+-    security: relaySecurity(downstream, upstreamTls),
+-  } } };
+-}
+-
+-export function setServerTls(settings: SocketRelaySettings, tls: SocketUpstreamTlsSettings): SocketRelaySettings {
+-  if (settings.topology.mode !== "relay") return settings;
+-  const relay = settings.topology.settings;
+-  return { ...settings, topology: { mode: "relay", settings: {
+-    ...relay,
+-    security: relaySecurity(socketDownstreamTls(relay.security), tls),
+-  } } };
+-}
+-
+-export function setSocketTopology(
+-  settings: SocketRelaySettings,
+-  mode: "relay" | "local_responder",
+-  recommendedPackage?: ProtocolPackageRef | null,
+-): SocketRelaySettings {
+-  if (mode !== "relay" && mode !== "local_responder") return settings;
+-  if (settings.topology.mode === mode) return settings;
+-  if (mode === "local_responder") {
+-    const security = appSecurity(settings);
+-    const current = settings.processing.mode === "scripted"
+-      ? settings.processing.settings
+-      : emptyScripted(recommendedPackage ?? undefined);
+-    return {
+-      ...settings,
+-      topology: { mode: "local_responder", settings: { downstream_security: security } },
+-      processing: { mode: "scripted", settings: current },
+-    };
+-  }
+-  const security = appSecurity(settings);
++  const security = relay.security.mode === "tls_to_tls"
++    ? { ...relay.security, downstream_tls: tls }
++    : relay.security.mode === "tls_to_tcp"
++      ? { ...relay.security, downstream_tls: tls }
++      : relay.security;
+   return {
+     ...settings,
+-    topology: { mode: "relay", settings: {
+-      upstream: { host: "", port: 0 },
+-      security: relaySecurity(security.mode === "tls" ? security.downstream_tls : undefined, undefined),
+-    } },
++    topology: { mode: "relay", settings: { ...relay, security } },
+   };
+ }
+ 
+-export function setProcessingMode(
+-  settings: SocketRelaySettings,
+-  mode: "direct" | "scripted",
+-  recommendedPackage?: ProtocolPackageRef | null,
+-): SocketRelaySettings {
+-  if (mode !== "direct" && mode !== "scripted") return settings;
+-  if (mode === "direct") {
+-    const relaySettings = settings.topology.mode === "relay"
+-      ? settings
+-      : setSocketTopology(settings, "relay");
+-    return { ...relaySettings, processing: { mode: "direct" } };
+-  }
+-  if (settings.processing.mode === "scripted") return settings;
++export function updateServerTls(
++  settings: SocketRelayDraftSettings,
++  tls: SocketUpstreamTlsSettings,
++): SocketRelayDraftSettings {
++  if (settings.topology.mode !== "relay") return settings;
++  const relay = settings.topology.settings;
++  const security = relay.security.mode === "tls_to_tls"
++    ? { ...relay.security, upstream_tls: tls }
++    : relay.security.mode === "tcp_to_tls"
++      ? { ...relay.security, upstream_tls: tls }
++      : relay.security;
+   return {
+     ...settings,
+-    processing: { mode: "scripted", settings: emptyScripted(recommendedPackage ?? undefined) },
++    topology: { mode: "relay", settings: { ...relay, security } },
+   };
+ }
+ 
+ export function bindPackage(
+-  processing: SocketPayloadProcessing,
++  processing: SocketPayloadProcessingDraft,
+   option: ListenerProtocolPackageOptionViewModel,
+-  local: boolean,
+-): SocketPayloadProcessing {
++): SocketPayloadProcessingDraft {
+   void processing;
+-  void local;
+   return { mode: "scripted", settings: { package: option.package } };
+ }
+ 
+ export function matchingOption(
+   catalog: ListenerProtocolPackageCatalogViewModel | undefined,
+-  packageRef: ProtocolPackageRef,
++  packageRef: ProtocolPackageRef | null,
+ ): ListenerProtocolPackageOptionViewModel | undefined {
++  if (!packageRef) return undefined;
+   const key = exactPackageKey(packageRef);
+   return socketCatalogOptions(catalog).find((item) => exactPackageKey(item.package) === key);
+ }
+diff --git a/src/features/listeners/socket-listener-settings.test.tsx b/src/features/listeners/socket-listener-settings.test.tsx
+index e82174c2..ed4b8755 100644
+--- a/src/features/listeners/socket-listener-settings.test.tsx
++++ b/src/features/listeners/socket-listener-settings.test.tsx
+@@ -1,10 +1,10 @@
+ import { render, screen } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+-import { useState } from "react";
++import type { ComponentProps } from "react";
+ import { describe, expect, it, vi } from "vitest";
+-import type { CertificateReference, SocketRelaySettings } from "@/generated/rust-types";
++import type { CertificateReference, SocketRelayDraftSettings } from "@/generated/rust-types";
+ import { SocketListenerSettings } from "./socket-listener-settings";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
++import { socketRuntimeLimits } from "./listeners-view.test-support";
+ import type { ProtocolCatalogState } from "./socket-processing-card";
+ 
+ const certificates: CertificateReference[] = [
+@@ -14,7 +14,7 @@ const certificates: CertificateReference[] = [
+   { id: "client-identity", label: "Client Identity", kind: "upstream_client_identity", reference: "managed:client-identity" },
+ ];
+ 
+-function relayTlsSettings(): SocketRelaySettings {
++function relayTlsSettings(): SocketRelayDraftSettings {
+   return {
+     topology: {
+       mode: "relay",
+@@ -36,12 +36,12 @@ function relayTlsSettings(): SocketRelaySettings {
+       },
+     },
+     maximum_connections: 100,
+-    runtime_limits: defaultSocketRuntimeLimits(),
++    runtime_limits: socketRuntimeLimits(),
+     processing: { mode: "direct" },
+   };
+ }
+ 
+-function localTlsSettings(): SocketRelaySettings {
++function localTlsSettings(): SocketRelayDraftSettings {
+   return {
+     ...relayTlsSettings(),
+     topology: {
+@@ -65,19 +65,20 @@ function localTlsSettings(): SocketRelaySettings {
+   };
+ }
+ 
+-function protocolRelaySettings(): SocketRelaySettings {
++function protocolRelaySettings(): SocketRelayDraftSettings {
+   return {
+     ...localTlsSettings(),
+     topology: relayTlsSettings().topology,
+   };
+ }
+ 
+-function renderSettings(settings: SocketRelaySettings, locked = false, overrides: {
+-  onChange?: (changes: Partial<SocketRelaySettings>) => void;
++function renderSettings(settings: SocketRelayDraftSettings, locked = false, overrides: {
++  onChange?: (changes: Partial<SocketRelayDraftSettings>) => void;
+   fieldErrors?: Record<string, string[]>;
+   protocolCatalog?: ProtocolCatalogState;
+ } = {}) {
+-  const onChange = overrides.onChange ?? vi.fn<(changes: Partial<SocketRelaySettings>) => void>();
++  const onChange = overrides.onChange ?? vi.fn<(changes: Partial<SocketRelayDraftSettings>) => void>();
++  const onTransition = vi.fn<ComponentProps<typeof SocketListenerSettings>["onTransition"]>();
+   const view = render(
+     <SocketListenerSettings
+       settings={settings}
+@@ -91,8 +92,11 @@ function renderSettings(settings: SocketRelaySettings, locked = false, overrides
+       locked={locked}
+       fieldErrors={overrides.fieldErrors}
+       busy={false}
++      transitionPending={false}
++      serverControlsBlocked={false}
+       testing={false}
+       onChange={onChange}
++      onTransition={onTransition}
+       onImportDownstreamServerIdentity={vi.fn().mockResolvedValue(true)}
+       onImportDownstreamClientTrust={vi.fn().mockResolvedValue(true)}
+       onImportClientIdentity={vi.fn().mockResolvedValue(true)}
+@@ -100,26 +104,7 @@ function renderSettings(settings: SocketRelaySettings, locked = false, overrides
+       onTest={vi.fn().mockResolvedValue(undefined)}
+     />,
+   );
+-  return { ...view, onChange };
+-}
+-
+-function SettingsHarness() {
+-  const [settings, setSettings] = useState(relayTlsSettings());
+-  return <SocketListenerSettings
+-    settings={settings}
+-    certificateReferences={certificates}
+-    certificateDetails={[]}
+-    protocolCatalog={{ loading: false, refresh: vi.fn(), data: { options: [], installed_version_count: 0, unavailable_version_count: 0, recommended_package: null } }}
+-    locked={false}
+-    busy={false}
+-    testing={false}
+-    onChange={(changes) => setSettings((current) => ({ ...current, ...changes }))}
+-    onImportDownstreamServerIdentity={vi.fn().mockResolvedValue(true)}
+-    onImportDownstreamClientTrust={vi.fn().mockResolvedValue(true)}
+-    onImportClientIdentity={vi.fn().mockResolvedValue(true)}
+-    onImportServerTrust={vi.fn().mockResolvedValue(true)}
+-    onTest={vi.fn().mockResolvedValue(undefined)}
+-  />;
++  return { ...view, onChange, onTransition };
+ }
+ 
+ describe("SocketListenerSettings", () => {
+@@ -166,22 +151,18 @@ describe("SocketListenerSettings", () => {
+     expect(screen.getByLabelText("Server 传输")).toBeEnabled();
+   });
+ 
+-  it("switches protocol relay to local response and back without hook-order errors or stale Server fields", async () => {
+-    const consoleError = vi.spyOn(console, "error").mockImplementation(() => undefined);
++  it("requests topology changes without constructing the replacement settings locally", async () => {
+     const user = userEvent.setup();
+-    render(<SettingsHarness />);
++    const { onChange, onTransition } = renderSettings(relayTlsSettings());
+ 
+     await user.click(screen.getByLabelText("Socket 响应方式"));
+     await user.click(await screen.findByRole("option", { name: "本机应答" }));
+-    expect(screen.queryByLabelText("Socket Server 主机")).not.toBeInTheDocument();
+-    expect(screen.queryByLabelText("Server 传输")).not.toBeInTheDocument();
+ 
+-    await user.click(screen.getByLabelText("Socket 响应方式"));
+-    await user.click(await screen.findByRole("option", { name: "转发到上游" }));
+-    expect(screen.getByLabelText("Socket Server 主机")).toHaveValue("");
+-    expect(screen.getByLabelText("Socket Server 端口")).toHaveValue("0");
+-    expect(consoleError.mock.calls.flat().join(" ")).not.toMatch(/order of Hooks|Rendered (?:more|fewer) hooks/);
+-    consoleError.mockRestore();
++    expect(onTransition).toHaveBeenCalledWith(
++      { type: "socket_topology", mode: "local_responder" },
++      null,
++    );
++    expect(onChange).not.toHaveBeenCalled();
+   });
+ 
+   it("selects a protocol package through HeroUI as the full processing chain", async () => {
+@@ -213,7 +194,7 @@ describe("SocketListenerSettings", () => {
+         root: { type: "object" as const, title: "ISO 8583 Response", properties: { response_code: { type: "string" as const, title: "Response" } } },
+       },
+     };
+-    const { onChange } = renderSettings(relayTlsSettings(), false, {
++    const { onChange, onTransition } = renderSettings(relayTlsSettings(), false, {
+       protocolCatalog: {
+         loading: false,
+         refresh: vi.fn().mockResolvedValue(undefined),
+@@ -230,23 +211,23 @@ describe("SocketListenerSettings", () => {
+     await user.click(screen.getByLabelText("Socket 响应方式"));
+     await user.click(await screen.findByRole("option", { name: "本机应答" }));
+ 
+-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({
+-      processing: expect.objectContaining({
+-        mode: "scripted",
+-        settings: expect.objectContaining({ package: recommended }),
+-      }),
+-    }));
++    expect(onTransition).toHaveBeenCalledWith(
++      { type: "socket_topology", mode: "local_responder" },
++      recommended,
++    );
++    expect(onChange).not.toHaveBeenCalled();
+   });
+ 
+   it("selects raw relay through HeroUI and announces that protocol processing was cleared", async () => {
+     const scripted = protocolRelaySettings();
+-    const { onChange } = renderSettings(scripted);
++    const { onChange, onTransition } = renderSettings(scripted);
+     const user = userEvent.setup();
+ 
+     await user.click(screen.getByLabelText("Socket 协议处理方案"));
+     await user.click(await screen.findByRole("option", { name: /不使用协议包/ }));
+ 
+-    expect(onChange).toHaveBeenCalledWith(expect.objectContaining({ processing: { mode: "direct" } }));
++    expect(onTransition).toHaveBeenCalledWith({ type: "processing", mode: "direct" });
++    expect(onChange).not.toHaveBeenCalled();
+     expect(screen.getByRole("status")).toHaveTextContent("已取消协议包；数据将保持原样透明转发。");
+   });
+ 
+diff --git a/src/features/listeners/socket-listener-settings.tsx b/src/features/listeners/socket-listener-settings.tsx
+index c3419f70..7806d72b 100644
+--- a/src/features/listeners/socket-listener-settings.tsx
++++ b/src/features/listeners/socket-listener-settings.tsx
+@@ -4,30 +4,33 @@ import { useState, type ReactNode } from "react";
+ import { Alert, Card, Label, ListBox, NumberField, Select } from "@heroui/react";
+ import type {
+   CertificateReference,
++  ListenerDraftTransition,
+   ListenerCertificateDetailViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+-  SocketRelaySettings,
++  ProtocolPackageRef,
++  SocketRelayDraftSettings,
+ } from "@/generated/rust-types";
+-import {
+-  bindPackage,
+-  matchingOption,
+-  setSocketTopology,
+-} from "./socket-listener-model";
+ import { SocketProcessingCard, type ProtocolCatalogState } from "./socket-processing-card";
+ import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
+ 
+ type Props = {
+-  settings: SocketRelaySettings;
++  settings: SocketRelayDraftSettings;
+   certificateReferences: CertificateReference[];
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   protocolCatalog: ProtocolCatalogState;
+   locked: boolean;
+   fieldErrors?: Record<string, string[]>;
+   busy: boolean;
++  transitionPending: boolean;
++  serverControlsBlocked: boolean;
+   testing: boolean;
+   testResult?: ListenerUpstreamConnectionTestViewModel;
+   testError?: string;
+-  onChange: (changes: Partial<SocketRelaySettings>) => void;
++  onChange: (changes: Partial<SocketRelayDraftSettings>) => void;
++  onTransition: (
++    transition: ListenerDraftTransition,
++    recommendedPackage?: ProtocolPackageRef | null,
++  ) => void;
+   onImportDownstreamServerIdentity: (label: string, password: string) => Promise<boolean>;
+   onImportDownstreamClientTrust: (label: string) => Promise<boolean>;
+   onImportClientIdentity: (label: string, password: string) => Promise<boolean>;
+@@ -37,7 +40,7 @@ type Props = {
+ 
+ export function SocketListenerSettings(props: Props): ReactNode {
+   const [announcement, setAnnouncement] = useState("");
+-  const apply = (settings: SocketRelaySettings) => props.onChange(settings);
++  const apply = (settings: SocketRelayDraftSettings) => props.onChange(settings);
+   const topologyMode = props.settings.topology.mode;
+   return (
+     <div className="col-span-2 space-y-4 max-[700px]:col-span-1">
+@@ -56,16 +59,10 @@ export function SocketListenerSettings(props: Props): ReactNode {
+           <Select aria-label="Socket 响应方式" selectedKey={topologyMode} isDisabled={props.locked}
+             onSelectionChange={(key) => {
+               if (key !== "relay" && key !== "local_responder") return;
+-              let next = setSocketTopology(
+-                props.settings,
+-                key,
++              props.onTransition(
++                { type: "socket_topology", mode: key },
+                 props.protocolCatalog.data?.recommended_package,
+               );
+-              if (next.processing.mode === "scripted") {
+-                const option = matchingOption(props.protocolCatalog.data, next.processing.settings.package);
+-                if (option) next = { ...next, processing: bindPackage(next.processing, option, key === "local_responder") };
+-              }
+-              apply(next);
+               setAnnouncement(key === "relay"
+                 ? "已切换为转发到上游；不选择协议包时将透明转发。"
+                 : "已切换为本机应答；Server 地址和安全设置已清除。");
+@@ -88,16 +85,17 @@ export function SocketListenerSettings(props: Props): ReactNode {
+       </p>}
+       {/* 锁状态变化时重建证书卡，可立即关闭已打开的导入 Dialog，防止运行快照锁被绕过。 */}
+       <SocketAppSecurityCard key={`app-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+-        certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
+-        onChange={apply} onImportIdentity={props.onImportDownstreamServerIdentity}
++        certificateDetails={props.certificateDetails} locked={props.locked || props.serverControlsBlocked} busy={props.busy}
++        onChange={apply} onTransition={props.onTransition} onImportIdentity={props.onImportDownstreamServerIdentity}
+         onImportTrust={props.onImportDownstreamClientTrust} />
+       {topologyMode === "relay" && <SocketServerCard key={`server-security-${props.locked}`} settings={props.settings} certificateReferences={props.certificateReferences}
+         certificateDetails={props.certificateDetails} locked={props.locked} busy={props.busy}
+         testing={props.testing} testResult={props.testResult} testError={props.testError}
+-        onChange={apply} onImportIdentity={props.onImportClientIdentity}
++        testBlocked={props.transitionPending}
++        onChange={apply} onTransition={props.onTransition} onImportIdentity={props.onImportClientIdentity}
+         onImportTrust={props.onImportServerTrust} onTest={props.onTest} />}
+       <SocketProcessingCard settings={props.settings} catalog={props.protocolCatalog}
+-        locked={props.locked} onChange={apply} />
++        locked={props.locked} onChange={apply} onTransition={props.onTransition} />
+     </div>
+   );
+ }
+diff --git a/src/features/listeners/socket-processing-card.test.tsx b/src/features/listeners/socket-processing-card.test.tsx
+index e34879c5..7a4569b3 100644
+--- a/src/features/listeners/socket-processing-card.test.tsx
++++ b/src/features/listeners/socket-processing-card.test.tsx
+@@ -5,10 +5,10 @@ import { describe, expect, it, vi } from "vitest";
+ import type {
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerProtocolPackageOptionViewModel,
+-  SocketRelaySettings,
++  SocketRelayDraftSettings,
+ } from "@/generated/rust-types";
+ import { SocketProcessingCard, type ProtocolCatalogState } from "./socket-processing-card";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
++import { socketRuntimeLimits } from "./listeners-view.test-support";
+ 
+ vi.mock("./socket-protocol-package-dialog", () => ({
+   SocketProtocolPackageDialog: ({ packageRef }: { packageRef: { id: string; version: string } }) => (
+@@ -57,7 +57,7 @@ function catalog(
+   };
+ }
+ 
+-function settings(mode: "relay" | "local_responder" = "relay"): SocketRelaySettings {
++function settings(mode: "relay" | "local_responder" = "relay"): SocketRelayDraftSettings {
+   return {
+     topology: mode === "relay"
+       ? {
+@@ -72,7 +72,7 @@ function settings(mode: "relay" | "local_responder" = "relay"): SocketRelaySetti
+         settings: { downstream_security: { mode: "tcp" } },
+       },
+     maximum_connections: 32,
+-    runtime_limits: defaultSocketRuntimeLimits(),
++    runtime_limits: socketRuntimeLimits(),
+     processing: {
+       mode: "scripted",
+       settings: {
+@@ -88,7 +88,7 @@ describe("SocketProcessingCard", () => {
+     direct.processing = { mode: "direct" };
+     const user = userEvent.setup();
+ 
+-    render(<SocketProcessingCard settings={direct} catalog={catalog()} locked={false} onChange={vi.fn()} />);
++    render(<SocketProcessingCard settings={direct} catalog={catalog()} locked={false} onTransition={vi.fn()} onChange={vi.fn()} />);
+ 
+     expect(screen.getByText("当前未使用协议包，应用与上游之间的数据保持原样转发。")).toBeVisible();
+     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+@@ -98,7 +98,7 @@ describe("SocketProcessingCard", () => {
+ 
+   it("automatically applies protocol capabilities and hides identity in advanced details", async () => {
+     const user = userEvent.setup();
+-    render(<SocketProcessingCard settings={settings()} catalog={catalog()} locked={false} onChange={vi.fn()} />);
++    render(<SocketProcessingCard settings={settings()} catalog={catalog()} locked={false} onTransition={vi.fn()} onChange={vi.fn()} />);
+ 
+     expect(screen.queryByRole("switch")).not.toBeInTheDocument();
+     expect(screen.getByText(/双向数据会自动解析为字段/)).toBeVisible();
+@@ -119,7 +119,7 @@ describe("SocketProcessingCard", () => {
+         settings={settings("local_responder")}
+         catalog={catalog()}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -132,34 +132,33 @@ describe("SocketProcessingCard", () => {
+     const direct = settings();
+     direct.processing = { mode: "direct" };
+     const onChange = vi.fn();
++    const onTransition = vi.fn();
+     const user = userEvent.setup();
+-    render(<SocketProcessingCard settings={direct} catalog={catalog()} locked={false} onChange={onChange} />);
++    render(<SocketProcessingCard settings={direct} catalog={catalog()} locked={false} onTransition={onTransition} onChange={onChange} />);
+ 
+     await user.click(screen.getByLabelText("Socket 协议处理方案"));
+     await user.click(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0 · 远端调试 · 在线" }));
+ 
+-    expect(onChange).toHaveBeenCalledWith({
+-      ...direct,
+-      processing: {
+-        mode: "scripted",
+-        settings: {
+-          package: { id: "iso-8583", version: "1.0.0" },
+-        },
+-      },
+-    });
++    expect(onTransition).toHaveBeenCalledWith(
++      { type: "processing", mode: "scripted" },
++      { id: "iso-8583", version: "1.0.0" },
++    );
++    expect(onChange).not.toHaveBeenCalled();
+     expect(screen.getByRole("status")).toHaveTextContent("完整的分帧、解析、规则、编码和显示处理链将自动应用");
+   });
+ 
+   it("removing a relay package returns to exact transparent processing", async () => {
+     const current = settings();
+     const onChange = vi.fn();
++    const onTransition = vi.fn();
+     const user = userEvent.setup();
+-    render(<SocketProcessingCard settings={current} catalog={catalog()} locked={false} onChange={onChange} />);
++    render(<SocketProcessingCard settings={current} catalog={catalog()} locked={false} onTransition={onTransition} onChange={onChange} />);
+ 
+     await user.click(screen.getByLabelText("Socket 协议处理方案"));
+     await user.click(await screen.findByRole("option", { name: "不使用协议包（透明转发）" }));
+ 
+-    expect(onChange).toHaveBeenCalledWith({ ...current, processing: { mode: "direct" } });
++    expect(onTransition).toHaveBeenCalledWith({ type: "processing", mode: "direct" });
++    expect(onChange).not.toHaveBeenCalled();
+   });
+ 
+   it("shows a loading state without exposing stale package options", async () => {
+@@ -169,7 +168,7 @@ describe("SocketProcessingCard", () => {
+         settings={settings()}
+         catalog={{ ...catalog(), loading: true }}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -187,7 +186,7 @@ describe("SocketProcessingCard", () => {
+         settings={settings()}
+         catalog={{ loading: false, error: "目录暂时不可用", refresh }}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -203,7 +202,7 @@ describe("SocketProcessingCard", () => {
+         settings={settings()}
+         catalog={catalog([], { installed_version_count: 4, unavailable_version_count: 4 })}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -221,7 +220,7 @@ describe("SocketProcessingCard", () => {
+           unavailable_version_count: 3,
+         })}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -234,7 +233,7 @@ describe("SocketProcessingCard", () => {
+   it("does not expose HTTP packages in the Socket selector", async () => {
+     const http = packageOption("2.0.0", { kind: "http", name: "HTTP JSON" });
+     const user = userEvent.setup();
+-    render(<SocketProcessingCard settings={settings()} catalog={catalog([packageOption(), http])} locked={false} onChange={vi.fn()} />);
++    render(<SocketProcessingCard settings={settings()} catalog={catalog([packageOption(), http])} locked={false} onTransition={vi.fn()} onChange={vi.fn()} />);
+ 
+     await user.click(screen.getByLabelText("Socket 协议处理方案"));
+     expect(await screen.findByRole("option", { name: "ISO 8583 1.0.0 · 1.0.0 · 远端调试 · 在线" })).toBeVisible();
+@@ -248,7 +247,7 @@ describe("SocketProcessingCard", () => {
+         settings={settings()}
+         catalog={catalog([packageOption("2.0.0")], { installed_version_count: 2, unavailable_version_count: 1 })}
+         locked={false}
+-        onChange={vi.fn()}
++        onTransition={vi.fn()} onChange={vi.fn()}
+       />,
+     );
+ 
+@@ -258,7 +257,7 @@ describe("SocketProcessingCard", () => {
+   });
+ 
+   it("locks package changes while the entry is running", () => {
+-    render(<SocketProcessingCard settings={settings()} catalog={catalog()} locked onChange={vi.fn()} />);
++    render(<SocketProcessingCard settings={settings()} catalog={catalog()} locked onTransition={vi.fn()} onChange={vi.fn()} />);
+     expect(screen.getByLabelText("Socket 协议处理方案")).toBeDisabled();
+   });
+ });
+diff --git a/src/features/listeners/socket-processing-card.tsx b/src/features/listeners/socket-processing-card.tsx
+index 9d070858..5bde56ff 100644
+--- a/src/features/listeners/socket-processing-card.tsx
++++ b/src/features/listeners/socket-processing-card.tsx
+@@ -3,9 +3,11 @@ import { useState, type Key } from "react";
+ import type {
+   ListenerProtocolPackageCatalogViewModel,
+   ListenerProtocolPackageOptionViewModel,
+-  SocketRelaySettings,
++  ListenerDraftTransition,
++  ProtocolPackageRef,
++  SocketRelayDraftSettings,
+ } from "@/generated/rust-types";
+-import { bindPackage, exactPackageKey, matchingOption, setProcessingMode, socketCatalogOptions } from "./socket-listener-model";
++import { bindPackage, exactPackageKey, matchingOption, socketCatalogOptions } from "./socket-listener-model";
+ import { SocketProtocolPackageDialog } from "./socket-protocol-package-dialog";
+ 
+ export interface ProtocolCatalogState {
+@@ -17,24 +19,29 @@ export interface ProtocolCatalogState {
+ 
+ const TRANSPARENT_RELAY_KEY = "__transparent_relay__";
+ 
+-export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
+-  settings: SocketRelaySettings;
++export function SocketProcessingCard({ settings, catalog, locked, onChange, onTransition }: {
++  settings: SocketRelayDraftSettings;
+   catalog: ProtocolCatalogState;
+   locked: boolean;
+-  onChange: (settings: SocketRelaySettings) => void;
++  onChange: (settings: SocketRelayDraftSettings) => void;
++  onTransition: (
++    transition: ListenerDraftTransition,
++    recommendedPackage?: ProtocolPackageRef | null,
++  ) => void;
+ }) {
+   // 包切换可能按能力原子关闭开关，必须通过 live region 告知键盘/读屏用户。
+   const [announcement, setAnnouncement] = useState("");
+   const processing = settings.processing;
+   const scripted = processing.mode === "scripted" ? processing.settings : undefined;
++  const boundPackage = scripted?.package ?? undefined;
+   const local = settings.topology.mode === "local_responder";
+   // useIpcQuery 刷新时会保留旧 data。加载或错误状态下必须把旧快照视为不可用，
+   // 否则用户可能在 Rust 正在重验/已经拒绝目录时继续修改方向开关。
+   const selected = catalog.loading || catalog.error
+     ? undefined
+-    : scripted ? matchingOption(catalog.data, scripted.package) : undefined;
+-  const selectedKey = scripted ? exactPackageKey(scripted.package) : TRANSPARENT_RELAY_KEY;
+-  const hasBoundPackage = Boolean(scripted && scripted.package.id.length > 0 && scripted.package.version.length > 0);
++    : matchingOption(catalog.data, boundPackage ?? null);
++  const selectedKey = boundPackage ? exactPackageKey(boundPackage) : local ? undefined : TRANSPARENT_RELAY_KEY;
++  const hasBoundPackage = Boolean(boundPackage);
+   const missingFromCatalog = hasBoundPackage && !selected;
+   const unavailableBound = missingFromCatalog
+     && !catalog.loading
+@@ -44,19 +51,18 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
+ 
+   function selectPackage(key: Key | null) {
+     if (!local && key === TRANSPARENT_RELAY_KEY) {
+-      onChange(setProcessingMode(settings, "direct"));
++      onTransition({ type: "processing", mode: "direct" });
+       setAnnouncement("已取消协议包；数据将保持原样透明转发。");
+       return;
+     }
+     const option = socketOptions.find((item) => exactPackageKey(item.package) === key);
+     if (!option) return;
+-    const current = processing.mode === "scripted"
+-      ? processing
+-      : setProcessingMode(settings, "scripted").processing;
+-    if (current.mode !== "scripted") return;
+-    const nextProcessing = bindPackage(current, option, local);
+     setAnnouncement(`已选择 ${option.name}；完整的分帧、解析、规则、编码和显示处理链将自动应用。`);
+-    onChange({ ...settings, processing: nextProcessing });
++    if (processing.mode !== "scripted") {
++      onTransition({ type: "processing", mode: "scripted" }, option.package);
++      return;
++    }
++    onChange({ ...settings, processing: bindPackage(processing, option) });
+   }
+ 
+   return (
+@@ -89,7 +95,7 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
+         {unavailableBound && <Alert status="warning"><Alert.Indicator /><Alert.Content>
+           <Alert.Title>当前处理方案已不可用</Alert.Title>
+           <Alert.Description>
+-            精确身份 {scripted?.package.id}@{scripted?.package.version} 仍会保留，不会自动替换。
++            精确身份 {boundPackage?.id}@{boundPackage?.version} 仍会保留，不会自动替换。
+             该版本可能已停用、校验失败，或其外部进程已离线；恢复可用后刷新目录，或选择新的方案。
+           </Alert.Description>
+         </Alert.Content></Alert>}
+@@ -103,8 +109,8 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
+               {!local && <ListBox.Item id={TRANSPARENT_RELAY_KEY} textValue="不使用协议包（透明转发）">
+                 不使用协议包（透明转发）
+               </ListBox.Item>}
+-              {missingFromCatalog && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
+-                {scripted?.package.id}@{scripted?.package.version} · 当前选择（不可用）
++              {missingFromCatalog && boundPackage && <ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）">
++                {boundPackage.id}@{boundPackage.version} · 当前选择（不可用）
+               </ListBox.Item>}
+               {(!catalog.loading && !catalog.error ? socketOptions : []).map((option) => (
+                 <ListBox.Item key={exactPackageKey(option.package)} id={exactPackageKey(option.package)} textValue={optionLabel(option)}>
+@@ -114,12 +120,12 @@ export function SocketProcessingCard({ settings, catalog, locked, onChange }: {
+             </ListBox></Select.Popover>
+           </Select>
+         </div>
+-        {scripted && hasBoundPackage && <details className="rounded-xl border border-[var(--telemetry-line)] p-3">
++        {boundPackage && <details className="rounded-xl border border-[var(--telemetry-line)] p-3">
+           <summary className="cursor-pointer text-sm font-medium">高级技术信息</summary>
+           <div className="mt-3 space-y-3">
+             {selected && <PackageSummary option={selected} />}
+-            {!selected && <Chip variant="soft">{scripted.package.id}@{scripted.package.version}</Chip>}
+-            <SocketProtocolPackageDialog packageRef={scripted.package} disabled={locked || catalog.loading || Boolean(catalog.error)} />
++            {!selected && <Chip variant="soft">{boundPackage.id}@{boundPackage.version}</Chip>}
++            <SocketProtocolPackageDialog packageRef={boundPackage} disabled={locked || catalog.loading || Boolean(catalog.error)} />
+           </div>
+         </details>}
+         {announcement && <p role="status" aria-live="polite" className="text-sm text-[var(--telemetry-muted)]">
+diff --git a/src/features/listeners/socket-security-cards.test-support.tsx b/src/features/listeners/socket-security-cards.test-support.tsx
+index 9e8bc423..d292a8b6 100644
+--- a/src/features/listeners/socket-security-cards.test-support.tsx
++++ b/src/features/listeners/socket-security-cards.test-support.tsx
+@@ -3,10 +3,10 @@ import { vi } from "vitest";
+ import type {
+   CertificateReference,
+   ListenerUpstreamConnectionTestViewModel,
+-  SocketRelaySettings,
++  SocketRelayDraftSettings,
+ } from "@/generated/rust-types";
+ import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
++import { socketRuntimeLimits } from "./listeners-view.test-support";
+ 
+ export const references: CertificateReference[] = [
+   { id: "app-id", label: "App Identity", kind: "reverse_server_identity", reference: "managed:app-id" },
+@@ -15,7 +15,7 @@ export const references: CertificateReference[] = [
+   { id: "client-id", label: "Client Identity", kind: "upstream_client_identity", reference: "managed:client-id" },
+ ];
+ 
+-export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): SocketRelaySettings {
++export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): SocketRelayDraftSettings {
+   return {
+     topology: {
+       mode: "relay",
+@@ -37,19 +37,19 @@ export function relay(security: "transparent" | "tls_to_tls" = "tls_to_tls"): So
+       },
+     },
+     maximum_connections: 32,
+-    runtime_limits: defaultSocketRuntimeLimits(),
++    runtime_limits: socketRuntimeLimits(),
+     processing: { mode: "direct" },
+   };
+ }
+ 
+-export function local(): SocketRelaySettings {
++export function local(): SocketRelayDraftSettings {
+   return {
+     ...relay(),
+     topology: { mode: "local_responder", settings: { downstream_security: { mode: "tcp" } } },
+   };
+ }
+ 
+-export function common(settings: SocketRelaySettings, overrides: { locked?: boolean; busy?: boolean } = {}) {
++export function common(settings: SocketRelayDraftSettings, overrides: { locked?: boolean; busy?: boolean } = {}) {
+   return {
+     settings,
+     certificateReferences: references,
+@@ -59,6 +59,7 @@ export function common(settings: SocketRelaySettings, overrides: { locked?: bool
+     locked: overrides.locked ?? false,
+     busy: overrides.busy ?? false,
+     onChange: vi.fn(),
++    onTransition: vi.fn(),
+   };
+ }
+ 
+@@ -84,6 +85,7 @@ export function renderServer(settings = relay(), overrides: {
+     testing: overrides.testing ?? false,
+     testResult: overrides.testResult,
+     testError: overrides.testError,
++    testBlocked: false,
+     onImportIdentity: vi.fn().mockResolvedValue(true),
+     onImportTrust: vi.fn().mockResolvedValue(true),
+     onTest: vi.fn().mockResolvedValue(undefined),
+diff --git a/src/features/listeners/socket-security-cards.test.tsx b/src/features/listeners/socket-security-cards.test.tsx
+index 3aa00d09..5c212f70 100644
+--- a/src/features/listeners/socket-security-cards.test.tsx
++++ b/src/features/listeners/socket-security-cards.test.tsx
+@@ -2,7 +2,7 @@ import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+ import userEvent from "@testing-library/user-event";
+ import { describe, expect, it, vi } from "vitest";
+ import { SocketAppSecurityCard, SocketServerCard } from "./socket-security-cards";
+-import type { SocketRelaySettings } from "@/generated/rust-types";
++import type { SocketRelayDraftSettings } from "@/generated/rust-types";
+ import {
+   common,
+   local,
+@@ -28,9 +28,8 @@ describe("Socket security cards", () => {
+     await user.click(screen.getByLabelText("App 接入传输"));
+     await user.click(await screen.findByRole("option", { name: "TLS" }));
+ 
+-    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+-      topology: expect.objectContaining({ settings: expect.objectContaining({ security: expect.objectContaining({ mode: "tls_to_tcp" }) }) }),
+-    }));
++    expect(props.onTransition).toHaveBeenCalledWith({ type: "app_tls", enabled: true });
++    expect(props.onChange).not.toHaveBeenCalled();
+   });
+ 
+   it("changes the App service identity through the certificate Select", async () => {
+@@ -42,7 +41,7 @@ describe("Socket security cards", () => {
+ 
+     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+       topology: expect.objectContaining({ settings: expect.objectContaining({
+-        security: expect.objectContaining({ downstream_tls: expect.objectContaining({ server_identity: "" }) }),
++        security: expect.objectContaining({ downstream_tls: expect.objectContaining({ server_identity: null }) }),
+       }) }),
+     }));
+   });
+@@ -107,7 +106,7 @@ describe("Socket security cards", () => {
+     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+       topology: expect.objectContaining({ settings: expect.objectContaining({
+         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
+-          client_authentication: { mode: "required", trust: "" },
++          client_authentication: { mode: "required", trust: null },
+         }) }),
+       }) }),
+     }));
+@@ -126,13 +125,13 @@ describe("Socket security cards", () => {
+     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+       topology: expect.objectContaining({ settings: expect.objectContaining({
+         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
+-          client_authentication: { mode: "optional", trust: "" },
++          client_authentication: { mode: "optional", trust: null },
+         }) }),
+       }) }),
+     }));
+   });
+ 
+-  it("uses an empty trust when enabling mTLS without any App CA candidates", async () => {
++  it("uses null trust when enabling mTLS without any App CA candidates", async () => {
+     const current = relay();
+     if (current.topology.mode !== "relay" || current.topology.settings.security.mode !== "tls_to_tls") throw new Error("expected TLS Relay");
+     current.topology.settings.security.downstream_tls.client_authentication = { mode: "disabled" };
+@@ -149,7 +148,7 @@ describe("Socket security cards", () => {
+     expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+       topology: expect.objectContaining({ settings: expect.objectContaining({
+         security: expect.objectContaining({ downstream_tls: expect.objectContaining({
+-          client_authentication: { mode: "required", trust: "" },
++          client_authentication: { mode: "required", trust: null },
+         }) }),
+       }) }),
+     }));
+@@ -244,7 +243,7 @@ describe("Socket security cards", () => {
+   it("renders disabled App TLS without a client trust selector", () => {
+     const current = relay();
+     if (current.topology.mode !== "relay" || current.topology.settings.security.mode !== "tls_to_tls") throw new Error("expected TLS Relay");
+-    current.topology.settings.security.downstream_tls.server_identity = "";
++    current.topology.settings.security.downstream_tls.server_identity = null;
+     current.topology.settings.security.downstream_tls.client_authentication = { mode: "disabled" };
+ 
+     renderApp(current);
+@@ -279,9 +278,8 @@ describe("Socket security cards", () => {
+     await user.click(screen.getByLabelText("Server 传输"));
+     await user.click(await screen.findByRole("option", { name: "TLS" }));
+ 
+-    expect(props.onChange).toHaveBeenCalledWith(expect.objectContaining({
+-      topology: expect.objectContaining({ settings: expect.objectContaining({ security: expect.objectContaining({ mode: "tcp_to_tls" }) }) }),
+-    }));
++    expect(props.onTransition).toHaveBeenCalledWith({ type: "server_tls", enabled: true });
++    expect(props.onChange).not.toHaveBeenCalled();
+   });
+ 
+   it("updates Server TLS verification and certificate selections", async () => {
+@@ -425,9 +423,10 @@ describe("Socket security cards", () => {
+   });
+ });
+ 
+-function renderlessServerProps(settings: SocketRelaySettings) {
++function renderlessServerProps(settings: SocketRelayDraftSettings) {
+   return {
+     ...common(settings), testing: false, onImportIdentity: vi.fn().mockResolvedValue(true),
+     onImportTrust: vi.fn().mockResolvedValue(true), onTest: vi.fn().mockResolvedValue(undefined),
++    testBlocked: false,
+   };
+ }
+diff --git a/src/features/listeners/socket-security-cards.tsx b/src/features/listeners/socket-security-cards.tsx
+index f92a6f22..5eff2639 100644
+--- a/src/features/listeners/socket-security-cards.tsx
++++ b/src/features/listeners/socket-security-cards.tsx
+@@ -4,11 +4,12 @@ import { useState } from "react";
+ import { Alert, Button, Card, Input, Label, ListBox, NumberField, Select, Switch } from "@heroui/react";
+ import type {
+   CertificateReference,
+-  DownstreamClientAuthentication,
++  DownstreamClientAuthenticationDraft,
++  ListenerDraftTransition,
+   ListenerCertificateDetailViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+-  SocketDownstreamTlsSettings,
+-  SocketRelaySettings,
++  SocketDownstreamTlsDraftSettings,
++  SocketRelayDraftSettings,
+   SocketUpstreamTlsSettings,
+ } from "@/generated/rust-types";
+ import { CertificateDetailPanel, CertificateReferenceSelect, ConnectionTestResult } from "./fixed-server-tls-fields";
+@@ -16,19 +17,18 @@ import { ImportIdentityModal, ImportPemModal, ImportTrustModal } from "./fixed-s
+ import { socketUpstreamTls } from "./listener-data-plane";
+ import {
+   appSecurity,
+-  setAppTls,
+-  setAppTransport,
+-  setServerTls,
+-  setServerTransport,
++  updateAppTls,
++  updateServerTls,
+ } from "./socket-listener-model";
+ 
+ interface CommonProps {
+-  settings: SocketRelaySettings;
++  settings: SocketRelayDraftSettings;
+   certificateReferences: CertificateReference[];
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   locked: boolean;
+   busy: boolean;
+-  onChange: (settings: SocketRelaySettings) => void;
++  onChange: (settings: SocketRelayDraftSettings) => void;
++  onTransition: (transition: ListenerDraftTransition) => void;
+ }
+ 
+ export function SocketAppSecurityCard(props: CommonProps & {
+@@ -44,10 +44,10 @@ export function SocketAppSecurityCard(props: CommonProps & {
+     <Card.Description>入口面向 App 的接入方式；TLS 可选择客户端证书认证。</Card.Description>
+   </Card.Header><Card.Content className="space-y-4">
+     <TransportSelect label="App 接入传输" value={security.mode} disabled={props.locked}
+-      onChange={(mode) => props.onChange(setAppTransport(props.settings, mode))} />
++      onChange={(mode) => props.onTransition({ type: "app_tls", enabled: mode === "tls" })} />
+     {tls && <DownstreamTlsFields tls={tls} references={props.certificateReferences}
+       details={props.certificateDetails} disabled={props.locked || props.busy}
+-      onChange={(next) => props.onChange(setAppTls(props.settings, next))}
++      onChange={(next) => props.onChange(updateAppTls(props.settings, next))}
+       onImportIdentity={() => { setLabel("Socket App 服务端身份"); setModal("identity"); }}
+       onImportTrust={() => { setLabel("Socket App 客户端 CA"); setModal("trust"); }} />}
+     {modal === "identity" && <ImportIdentityModal open busy={props.busy} label={label} password={password}
+@@ -71,6 +71,7 @@ export function SocketServerCard(props: CommonProps & {
+   testing: boolean;
+   testResult?: ListenerUpstreamConnectionTestViewModel;
+   testError?: string;
++  testBlocked: boolean;
+   onImportIdentity: (label: string, password: string) => Promise<boolean>;
+   onImportTrust: (label: string) => Promise<boolean>;
+   onTest: () => Promise<void>;
+@@ -96,13 +97,13 @@ export function SocketServerCard(props: CommonProps & {
+         <Label>Server 端口</Label><NumberField.Group><NumberField.DecrementButton /><NumberField.Input /><NumberField.IncrementButton /></NumberField.Group>
+       </NumberField>
+       <TransportSelect label="Server 传输" value={tls ? "tls" : "tcp"} disabled={props.locked}
+-        onChange={(mode) => props.onChange(setServerTransport(props.settings, mode))} />
++        onChange={(mode) => props.onTransition({ type: "server_tls", enabled: mode === "tls" })} />
+     </div>
+     {tls && <UpstreamTlsFields tls={tls} references={props.certificateReferences} details={props.certificateDetails}
+-      disabled={props.locked || props.busy} onChange={(next) => props.onChange(setServerTls(props.settings, next))}
++      disabled={props.locked || props.busy} onChange={(next) => props.onChange(updateServerTls(props.settings, next))}
+       onImportIdentity={() => { setLabel("Socket Server 客户端身份"); setModal("identity"); }}
+       onImportTrust={() => { setLabel("Socket Server CA"); setModal("trust"); }} />}
+-    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" isDisabled={props.locked || props.busy} onPress={() => void props.onTest()}>
++    <div className="flex flex-wrap items-center gap-3"><Button variant="outline" isDisabled={props.locked || props.busy || props.testBlocked} onPress={() => void props.onTest()}>
+       {props.testing ? "正在探测 Server…" : "测试 Server 连接"}</Button>
+       <span className="text-xs text-[var(--telemetry-muted)]">执行 DNS 与 TCP 连接；Server TLS 模式同时验证握手。</span></div>
+     {props.testResult && <ConnectionTestResult result={props.testResult} showTlsDetails={Boolean(tls)} />}
+@@ -117,8 +118,8 @@ export function SocketServerCard(props: CommonProps & {
+ }
+ 
+ function DownstreamTlsFields({ tls, references, details, disabled, onChange, onImportIdentity, onImportTrust }: {
+-  tls: SocketDownstreamTlsSettings; references: CertificateReference[]; details: ListenerCertificateDetailViewModel[];
+-  disabled: boolean; onChange: (value: SocketDownstreamTlsSettings) => void; onImportIdentity: () => void; onImportTrust: () => void;
++  tls: SocketDownstreamTlsDraftSettings; references: CertificateReference[]; details: ListenerCertificateDetailViewModel[];
++  disabled: boolean; onChange: (value: SocketDownstreamTlsDraftSettings) => void; onImportIdentity: () => void; onImportTrust: () => void;
+ }) {
+   const identities = references.filter((item) => item.kind === "reverse_server_identity");
+   const trusts = references.filter((item) => item.kind === "downstream_client_trust");
+@@ -128,13 +129,13 @@ function DownstreamTlsFields({ tls, references, details, disabled, onChange, onI
+     <p className="text-xs text-[var(--telemetry-muted)]">App 侧使用 serverAuth 服务端身份；不要选择代理连接上游 Server 时使用的 clientAuth 客户端身份。</p>
+     <CertificateRow label="App 侧服务端身份" value={tls.server_identity || null} emptyLabel="请选择服务端 PEM identity"
+       references={identities} button="导入服务端身份" disabled={disabled}
+-      onChange={(server_identity) => onChange({ ...tls, server_identity: server_identity ?? "" })} onImport={onImportIdentity} />
+-    <CertificateDetailPanel reference={identities.find((item) => item.id === tls.server_identity)} detail={detail(details, tls.server_identity)} emptyText="尚未选择 App 侧服务端身份。" />
++      onChange={(server_identity) => onChange({ ...tls, server_identity })} onImport={onImportIdentity} />
++    <CertificateDetailPanel reference={identities.find((item) => item.id === tls.server_identity)} detail={detail(details, tls.server_identity ?? undefined)} emptyText="尚未选择 App 侧服务端身份。" />
+     <ClientAuthentication value={authentication} trusts={trusts} disabled={disabled} onChange={(client_authentication) => onChange({ ...tls, client_authentication })} />
+     {authentication.mode !== "disabled" && <><CertificateRow label="App 客户端 CA" value={trustId ?? null} emptyLabel="请选择客户端 CA"
+       references={trusts} button="导入客户端 CA" disabled={disabled} onImport={onImportTrust}
+-      onChange={(trust) => onChange({ ...tls, client_authentication: authentication.mode === "required" ? { mode: "required", trust: trust ?? "" } : { mode: "optional", trust: trust ?? "" } })} />
+-      <CertificateDetailPanel reference={trusts.find((item) => item.id === trustId)} detail={detail(details, trustId)} emptyText="尚未选择 App 客户端 CA。" /></>}
++      onChange={(trust) => onChange({ ...tls, client_authentication: authentication.mode === "required" ? { mode: "required", trust } : { mode: "optional", trust } })} />
++      <CertificateDetailPanel reference={trusts.find((item) => item.id === trustId)} detail={detail(details, trustId ?? undefined)} emptyText="尚未选择 App 客户端 CA。" /></>}
+   </div>;
+ }
+ 
+@@ -176,9 +177,9 @@ function CertificateRow({ label, value, emptyLabel, references, button, disabled
+ }
+ 
+ function ClientAuthentication({ value, trusts, disabled, onChange }: {
+-  value: DownstreamClientAuthentication; trusts: CertificateReference[]; disabled: boolean; onChange: (value: DownstreamClientAuthentication) => void;
++  value: DownstreamClientAuthenticationDraft; trusts: CertificateReference[]; disabled: boolean; onChange: (value: DownstreamClientAuthenticationDraft) => void;
+ }) {
+-  const trust = value.mode === "disabled" ? trusts[0]?.id ?? "" : value.trust;
++  const trust = value.mode === "disabled" ? trusts[0]?.id ?? null : value.trust;
+   return <Select aria-label="App 客户端证书要求" selectedKey={value.mode} isDisabled={disabled} onSelectionChange={(key) => {
+     if (key === "required" || key === "optional") onChange({ mode: key, trust });
+     else if (key === "disabled") onChange({ mode: "disabled" });
+diff --git a/src/features/listeners/socket-working-mode.test.ts b/src/features/listeners/socket-working-mode.test.ts
+index 06e6515e..31d21a74 100644
+--- a/src/features/listeners/socket-working-mode.test.ts
++++ b/src/features/listeners/socket-working-mode.test.ts
+@@ -1,156 +1,24 @@
+ import { describe, expect, it } from "vitest";
+-import type {
+-  ScriptedSocketProcessing,
+-  SocketDownstreamTlsSettings,
+-  SocketRelaySettings,
+-} from "@/generated/rust-types";
+-import {
+-  setSocketWorkingMode,
+-  socketWorkingMode,
+-  type SocketWorkingMode,
+-} from "./socket-listener-model";
+-import { defaultSocketRuntimeLimits } from "./listener-data-plane";
+-
+-const appTls: SocketDownstreamTlsSettings = {
+-  server_identity: "app-identity",
+-  client_authentication: { mode: "required", trust: "app-ca" },
+-};
+-
+-const fullProcessing: ScriptedSocketProcessing = {
+-  package: { id: "iso-8583", version: "2.0.0" },
+-};
+-
+-const localProcessing: ScriptedSocketProcessing = {
+-  package: { id: "iso-8583", version: "2.0.0" },
+-};
+-
+-const emptyProcessing: ScriptedSocketProcessing = {
+-  package: { id: "", version: "" },
+-};
+-
+-function relay(processing: SocketRelaySettings["processing"]): SocketRelaySettings {
+-  return {
+-    topology: {
+-      mode: "relay",
+-      settings: {
+-        upstream: { host: "server.test", port: 9443 },
+-        security: {
+-          mode: "tls_to_tls",
+-          downstream_tls: appTls,
+-          upstream_tls: {
+-            verify_hostname: false,
+-            tls_server_name: "payments.example.test",
+-            server_trust: "server-ca",
+-            client_identity: "client-identity",
+-          },
+-        },
+-      },
+-    },
+-    maximum_connections: 64,
+-    runtime_limits: defaultSocketRuntimeLimits(),
+-    processing,
+-  };
++import type { SocketRelayDraftSettings } from "@/generated/rust-types";
++import { socketWorkingMode } from "./socket-listener-model";
++import { localResponderListener, socketListener } from "./listeners-view.test-support";
++
++function socketSettings(): SocketRelayDraftSettings {
++  const listener = socketListener();
++  if (listener.data_plane.kind !== "socket") throw new Error("expected Socket");
++  return listener.data_plane.settings;
+ }
+ 
+-function local(processing: SocketRelaySettings["processing"]): SocketRelaySettings {
+-  return {
+-    topology: {
+-      mode: "local_responder",
+-      settings: { downstream_security: { mode: "tls", downstream_tls: appTls } },
+-    },
+-    maximum_connections: 64,
+-    runtime_limits: defaultSocketRuntimeLimits(),
+-    processing,
+-  };
+-}
+-
+-const fixtures: Record<SocketWorkingMode, SocketRelaySettings> = {
+-  raw_relay: relay({ mode: "direct" }),
+-  protocol_relay: relay({ mode: "scripted", settings: fullProcessing }),
+-  local_response: local({ mode: "scripted", settings: localProcessing }),
+-};
+-
+-const emptyRelay = {
+-  mode: "relay" as const,
+-  settings: {
+-    upstream: { host: "", port: 0 },
+-    security: { mode: "tls_to_tcp" as const, downstream_tls: appTls },
+-  },
+-};
+-
+-describe("Socket user working mode", () => {
+-  it.each([
+-    ["raw_relay", "relay", "direct"],
+-    ["protocol_relay", "relay", "scripted"],
+-    ["local_response", "local_responder", "scripted"],
+-  ] as const)("maps %s to the exact existing wire", (mode, topology, processing) => {
+-    const result = setSocketWorkingMode(fixtures.raw_relay, mode);
+-
+-    expect(result.topology.mode).toBe(topology);
+-    expect(result.processing.mode).toBe(processing);
+-    expect(socketWorkingMode(result)).toBe(mode);
+-  });
+-
+-  it.each([
+-    ["raw_relay", "raw_relay", fixtures.raw_relay],
+-    ["raw_relay", "protocol_relay", {
+-      ...fixtures.raw_relay,
+-      processing: { mode: "scripted", settings: emptyProcessing },
+-    }],
+-    ["raw_relay", "local_response", local({ mode: "scripted", settings: emptyProcessing })],
+-    ["protocol_relay", "raw_relay", {
+-      ...fixtures.protocol_relay,
+-      processing: { mode: "direct" },
+-    }],
+-    ["protocol_relay", "protocol_relay", fixtures.protocol_relay],
+-    ["protocol_relay", "local_response", local({ mode: "scripted", settings: localProcessing })],
+-    ["local_response", "raw_relay", {
+-      ...fixtures.local_response,
+-      topology: emptyRelay,
+-      processing: { mode: "direct" },
+-    }],
+-    ["local_response", "protocol_relay", {
+-      ...fixtures.local_response,
+-      topology: emptyRelay,
+-    }],
+-    ["local_response", "local_response", fixtures.local_response],
+-  ] as const)("switches %s -> %s atomically", (source, target, expected) => {
+-    const result = setSocketWorkingMode(fixtures[source], target);
+-
+-    expect(result).toEqual(expected);
+-    expect(socketWorkingMode(result)).toBe(target);
+-    if (source === target) expect(result).toBe(fixtures[source]);
+-  });
+-
+-  it("ignores an unknown work mode instead of creating a partial wire", () => {
+-    expect(setSocketWorkingMode(fixtures.protocol_relay, "future_mode" as SocketWorkingMode))
+-      .toBe(fixtures.protocol_relay);
+-  });
+-
+-  it.each(["protocol_relay", "local_response"] as const)(
+-    "binds the recommended exact package when first entering %s",
+-    (mode) => {
+-      const recommended = { id: "iso8583-ascii-standard", version: "1.0.0" };
+-
+-      const result = setSocketWorkingMode(fixtures.raw_relay, mode, recommended);
+-
+-      expect(result.processing).toMatchObject({
+-        mode: "scripted",
+-        settings: { package: recommended },
+-      });
+-    },
+-  );
+-
+-  it("does not replace an existing exact binding with the recommendation", () => {
+-    const result = setSocketWorkingMode(
+-      fixtures.protocol_relay,
+-      "local_response",
+-      { id: "iso8583-ascii-standard", version: "1.0.0" },
+-    );
+-
+-    expect(result.processing).toMatchObject({
+-      mode: "scripted",
+-      settings: { package: { id: "iso-8583", version: "2.0.0" } },
+-    });
++describe("socketWorkingMode", () => {
++  it("projects direct Relay, scripted Relay, and LocalResponder modes", () => {
++    const direct = socketSettings();
++    expect(socketWorkingMode(direct)).toBe("raw_relay");
++    expect(socketWorkingMode({
++      ...direct,
++      processing: { mode: "scripted", settings: { package: null } },
++    })).toBe("protocol_relay");
++    const local = localResponderListener();
++    if (local.data_plane.kind !== "socket") throw new Error("expected Socket");
++    expect(socketWorkingMode(local.data_plane.settings)).toBe("local_response");
+   });
+ });
+diff --git a/src/features/listeners/upstream-tls-card.tsx b/src/features/listeners/upstream-tls-card.tsx
+index 8333b076..c28b9cf3 100644
+--- a/src/features/listeners/upstream-tls-card.tsx
++++ b/src/features/listeners/upstream-tls-card.tsx
+@@ -3,7 +3,7 @@
+ import { Alert, Button, Card, Switch } from "@heroui/react";
+ import type {
+   CertificateReference,
+-  HttpListenerSettings,
++  HttpListenerDraftSettings,
+   ListenerCertificateDetailViewModel,
+   ListenerUpstreamConnectionTestViewModel,
+ } from "@/generated/rust-types";
+@@ -27,14 +27,15 @@ const CLIENT_IDENTITY_DESCRIPTION = [
+ ].join("");
+ 
+ type Props = {
+-  settings: HttpListenerSettings;
++  settings: HttpListenerDraftSettings;
+   certificateReferences: CertificateReference[];
+   certificateDetails: ListenerCertificateDetailViewModel[];
+   busy: boolean;
++  testBlocked: boolean;
+   testing: boolean;
+   testResult?: ListenerUpstreamConnectionTestViewModel;
+   testError?: string;
+-  onChange: (changes: Partial<HttpListenerSettings>) => void;
++  onChange: (changes: Partial<HttpListenerDraftSettings>) => void;
+   onOpenIdentityImport: () => void;
+   onOpenTrustImport: () => void;
+   onTest: () => Promise<void>;
+@@ -169,7 +170,7 @@ export function UpstreamTlsCard(props: Props) {
+         <div className="flex flex-wrap items-center gap-3 border-t border-[var(--telemetry-line)] pt-4">
+           <Button
+             variant="outline"
+-            isDisabled={props.busy}
++            isDisabled={props.busy || props.testBlocked}
+             onPress={() => void props.onTest()}
+           >
+             {props.testing ? "正在连接 Server…" : "测试 Server 连接"}
+diff --git a/src/features/listeners/use-listener-certificates.ts b/src/features/listeners/use-listener-certificates.ts
+index 21e90eb4..b5d70f09 100644
+--- a/src/features/listeners/use-listener-certificates.ts
++++ b/src/features/listeners/use-listener-certificates.ts
+@@ -3,12 +3,15 @@ import { toast } from "@heroui/react";
+ import type {
+   ListenerCertificateDetailViewModel,
+   ListenerCertificateImportViewModel,
+-  ProxyListener,
+-  ProxyWorkspace,
++  ListenerDraft,
+ } from "@/generated/rust-types";
+ import { commands } from "@/generated/rust-types";
+ import { callCommand } from "@/lib/ipc/client";
+-import { mergeCertificateDetails, pruneDetachedDraftCertificates } from "./listener-workspace-draft";
++import {
++  type ListenerWorkspaceDraft,
++  mergeCertificateDetails,
++  pruneDetachedDraftCertificates,
++} from "./listener-workspace-draft";
+ import type { ListenerPending } from "./listener-runtime-card";
+ import { useDraftCertificateLeases } from "./use-draft-certificate-leases";
+ import { socketDownstreamTls, socketUpstreamTls } from "./listener-data-plane";
+@@ -32,12 +35,12 @@ export function useListenerCertificates({
+   runPending,
+ }: {
+   currentId?: string;
+-  workspace?: ProxyWorkspace;
+-  selected?: ProxyListener;
++  workspace?: ListenerWorkspaceDraft;
++  selected?: ListenerDraft;
+   selectedIndex: number;
+   pending?: ListenerPending;
+-  persistedReferences: ProxyWorkspace["certificate_references"];
+-  setWorkspace: Dispatch<SetStateAction<ProxyWorkspace | undefined>>;
++  persistedReferences: ListenerWorkspaceDraft["certificate_references"];
++  setWorkspace: Dispatch<SetStateAction<ListenerWorkspaceDraft | undefined>>;
+   clearDerivedResults: () => void;
+   runPending: RunPending;
+ }) {
+@@ -55,23 +58,24 @@ export function useListenerCertificates({
+     return () => { mounted.current = false; };
+   }, []);
+ 
+-  function applyDraftWorkspace(next: ProxyWorkspace, previous: ProxyWorkspace) {
++  function applyDraftWorkspace(next: ListenerWorkspaceDraft, previous: ListenerWorkspaceDraft) {
+     const { workspace: pruned, detached } = pruneDetachedDraftCertificates(
+       previous,
+       next,
+       persistedReferences,
+     );
+     setWorkspace(pruned);
+-    if (detached.length === 0) return;
++    if (detached.length === 0) return pruned;
+     const detachedIds = new Set(detached.map((reference) => reference.id));
+     setImportedDetails((current) => current.filter((detail) => !detachedIds.has(detail.reference_id)));
+     for (const reference of detached) leases.discard(reference);
++    return pruned;
+   }
+ 
+   async function importCertificate(
+     kind: ImportPending,
+     load: () => Promise<ListenerCertificateImportViewModel | null>,
+-    bind: (listener: ProxyListener, referenceId: string) => ProxyListener,
++    bind: (listener: ListenerDraft, referenceId: string) => ListenerDraft,
+   ) {
+     if (!workspace || !selected || pending) return false;
+     const context = {
+@@ -137,7 +141,7 @@ export function useListenerCertificates({
+   };
+ }
+ 
+-function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): ProxyListener {
++function bindDownstreamIdentity(listener: ListenerDraft, referenceId: string): ListenerDraft {
+   if (listener.data_plane.kind === "http") {
+     const settings = listener.data_plane.settings;
+     return { ...listener, data_plane: { kind: "http", settings: {
+@@ -173,7 +177,7 @@ function bindDownstreamIdentity(listener: ProxyListener, referenceId: string): P
+   } } };
+ }
+ 
+-function bindDownstreamTrust(listener: ProxyListener, referenceId: string): ProxyListener {
++function bindDownstreamTrust(listener: ListenerDraft, referenceId: string): ListenerDraft {
+   if (listener.data_plane.kind === "http") {
+     const settings = listener.data_plane.settings;
+     const current = settings.downstream_tls.client_authentication;
+@@ -224,9 +228,9 @@ function bindDownstreamTrust(listener: ProxyListener, referenceId: string): Prox
+ }
+ 
+ function bindUpstream(
+-  listener: ProxyListener,
++  listener: ListenerDraft,
+   changes: { client_identity?: string; server_trust?: string },
+-): ProxyListener {
++): ListenerDraft {
+   if (listener.data_plane.kind === "http") {
+     const settings = listener.data_plane.settings;
+     if (settings.topology.mode === "local_server") return listener;
+diff --git a/src/features/listeners/use-listener-persistence.ts b/src/features/listeners/use-listener-persistence.ts
+index e8142965..d1bf8b5e 100644
+--- a/src/features/listeners/use-listener-persistence.ts
++++ b/src/features/listeners/use-listener-persistence.ts
+@@ -1,14 +1,18 @@
+ import { toast } from "@heroui/react";
+ import type {
+   ListenerMonitorRowViewModel,
+-  ProxyListener,
++  ListenerDraft,
++  ListenerDraftValidationViewModel,
+   ProxyWorkspace,
+-  WorkspaceValidationViewModel,
+ } from "@/generated/rust-types";
+ import { commands } from "@/generated/rust-types";
+ import { callCommand } from "@/lib/ipc/client";
+ import type { ListenerPending } from "./listener-runtime-card";
+-import { listenerCertificateReferences, mergePersistedListener } from "./listener-workspace-draft";
++import {
++  type ListenerWorkspaceDraft,
++  listenerCertificateReferences,
++  mergePersistedListener,
++} from "./listener-workspace-draft";
+ import type { useDraftCertificateLeases } from "./use-draft-certificate-leases";
+ 
+ type RunPending = (
+@@ -25,6 +29,8 @@ export function useListenerPersistence({
+   snapshotLocked,
+   pending,
+   hasUnsavedChanges,
++  hasDraftConflict,
++  transitionPending,
+   leases,
+   setWorkspace,
+   setPersistedWorkspace,
+@@ -33,23 +39,25 @@ export function useListenerPersistence({
+   refreshWorkspaces,
+   runPending,
+ }: {
+-  workspace?: ProxyWorkspace;
+-  selected?: ProxyListener;
++  workspace?: ListenerWorkspaceDraft;
++  selected?: ListenerDraft;
+   status?: ListenerMonitorRowViewModel;
+   statusKnown: boolean;
+   snapshotLocked: boolean;
+   pending?: ListenerPending;
+   hasUnsavedChanges: boolean;
++  hasDraftConflict: boolean;
++  transitionPending: () => boolean;
+   leases: ReturnType<typeof useDraftCertificateLeases>;
+-  setWorkspace: (workspace: ProxyWorkspace) => void;
++  setWorkspace: (workspace: ListenerWorkspaceDraft) => void;
+   setPersistedWorkspace: (workspace: ProxyWorkspace) => void;
+-  setValidation: (validation: WorkspaceValidationViewModel) => void;
++  setValidation: (validation: ListenerDraftValidationViewModel) => void;
+   refreshOverview: () => Promise<void>;
+   refreshWorkspaces: () => Promise<void>;
+   runPending: RunPending;
+ }) {
+   async function validate() {
+-    if (!workspace || !selected || pending) return;
++    if (!workspace || !selected || pending || transitionPending()) return;
+     await runPending("validate", async () => {
+       const result = await validateListener(workspace, selected);
+       setValidation(result);
+@@ -58,18 +66,18 @@ export function useListenerPersistence({
+   }
+ 
+   async function save() {
+-    if (!workspace || !selected || snapshotLocked || pending) return;
++    if (!workspace || !selected || snapshotLocked || pending || hasDraftConflict || transitionPending()) return;
+     await runPending("save", async () => {
+       const result = await validateListener(workspace, selected);
+       setValidation(result);
+-      if (!result.valid) return;
++      if (!result.valid || !result.normalized) return;
+       await persist(result.normalized, workspace, selected.id);
+       toast("当前代理监听已保存。", { variant: "success" });
+       await refreshWorkspaces();
+     });
+   }
+ 
+-  async function persist(normalized: ProxyWorkspace, localDraft: ProxyWorkspace, listenerId: string) {
++  async function persist(normalized: ProxyWorkspace, localDraft: ListenerWorkspaceDraft, listenerId: string) {
+     const listener = normalized.listeners.find((item) => item.id === listenerId);
+     if (!listener) throw new Error("当前代理监听已被删除，请刷新后重试。");
+     const references = listenerCertificateReferences(listener, normalized.certificate_references);
+@@ -94,16 +102,17 @@ export function useListenerPersistence({
+   }
+ 
+   async function toggleRuntime() {
+-    if (!workspace || !selected || !statusKnown || pending) return;
++    if (!workspace || !selected || !statusKnown || pending || transitionPending()) return;
+     const operation = status?.can_stop ? "stop" : status?.can_start ? "start" : undefined;
+     if (!operation) return;
++    if (operation === "start" && hasDraftConflict) return;
+     await runPending(operation, async () => {
+       let revision = workspace.revision;
+       let draftSnapshot = workspace;
+       if (operation === "start" && hasUnsavedChanges) {
+         const result = await validateListener(workspace, selected);
+         setValidation(result);
+-        if (!result.valid) return;
++        if (!result.valid || !result.normalized) return;
+         draftSnapshot = await persist(result.normalized, workspace, selected.id);
+         revision = draftSnapshot.revision;
+       }
+@@ -124,8 +133,8 @@ export function useListenerPersistence({
+   return { validate, save, toggleRuntime };
+ }
+ 
+-function validateListener(workspace: ProxyWorkspace, listener: ProxyListener) {
+-  return callCommand(commands.listenerValidate(
++function validateListener(workspace: ListenerWorkspaceDraft, listener: ListenerDraft) {
++  return callCommand(commands.listenerDraftValidate(
+     workspace.id,
+     workspace.revision,
+     listener,

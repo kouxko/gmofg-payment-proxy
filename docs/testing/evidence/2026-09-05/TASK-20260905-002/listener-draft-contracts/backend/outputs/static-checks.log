@@ -1,0 +1,9 @@
+     327 src-tauri/crates/application/src/models/listener_draft.rs
+     264 src-tauri/crates/application/src/models/listener_draft/normalization.rs
+     280 src-tauri/crates/application/src/models/listener_draft/transition.rs
+      79 src-tauri/crates/application/src/facade/listeners/draft.rs
+     415 src-tauri/crates/application/src/requirements_tests/listener_draft.rs
+     169 src-tauri/crates/application/src/requirements_tests/listener_draft/validation.rs
+     366 src-tauri/src/commands/listener.rs
+     429 src-tauri/crates/application/src/facade/listeners.rs
+    2329 total

@@ -1,0 +1,234 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.4.1/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :isolation-probe:preBuild UP-TO-DATE
+> Task :target-probe:preBuild UP-TO-DATE
+> Task :isolation-probe:preDebugBuild UP-TO-DATE
+> Task :target-probe:preDebugBuild UP-TO-DATE
+> Task :isolation-probe:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :target-probe:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :app:buildRustAndroid UP-TO-DATE
+> Task :app:preBuild UP-TO-DATE
+> Task :app:preReleaseBuild UP-TO-DATE
+> Task :target-probe:generateDebugResources
+> Task :isolation-probe:generateDebugResources
+> Task :app:generateReleaseBuildConfig
+> Task :app:generateReleaseResources FROM-CACHE
+> Task :isolation-probe:packageDebugResources
+> Task :target-probe:packageDebugResources
+> Task :target-probe:processDebugNavigationResources
+> Task :isolation-probe:processDebugNavigationResources
+> Task :app:packageReleaseResources
+> Task :app:processReleaseNavigationResources FROM-CACHE
+> Task :target-probe:javaPreCompileDebug FROM-CACHE
+> Task :isolation-probe:javaPreCompileDebug FROM-CACHE
+> Task :target-probe:generateDebugAssets UP-TO-DATE
+> Task :isolation-probe:generateDebugAssets UP-TO-DATE
+> Task :app:parseReleaseLocalResources FROM-CACHE
+> Task :isolation-probe:mergeDebugAssets
+> Task :target-probe:mergeDebugAssets
+> Task :app:generateReleaseRFile FROM-CACHE
+> Task :target-probe:compressDebugAssets
+> Task :isolation-probe:compressDebugAssets
+> Task :isolation-probe:parseDebugLocalResources
+> Task :target-probe:parseDebugLocalResources
+> Task :target-probe:checkDebugDuplicateClasses
+> Task :isolation-probe:checkDebugDuplicateClasses
+> Task :isolation-probe:desugarDebugFileDependencies
+> Task :target-probe:desugarDebugFileDependencies
+> Task :isolation-probe:generateDebugRFile
+> Task :target-probe:generateDebugRFile
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :app:extractProguardFiles
+> Task :app:extractDeepLinksRelease FROM-CACHE
+> Task :app:processReleaseMainManifest
+> Task :app:preDebugBuild UP-TO-DATE
+> Task :app:generateDebugBuildConfig UP-TO-DATE
+> Task :app:generateDebugResources UP-TO-DATE
+> Task :app:packageDebugResources UP-TO-DATE
+> Task :app:processDebugNavigationResources UP-TO-DATE
+> Task :app:parseDebugLocalResources UP-TO-DATE
+> Task :app:generateDebugRFile UP-TO-DATE
+> Task :app:compileDebugKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebug UP-TO-DATE
+> Task :app:compileDebugJavaWithJavac UP-TO-DATE
+> Task :app:checkDebugAarMetadata UP-TO-DATE
+> Task :app:compileDebugNavigationResources UP-TO-DATE
+> Task :app:mapDebugSourceSetPaths UP-TO-DATE
+> Task :app:mergeDebugResources UP-TO-DATE
+> Task :app:createDebugCompatibleScreenManifests UP-TO-DATE
+> Task :app:extractDeepLinksDebug UP-TO-DATE
+> Task :app:processDebugMainManifest UP-TO-DATE
+> Task :app:processDebugManifest UP-TO-DATE
+> Task :app:processDebugManifestForPackage UP-TO-DATE
+> Task :app:processDebugResources UP-TO-DATE
+> Task :app:bundleDebugClassesToRuntimeJar UP-TO-DATE
+> Task :app:bundleDebugClassesToCompileJar UP-TO-DATE
+> Task :app:preDebugUnitTestBuild UP-TO-DATE
+> Task :app:compileDebugUnitTestKotlin UP-TO-DATE
+> Task :app:javaPreCompileDebugUnitTest UP-TO-DATE
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugJavaRes UP-TO-DATE
+> Task :app:processDebugUnitTestJavaRes UP-TO-DATE
+> Task :app:testDebugUnitTest UP-TO-DATE
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:checkReleaseAarMetadata
+> Task :app:compileReleaseNavigationResources FROM-CACHE
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:mergeReleaseNativeLibs
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:mergeReleaseResources
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libintercept_proxy_android_engine.so. Run with --info option to learn more.
+
+> Task :app:processReleaseManifest
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:desugarReleaseFileDependencies
+> Task :app:mergeReleaseStartupProfile
+> Task :app:compileReleaseKotlin
+> Task :target-probe:compileDebugKotlin NO-SOURCE
+> Task :isolation-probe:compileDebugKotlin NO-SOURCE
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:processReleaseManifestForPackage
+> Task :isolation-probe:mergeExtDexDebug
+> Task :target-probe:mergeExtDexDebug
+> Task :app:mergeExtDexRelease
+> Task :target-probe:compileDebugJavaWithJavac
+> Task :target-probe:processDebugJavaRes NO-SOURCE
+> Task :isolation-probe:compileDebugJavaWithJavac
+> Task :isolation-probe:processDebugJavaRes NO-SOURCE
+> Task :target-probe:checkDebugAarMetadata
+> Task :target-probe:compileDebugNavigationResources FROM-CACHE
+> Task :target-probe:mapDebugSourceSetPaths
+> Task :target-probe:mergeLibDexDebug
+> Task :isolation-probe:checkDebugAarMetadata
+> Task :isolation-probe:compileDebugNavigationResources FROM-CACHE
+> Task :isolation-probe:mergeLibDexDebug
+> Task :isolation-probe:mapDebugSourceSetPaths
+> Task :target-probe:mergeDebugResources
+> Task :isolation-probe:mergeDebugResources
+> Task :target-probe:createDebugCompatibleScreenManifests
+> Task :isolation-probe:createDebugCompatibleScreenManifests
+> Task :target-probe:extractDeepLinksDebug
+> Task :isolation-probe:extractDeepLinksDebug
+> Task :target-probe:processDebugMainManifest
+> Task :target-probe:processDebugManifest
+> Task :isolation-probe:processDebugMainManifest
+> Task :isolation-probe:processDebugManifest
+> Task :target-probe:mergeDebugJniLibFolders
+> Task :target-probe:mergeDebugNativeLibs NO-SOURCE
+> Task :target-probe:stripDebugDebugSymbols NO-SOURCE
+> Task :isolation-probe:mergeDebugJniLibFolders
+> Task :isolation-probe:processDebugManifestForPackage
+> Task :target-probe:validateSigningDebug
+> Task :isolation-probe:mergeDebugJavaResource
+> Task :target-probe:mergeDebugJavaResource
+> Task :target-probe:writeDebugAppMetadata
+> Task :isolation-probe:mergeDebugNativeLibs NO-SOURCE
+> Task :isolation-probe:stripDebugDebugSymbols NO-SOURCE
+> Task :target-probe:writeDebugSigningConfigVersions
+> Task :isolation-probe:validateSigningDebug
+> Task :target-probe:processDebugManifestForPackage
+> Task :isolation-probe:writeDebugAppMetadata
+> Task :isolation-probe:writeDebugSigningConfigVersions
+> Task :target-probe:processDebugResources
+> Task :isolation-probe:processDebugResources
+> Task :app:generateReleaseLintReportModel
+> Task :isolation-probe:dexBuilderDebug
+> Task :target-probe:dexBuilderDebug
+> Task :target-probe:mergeProjectDexDebug
+> Task :isolation-probe:mergeProjectDexDebug
+> Task :target-probe:packageDebug
+> Task :isolation-probe:packageDebug
+> Task :target-probe:createDebugApkListingFileRedirect
+> Task :isolation-probe:createDebugApkListingFileRedirect
+> Task :target-probe:assembleDebug
+> Task :isolation-probe:assembleDebug
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:processReleaseResources
+> Task :app:processReleaseJavaRes
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics
+> Task :app:mergeReleaseJavaResource
+> Task :app:collectReleaseDependencies
+> Task :app:sdkReleaseDependencyData
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:optimizeReleaseResources
+> Task :app:mergeDexRelease
+> Task :app:compileReleaseArtProfile
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:lintAnalyzeRelease
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///Users/codin/Code/gmofg-payment-proxy/android-companion/app/build/reports/lint-results-release.html
+
+> Task :app:packageRelease
+> Task :app:lintRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+BUILD SUCCESSFUL in 32s
+143 actionable tasks: 105 executed, 11 from cache, 27 up-to-date
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.4.1/userguide/configuration_cache_enabling.html
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/Users/codin/Library/Android/sdk/build-tools/36.1.0/lib/apksigner.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Intercept Proxy Companion, O=Intercept Proxy, C=CN
+Signer #1 certificate SHA-256 digest: c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2
+Signer #1 certificate SHA-1 digest: 1a565aa79e5a9bf74b1e5833067c8af06cdd882e
+Signer #1 certificate MD5 digest: 258f89ac80fc0ac59c3b5bc8a4caa021
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 4096
+Signer #1 public key SHA-256 digest: 65f01bb8632eec0b5f85fb463109be6a53b39b0bf54f7b0a8a7b0a072413de1f
+Signer #1 public key SHA-1 digest: 1f45e2399461547b61d2058c3978de0acc67c36d
+Signer #1 public key MD5 digest: c940153ac1ccfa85660830ef8727049e
+package: name='com.interceptproxy.vpn' versionCode='1' versionName='1.0.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+Verifying alignment of /Users/codin/Code/gmofg-payment-proxy/android-companion/app/build/outputs/apk/release/app-release.apk (4)...
+      87 META-INF/com/android/build/gradle/app-metadata.properties (OK - compressed)
+     208 META-INF/version-control-info.textproto (OK - compressed)
+     297 classes.dex (OK - compressed)
+  671744 lib/arm64-v8a/libintercept_proxy_android_engine.so (OK)
+10059776 lib/armeabi-v7a/libintercept_proxy_android_engine.so (OK)
+16613376 lib/x86/libintercept_proxy_android_engine.so (OK)
+25690112 lib/x86_64/libintercept_proxy_android_engine.so (OK)
+34812562 kotlin/annotation/annotation.kotlin_builtins (OK - compressed)
+34813171 kotlin/collections/collections.kotlin_builtins (OK - compressed)
+34815084 kotlin/concurrent/atomics/atomics.kotlin_builtins (OK - compressed)
+34816240 kotlin/coroutines/coroutines.kotlin_builtins (OK - compressed)
+34816426 kotlin/internal/internal.kotlin_builtins (OK - compressed)
+34816842 kotlin/kotlin.kotlin_builtins (OK - compressed)
+34822250 kotlin/ranges/ranges.kotlin_builtins (OK - compressed)
+34823672 kotlin/reflect/reflect.kotlin_builtins (OK - compressed)
+34825156 AndroidManifest.xml (OK - compressed)
+34826933 res/4j.xml (OK - compressed)
+34827362 res/Yd.xml (OK - compressed)
+34827784 resources.arsc (OK)
+34829410 META-INF/CERT.SF (OK - compressed)
+34830581 META-INF/CERT.RSA (OK - compressed)
+34832503 META-INF/MANIFEST.MF (OK - compressed)
+Verification successful
+Android Companion APK 门禁通过: /Users/codin/Code/gmofg-payment-proxy/android-companion/app/build/outputs/apk/release/app-release.apk
+/Users/codin/Code/gmofg-payment-proxy/src-tauri/resources/android-companion.apk
+Companion release APK 已构建、校验并放入桌面资源：/Users/codin/Code/gmofg-payment-proxy/android-companion/app/build/outputs/apk/release/app-release.apk

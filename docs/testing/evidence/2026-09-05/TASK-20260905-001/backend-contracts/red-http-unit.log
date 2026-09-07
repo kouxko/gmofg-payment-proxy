@@ -1,0 +1,21 @@
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 13.55s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 1 test
+
+thread 'message::tests::forward_normalization_removes_connection_declared_and_proxy_hop_headers' (4229189) panicked at crates/proxy/src/message/tests.rs:209:5:
+assertion `left == right` failed
+  left: b"GET / HTTP/1.1\r\nX-Private-Hop:\t secret \t\r\nx-second-hop: second\r\nProxy-Connection: keep-alive\r\nX-Preserved:\t exact \t\r\nHost: upstream.test\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+ right: b"GET / HTTP/1.1\r\nX-Preserved:\t exact \t\r\nHost: upstream.test\r\nConnection: close\r\nContent-Length: 0\r\n\r\n"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test message::tests::forward_normalization_removes_connection_declared_and_proxy_hop_headers ... FAILED
+
+failures:
+
+failures:
+    message::tests::forward_normalization_removes_connection_declared_and_proxy_hop_headers
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 184 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-runtime --lib`

@@ -1,0 +1,48 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "rule-validation",
+  "executed_at_start": "2026-09-05 23:42:34 +08:00",
+  "executed_at_end": "2026-09-05 23:45:50 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "environment": {
+    "os": "Darwin 27.0.0 arm64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)"
+  },
+  "inputs": [
+    "Condition::Document and Condition::DocumentPattern",
+    "invalid HTTP and Terminal actions spanning stage, direction, limit, and header content checks",
+    "valid upstream Throttle and downstream CustomHttpStatus controls"
+  ],
+  "expected": "Every HTTP or Terminal action is validated independently of condition kind; invalid saves return RULE_INVALID and do not change the Workspace; valid combinations remain accepted.",
+  "actual": "RED reproduced acceptance and persistence of invalid Document-conditioned actions. After removing the condition-kind early return, 11 focused Domain contract tests, all 102 Domain tests, 5 focused Application unified-rule tests, and all 435 Application library tests passed; both focused Clippy commands passed with warnings denied.",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --test unified_rule_contract document_conditions_do_not_bypass_http_action_validation -- --exact --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application requirements_tests::unified_rules::unified_save_rejects_every_invalid_http_runtime_shape_without_persistence -- --exact --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --test unified_rule_contract -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib requirements_tests::unified_rules:: -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --test unified_rule_contract -- -D warnings",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib -- -D warnings"
+  ],
+  "evidence": [
+    "README.md",
+    "outputs/red-domain.log",
+    "outputs/red-application.log",
+    "outputs/green-domain.log",
+    "outputs/green-application.log",
+    "outputs/green-expanded.log",
+    "outputs/clippy.log"
+  ],
+  "not_applicable": {
+    "file_resources": "typed Rust values are declared directly in the regression tests; no external fixture",
+    "network_tls_frames": "pure Domain validation and in-memory Application persistence boundary",
+    "ui_screenshots_device": "no UI or device behavior changed"
+  },
+  "not_run": {
+    "ci_commit_push_publish": "outside the assigned slice and not authorized"
+  },
+  "derived_from": null
+}
