@@ -1,0 +1,16 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.96s
+     Running tests/wasm_http_finalize.rs (src-tauri/target/debug/deps/wasm_http_finalize-7cb10b583b86ab61)
+
+running 5 tests
+test rejects_present_http_finalize_export_that_is_not_a_function ... ok
+
+thread '<unnamed>' (1) panicked at src/lib.rs:105:9:
+downstream finalize trap
+test rejects_present_http_finalize_export_with_the_wrong_signature ... ok
+test loads_a_committed_legacy_base_world_component_without_finalize ... ok
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+test preserves_finalize_guest_errors_and_traps ... ok
+test discovers_and_calls_independent_optional_http_finalize_exports ... ok
+
+test result: ok. 5 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 3.13s
+

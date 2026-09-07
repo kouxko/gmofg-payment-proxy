@@ -1,0 +1,9 @@
+exp-lower
+canonical={data={result={}}&meta={code=1e+2}&key=B2BTOKEN}
+sign=AECFD8E0179E670CC73B20784034C993
+exp-upper
+canonical={data={result={}}&meta={code=1e+2}&key=B2BTOKEN}
+sign=AECFD8E0179E670CC73B20784034C993
+negative-zero
+canonical={data={result={}}&meta={code=0}&key=B2BTOKEN}
+sign=981408E3A88E80CB004FA2E974088CD4

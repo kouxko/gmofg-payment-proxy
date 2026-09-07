@@ -1,0 +1,7 @@
+HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+X-Path-Id: 21aac82a-5f51-4afe-b12d-f3f5a55c65cf
+Content-Length: 341
+Connection: close
+
+{"data":{"errorCode":"","errorInfo":null,"result":{"amount":250.0,"amountRmb":0.0,"currencyCode":"JPY","extendedInfo":"paired","orderDetailId":"PAIR-D","orderId":"PAIR-O","payType":"99","transStatus":"PAY_SUCCESS","transTime":"20260907123456"},"sign":"F070F340438D40D0BC07295E241EE519","subErrorCode":""},"meta":{"code":"00","message":"OK"}}

@@ -1,0 +1,225 @@
+[
+  {
+    "name": "build",
+    "command": [
+      "deno",
+      "run",
+      "-A",
+      "examples/protocol-packages/gmofg_cps/build.mjs"
+    ],
+    "started_at": "2026-09-07 18:05:18 +08:00",
+    "finished_at": "2026-09-07 18:05:19 +08:00",
+    "seconds": 1.02,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/build.log"
+  },
+  {
+    "name": "java",
+    "command": [
+      "examples/protocol-packages/gmofg_cps/tests/java_reference/run.sh"
+    ],
+    "started_at": "2026-09-07 18:05:19 +08:00",
+    "finished_at": "2026-09-07 18:05:20 +08:00",
+    "seconds": 1.4,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/java.log"
+  },
+  {
+    "name": "host",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-package-runtime",
+      "--test",
+      "gmofg_cps_component",
+      "--",
+      "--nocapture"
+    ],
+    "started_at": "2026-09-07 18:05:20 +08:00",
+    "finished_at": "2026-09-07 18:05:22 +08:00",
+    "seconds": 1.98,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/host.log"
+  },
+  {
+    "name": "wire",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "cps_checksum_wire",
+      "--",
+      "--nocapture"
+    ],
+    "started_at": "2026-09-07 18:05:22 +08:00",
+    "finished_at": "2026-09-07 18:05:23 +08:00",
+    "seconds": 1.47,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/wire.log"
+  },
+  {
+    "name": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "examples/protocol-packages/gmofg_cps/Cargo.toml",
+      "--locked",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-07 18:05:23 +08:00",
+    "finished_at": "2026-09-07 18:05:24 +08:00",
+    "seconds": 0.46,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/clippy.log"
+  },
+  {
+    "name": "host-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-package-runtime",
+      "--test",
+      "gmofg_cps_component",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-07 18:05:24 +08:00",
+    "finished_at": "2026-09-07 18:05:25 +08:00",
+    "seconds": 1.28,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/host-clippy.log"
+  },
+  {
+    "name": "infrastructure-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "--tests",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "started_at": "2026-09-07 18:05:25 +08:00",
+    "finished_at": "2026-09-07 18:05:26 +08:00",
+    "seconds": 0.89,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/infrastructure-clippy.log"
+  },
+  {
+    "name": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "examples/protocol-packages/gmofg_cps/Cargo.toml",
+      "--",
+      "--check"
+    ],
+    "started_at": "2026-09-07 18:05:26 +08:00",
+    "finished_at": "2026-09-07 18:05:26 +08:00",
+    "seconds": 0.14,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/fmt.log"
+  },
+  {
+    "name": "host-fmt",
+    "command": [
+      "rustfmt",
+      "--edition",
+      "2024",
+      "--check",
+      "src-tauri/crates/package-runtime/tests/gmofg_cps_component.rs",
+      "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs"
+    ],
+    "started_at": "2026-09-07 18:05:26 +08:00",
+    "finished_at": "2026-09-07 18:05:26 +08:00",
+    "seconds": 0.06,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/host-fmt.log"
+  },
+  {
+    "name": "deno-lint",
+    "command": [
+      "deno",
+      "lint",
+      "examples/protocol-packages/gmofg_cps/build.mjs"
+    ],
+    "started_at": "2026-09-07 18:05:26 +08:00",
+    "finished_at": "2026-09-07 18:05:26 +08:00",
+    "seconds": 0.05,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/deno-lint.log"
+  },
+  {
+    "name": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-07 18:05:26 +08:00",
+    "finished_at": "2026-09-07 18:05:30 +08:00",
+    "seconds": 3.29,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/architecture.log"
+  },
+  {
+    "name": "source-size",
+    "command": [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    "started_at": "2026-09-07 18:05:30 +08:00",
+    "finished_at": "2026-09-07 18:05:30 +08:00",
+    "seconds": 0.63,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/source-size.log"
+  },
+  {
+    "name": "diff",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-07 18:05:30 +08:00",
+    "finished_at": "2026-09-07 18:05:30 +08:00",
+    "seconds": 0.04,
+    "exit_code": 0,
+    "source_stable": true,
+    "log": "outputs/logs/diff.log"
+  }
+]

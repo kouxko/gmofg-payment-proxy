@@ -1,0 +1,151 @@
+[
+  {
+    "name": "integrated-clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "-p",
+      "intercept-proxy-package-runtime",
+      "-p",
+      "intercept-proxy-exchange",
+      "--all-targets",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "log": "outputs/logs/integrated-clippy.log",
+    "started_at": "2026-09-07T08:39:23.888951+00:00",
+    "finished_at": "2026-09-07T08:39:48.633061+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "runtime-tests",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "--lib",
+      "finalize"
+    ],
+    "log": "outputs/logs/runtime-tests.log",
+    "started_at": "2026-09-07T08:39:48.665224+00:00",
+    "finished_at": "2026-09-07T08:40:06.412552+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "wire",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "real_wasm_finalize_reaches_fixed_server_and_app_wire",
+      "--",
+      "--nocapture"
+    ],
+    "log": "outputs/logs/wire.log",
+    "started_at": "2026-09-07T08:40:06.625265+00:00",
+    "finished_at": "2026-09-07T08:40:10.387844+00:00",
+    "exit_code": 0,
+    "source_unchanged": true,
+    "environment": {
+      "HTTP_FINALIZE_WIRE_EVIDENCE_DIR": "<new-output-directory>"
+    }
+  },
+  {
+    "name": "runtime-lifecycle",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--lib",
+      "adapters::in_process_wasm::tests::"
+    ],
+    "log": "outputs/logs/runtime-lifecycle.log",
+    "started_at": "2026-09-07T08:40:10.405649+00:00",
+    "finished_at": "2026-09-07T08:40:12.787417+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "observation-test",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy",
+      "--lib",
+      "http_finalize_failure_reaches_the_observation_store_with_package_details"
+    ],
+    "log": "outputs/logs/observation-test.log",
+    "started_at": "2026-09-07T08:40:12.805089+00:00",
+    "finished_at": "2026-09-07T08:41:17.871045+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "log": "outputs/logs/fmt.log",
+    "started_at": "2026-09-07T08:41:17.910171+00:00",
+    "finished_at": "2026-09-07T08:41:19.306311+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "fixture-fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.toml",
+      "--",
+      "--check"
+    ],
+    "log": "outputs/logs/fixture-fmt.log",
+    "started_at": "2026-09-07T08:41:19.330462+00:00",
+    "finished_at": "2026-09-07T08:41:19.446167+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  },
+  {
+    "name": "lint",
+    "command": [
+      "deno",
+      "task",
+      "lint"
+    ],
+    "log": "outputs/logs/lint.log",
+    "started_at": "2026-09-07T08:41:19.464355+00:00",
+    "finished_at": "2026-09-07T08:41:31.716220+00:00",
+    "exit_code": 0,
+    "source_unchanged": true
+  }
+]

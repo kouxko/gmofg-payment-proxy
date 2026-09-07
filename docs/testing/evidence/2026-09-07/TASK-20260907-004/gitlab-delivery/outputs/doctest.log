@@ -1,0 +1,10 @@
+   Compiling intercept-proxy-gmofg-cps-component v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/examples/protocol-packages/gmofg_cps)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.48s
+   Doc-tests intercept_proxy_gmofg_cps_component
+
+running 1 test
+test src/lib.rs - __export_http_package_downstream_finalize_impl (line 13) ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+all doctests ran in 2.22s; merged doctests compilation took 0.26s

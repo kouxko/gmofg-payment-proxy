@@ -1,0 +1,9 @@
+POST /before?value=before HTTP/1.1
+Host: wire.test
+Content-Type: application/json; charset=utf-8
+X-Value: before
+X-Path-Id: ae663730-8ddf-424f-a353-792124e7a76e
+Content-Length: 8
+Connection: close
+
+"before"

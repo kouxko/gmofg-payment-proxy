@@ -1,0 +1,10 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.49s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 3 tests
+test adapters::in_process_wasm::tests::deactivate_does_not_wait_for_a_guest_blocked_in_websocket_receive ... ok
+test adapters::in_process_wasm::tests::finalize_capabilities_follow_the_active_runtime_generation ... ok
+test adapters::in_process_wasm::tests::replace_cancels_an_old_call_and_publishes_new_finalize_capabilities ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 493 filtered out; finished in 1.82s
+

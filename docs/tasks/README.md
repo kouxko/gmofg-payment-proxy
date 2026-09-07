@@ -2,6 +2,14 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-07
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 18:12:25 +08:00 | [TASK-20260907-004：CPS checksum Wasm 包](completed/2026-09-07/implement-cps-checksum-wasm.md) | 上下行JSON编解码/展示、四模型原token响应重签及完整HTTP规则链 | PASS；Java14向量、包8+1、实际Host/HTTP、严格静态检查与独立审查APPROVE；真实终端业务NOT_RUN | 高 | CPS、MD5、Wasm、Decode、Encode、Finalize |
+| 16:57:33 +08:00 | [TASK-20260907-001：Proxy 本地 Wasm HTTP 上下行 Finalize](completed/2026-09-07/http-post-encode-finalize-cps-response-signing.md) | 独立 Finalize trait、可选 ABI、五字段原子写回、事务/Mock/错误与旧包兼容 | 本地53项通过、真实HTTP wire及独立审查APPROVE；源码typecheck通过，全量受历史证据5项TS2307阻断 | 高 | HTTP、Finalize、Wasm、Schema100、Pipeline |
+| 15:25:31 +08:00 | [TASK-20260907-002：DLL 包支持电子小票并交付 1.0.1](completed/2026-09-07/support-receipt-responses-dll-package-1-0-1.md) | 显式分流U010/U011，五字段小票编解码和安全展示，保留原DLL和旧产物 | PASS；包18/18、Host1/1、codec1/1、静态检查及独立审查APPROVE；真实链路/CI NOT_RUN | 高 | DLL、JsonReceipt、Wasm、1.0.1 |
+
 ## 2026-09-06
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

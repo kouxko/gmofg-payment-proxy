@@ -1,0 +1,14 @@
+{
+  "metadata.json": "d03bd666d2349ca4ae446dadcd3d8ac1a88791010cfc79dcbb249409591eb763",
+  "README.md": "dddbc815c1ee7cf637b86ef0a51a6f0756eb345b18748d2a21bdd364a84e57ea",
+  "resources/scoped-commit.patch": "8f8f0a8b575c54b992699dbcce295d5871c397ca2e6172b931e006f17bf658fb",
+  "outputs/mr-readback.json": "a7b11f588263788c3e1beaf18826de6bec5cdb9b6f05f3408de259791176c4ba",
+  "outputs/mr-commits.json": "cf709abba74a015e7ede5a6f24954539edfae841a6915f75b6393025e751a2f2",
+  "outputs/doctest.log": "eecc8a76def8c93aed71d9b29302bea9a30aa2d6feb2b4da244e36579be06d58",
+  "outputs/mr-created.json": "7aa170ee1735629f02d44c076b24539107f030743dfd2b6c88d9e86d6f302df1",
+  "outputs/mr-diff-paths.json": "259d3524b297f9b55da6b2077ca4a8a02f0735c2edcd5c5c1b86f0911b883ab3",
+  "outputs/post-format-java.log": "345c1aedc4b393e906992de4082d0586c1c50fd064e3fab481cd2ca0fd13a8ab",
+  "inputs/commit-message.txt": "528da1febdcadcc2fa6bea81a5400f560d4927d36f12a31c2d437b81321731d0",
+  "inputs/delivered-file-sha256.json": "655ece191ccce7cfe618006ac6432febe092aee2c37dee74c825e3df347596ab",
+  "resources/examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.prefix": "258e39238b681e669c66915340899b6b1d587468cb9d61aae382bb05d3cf7aae"
+}

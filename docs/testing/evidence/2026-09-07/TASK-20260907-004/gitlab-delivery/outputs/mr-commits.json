@@ -1,0 +1,19 @@
+[
+  {
+    "id": "bb0f795b19773e643c6b024a4d93e6d9e3362234",
+    "short_id": "bb0f795b",
+    "created_at": "2026-09-07T10:08:21.000Z",
+    "parent_ids": [],
+    "title": "feat: 添加 CPS 响应 checksum Wasm 包 [skip ci]",
+    "message": "feat: 添加 CPS 响应 checksum Wasm 包 [skip ci]\n\n新增可直接导入的 gmofg-cps@1.0.0 HTTP Component，提供完整 JSON 编解码、HTML 安全展示和下行响应重签。\n\n- 实现上下行 Decode/Display/Encode 与 downstream Finalize，覆盖 pay、confirm、refund、reverse 的 16 条源码路由。\n- 根据 CPS Java 模型合并继承字段、排序、排除 sign/null/int0，使用原请求 URL token 计算 UTF-8 MD5 大写签名；规则修改金额后更新 data.sign。\n- 未修改 Document 保留原始正文；未知字段保留，业务不适用时完整输入原样返回，非法 Host 封装明确报错。\n- 提供构建脚本、内嵌 manifest 的 Wasm 产物、SHA-256、14 条原 Java 算法对照向量、Host 与真实 HTTP 链路回归。\n\n验证：8 项包单元测试、14 条 Java 向量、实际 Component Host 与真实 HTTP 规则重签测试通过；严格 Clippy、fmt、Deno lint、架构及源码尺寸检查通过，整体复审 APPROVE。\n支持边界：1e2、1E+2 和 -0 等数字词法场景不在约定输入范围；真实 CPS 服务、TLS/mTLS 和终端支付未验收。本次跳过远程 CI。\n",
+    "author_name": "kouqurong",
+    "author_email": "koqurong@outlook.com",
+    "authored_date": "2026-09-07T10:08:09.000Z",
+    "committer_name": "kouqurong",
+    "committer_email": "koqurong@outlook.com",
+    "committed_date": "2026-09-07T10:08:21.000Z",
+    "trailers": {},
+    "extended_trailers": {},
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/bb0f795b19773e643c6b024a4d93e6d9e3362234"
+  }
+]

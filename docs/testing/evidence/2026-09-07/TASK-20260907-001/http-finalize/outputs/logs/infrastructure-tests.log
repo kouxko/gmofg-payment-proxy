@@ -1,0 +1,21 @@
+    Blocking waiting for file lock on build directory
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling intercept-proxy-traffic-observation v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 08s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 10 tests
+test adapters::listener_runtime::http_finalize::tests::malformed_finalize_json_is_rejected ... ok
+test adapters::listener_runtime::http_finalize::tests::unchanged_start_line_preserves_version_and_reason_bytes ... ok
+test adapters::listener_runtime::http_finalize::tests::finalize_output_requires_the_code_key ... ok
+test adapters::listener_runtime::http_finalize::tests::local_finalize_contract_error_keeps_package_direction_and_method ... ok
+test adapters::listener_runtime::http_finalize::tests::duplicate_json_and_case_insensitive_header_names_use_the_last_value ... ok
+test adapters::listener_runtime::http_finalize::tests::unchanged_effective_header_preserves_original_duplicates ... ok
+test adapters::listener_runtime::http_finalize::tests::rejected_finalize_output_never_partially_writes_the_message ... ok
+test adapters::pipeline::tests::http_finalize_runs_after_encode_and_before_lifecycle_commit ... ok
+test sqlite::sqlite_tests::http_finalize_compatibility::finalize_host_reopens_schema100_and_keeps_the_existing_http_package_and_workspace ... ok
+test adapters::listener_runtime::http_finalize::tests::real_wasm_finalize_updates_http_fields ... ok
+
+test result: ok. 10 passed; 0 failed; 0 ignored; 0 measured; 486 filtered out; finished in 1.56s
+

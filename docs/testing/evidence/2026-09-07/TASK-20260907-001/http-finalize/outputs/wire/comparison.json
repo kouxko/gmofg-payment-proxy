@@ -1,0 +1,62 @@
+{
+  "result": "PASS",
+  "actual": {
+    "client_input": {
+      "start_line": "POST /before?value=before HTTP/1.1",
+      "header": {
+        "host": "wire.test",
+        "content-type": "application/json; charset=utf-8",
+        "x-value": "before",
+        "x-path-id": "ae663730-8ddf-424f-a353-792124e7a76e",
+        "content-length": "8",
+        "connection": "close"
+      },
+      "body": "\"before\"",
+      "bytes": 214,
+      "sha256": "7bbff817ef97764beadad8ad7f16381d7164c4dd8585f09fa75f4a205df84040"
+    },
+    "origin_request": {
+      "start_line": "POST /upstream?value=upstream HTTP/1.1",
+      "header": {
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "ae663730-8ddf-424f-a353-792124e7a76e",
+        "x-value": "upstream",
+        "host": "127.0.0.1:55623",
+        "connection": "close",
+        "content-length": "10"
+      },
+      "body": "\"upstream\"",
+      "bytes": 229,
+      "sha256": "0e39e33615dc9ed4bec9aeaf58c5761bc846cd9f216d07585378df727cc9a2b1"
+    },
+    "origin_response": {
+      "start_line": "HTTP/1.1 200 OK",
+      "header": {
+        "content-type": "application/json; charset=utf-8",
+        "x-value": "before",
+        "x-path-id": "ae663730-8ddf-424f-a353-792124e7a76e",
+        "content-length": "8",
+        "connection": "close"
+      },
+      "body": "\"before\"",
+      "bytes": 178,
+      "sha256": "02fc70bda164792a5ff26130828fcb4dbc1730e70aa9c7b7b8e9e29bcf92beb8"
+    },
+    "app_response": {
+      "start_line": "HTTP/1.1 202 Accepted",
+      "header": {
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "ae663730-8ddf-424f-a353-792124e7a76e",
+        "x-value": "downstream",
+        "content-length": "12",
+        "connection": "close"
+      },
+      "body": "\"downstream\"",
+      "bytes": 193,
+      "sha256": "9c8f69791201432a5accc5281a2239599d4e70e43943323abeb300b009f690e3"
+    }
+  },
+  "path_id": "ae663730-8ddf-424f-a353-792124e7a76e",
+  "content_lengths_match": true,
+  "raw_http_copies_match": true
+}
