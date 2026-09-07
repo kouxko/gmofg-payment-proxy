@@ -38,7 +38,7 @@ const component = appendCustomSection(
 validateComponent(component);
 
 await mkdir(distributionRoot, { recursive: true });
-const outputPath = path.join(distributionRoot, "gmofg-payment-dll-1.0.0.wasm");
+const outputPath = path.join(distributionRoot, "gmofg-payment-dll-1.0.1.wasm");
 await writeFile(outputPath, component);
 const digest = createHash("sha256").update(component).digest("hex");
 await writeFile(`${outputPath}.sha256`, `${digest}  ${path.basename(outputPath)}\n`);
@@ -100,10 +100,10 @@ function validateManifest(value) {
   const expectedIdentity = value?.api === 1
     && value?.kind === "http"
     && value?.package?.id === "gmofg-payment-dll"
-    && value?.package?.version === "1.0.0"
+    && value?.package?.version === "1.0.1"
     && typeof value?.package?.name === "string"
     && value.package.name.trim().length > 0;
-  if (!expectedIdentity) throw new Error("manifest.json does not describe gmofg-payment-dll@1.0.0 HTTP API 1");
+  if (!expectedIdentity) throw new Error("manifest.json does not describe gmofg-payment-dll@1.0.1 HTTP API 1");
   const upstream = value?.document?.upstream;
   if (!isPlainObject(upstream) || Object.keys(upstream).length !== 0) {
     throw new Error("manifest.json document.upstream must not declare a DLL schema");
@@ -114,6 +114,8 @@ function validateManifest(value) {
   }
   for (const requiredProperty of [
     "ErrorCode",
+    "ErrorMessage",
+    "ResponseDateTime",
     "ResponseID",
     "TransactionType",
     "KCCI_01",
