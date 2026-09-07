@@ -65,6 +65,8 @@ HTTP 的边界分两层：
 Plain Body 模式仍会建立 `http-text` Document，但不加载协议包；Protocol Body 模式使用
 Listener 启动时冻结的精确协议包版本。规则快照替换不会更换已冻结的协议脚本身份。
 Rules 与 Encode 的共同事务通过 `PrepareWrite` 明确执行，参见 [阶段与事务合同](exchange-pipeline.md)。
+本地 HTTP Wasm 包实现 Finalize 时，同一写准备事务还会在正文动作完成后调用该方向的 Finalize；
+成功才提交规则生命周期并交给 Writer。输入输出与兼容边界见 [HTTP Finalize](http-finalize.md)。
 
 固定上游反向代理和普通 HTTP 正向代理都进入同一个 HTTP Exchange。当前连接绑定一个 Endpoint；
 同一 Exchange 不支持在 keep-alive 期间切换目标。CONNECT、Upgrade 和 MITM tunnel fail-closed。
@@ -198,7 +200,7 @@ flowchart LR
 | Socket EOF 且存在半帧 | `TRUNCATED_FRAME` 类业务失败 |
 | Server 在必要响应前 EOF | Exchange 失败 |
 | Frame 边界无效或同次读取含尾部 | 协议失败，不保留到下一笔 |
-| Decode、Rules、Encode 失败 | 当前 Exchange 失败，不发送兜底数据 |
+| Decode、Rules、Encode、HTTP Finalize 失败 | 当前 Exchange 失败，不发送兜底数据 |
 | Reader、Writer、connect、TLS 或超时失败 | 保留稳定错误码并关闭连接 |
 | Display 失败 | 使用 HTTP body 或 Socket hex，交易继续 |
 | 观察队列或 UI 刷新失败 | 丢观察并计数，交易继续 |

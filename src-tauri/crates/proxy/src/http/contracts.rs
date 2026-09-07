@@ -102,6 +102,10 @@ pub trait PipelinePorts: HandshakePolicy {
 pub struct HttpRequestMetadata {
     pub method: String,
     pub request_target: String,
+    /// Request target exactly as observed on the App-facing start-line.
+    /// It can be absolute-form or origin-form; the proxy does not invent an
+    /// origin when the App supplied only a relative target.
+    pub url: String,
 }
 
 impl HttpRequestMetadata {
@@ -115,6 +119,7 @@ impl HttpRequestMetadata {
         Ok(Self {
             method: method.as_str().to_owned(),
             request_target: request_target.as_str().to_owned(),
+            url: uri.to_string(),
         })
     }
 }

@@ -20,13 +20,26 @@ pub(crate) struct InProcessWasmRuntime {
 struct RuntimeGeneration {
     runtime: tokio::sync::Mutex<WasmPackageRuntime>,
     cancelled: CancellationToken,
+    has_upstream_finalize: bool,
+    has_downstream_finalize: bool,
 }
 
 impl RuntimeGeneration {
     fn new(runtime: WasmPackageRuntime) -> Self {
+        let has_upstream_finalize = runtime.has_http_finalize(ProtocolDirection::Upstream);
+        let has_downstream_finalize = runtime.has_http_finalize(ProtocolDirection::Downstream);
         Self {
             runtime: tokio::sync::Mutex::new(runtime),
             cancelled: CancellationToken::new(),
+            has_upstream_finalize,
+            has_downstream_finalize,
+        }
+    }
+
+    fn has_http_finalize(&self, direction: ProtocolDirection) -> bool {
+        match direction {
+            ProtocolDirection::Upstream => self.has_upstream_finalize,
+            ProtocolDirection::Downstream => self.has_downstream_finalize,
         }
     }
 }
@@ -88,6 +101,32 @@ fn runtime_offline() -> PackageTransportError {
 
 #[async_trait]
 impl ProtocolPackageRuntime for InProcessWasmRuntime {
+    fn has_http_finalize(
+        &self,
+        direction: ProtocolDirection,
+    ) -> Result<bool, PackageTransportError> {
+        self.runtime
+            .lock()
+            .as_ref()
+            .map(|runtime| runtime.has_http_finalize(direction))
+            .ok_or_else(runtime_offline)
+    }
+
+    async fn finalize_http(
+        &self,
+        direction: ProtocolDirection,
+        http_json: String,
+    ) -> Result<Option<String>, PackageTransportError> {
+        let runtime = self.runtime.lock().clone().ok_or_else(runtime_offline)?;
+        tokio::select! {
+            biased;
+            () = runtime.cancelled.cancelled() => Err(runtime_offline()),
+            result = async {
+                runtime.runtime.lock().await.finalize_http(direction, &http_json).await
+            } => result.map_err(package_error),
+        }
+    }
+
     async fn frame(
         &self,
         direction: ProtocolDirection,
@@ -215,6 +254,157 @@ mod tests {
         .unwrap();
         let manifest = std::fs::read(fixture.join("manifest.json")).unwrap();
         embed_package_manifest(&component, &manifest).unwrap()
+    }
+
+    fn http_finalize_component(features: &[&str]) -> Vec<u8> {
+        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
+        let fixture =
+            repository.join("src-tauri/crates/package-runtime/tests/fixtures/http-finalize");
+        let feature_key = if features.is_empty() {
+            "none".to_owned()
+        } else {
+            features.join("-")
+        };
+        let target_dir = fixture.join("target").join(feature_key);
+        let mut command = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
+        command.args([
+            "build",
+            "--locked",
+            "--manifest-path",
+            fixture.join("Cargo.toml").to_str().unwrap(),
+            "--target",
+            "wasm32-wasip2",
+            "--target-dir",
+            target_dir.to_str().unwrap(),
+            "--no-default-features",
+        ]);
+        if !features.is_empty() {
+            command.args(["--features", &features.join(",")]);
+        }
+        let output = command.output().unwrap();
+        assert!(
+            output.status.success(),
+            "{}",
+            String::from_utf8_lossy(&output.stderr)
+        );
+        let component = std::fs::read(
+            target_dir.join("wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm"),
+        )
+        .unwrap();
+        let manifest = std::fs::read(fixture.join("manifest.json")).unwrap();
+        embed_package_manifest(&component, &manifest).unwrap()
+    }
+
+    async fn load_http_finalize_runtime(features: &[&str]) -> WasmPackageRuntime {
+        let component = read_package_component(&http_finalize_component(features)).unwrap();
+        WasmPackageRuntime::load(&component).await.unwrap()
+    }
+
+    #[tokio::test]
+    async fn finalize_capabilities_follow_the_active_runtime_generation() {
+        let runtime = InProcessWasmRuntime::new(load_http_finalize_runtime(&[]).await);
+        assert!(
+            !runtime
+                .has_http_finalize(ProtocolDirection::Upstream)
+                .unwrap()
+        );
+        assert!(
+            !runtime
+                .has_http_finalize(ProtocolDirection::Downstream)
+                .unwrap()
+        );
+        assert_eq!(
+            runtime
+                .finalize_http(ProtocolDirection::Downstream, "base".to_owned())
+                .await
+                .unwrap(),
+            None
+        );
+
+        runtime.replace(load_http_finalize_runtime(&["downstream"]).await);
+        assert!(
+            !runtime
+                .has_http_finalize(ProtocolDirection::Upstream)
+                .unwrap()
+        );
+        assert!(
+            runtime
+                .has_http_finalize(ProtocolDirection::Downstream)
+                .unwrap()
+        );
+        assert_eq!(
+            runtime
+                .finalize_http(ProtocolDirection::Downstream, "before".to_owned())
+                .await
+                .unwrap()
+                .as_deref(),
+            Some("downstream")
+        );
+
+        assert!(runtime.deactivate());
+        assert!(
+            runtime
+                .has_http_finalize(ProtocolDirection::Upstream)
+                .is_err()
+        );
+        assert!(
+            runtime
+                .has_http_finalize(ProtocolDirection::Downstream)
+                .is_err()
+        );
+    }
+
+    #[tokio::test]
+    async fn replace_cancels_an_old_call_and_publishes_new_finalize_capabilities() {
+        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+        let address = listener.local_addr().unwrap();
+        let (blocked, entered) = tokio::sync::oneshot::channel();
+        let peer = tokio::spawn(async move {
+            let (stream, _) = listener.accept().await.unwrap();
+            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
+            websocket.next().await.unwrap().unwrap();
+            websocket.next().await.unwrap().unwrap();
+            let _ = blocked.send(());
+            std::future::pending::<()>().await;
+        });
+
+        let old_component = read_package_component(&blocking_websocket_component()).unwrap();
+        let old_runtime = WasmPackageRuntime::load(&old_component).await.unwrap();
+        let new_runtime = load_http_finalize_runtime(&["downstream"]).await;
+        let runtime = Arc::new(InProcessWasmRuntime::new(old_runtime));
+        let call_runtime = Arc::clone(&runtime);
+        let call = tokio::spawn(async move {
+            call_runtime
+                .decode_http(
+                    ProtocolDirection::Upstream,
+                    format!("websocket-roundtrip:ws://{address}"),
+                )
+                .await
+        });
+        tokio::time::timeout(Duration::from_secs(5), entered)
+            .await
+            .expect("old generation entered WebSocket receive")
+            .unwrap();
+
+        runtime.replace(new_runtime);
+        assert!(
+            !runtime
+                .has_http_finalize(ProtocolDirection::Upstream)
+                .unwrap()
+        );
+        assert!(
+            runtime
+                .has_http_finalize(ProtocolDirection::Downstream)
+                .unwrap()
+        );
+        assert!(
+            tokio::time::timeout(Duration::from_millis(100), call)
+                .await
+                .expect("old generation call must be cancelled")
+                .unwrap()
+                .is_err()
+        );
+        peer.abort();
     }
 
     #[tokio::test]

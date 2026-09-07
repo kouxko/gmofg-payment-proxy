@@ -34,7 +34,7 @@ pub use observer::{
 pub use output_validation::BoundedSocketJointEvaluation;
 pub(crate) use output_validation::validate_socket_output;
 pub use processing::{
-    FrameBoundary, HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
+    FrameBoundary, JointConditionEvaluation, JointRuleConditionEvaluation,
     SocketConnectionIdentity, SocketDirectionCapabilities, SocketJointEvaluation,
     SocketObservationMetadata, SocketPayloadDirection, SocketPipelineLimits,
     SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,

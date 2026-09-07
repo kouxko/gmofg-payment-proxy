@@ -85,7 +85,9 @@ Proxy -> App:    working Document condition -> action -> Encode -> write
 `(priority, rule_id)` 顺序执行；`created_order` 仅用于编辑历史展示，不参与运行时排序。每条规则的唯一
 condition 读取当前 working state，命中后执行唯一 action，并供后序规则条件观察。方向完成后只
 Encode 一次。Document、普通 HTTP action、Encode
-与 actor delta 作为一个事务提交，全部成功才一次提交 lifecycle，任一步失败都回滚。
+以及本地 HTTP 包的可选 Finalize 与 actor delta 作为一个事务提交，全部成功才一次提交 lifecycle，任一步失败都回滚。
+Finalize 在本轮正文动作完成后执行，独立于 Encode 是否跳过；具体输入输出、Mock 和旧包兼容见
+[HTTP Finalize](http-finalize.md)。
 该事务由显式 `PrepareWrite` 端口组织，成功准备和真实写出分别观察，见
 [Exchange 与 Pipeline](exchange-pipeline.md)。HTTP/Socket 复用规则 entry 与 Schema 验证步骤，
 各自保留适用方向、协议包种类和精确版本的检查。

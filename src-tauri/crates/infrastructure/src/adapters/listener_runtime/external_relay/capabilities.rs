@@ -238,6 +238,7 @@ fn rpc_error(
                 ExternalPackageCallStage::Decode => ExchangeExternalPackageCallStage::Decode,
                 ExternalPackageCallStage::Display => ExchangeExternalPackageCallStage::Display,
                 ExternalPackageCallStage::Encode => ExchangeExternalPackageCallStage::Encode,
+                ExternalPackageCallStage::Finalize => ExchangeExternalPackageCallStage::Finalize,
             },
             method: diagnostic.method,
             request_id: diagnostic.request_id,

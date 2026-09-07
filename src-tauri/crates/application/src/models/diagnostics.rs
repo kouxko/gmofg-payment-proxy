@@ -123,10 +123,11 @@ pub enum ExternalPackageCallStage {
     Decode,
     Encode,
     Display,
+    Finalize,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
-/// 外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+/// 本地 Wasm 或远端 JSON-RPC 包调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
 /// 在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
 pub struct ExternalPackageCallDiagnosticViewModel {
     pub package: ProtocolPackageRef,

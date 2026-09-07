@@ -22,6 +22,9 @@ WebSocket 回连。该路径增加了跨平台二进制打包、子进程生命�
    JSON-RPC DTO 与 Base64 转换。
 4. Component 通过版本化 WIT 导出固定的 Frame、Decode、Encode 和 Display Hook。HTTP world 使用
    `string`；Socket world 使用 `list<u8>`；Document 在 WIT 边界使用规范 JSON 字符串。
+   HTTP 的可选上下行 Finalize 通过扩展 world 和动态导出检查接入，旧 `http-package` 的必需导出不变；
+   参见 [HTTP Finalize 合同](../http-finalize.md) 与
+   [ADR-011](ADR-011-http-finalize-capability.md)。
 5. Host 向 Component 提供 WASI 文件系统、环境、网络能力和 `ws`/`wss` WebSocket 接口。产品不增加
    沙箱、fuel、内存、包体积、Hook 超时、Busy、重试或 replay 限制；宿主和操作系统自身的资源失败按
    真实错误传播。

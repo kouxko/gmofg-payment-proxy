@@ -75,7 +75,8 @@ impl Reader<Http, Upstream> for BufferedAppReader {
         self.state
             .lock()
             .expect("HTTP Exchange state mutex poisoned")
-            .begin(command);
+            .begin(command)
+            .map_err(proxy_write_error)?;
         let state = self
             .state
             .lock()
