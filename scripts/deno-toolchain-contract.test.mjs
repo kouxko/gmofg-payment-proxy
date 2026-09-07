@@ -52,6 +52,7 @@ test("frontend CI and release workflows do not install or invoke Node and pnpm",
     ".github/workflows/ci.yml",
     ".github/workflows/windows-release.yml",
     ".github/workflows/windows-quick-build.yml",
+    ".gitlab-ci.yml",
   ];
 
   for (const workflowPath of workflowPaths) {
@@ -65,6 +66,10 @@ test("frontend CI and release workflows do not install or invoke Node and pnpm",
     assert.match(source, /denoland\/setup-deno@/u);
     assert.match(source, /deno ci/u);
   }
+
+  const gitLabWorkflow = await readText(".gitlab-ci.yml");
+  assert.match(gitLabWorkflow, /^[ ]{2}DENO_VERSION: "2\.9\.6"$/mu);
+  assert.match(gitLabWorkflow, /deno ci/u);
 });
 
 test("local and CI Rust toolchains are pinned to 1.98.0", async () => {
@@ -93,10 +98,14 @@ test("local and CI Rust toolchains are pinned to 1.98.0", async () => {
 
   for (const workflowPath of workflowPaths) {
     const source = await readText(workflowPath);
-    const rustToolchainActions = source.match(/dtolnay\/rust-toolchain@/gu) ?? [];
+    const rustToolchainActions = source.match(/dtolnay\/rust-toolchain@/gu) ??
+      [];
     const pinnedToolchains = source.match(/toolchain: 1\.98\.0/gu) ?? [];
 
-    assert.ok(rustToolchainActions.length > 0, `${workflowPath}: Rust action missing`);
+    assert.ok(
+      rustToolchainActions.length > 0,
+      `${workflowPath}: Rust action missing`,
+    );
     assert.equal(
       pinnedToolchains.length,
       rustToolchainActions.length,
@@ -104,4 +113,8 @@ test("local and CI Rust toolchains are pinned to 1.98.0", async () => {
     );
     assert.doesNotMatch(source, /toolchain:\s+1\.97(?:\.1)?/u);
   }
+
+  const gitLabWorkflow = await readText(".gitlab-ci.yml");
+  assert.match(gitLabWorkflow, /^[ ]{2}RUST_TOOLCHAIN: "1\.98\.0"$/mu);
+  assert.doesNotMatch(gitLabWorkflow, /RUST_TOOLCHAIN:\s+"1\.97(?:\.1)?"/u);
 });

@@ -1,16 +1,29 @@
 pluginManagement {
+    val useAliyunMirror = providers.environmentVariable("ANDROID_MAVEN_MIRROR").orNull == "aliyun"
     repositories {
-        google()
-        mavenCentral()
-        gradlePluginPortal()
+        if (useAliyunMirror) {
+            maven("https://maven.aliyun.com/repository/google")
+            maven("https://maven.aliyun.com/repository/central")
+            maven("https://maven.aliyun.com/repository/gradle-plugin")
+        } else {
+            google()
+            mavenCentral()
+            gradlePluginPortal()
+        }
     }
 }
 
 dependencyResolutionManagement {
+    val useAliyunMirror = providers.environmentVariable("ANDROID_MAVEN_MIRROR").orNull == "aliyun"
     repositoriesMode.set(RepositoriesMode.FAIL_ON_PROJECT_REPOS)
     repositories {
-        google()
-        mavenCentral()
+        if (useAliyunMirror) {
+            maven("https://maven.aliyun.com/repository/google")
+            maven("https://maven.aliyun.com/repository/central")
+        } else {
+            google()
+            mavenCentral()
+        }
     }
 }
 

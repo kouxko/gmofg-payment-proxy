@@ -7,6 +7,7 @@
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260903-011 | gitlab-ci-pipeline | 验证 GitLab CI 的 Android Companion、coverage、Windows verify、unsigned package 依赖和触发合同，以及固定工具链、下载 SHA 和服务器端 CI Lint | PASS_WITH_REMOTE_PIPELINE_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-011/gitlab-ci-pipeline/README.md) |
 | TASK-20260903-009 | PROTOCOL-DISPLAY-TABLE-SCROLL-001 | 验证每张协议 Display 宽表保留原生语义与可读列宽，并在独立容器内产生横向滚动；补充验证持久化停用后的规则不再执行 | PASS_WITH_USER_UI_VERIFICATION_PENDING | TASK-20260903-005 | gmofg-dll-downstream-package | [父证据](2026-09-03/TASK-20260903-005/gmofg-dll-downstream-package/README.md) | [证据](2026-09-03/TASK-20260903-009/PROTOCOL-DISPLAY-TABLE-SCROLL-001/README.md) |
 | TASK-20260903-010 | gmofg-dll-json-tree-display | 验证 GMO-FG DLL Display 按完整 JSON Object/Array 层级原生展开收起，移除 `$` 技术路径，并保持分色 table、横向滚动、安全清洗和资源门禁 | PASS_WITH_RUNNING_APP_VISUAL_NOT_RUN | TASK-20260903-005 | gmofg-dll-downstream-package | [父证据](2026-09-03/TASK-20260903-005/gmofg-dll-downstream-package/README.md) | [证据](2026-09-03/TASK-20260903-010/gmofg-dll-json-tree-display/README.md) |
 | TASK-20260903-004 | STANDALONE-WEAK-NETWORK-UI-001 | 验证无代理独立弱网、四个有来源场景、五项常用效果、渐进披露、运行保护及三个设备操作按钮等宽布局 | PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_MANUAL_NOT_RUN | 无 | 无 | 无 | [证据](2026-09-03/TASK-20260903-004/STANDALONE-WEAK-NETWORK-UI-001/README.md) |
