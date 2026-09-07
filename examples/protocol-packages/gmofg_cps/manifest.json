@@ -1,0 +1,14 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "gmofg-cps",
+    "version": "1.0.0",
+    "name": "GMOFG CPS",
+    "description": "CPS JSON Decode/Display/Encode and downstream response sign finalization"
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {}
+  }
+}

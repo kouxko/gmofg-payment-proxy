@@ -1,0 +1,98 @@
+import com.google.gson.Gson;
+import com.google.gson.GsonBuilder;
+import com.google.gson.JsonElement;
+import com.google.gson.JsonObject;
+import com.google.gson.JsonParser;
+
+import java.io.IOException;
+import java.lang.reflect.Field;
+import java.nio.charset.Charset;
+import java.nio.charset.StandardCharsets;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.security.MessageDigest;
+import java.security.NoSuchAlgorithmException;
+import java.util.ArrayList;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.Comparator;
+import java.util.List;
+
+public final class OracleMain {
+    private static final Gson GSON = new GsonBuilder().setPrettyPrinting().disableHtmlEscaping().create();
+
+    private OracleMain() {}
+
+    public static final class TextUtils {
+        static boolean isEmpty(CharSequence value) {
+            return value == null || value.length() == 0;
+        }
+    }
+
+    public static final class Logger {
+        static void error(String ignored) {}
+    }
+
+    public static class Meta {
+        private String code;
+        private String message;
+    }
+
+    public static class BaseResult {
+        private String orderDetailId;
+        private String orderId;
+        private String transTime;
+        private String transStatus;
+    }
+
+    public static class BaseData {
+        private String errorCode;
+        private String errorInfo;
+        private String subErrorCode;
+        private String sign;
+    }
+
+    public static final class PayResult extends BaseResult {
+        private String currencyCode;
+        private int amount;
+        private int amountRmb;
+        private String payType;
+        private String extendedInfo;
+    }
+
+    public static final class ConfirmResult extends BaseResult {
+        private String payType;
+        private String payCheckDate;
+    }
+
+    public static final class RefundResult extends BaseResult {
+        private String currencyCode;
+        private int refundAmount;
+    }
+
+    public static final class ReverseResult extends BaseResult {
+        private int amount;
+        private String currencyCode;
+    }
+
+    public static final class PayData extends BaseData { private PayResult result; }
+    public static final class ConfirmData extends BaseData { private ConfirmResult result; }
+    public static final class RefundData extends BaseData { private RefundResult result; }
+    public static final class ReverseData extends BaseData { private ReverseResult result; }
+
+    public static final class PayResponse extends Message.Response { private PayData data; }
+    public static final class ConfirmResponse extends Message.Response { private ConfirmData data; }
+    public static final class RefundResponse extends Message.Response { private RefundData data; }
+    public static final class ReverseResponse extends Message.Response { private ReverseData data; }
+
+    // These types are part of the original algorithm's explicit instanceof allow-list.
+    // They are unused by the downstream response vectors but must exist for exact compilation.
+    public static class Products {}
+    public static class VoucherDiscount {}
+    public static class ProductsDetail {}
+
+    public static final class Message {
+        private static String lastCanonical;
+
+        public static class Request {}
+        public static class Response { private Meta meta; }
