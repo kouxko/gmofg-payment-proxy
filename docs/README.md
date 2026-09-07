@@ -15,6 +15,10 @@
 
 ## 待实现任务
 
+- [TASK-20260907-003：构建 HTTP Finalize Windows 候选包](tasks/pending/2026-09-07/build-http-finalize-windows.md)（高，进行中）
+
+
+
 - [TASK-20260906-001：修复六项架构与逻辑审查发现](tasks/pending/2026-09-06/fix-six-architecture-review-findings.md)（高，待确认；已实现部分验证与复审通过，Socket 读取上限待确认）
 
 

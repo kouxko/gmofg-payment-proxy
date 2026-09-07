@@ -1,0 +1,5 @@
+/target/
+!Cargo.lock
+!dist/
+!dist/*.wasm
+!dist/*.sha256

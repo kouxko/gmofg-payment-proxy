@@ -1,0 +1,10 @@
+{
+  "time": "2026-09-07 18:05:30 +08:00",
+  "git_head": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+  "platform": "Darwin KQR.local 27.0.0 Darwin Kernel Version 27.0.0: Tue Aug 11 22:18:52 PDT 2026; root:xnu-13432.1.9~3/RELEASE_ARM64_T6000 arm64",
+  "rust": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "deno": "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 15.0.245.2-rusty\ntypescript 6.0.3",
+  "wasm_sha256": "674e879c62dc1707e4714f8bddeb2337150e30c5bfc766d58bc5ebafebea5ca3",
+  "source_state": "/tmp/task0907-cps-tested-state.json",
+  "wire_evidence": "/tmp/task0907-cps-final-wire"
+}

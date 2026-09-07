@@ -3,6 +3,15 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-07
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260907-004 | gitlab-delivery | 22文件单提交、GitLab MR !4及提交信息一致性 | PASS_MR_CREATED_VERIFIED | TASK-20260907-004 | cps-checksum | [父证据](2026-09-07/TASK-20260907-004/cps-checksum/README.md) | [证据](2026-09-07/TASK-20260907-004/gitlab-delivery/README.md) |
+| TASK-20260907-004 | cps-checksum | CPS四模型Java对照、实际Wasm/Host与HTTP规则重签 | PASS_LOCAL_CPS_JAVA_HOST_HTTP_REVIEW | TASK-20260907-001 | http-finalize | [父证据](2026-09-07/TASK-20260907-001/http-finalize/README.md) | [证据](2026-09-07/TASK-20260907-004/cps-checksum/README.md) |
+| TASK-20260907-001 | http-finalize | 可选ABI、HTTP事务/实际wire、失败观察和旧库/旧包 | LOCAL_PASS_REVIEW_APPROVED_WITH_EXISTING_FULL_TYPECHECK_FAILURE | TASK-20260901-001 | json-pretty-wasm-example | [父证据](2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md) | [证据](2026-09-07/TASK-20260907-001/http-finalize/README.md) |
+| TASK-20260907-002 | dll-receipt-1-0-1 | 小票成功/失败/修改、原DLL回归、Wasm1.0.1和Host验证 | PASS_LOCAL_PACKAGE_AND_HOST | TASK-20260903-005 | gmofg-dll-downstream-package | [父证据](2026-09-03/TASK-20260903-005/gmofg-dll-downstream-package/README.md) | [证据](2026-09-07/TASK-20260907-002/dll-receipt-1-0-1/README.md) |
+
 ## 2026-09-06
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |

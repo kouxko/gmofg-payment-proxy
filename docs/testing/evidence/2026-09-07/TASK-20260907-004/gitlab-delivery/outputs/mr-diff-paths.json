@@ -1,0 +1,134 @@
+[
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm",
+    "new_path": "examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm.sha256",
+    "new_path": "examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm.sha256",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/codec.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/codec.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/finalize.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/finalize.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/lib.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/lib.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/route.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/route.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/signing.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/signing.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/src/tests.rs",
+    "new_path": "examples/protocol-packages/gmofg_cps/src/tests.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/tests/fixtures/java-signatures.json",
+    "new_path": "examples/protocol-packages/gmofg_cps/tests/fixtures/java-signatures.json",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.prefix",
+    "new_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.prefix",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.suffix",
+    "new_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.suffix",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/README.md",
+    "new_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/README.md",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/run.sh",
+    "new_path": "examples/protocol-packages/gmofg_cps/tests/java_reference/run.sh",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/.gitignore",
+    "new_path": "examples/protocol-packages/gmofg_cps/.gitignore",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/Cargo.lock",
+    "new_path": "examples/protocol-packages/gmofg_cps/Cargo.lock",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/Cargo.toml",
+    "new_path": "examples/protocol-packages/gmofg_cps/Cargo.toml",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/README.md",
+    "new_path": "examples/protocol-packages/gmofg_cps/README.md",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/build.mjs",
+    "new_path": "examples/protocol-packages/gmofg_cps/build.mjs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "examples/protocol-packages/gmofg_cps/manifest.json",
+    "new_path": "examples/protocol-packages/gmofg_cps/manifest.json",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs",
+    "new_path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs",
+    "new_file": true,
+    "deleted_file": false
+  },
+  {
+    "old_path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "new_path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "new_file": false,
+    "deleted_file": false
+  },
+  {
+    "old_path": "src-tauri/crates/package-runtime/tests/gmofg_cps_component.rs",
+    "new_path": "src-tauri/crates/package-runtime/tests/gmofg_cps_component.rs",
+    "new_file": true,
+    "deleted_file": false
+  }
+]

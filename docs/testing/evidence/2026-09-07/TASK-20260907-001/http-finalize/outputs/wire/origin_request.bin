@@ -1,0 +1,9 @@
+POST /upstream?value=upstream HTTP/1.1
+Content-Type: application/json; charset=utf-8
+X-Path-Id: ae663730-8ddf-424f-a353-792124e7a76e
+X-Value: upstream
+Host: 127.0.0.1:55623
+Connection: close
+Content-Length: 10
+
+"upstream"

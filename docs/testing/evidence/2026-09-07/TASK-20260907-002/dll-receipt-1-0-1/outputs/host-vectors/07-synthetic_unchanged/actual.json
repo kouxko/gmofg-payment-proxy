@@ -1,0 +1,13 @@
+{
+  "display": "<section style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere\"><h3>GMO-FG Payment DLL downstream</h3><details open><summary><strong>基本信息</strong><span>Object · 5 fields</span></summary><table style=\"background-color:hsl(18 45% 46% / 0.10);border-color:hsl(18 65% 50%)\"><thead><tr><th>ResponseID</th><th>TransactionType</th><th>ResponseDateTime</th><th>ErrorCode</th><th>ErrorMessage</th></tr></thead><tbody><tr><td>A</td><td>U011</td><td>20260907155729</td><td>E02</td><td>対象伝票が見つかりません</td></tr></tbody></table></details></section>",
+  "document": {
+    "ErrorCode": "E02",
+    "ErrorMessage": "対象伝票が見つかりません",
+    "ResponseDateTime": "20260907155729",
+    "ResponseID": "A",
+    "TransactionType": "U011"
+  },
+  "encoded": "{\"ResponseID\":\"A\",\"TransactionType\":\"U011\",\"ResponseDateTime\":\"20260907155729\",\"ErrorCode\":\"E02\",\"ErrorMessage\":\"対象伝票が見つかりません\"}",
+  "input": "{\"ResponseID\":\"A\",\"TransactionType\":\"U011\",\"ResponseDateTime\":\"20260907155729\",\"ErrorCode\":\"E02\",\"ErrorMessage\":\"対象伝票が見つかりません\"}",
+  "kind": "synthetic_unchanged"
+}

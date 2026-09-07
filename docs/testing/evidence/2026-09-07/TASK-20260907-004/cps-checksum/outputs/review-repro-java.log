@@ -1,0 +1,3 @@
+{"id":"edge-exp-lower","operation":"confirm","body":"{\"meta\":{\"code\":1e2},\"data\":{\"sign\":\"OLD\",\"result\":{}}}","token":"TOKEN","canonical":"{data={result={}}&meta={code=1e2}&key=B2BTOKEN}","sign":"8DADD417DB0FC64F6414A64B9333565E"}
+{"id":"edge-exp-upper","operation":"confirm","body":"{\"meta\":{\"code\":1E+2},\"data\":{\"sign\":\"OLD\",\"result\":{}}}","token":"TOKEN","canonical":"{data={result={}}&meta={code=1E+2}&key=B2BTOKEN}","sign":"C3FFD8425A4EE30729C2462E208D38A3"}
+{"id":"edge-negative-zero","operation":"confirm","body":"{\"meta\":{\"code\":-0},\"data\":{\"sign\":\"OLD\",\"result\":{}}}","token":"TOKEN","canonical":"{data={result={}}&meta={code=-0}&key=B2BTOKEN}","sign":"866CCEDE7816EA696D9523B8EA3B0715"}

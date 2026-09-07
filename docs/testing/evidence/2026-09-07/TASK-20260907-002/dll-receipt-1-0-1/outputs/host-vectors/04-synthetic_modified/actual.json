@@ -1,0 +1,20 @@
+{
+  "decoded_again": {
+    "ErrorCode": "D48",
+    "ErrorMessage": "送信失敗 <script>alert('x')</script> & \"確認\"",
+    "ResponseDateTime": "20260907155727",
+    "ResponseID": "A",
+    "TransactionType": "U010"
+  },
+  "display": "<section style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere\"><h3>GMO-FG Payment DLL downstream</h3><details open><summary><strong>基本信息</strong><span>Object · 5 fields</span></summary><table style=\"background-color:hsl(18 45% 46% / 0.10);border-color:hsl(18 65% 50%)\"><thead><tr><th>ResponseID</th><th>TransactionType</th><th>ResponseDateTime</th><th>ErrorCode</th><th>ErrorMessage</th></tr></thead><tbody><tr><td>A</td><td>U010</td><td>20260907155727</td><td>D48</td><td>送信失敗 &lt;script&gt;alert(&#39;x&#39;)&lt;/script&gt; &amp; &quot;確認&quot;</td></tr></tbody></table></details></section>",
+  "document": {
+    "ErrorCode": "D48",
+    "ErrorMessage": "送信失敗 <script>alert('x')</script> & \"確認\"",
+    "ResponseDateTime": "20260907155727",
+    "ResponseID": "A",
+    "TransactionType": "U010"
+  },
+  "encoded": "{\"ResponseID\":\"A\",\"TransactionType\":\"U010\",\"ResponseDateTime\":\"20260907155727\",\"ErrorCode\":\"D48\",\"ErrorMessage\":\"送信失敗 <script>alert('x')</script> & \\\"確認\\\"\"}",
+  "input": "{\"ResponseID\":\"A\",\"TransactionType\":\"U010\",\"ResponseDateTime\":\"20260907155727\",\"ErrorCode\":\"E01\",\"ErrorMessage\":\"電子レシート送信に失敗しました\"}",
+  "kind": "synthetic_modified"
+}

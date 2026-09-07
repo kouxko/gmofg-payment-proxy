@@ -1,0 +1,8 @@
+{
+  "expected_sign": "F070F340438D40D0BC07295E241EE519",
+  "from": 100,
+  "hit_count": 1,
+  "path": "/data/result/amount",
+  "stage": "proxy_to_app",
+  "to": 250
+}

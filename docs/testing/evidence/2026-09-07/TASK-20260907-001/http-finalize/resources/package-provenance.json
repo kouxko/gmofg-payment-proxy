@@ -1,0 +1,41 @@
+{
+  "original_package": {
+    "source": "examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm",
+    "archive": "resources/packages/json-pretty-1.0.0.wasm",
+    "sha256": "5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3",
+    "matches_parent_artifact": "docs/testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example/outputs/json-pretty-1.0.0.wasm"
+  },
+  "fixture_components": [
+    {
+      "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/none/wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm",
+      "archive": "resources/packages/http-finalize-none.wasm",
+      "sha256": "3f8e67e868d813ba43e527e1b16fc52f62e2770fdcfa4e2048e55e95fa108b21",
+      "features": "none"
+    },
+    {
+      "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream/wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm",
+      "archive": "resources/packages/http-finalize-upstream.wasm",
+      "sha256": "0287b6659358ec7449a3e7c542e0d58b177e4f1591ddf5bddc09791a955f3b9b",
+      "features": "upstream"
+    },
+    {
+      "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/downstream/wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm",
+      "archive": "resources/packages/http-finalize-downstream.wasm",
+      "sha256": "bc906051506c1adfb7756dfd871b49d9059b6211207e0a415e0db14065f69494",
+      "features": "downstream"
+    },
+    {
+      "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream-downstream/wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm",
+      "archive": "resources/packages/http-finalize-upstream-downstream.wasm",
+      "sha256": "c6d1788a82e99f3473e8a4edb4a476bcbf5092a2f1f2b5947b545f9038f5629e",
+      "features": "upstream-downstream"
+    },
+    {
+      "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/invalid-signature/wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm",
+      "archive": "resources/packages/http-finalize-invalid-signature.wasm",
+      "sha256": "745f7c8c80f67fcc9ae30f8ae49b995d094c71395395707873e4294889d33df2",
+      "features": "invalid-signature"
+    }
+  ],
+  "usage": "Fixture components are the exact compiled inputs; test helpers embed the archived manifest.json before read_package_component. Non-function export is generated in memory by the archived wasm_http_finalize.rs using wasm_encoder. No new package was installed in a user database."
+}

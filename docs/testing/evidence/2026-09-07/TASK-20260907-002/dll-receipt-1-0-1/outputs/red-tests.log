@@ -1,0 +1,30 @@
+   Compiling intercept-proxy-gmofg-payment-dll-component v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/examples/protocol-packages/gmofg_payment_dll)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2.90s
+     Running unittests src/lib.rs (examples/protocol-packages/gmofg_payment_dll/target/debug/deps/intercept_proxy_gmofg_payment_dll_component-af6f379e0745e135)
+
+running 3 tests
+test receipt_tests::edited_receipt_reencodes_and_escapes_display_without_changing_error_semantics ... FAILED
+test receipt_tests::receipt_success_and_failure_preserve_fields_and_original_text ... FAILED
+test receipt_tests::receipt_invalid_fields_and_cross_protocol_tables_fail_in_all_hooks ... ok
+
+failures:
+
+---- receipt_tests::edited_receipt_reencodes_and_escapes_display_without_changing_error_semantics stdout ----
+
+thread 'receipt_tests::edited_receipt_reencodes_and_escapes_display_without_changing_error_semantics' (8975125) panicked at src/receipt_tests.rs:30:49:
+called `Result::unwrap()` on an `Err` value: "GMO-FG Payment DLL response is not valid JSON: unknown field `ErrorMessage`, expected one of `ErrorCode`, `ResponseID`, `TransactionType`, `ResponseTimeStamp`, `DebitInp`, `TerminalID`, `TerminalSeqNo`, `ResponseDateTime`, `DLLUpdateAnn`, `KCCI_01`, `KJSI_01`, `KBAT_01`, `KDST_01`, `KCAK_01`, `KBRD_01`, `KICC_01`, `KGIN_01`, `GDST_01`, `GCAK_01`, `GBRD_01`, `GICC_01` at line 1 column 111"
+
+---- receipt_tests::receipt_success_and_failure_preserve_fields_and_original_text stdout ----
+
+thread 'receipt_tests::receipt_success_and_failure_preserve_fields_and_original_text' (8975127) panicked at src/receipt_tests.rs:15:49:
+decode receipt: "GMO-FG Payment DLL response is not valid JSON: unknown field `ErrorMessage`, expected one of `ErrorCode`, `ResponseID`, `TransactionType`, `ResponseTimeStamp`, `DebitInp`, `TerminalID`, `TerminalSeqNo`, `ResponseDateTime`, `DLLUpdateAnn`, `KCCI_01`, `KJSI_01`, `KBAT_01`, `KDST_01`, `KCAK_01`, `KBRD_01`, `KICC_01`, `KGIN_01`, `GDST_01`, `GCAK_01`, `GBRD_01`, `GICC_01` at line 1 column 111"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    receipt_tests::edited_receipt_reencodes_and_escapes_display_without_changing_error_semantics
+    receipt_tests::receipt_success_and_failure_preserve_fields_and_original_text
+
+test result: FAILED. 1 passed; 2 failed; 0 ignored; 0 measured; 14 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `--lib`

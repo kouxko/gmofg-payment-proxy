@@ -1,0 +1,8 @@
+POST /gateway/products-pointPay/version=1.0/B01/1/0/MERCHANT%20%20TERMINAL%20%20TOKEN HTTP/1.1
+Host: cps.test
+Content-Type: application/json; charset=utf-8
+X-Path-Id: 21aac82a-5f51-4afe-b12d-f3f5a55c65cf
+Content-Length: 23
+Connection: close
+
+{"request":"preserved"}
