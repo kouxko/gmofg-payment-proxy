@@ -1,0 +1,147 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-001",
+  "case_id": "manual-recovery/android-atomic-hot-apply",
+  "result": "PASS",
+  "timezone": "Asia/Shanghai",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "manual-recovery/android",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/manual-recovery/android/"
+  },
+  "contract": {
+    "protected_automatic_operation": "apply_active",
+    "explicit_operations": [
+      "start",
+      "apply"
+    ],
+    "unprotected_automatic_operation": "apply",
+    "protocol_version": 2,
+    "failure_code": "ANDROID_CONTROL_LEASE_STALE"
+  },
+  "tests": {
+    "coordinator_and_protocol": {
+      "tests": 15,
+      "failures": 0
+    },
+    "all_jvm": {
+      "tests": 45,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "androidtest_compile": "PASS",
+    "instrumentation_execution": "NOT_RUN: no attached adb device",
+    "lint_release": "PASS",
+    "release_apk_gate": "PASS"
+  },
+  "locking": {
+    "order": [
+      "ControlLeaseCoordinator monitor",
+      "ControlLeaseWatchdog monitor",
+      "VpnRuntimeRegistry monitor"
+    ],
+    "atomic_registry_operation": "beginStartIfRunning validates desiredRunning/running/current generation and advances generation under one registry monitor",
+    "issue": "none found; registry-only fault writers cannot pass beginStartIfRunning after publishing stopped/faulted, and old-generation callbacks fail after beginStart"
+  },
+  "artifacts": {
+    "apk": "resources/apk/android-companion-release.apk",
+    "apk_sha256": "ced81ae37ef0415f38dfe5d8d0d830a359bb6999ebc86a2b6a46536e03f3e1df",
+    "junit": "outputs/junit/",
+    "lint": "outputs/lint-results-release.html"
+  },
+  "source_snapshots": {
+    "before": [
+      {
+        "snapshot_path": "resources/before/CompanionControlServer.kt",
+        "sha256": "e658ddc953a34238914ff5da06384bd3123063c26cbcf89b199a3a823a4c55d8"
+      },
+      {
+        "snapshot_path": "resources/before/ControlLeaseCoordinator.kt",
+        "sha256": "5964288703cf6c5757eaf9467ecad35c4b87b015749247a61dfe60a2fdd8429c"
+      },
+      {
+        "snapshot_path": "resources/before/ControlLeaseManager.kt",
+        "sha256": "0959d44c622936fff95adddb8b35de82e370e736cadefe25a14add48b22384eb"
+      },
+      {
+        "snapshot_path": "resources/before/ControlLeaseRecoveryTest.kt",
+        "sha256": "1c805800bb46aaa76f6fb1a3f08466407ca025edf1932bfb48365eda281f0e15"
+      },
+      {
+        "snapshot_path": "resources/before/ControlLeaseWatchdog.kt",
+        "sha256": "cace9c359bedb05549267d8036203e824cc664ec3cb87f1687c940474580cbbf"
+      },
+      {
+        "snapshot_path": "resources/before/ControlProtocol.kt",
+        "sha256": "7f9bf1f44264fed8ece525670af2362a5012287910a473946468a578c62aa0dd"
+      },
+      {
+        "snapshot_path": "resources/before/ControlProtocolTest.kt",
+        "sha256": "3718f9f90fdfa37a3da63ade335c5fc750186e9f418ed67c1acb1d1f7fa1bb1f"
+      },
+      {
+        "snapshot_path": "resources/before/VpnRuntimeRegistry.kt",
+        "sha256": "a229211fba302233c132d6aec5eb87a1a9c72fb61692c86a6bbc9b5998dd9eff"
+      }
+    ],
+    "after": [
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseWatchdog.kt",
+        "snapshot_path": "resources/after/ControlLeaseWatchdog.kt",
+        "sha256": "df6a7421bbdd7a3dd53402ae10ba2f65501210a7671a39782b4ff2bf1c06a1a8",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseCoordinator.kt",
+        "snapshot_path": "resources/after/ControlLeaseCoordinator.kt",
+        "sha256": "81f5a2d86c55f9df1bab8de4d0c2bee7d9ff286e18fbdfe454d932981f46a839",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt",
+        "snapshot_path": "resources/after/ControlLeaseManager.kt",
+        "sha256": "9f92a4a57bb7ef9172ab3a18f1ed2e64aa428a52a333d5c021e78f0dbead3ddc",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/CompanionControlServer.kt",
+        "snapshot_path": "resources/after/CompanionControlServer.kt",
+        "sha256": "37a0e99aa8063a388c1b7e5bc4240f2fc0d5fb32da54194f189c6bb08773d946",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlProtocol.kt",
+        "snapshot_path": "resources/after/ControlProtocol.kt",
+        "sha256": "121b1861736355c64d2b032963864ccb092c7764dc4f7bbdde29cc9b5468fde7",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt",
+        "snapshot_path": "resources/after/VpnRuntimeRegistry.kt",
+        "sha256": "0cb1fa94e72bb4baa3d8d40847ec73b7d9d44fc49a69b227c3a574971aaf8e7e",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseRecoveryTest.kt",
+        "snapshot_path": "resources/after/ControlLeaseRecoveryTest.kt",
+        "sha256": "68dabaa91f49eb36b049eec77d5e6c6cbdc0c6da8c2ff21dbc96aac8e1e73e29",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlProtocolTest.kt",
+        "snapshot_path": "resources/after/ControlProtocolTest.kt",
+        "sha256": "424c5628f8bf453f28dbe44813a36d7f4cc0407c70030b99ee0f6381d09e74ce",
+        "matches_current_source": true
+      }
+    ]
+  },
+  "git_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "shared_dirty_worktree": true,
+  "replay": "replay/commands.sh",
+  "not_applicable": {
+    "network_frames": "No Android LocalSocket frame ran because no device was attached; Android validateEnvelope covered the operation whitelist and the desktop sibling case covers encoded frame roundtrip.",
+    "screenshots": "No UI behavior.",
+    "device_execution": "No attached device."
+  }
+}

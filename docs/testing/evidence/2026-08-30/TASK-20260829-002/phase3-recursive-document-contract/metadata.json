@@ -1,0 +1,91 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase3-recursive-document-contract",
+  "executed_at": "2026-08-30 03:56:54 +08:00",
+  "archived_at": "2026-08-30 04:16:20 +08:00",
+  "timezone": "Asia/Shanghai",
+  "result": "VERIFIED",
+  "scope": "G044 / Phase 3 recursive Document contract and immediate consumers",
+  "environment": {
+    "platform": "macOS arm64",
+    "node": "v26.7.0",
+    "pnpm": "11.13.1",
+    "rustc": "1.97.1 (8bab26f4f 2026-07-14)",
+    "cargo": "1.97.1 (c980f4866 2026-06-30)"
+  },
+  "tested_state": {
+    "branch": "codex/task-20260829-002",
+    "head": "c85ddaabb073198b0e4677c46f4babbbe2ba5799",
+    "head_tree": "3f2a0df06195330fedf1bd4ececd9b6cfc025a4f",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase 3 changes and an unrelated user docs/README.md modification",
+    "changed_during_final_checkpoint": false,
+    "generated_bindings_sha256": "ba0dcb545e4f5c04f381d337a4a11062fef789e8d0b28660f575bff37b7dc356"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase2-development-database-recreate",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/",
+    "resource_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase2-development-database-recreate/resources/nuvei-tango-json-rhai-1.0.0.zip",
+    "resource_sha256": "0595af171e20ae9eee21da42a8327971c99689a278cab6ffd7612ba20a4049ea",
+    "resource_bytes": 6706,
+    "preserved_unchanged": true
+  },
+  "input": {
+    "contract_inventory": "inputs/phase3-contract-and-consumer-inventory.json",
+    "active_package_fixture": "examples/protocol-packages/nuvei_tango_rhai/dist/nuvei-tango-json-rhai-1.0.0.zip",
+    "archived_package_fixture": "resources/nuvei-tango-json-rhai-1.0.0.zip",
+    "package_fixture_sha256": "047fe2701973d860d40fe30f5c74a735e46934d808ffb7dd1f16bf404460e30b",
+    "package_fixture_bytes": 6715
+  },
+  "actual": {
+    "domain_unit_tests": { "passed": 87, "failed": 0 },
+    "domain_recursive_tests": { "passed": 6, "failed": 0 },
+    "protocol_scripting_tests": { "passed": 160, "failed": 0 },
+    "application_unit_tests": { "passed": 459, "failed": 0 },
+    "infrastructure_unit_tests": { "passed": 651, "failed": 0 },
+    "nuvei_example_tests": { "passed": 6, "failed": 0 },
+    "frontend": { "files_passed": 62, "tests_passed": 534, "failed": 0 },
+    "phase3_node_contract_tests": { "passed": 14, "failed": 0 },
+    "application_protocol_rule_value_tests": { "passed": 4, "failed": 0 },
+    "targeted_socket_dialog": { "passed": 7, "failed": 0 },
+    "phase1_ten_gate_checkpoint": "PASS, exit 0",
+    "rust_workspace_all_targets_all_features": "PASS, 0 failed",
+    "workspace_clippy_deny_warnings": "PASS",
+    "bindings_fresh_deterministic": "PASS",
+    "typecheck_lint_architecture_source_size": "PASS",
+    "obsolete_contract_scans": {
+      "old_rust_symbols": 0,
+      "rule_schema_version": 0,
+      "flat_schema_shapes": 0,
+      "non_pointer_host_calls": 0,
+      "clear_document_and_field_slot_contracts": 0,
+      "legacy_scalar_text_contracts": 0
+    },
+    "diff_check": "PASS"
+  },
+  "development_observations": {
+    "phase1_inventory_first_checkpoint": "FAIL because active inventory still required removed flat Document fragments; updated to recursive current-state fragments and reran 4/4",
+    "source_size_second_checkpoint": "FAIL at registration.rs 502 lines; whitespace-only reduction to 498, unchanged 500-line threshold",
+    "frontend_third_checkpoint": "FAIL 1/531 because socket dialog test retained old flat schema fixture; frontend owner migrated fixture; targeted 7/7 and final 531/531 PASS",
+    "independent_verifier": "FAILED: unsafe integral f64 boundary, complete payload-vs-schema enforcement, undeclared rule path rejection, generated number|null and literal Null, exposed ClearDocument, missing public schema-definition gate, stale comments and Blob contract",
+    "post_verifier_repairs": "All reported contracts repaired; first fresh checkpoint stopped only on rustfmt, then the complete ten-gate checkpoint passed after standard formatting",
+    "final_p2_review": "FAILED P2: protocol_rule_values retained Int/Bool/Blob Hex text contract and MAX_PROTOCOL_RULE_INT_TEXT_BYTES; removed in favor of standard JSON plus recursive Domain value validation; targeted 4/4, Node 14/14, strict Clippy, bindings and diff-check PASS",
+    "final_independent_ten_gate_rerun": "PASS; exact ten gates independently rerun, including Application 459/459; formal verdict still pending",
+    "unrelated_frontend_flake": "OBSERVED 1/534 focus-restore failure; targeted 1/1 and later full 534/534 PASS",
+    "current_review_state": "APPROVED",
+    "independent_verdict": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "blockers": [],
+    "checkpoint_ready": true
+  },
+  "outputs": ["outputs/verification-summary.json"],
+  "replay": "replay/commands.txt",
+  "not_applicable": {
+    "protocol_frames": "No real proxy data-plane exchange is part of Phase 3.",
+    "screenshots": "No UI interaction flow changed.",
+    "real_device_remote_service_sidecar": "Outside the Document model contract.",
+    "remote_ci_push_release_deploy_commit": "Not authorized and not run."
+  }
+}

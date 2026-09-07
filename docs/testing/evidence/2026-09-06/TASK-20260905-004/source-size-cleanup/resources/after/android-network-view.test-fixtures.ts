@@ -1,0 +1,223 @@
+import { vi } from "vitest";
+import { testAndroidNetworkProfile } from "./android-network-test-profile";
+
+const mocks = vi.hoisted(() => ({
+  androidAdbGet: vi.fn(),
+  androidDeviceList: vi.fn(),
+  androidAdbSelect: vi.fn(),
+  androidPackageList: vi.fn(),
+  androidPackageRefresh: vi.fn(),
+  androidPackageQuery: vi.fn(),
+  deviceNetworkProfileList: vi.fn(),
+  deviceNetworkStatus: vi.fn(),
+  deviceNetworkControlOverview: vi.fn(),
+  deviceNetworkEndpoints: vi.fn(),
+  deviceNetworkProfileNew: vi.fn(),
+  deviceNetworkProfileGet: vi.fn(),
+  deviceNetworkProfileApplyIntent: vi.fn(),
+  deviceNetworkProfileSave: vi.fn(),
+  androidCompanionInstall: vi.fn(),
+  androidCompanionUpdate: vi.fn(),
+  androidVpnOpenConsent: vi.fn(),
+  deviceNetworkStart: vi.fn(),
+  deviceNetworkApply: vi.fn(),
+  deviceNetworkStop: vi.fn(),
+  deviceNetworkEmergencyRestore: vi.fn(),
+  workspaceList: vi.fn(),
+  workspaceGet: vi.fn(),
+}));
+vi.mock("@/generated/rust-types", () => ({ commands: mocks }));
+vi.mock("@/features/shell/bootstrap-context", () => ({
+  useAppEventRefresh: vi.fn(),
+}));
+vi.mock(
+  "@/features/shell/selected-workspace-context",
+  () => ({
+    useSelectedWorkspace: () => ({
+      selected: { id: "workspace-1", revision: 1 },
+      summaries: [],
+      isLoading: false,
+      refresh: vi.fn(),
+    }),
+  }),
+);
+export function androidNetworkMocks() {
+  return mocks;
+}
+export function ok<T>(data: T) {
+  return Promise.resolve({ status: "ok" as const, data });
+}
+export function owner(serial = "device-1") {
+  return {
+    serial,
+    epoch: "11111111-1111-4111-8111-111111111111",
+    mode: "adb_reverse",
+    profile_id: "profile-1",
+    state: "active",
+    source: "start",
+    transition_reason: "activation_confirmed",
+    updated_at: "2026-08-17T00:00:00Z",
+  };
+}
+export function overview(owners: Array<ReturnType<typeof owner>>) {
+  return {
+    owners,
+    max_runtime_owners: 8,
+    can_start_new_owner: owners.length < 8,
+  };
+}
+export const profile = testAndroidNetworkProfile;
+export function setupAndroidNetworkViewMocks() {
+  vi.clearAllMocks();
+  mocks.androidAdbGet.mockReturnValue(
+    ok({
+      available: true,
+      executable: "/sdk/adb",
+      version: "adb",
+      selected_serial: "device-1",
+    }),
+  );
+  mocks.androidDeviceList.mockReturnValue(
+    ok([{
+      serial: "device-1",
+      runtime_epoch: "11111111-1111-4111-8111-111111111111",
+      state: "device",
+      product: null,
+      model: "A920MAX",
+      device: null,
+      transport_id: "1",
+      selected: true,
+    }]),
+  );
+  mocks.androidPackageList.mockReturnValue(
+    ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]),
+  );
+  mocks.androidPackageRefresh.mockReturnValue(
+    ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]),
+  );
+  mocks.androidPackageQuery.mockReturnValue(
+    ok([{ package_name: "example.target", uid: 10001, shared_uid: null }]),
+  );
+  mocks.deviceNetworkProfileList.mockReturnValue(ok([]));
+  mocks.workspaceList.mockReturnValue(
+    ok([{
+      id: "workspace-1",
+      name: "当前工作区",
+      revision: 1,
+      listener_count: 2,
+      enabled_listener_count: 2,
+      selected: true,
+    }]),
+  );
+  mocks.workspaceGet.mockReturnValue(ok({
+    id: "workspace-1",
+    name: "当前工作区",
+    revision: 1,
+    listeners: [
+      {
+        id: "listener-1",
+        name: "交易入口",
+        bind_address: "0.0.0.0",
+        port: 16627,
+      },
+      {
+        id: "listener-2",
+        name: "DLL 入口",
+        bind_address: "0.0.0.0",
+        port: 16127,
+      },
+    ],
+    metadata_extractors: [],
+    response_assertions: [],
+    fault_presets: [],
+    certificate_references: [],
+    android_network_profiles: [],
+  }));
+  mocks.deviceNetworkStatus.mockReturnValue(ok({
+    serial: "device-1",
+    runtime_epoch: "11111111-1111-4111-8111-111111111111",
+    state: "stopped",
+    state_text: "已停止",
+    ui_tone: "neutral",
+    verified: true,
+    transport: "local_abstract_socket",
+    active_profile_id: null,
+    companion_process_running: true,
+    message: "已停止",
+    unsupported_fields: [],
+    stats: null,
+  }));
+  mocks.deviceNetworkControlOverview.mockReturnValue(ok(overview([])));
+  mocks.deviceNetworkEndpoints.mockReturnValue(ok({
+    configured_profile_id: null,
+    configured: [],
+    runtime_owner: null,
+    runtime: [],
+  }));
+  mocks.deviceNetworkProfileNew.mockReturnValue(ok(profile));
+  mocks.deviceNetworkProfileApplyIntent.mockImplementation(
+    (_serial, value, intent) => {
+      if (intent.kind === "toggle_package") {
+        return ok({
+          ...value,
+          target_applications: intent.selected
+            ? [{
+              package_name: intent.package_name,
+              uid: 10001,
+              display_name: intent.package_name,
+            }]
+            : [],
+        });
+      }
+      if (intent.kind === "set_burst_loss_enabled") {
+        return ok({
+          ...value,
+          weak_network: {
+            ...value.weak_network,
+            burst_loss: intent.enabled
+              ? {
+                enter_bad_state_basis_points: 0,
+                leave_bad_state_basis_points: 0,
+                good_state_loss_basis_points: 0,
+                bad_state_loss_basis_points: 0,
+              }
+              : null,
+          },
+        });
+      }
+      if (intent.kind === "add_blackout_window") {
+        return ok({
+          ...value,
+          weak_network: {
+            ...value.weak_network,
+            blackout_windows: [{ start_after_millis: 0, duration_millis: 0 }],
+          },
+        });
+      }
+      return ok({
+        ...value,
+        weak_network: {
+          ...value.weak_network,
+          nth_tcp_flag_drops: [{ direction: "upload", flag: "syn", nth: 1 }],
+        },
+      });
+    },
+  );
+  mocks.deviceNetworkProfileSave.mockImplementation((_serial, value) =>
+    ok(value)
+  );
+  mocks.deviceNetworkStart.mockReturnValue(ok({
+    serial: "device-1",
+    runtime_epoch: "11111111-1111-4111-8111-111111111111",
+    state: "running",
+    state_text: "运行中",
+    ui_tone: "positive",
+    verified: true,
+    transport: "local_abstract_socket",
+    active_profile_id: "profile-1",
+    companion_process_running: true,
+    message: "运行中",
+    unsupported_fields: [],
+    stats: null,
+  }));
+}

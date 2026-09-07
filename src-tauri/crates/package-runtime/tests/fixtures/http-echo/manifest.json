@@ -1,0 +1,14 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "component-contract",
+    "version": "1.0.0",
+    "name": "Component Contract",
+    "description": ""
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {}
+  }
+}

@@ -1,0 +1,18 @@
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-contract --tests
+pnpm test:task-20260829-002:phase4
+pnpm check:bindings
+pnpm scan:architecture
+pnpm scan:source-size
+pnpm lint
+pnpm typecheck
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-contract --all-targets --all-features -- -D warnings
+pnpm check:task-20260829-002:checkpoint
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib mcp::tests::g036_behavior_contract::limits::production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features --no-run
+# NOT EVIDENCE: short-name --exact probe discovered 0 tests
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture --test-threads=1
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features mcp::tests::g036_behavior_contract::limits::production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture --test-threads=1
+pnpm check:task-20260829-002:checkpoint
+cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features
+git diff --check

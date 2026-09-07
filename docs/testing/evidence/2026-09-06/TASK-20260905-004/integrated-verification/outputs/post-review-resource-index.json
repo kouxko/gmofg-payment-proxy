@@ -1,0 +1,27 @@
+[
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "snapshot": "resources/post-review/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "purpose": "final reviewed correction after stable full workspace run"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "snapshot": "resources/post-review/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "purpose": "final reviewed correction after stable full workspace run"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "snapshot": "resources/post-review/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "purpose": "final reviewed correction after stable full workspace run"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "snapshot": "resources/post-review/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "purpose": "final reviewed correction after stable full workspace run"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "snapshot": "resources/post-review/src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "purpose": "final reviewed correction after stable full workspace run"
+  }
+]

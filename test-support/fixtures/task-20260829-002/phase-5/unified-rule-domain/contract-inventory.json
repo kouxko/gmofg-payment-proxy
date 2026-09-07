@@ -1,0 +1,52 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase5-unified-rule-domain",
+  "version": 1,
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase4-package-contract",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/"
+  },
+  "discoverable_tests": {
+    "rust": "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs",
+    "typescript": "src/features/rules/rule-definition-model.test.ts",
+    "rust_names": [
+      "clear_document_value_type_survives_strict_serde_round_trip",
+      "cloned_rule_configuration_is_deeply_independent",
+      "number_equal_uses_javascript_numeric_equality_for_signed_zero",
+      "rule_program_rejects_large_condition_and_action_lists",
+      "rule_program_rejects_multiple_document_actions",
+      "rule_program_rejects_zero_or_multiple_conditions",
+      "runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation",
+      "schema_declared_paths_validate_and_undeclared_paths_keep_rule_local_type",
+      "schema_enforces_insert_append_array_target_and_nested_item_type",
+      "schema_rejects_clear_value_type_that_disagrees_with_declared_path",
+      "schema_rejects_document_pattern_predicate_type_at_array_item_wildcard",
+      "terminal_action_must_be_unique_and_last_and_stops_later_rules",
+      "typed_predicate_operator_matrix_is_strict_and_missing_or_mismatch_is_false"
+    ],
+    "typescript_names": [
+      "ruleDirectionLabel > labels the two message directions shown in the unified rule list",
+      "ruleStageIncompatibility > keeps a Schema-undeclared Document action as rule-local metadata",
+      "ruleStageIncompatibility > treats the JSON string Null as a string and actual null as null",
+      "ruleStageIncompatibility > accepts Rust-factory Insert and Append on an undeclared rule-local path",
+      "ruleStageIncompatibility > does not apply schema-free array actions to a declared scalar path",
+      "ruleStageIncompatibility > rejects schema-free Insert when either the target descriptor or operand descriptor differs",
+      "unified lifecycle wire > keeps lifecycle at the rule definition"
+    ]
+  },
+  "generated_wire_golden": "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/generated-wire-golden.json",
+  "phase12_legacy_owner_allowlist": [],
+  "contracts": [
+    "exactly one condition per rule; multiple conditions are represented by multiple rules",
+    "typed predicates use RFC6901 and fail false on missing or runtime type mismatch",
+    "declared schema paths require matching types and undeclared paths preserve rule-local types",
+    "exactly one unified action per rule with strict document mutation primitives",
+    "a terminal action stops later rules",
+    "runtime ordering is priority then rule_id and excludes created_order",
+    "later rules observe the working document mutated by earlier rules",
+    "cloned rule configuration is deeply independent",
+    "new message-rule saves expose only proxy_to_upstream and proxy_to_app",
+    "generated TypeScript discriminators match the Rust owner"
+  ]
+}

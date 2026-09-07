@@ -1,0 +1,28 @@
+{
+  "request": {
+    "direction": "upstream",
+    "frame_status": "complete",
+    "frame_bytes": 271,
+    "frame_length": 267,
+    "control_header_hex": "01000100",
+    "sequence": "00000020",
+    "message_type": "AccptrAuthstnReq",
+    "field_types": ["int", "blob", "string", "string", "string", "blob"],
+    "display_contains_all_synthetic_values": true,
+    "display_contains_redacted_marker": false,
+    "encode_equals_input": true
+  },
+  "response": {
+    "direction": "downstream",
+    "frame_status": "complete",
+    "frame_bytes": 191,
+    "frame_length": 187,
+    "control_header_hex": "01000100",
+    "sequence": "00000020",
+    "message_type": "AccptrAuthstnRspn",
+    "field_types": ["int", "blob", "string", "string", "string", "blob"],
+    "display_contains_all_synthetic_values": true,
+    "display_contains_redacted_marker": false,
+    "encode_equals_input": true
+  }
+}

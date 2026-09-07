@@ -1,0 +1,30 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "wasm-integrated-runtime",
+  "tested_commit": "8cac832",
+  "executed_at": "2026-09-01 21:49:00 +08:00",
+  "completed_at": "2026-09-01 21:56:00 +08:00",
+  "result": "PARTIAL_PASS",
+  "app": {
+    "path": "src-tauri/target/release/bundle/macos/Intercept Proxy.app",
+    "architecture": "arm64",
+    "pid_left_running": 22901
+  },
+  "passes": {
+    "http_valid_cases": 6,
+    "http_invalid_fail_closed": true,
+    "socket_match_rewritten_to": "0100",
+    "socket_miss_unchanged": true,
+    "socket_invalid_fail_closed": true,
+    "au_eftex_import": true,
+    "managed_packages_recovered_after_restart": true
+  },
+  "known_issues": [
+    "protocol package detail UI reports incomplete data although authoritative detail API is complete"
+  ],
+  "not_run_by_user_scope": [
+    "wasm host filesystem",
+    "wasi outbound http",
+    "host websocket external capability"
+  ]
+}

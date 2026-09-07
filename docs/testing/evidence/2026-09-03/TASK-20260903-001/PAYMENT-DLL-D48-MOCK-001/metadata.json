@@ -1,0 +1,29 @@
+{
+  "task_id": "TASK-20260903-001",
+  "case_id": "PAYMENT-DLL-D48-MOCK-001",
+  "executed_at": "2026-09-03 12:25:24 +08:00",
+  "completed_at": "2026-09-03 12:36:09 +08:00",
+  "environment": {
+    "app": "/Applications/Intercept Proxy.app",
+    "mcp_endpoint": "http://127.0.0.1:17653/mcp",
+    "workspace_id": "0ec6c07a-9fa9-4116-bd89-e176930f4361",
+    "listener_id": "06acc281-217c-4bb9-933b-ef6d42f0eb9a"
+  },
+  "tested_state": {
+    "workspace_revision_before": 17,
+    "workspace_revision_after": 18,
+    "runtime_changed_during_assertion": false,
+    "listener_restored_to": "stopped"
+  },
+  "result": "PASS_WITH_MCP_FULL_CANDIDATE_INCOMPATIBILITY",
+  "mock_rule_id": "b3996e35-0c57-4971-9a73-74b809d33aee",
+  "capture_session_id": "92f808f5-383a-42ec-a5a5-20ad27621f94",
+  "not_applicable": {
+    "ci": "No source change",
+    "server_received_data": "Terminal Mock used a local unreachable upstream, so no upstream server was contacted"
+  },
+  "not_run": {
+    "real_device_transaction": "No new business payment transaction was sent"
+  },
+  "replay": "replay/README.md"
+}

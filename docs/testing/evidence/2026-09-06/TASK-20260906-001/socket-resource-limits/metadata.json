@@ -1,0 +1,48 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260906-001",
+  "case_id": "socket-resource-limits",
+  "recorded_at": "2026-09-06T15:18:00.294496+08:00",
+  "execution_date": "2026-09-06",
+  "environment": "macOS 27.0 arm64; tool versions in ../integrated-verification/resources/environment.txt",
+  "source": {
+    "head": "5fd8bfbb5a048fba4f4ac9da483ec704b5264437",
+    "snapshot": "../integrated-verification/resources/source-snapshot.zip",
+    "inventory": "../integrated-verification/resources/source-inventory.json",
+    "phase_resources": "runs/ contains actual RED/GREEN/follow-up resources and logs",
+    "stability": "../integrated-verification/outputs/validation/review-fixes/source-stability.json"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260905-004",
+    "case_id": "final-verification",
+    "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260905-004/final-verification"
+  },
+  "commands": [
+    [
+      "cargo",
+      "test",
+      "--offline",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-runtime",
+      "bounded_retention",
+      "--",
+      "--nocapture"
+    ]
+  ],
+  "result": "OBSERVER_PASS_READ_CHUNK_CAP_PENDING",
+  "purpose": "诊断队列按需增长，容量不得直接触发巨额预分配",
+  "expected": [
+    "usize::MAX 保留数量配512字节预算，构造不panic；记录两事件后仅保留第二个并记录一次淘汰",
+    "现有非零数量/字节预算和淘汰语义保持"
+  ],
+  "actual": [
+    "RED 构造 capacity overflow；GREEN bounded_retention 三项通过",
+    "read_chunk_bytes 的绝对上限未实施，仍需用户选择数值；不把该P1子项记为PASS"
+  ],
+  "not_run": {
+    "huge_read_allocation": "未执行危险巨额 vec 分配；现有无上限校验只做静态/非分配探针",
+    "binary_and_ui": "N/A，内部队列逻辑，无网络/界面"
+  }
+}

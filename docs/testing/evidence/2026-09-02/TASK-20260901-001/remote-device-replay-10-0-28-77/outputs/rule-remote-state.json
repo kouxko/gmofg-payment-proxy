@@ -1,0 +1,22 @@
+{
+  "workspace_id": "5578cfdb-4b94-4d7d-be99-fec767329700",
+  "workspace_name": "Remote Wasm Rules Replay 20260902",
+  "revision": 11,
+  "runtime_epoch": "2db8a6c6-4f14-4567-9164-3d560ac7a146",
+  "listeners": [
+    {"id": "912a4e4b-44b9-4e97-b5fe-a22c9d50819c", "port": 8083, "package": "au-eftex@1.1.0", "state": "running", "fault_reason": null, "bytes_in": 71, "bytes_out": 63},
+    {"id": "426a6534-486d-4e96-9c7b-06445e4f5212", "port": 8084, "package": "iso8583-ascii-standard@1.0.0", "state": "running", "fault_reason": null, "bytes_in": 12, "bytes_out": 12},
+    {"id": "c81dc44b-e61b-465e-a3cc-93173f4b65ed", "port": 8085, "package": "iso8583-deno-ascii@1.0.1", "state": "running", "fault_reason": null, "bytes_in": 118, "bytes_out": 118},
+    {"id": "456ac387-c5cb-4725-ba16-2a8e2b6b78f7", "port": 8086, "package": "nuvei-tango-json@1.0.1", "state": "running", "fault_reason": null, "bytes_in": 85, "bytes_out": 86},
+    {"id": "0bb2a0ac-81bd-4ee6-afac-6856d07748c0", "port": 8087, "package": "nuvei-tango-json-rhai@1.0.1", "state": "running", "fault_reason": null, "bytes_in": 308, "bytes_out": 228}
+  ],
+  "rules": [
+    {"id": "fe958669-3494-4e67-a0ab-e4a557ae9113", "listener_port": 8083, "enabled": true, "priority": 10, "hit_count": 1},
+    {"id": "49f03fbc-fe04-4daa-b35c-e4b9cc28301c", "listener_port": 8084, "enabled": true, "priority": 10, "hit_count": 1},
+    {"id": "d98c6eba-bb4e-475a-a9a6-08710850706f", "listener_port": 8085, "enabled": true, "priority": 10, "hit_count": 1},
+    {"id": "9ebbe808-2787-4a67-a137-6d8e5f1666a4", "listener_port": 8086, "enabled": true, "priority": 10, "hit_count": 1},
+    {"id": "6acb6219-3bb0-4898-aa11-4059a38e4327", "listener_port": 8087, "enabled": true, "priority": 10, "hit_count": 1}
+  ],
+  "exchange_store": {"total": 13, "completed": 9, "expected_failed": 4, "dropped": 0, "evicted": 0},
+  "diagnostics": {"cursor": 348, "error_events": 4, "expected_invalid_frame_errors": 4, "listener_faults": 0}
+}

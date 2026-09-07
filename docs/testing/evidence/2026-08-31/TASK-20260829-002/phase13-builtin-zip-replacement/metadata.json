@@ -1,0 +1,74 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase13-builtin-zip-replacement",
+  "executed_at": "2026-08-31 06:44:00 +08:00",
+  "completed_at": "2026-08-31 09:52:13 +08:00",
+  "result": "VERIFIED_APPROVED_CODE_CHECKPOINT_READY_GLOBAL_CHECKPOINT_ENVIRONMENT_BLOCKED",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase12-legacy-stage-deletion",
+    "evidence_path": "docs/testing/evidence/2026-08-31/TASK-20260829-002/phase12-legacy-stage-deletion/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "08380aa",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase13 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "checker_sha256": "407bf6d38e4979648e3d861b03ca3e6e08bd6298ce285f9fe18de84fedc8f519",
+    "checker_test_sha256": "de28dcd7950f53559bb012fa9336ae5bf7109db18e3a3da7284d4161f5f5d9e4",
+    "cargo_test_sha256": "5cc86ecc88e08c947028aed3172cf84248c5d6f6b5d91ce5c8a47e830fe6bb16",
+    "manifest_json_sha256": "33b00a63796cdf9d4f803035a47e6af6fab0b0ce07ee22643757572e11d3bbce",
+    "protocol_js_sha256": "b729f4a049b494d2885af259c1b21616392d22dd37f6753c3be8d08c3897437b",
+    "display_js_sha256": "7cbb9d5ffad238804da7c9ef817c94c75792e67ded32a2f43c41b674df086856",
+    "build_rs_sha256": "8d1c7a1d7888cc81e37a133d455d42b4d9cfbf8eaaa113a79487ea81739a40e1",
+    "cargo_workspace_sha256": "31e91a17d37baf8d679dd6ca4bf6eae9e7436a9f8df5da513c4affac0bef6e25",
+    "cargo_lock_sha256": "7ebe5424f9cd9225a1570d43fee7823fded3e1b6799a68c8d2db43aa21cb5305",
+    "package_json_sha256": "11636af1ccc3d5a63f5818610e82d2e67cef051ec1ac73273a35c4da0cb3a524",
+    "phase4_contract_inventory_sha256": "39d878883c05f473ef3abf6f6ccd61a889a8ce8ff426d9345069bc5fade2847b",
+    "generated_bindings_sha256": "438619b59a181d573aecf0426a80426ffbcb3f6f1537827c1684b8510a0af329"
+  },
+  "results": {
+    "phase13_checker_mutations_and_control": { "passed": 18, "failed": 0 },
+    "phase13_cargo_builtin_contract": { "passed": 2, "failed": 0 },
+    "invalid_short_exact_names": { "commands": 2, "tests_discovered": 0, "accepted_as_evidence": false },
+    "production_seed_full_name_exact": { "passed": 1, "failed": 0 },
+    "production_sidecar_gate_full_name_exact": { "passed": 1, "failed": 0 },
+    "stale_production_assertion_repair_exact": { "passed": 1, "failed": 0 },
+    "root_lib_excluding_nonloopback_environment_case": { "passed": 129, "failed": 0 },
+    "frontend_vitest": { "files_passed": 64, "tests_passed": 545, "failed": 0 },
+    "review_repair_frontend_focused": { "files_passed": 11, "tests_passed": 161, "failed": 0 },
+    "review_repair_application": { "unit_passed": 455, "integration_passed": 49, "failed": 0 },
+    "review_repair_infrastructure_protocol_package": { "lib_passed": 7, "archive_passed": 1, "failed": 0 },
+    "final_delta_generated_bindings": "FRESH_AND_DETERMINISTIC_PASS",
+    "final_delta_phase4_gate": { "checker_passed": 23, "cargo_passed": 13, "typescript_passed": 7, "failed": 0 },
+    "final_delta_application": { "all_target_compile_errors": 0, "tests_passed": 504, "failed": 0, "strict_clippy": "PASS" },
+    "fresh_all_target_compile": { "errors": 0, "warnings": 0 },
+    "bindings_architecture_source_size_lint_typecheck_fmt_clippy_diff": "PASS",
+    "global_checkpoint": "Unique session 7784 passed gates 1 through 9. Gate 10 workspace tests stopped in the root lib with 2 of 130 failing: one stale production assertion was repaired and then passed exact plus affected 129/129; the existing non-loopback MCP HTTP case timed out with Elapsed(()). Later workspace targets were NOT_RUN after Cargo exit 101. The full checkpoint was not rerun by instruction."
+  },
+  "not_run": [
+    "workspace targets after the root lib stopped gate 10 in unique session 7784",
+    "full checkpoint rerun after the stale production assertion repair",
+    "human-assisted non-loopback network permission action",
+    "real signed macOS app bundle and firewall/system permission prompt E2E",
+    "manual cleanup validation for pre-Phase13 legacy local package data",
+    "Phase14 and later phases",
+    "remote CI, push, Release and Windows bundle E2E"
+  ],
+  "blockers": [
+    "global checkpoint is environment-blocked by the existing non-loopback MCP HTTP deadline in unique session 7784",
+    "human-assisted macOS bundle, signing and system permission validation is NOT_RUN"
+  ],
+  "code_checkpoint_ready": true,
+  "global_checkpoint_complete": false,
+  "review_status": "VERIFIED_APPROVED",
+  "final_verdict": {
+    "reviewer": "APPROVE",
+    "verifier": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}

@@ -1,0 +1,46 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "json-pretty-wasm-example",
+  "executed_at": "2026-09-03 10:46:55 +08:00",
+  "result": "LOCAL_APP_VERIFIED",
+  "tested_commit": "07ec632581b369d9255a806bd12ab07e918770ed",
+  "tested_state": "uncommitted JSON Pretty, HTTP nullable Schema, Frame capability and safe Display style changes",
+  "derived_from": {
+    "task_id": "TASK-20260901-001",
+    "case_id": "wasm-integrated-runtime",
+    "evidence_path": "docs/testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/"
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "aarch64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "deno": "2.9.6",
+    "wasmtime": "48.0.1 through current package-runtime"
+  },
+  "artifact": {
+    "path": "outputs/json-pretty-1.0.0.wasm",
+    "bytes": 161042,
+    "sha256": "5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3"
+  },
+  "checks": {
+    "rust_unit_tests": "4/4 PASS",
+    "release_component_build": "PASS",
+    "strict_manifest_section_validation": "PASS",
+    "frontend_import_detail_display": "20/20 PASS",
+    "frontend_listener_catalog": "49/49 PASS",
+    "typescript": "PASS",
+    "development_app_build": "PASS",
+    "local_app_user_acceptance": "PASS",
+    "rust_http_import_projection": "1/1 PASS"
+  },
+  "not_run": [
+    "remote Windows retest",
+    "full repository test suite",
+    "remote CI"
+  ],
+  "not_applicable": [
+    "network capture",
+    "database snapshot"
+  ]
+}

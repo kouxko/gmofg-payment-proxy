@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-004",
+  "case_id": "typed-socket-io",
+  "executed_at": "2026-09-06 00:14:33 +08:00",
+  "environment": {
+    "os": "Darwin 27.0.0 arm64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "manifest": "src-tauri/Cargo.toml"
+  },
+  "inputs": [
+    "misleading human-readable direction/code text with different structured metadata",
+    "partial write of 7 bytes followed by a pending write",
+    "successful 5-byte write followed by an injected flush failure",
+    "existing socket relay regression suite"
+  ],
+  "expected": [
+    "classification uses structured code and direction only",
+    "partial progress survives timeout",
+    "flush failure retains stage, direction, and written bytes",
+    "existing raw half-close and protocol pairing behavior remains green"
+  ],
+  "result": "PASS",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange error::tests::structured_annotations_do_not_modify_the_human_message",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime socket_relay::raw_exchange::tests --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime socket_relay --lib",
+    "cargo check --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange -p intercept-proxy-runtime",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange -p intercept-proxy-runtime --lib --tests -- -D warnings"
+  ],
+  "outputs": [
+    "outputs/red.txt",
+    "outputs/focused-tests.txt",
+    "outputs/socket-relay.txt",
+    "outputs/static-checks.txt"
+  ],
+  "not_applicable": {
+    "network_capture": "Internal deterministic transport doubles and existing integration tests were used.",
+    "binary_fixture": "No protocol bytes or fixture contract changed.",
+    "external_service": "No external service was invoked.",
+    "ci": "CI execution was outside this subtask."
+  },
+  "initial_result": "OWNED_SCOPE_PASS_WITH_SHARED_INTEGRATION_BLOCKERS",
+  "historical_shared_integration_blockers": [
+    "exchange/src/pipeline.rs SequentialPrepare lacks Debug, so current strict Clippy exits 101",
+    "exchange/src/tests/pipeline.rs writer failure assertion still expects an unannotated Error"
+  ],
+  "final_integration": {
+    "result": "PASS",
+    "source": "../integrated-verification/README.md",
+    "checks": "final Runtime 202/202 and full workspace check; initial shared blockers resolved; scope excludes Local HTTP Q1"
+  }
+}

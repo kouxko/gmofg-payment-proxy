@@ -1,0 +1,34 @@
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 45.56s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-ea420da7964faa6e)
+
+running 2 tests
+test adapters::android_adb::tests::lease_heartbeat::replaced_epoch_is_rejected_before_real_heartbeat_transport ... ok
+test adapters::android_adb::tests::lease_heartbeat::same_serial_business_gate_does_not_block_real_heartbeat_path ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 467 filtered out; finished in 0.01s
+
+     Running tests/phase7_transport_contract.rs (src-tauri/target/debug/deps/phase7_transport_contract-2d5f96871e04d041)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/r07a_application_backup_archive.rs (src-tauri/target/debug/deps/r07a_application_backup_archive-c86af871a3f4de3f)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 24 filtered out; finished in 0.00s
+
+     Running tests/r07b_application_backup_export.rs (src-tauri/target/debug/deps/r07b_application_backup_export-57fc627f11309441)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+
+     Running tests/r07c_application_backup_import_tokens.rs (src-tauri/target/debug/deps/r07c_application_backup_import_tokens-6c48bfa761e935d1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 8 filtered out; finished in 0.00s
+

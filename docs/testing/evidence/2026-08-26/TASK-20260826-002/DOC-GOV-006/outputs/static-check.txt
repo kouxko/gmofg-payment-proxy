@@ -1,0 +1,31 @@
+DOC-GOV-006 static validation
+Executed at: 2026-08-26 12:34:00 +08:00
+
+Checker history:
+- Seven earlier checker attempts exited after matching valid rule content because different cross-line or changed
+  phrases were tested with single-line or stale predicates.
+- The checker predicates were corrected to normalize line boundaries and match the current exact contract.
+- No rule or expected behavior was removed or relaxed to obtain PASS.
+
+Final attempt:
+PASS requirement: section 10.5 exists exactly once
+PASS routing: three mutually exclusive pre-entry and in-flight promotion branches exist
+PASS lifecycle: active records, terminal finalization and race rejection are deterministic
+PASS interruption: recovery is three transactions with runtime audit and cleanup outside the global lock
+PASS ownership: recovery owner is persisted to metadata and index before cleanup; stale runner writes are rejected
+PASS path evidence: eight layers, path dependencies and same-connection causal proof are mandatory
+PASS aggregation: failure, uncertainty, success, not-run and cleanup propagation are explicit
+PASS reproducibility: environment, dependencies and exact Proxy draft fields are required
+PASS authority: QV cannot expand external operations, CI or formal acceptance
+PASS archive boundary: resource snapshots are reusable and finalized QV records are immutable
+PASS documents: index, template, links and metadata JSON are valid
+PASS scenarios: aggregation, finalization, routing and cleanup cases pass
+PASS real concurrency: two processes allocate unique IDs through an atomic directory lock
+PASS real recovery: RESERVED and RUNNING exits, owner persistence, stale-runner rejection and cleanup outside lock pass
+PASS finalization race: two finalizers produce exactly one SUCCESS and one REJECTED result
+PASS repeat execution: a new QV is created with derived_from
+PASS terminology: version-management constraints remain confined to section 15
+PASS stability: authoritative rule and QV index did not change during validation
+PASS replay: saved replay executed successfully
+
+Final result: PASS

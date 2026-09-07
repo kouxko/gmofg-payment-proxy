@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260828-001",
+  "case_id": "RUNNING-APP-REPLAY-001",
+  "derived_from": {
+    "task_id": "TASK-20260827-003",
+    "case_id": "FINAL-REPLAY-001",
+    "evidence_path": "docs/testing/evidence/2026-08-27/TASK-20260827-003/FINAL-REPLAY-001/"
+  },
+  "environment": {
+    "platform": "macOS",
+    "app": "Intercept Proxy.app",
+    "app_state": "user-started release app remained running",
+    "mcp_endpoint": "http://127.0.0.1:17653/mcp",
+    "mcp_protocol_version": "2026-07-28",
+    "workspace_name": "默认 Workspace"
+  },
+  "started_at": "2026-08-28 09:40:55 +08:00",
+  "finished_at": "2026-08-28 10:08:23 +08:00",
+  "result": "FAILED_WITH_NOT_RUN",
+  "results": {
+    "http_proxy_mock_server": "PASS",
+    "socket_proxy_mock_server": "PASS",
+    "http_capture_and_exchange": "PASS",
+    "socket_exchange": "PASS",
+    "diagnostic_newest_first": "PASS",
+    "empty_workspace_rule_capabilities": "PASS",
+    "http_response_to_mock_draft": "FAIL",
+    "workspace_listener_ui_refresh": "FAIL",
+    "cleanup_and_restore": "PASS",
+    "tls_mtls_runtime": "NOT_RUN",
+    "external_package_runtime": "NOT_RUN",
+    "android_device_runtime": "NOT_RUN"
+  },
+  "not_applicable": {
+    "screenshots": "N/A; App accessibility state and protocol outputs were sufficient for the tested behavior",
+    "remote_business_request": "N/A; only local mock servers were authorized"
+  },
+  "replay": "replay/run_running_app_replay.py"
+}

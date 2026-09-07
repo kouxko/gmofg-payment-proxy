@@ -1,0 +1,20 @@
+{
+  "listener_same_entity_conflict": "PASS",
+  "listener_conflict_blocks_mutations": "PASS: save, start and delete are disabled",
+  "listener_conflict_validation_message": "PASS: valid structure states that the external conflict must be resolved first",
+  "listener_conflict_explicit_resolution": "PASS: user action replaces only the conflicted Listener with authority",
+  "listener_external_deletion_resolution": "PASS: user action removes the externally deleted dirty Listener",
+  "other_listener_draft_and_certificate_after_resolution": "PASS: Listener B draft and imported CA remain reachable and are not discarded",
+  "listener_other_entity_refresh": "PASS",
+  "listener_draft_certificate_retention": "PASS",
+  "listener_order_and_selection_retention": "PASS",
+  "bootstrap_unrelated_event_does_not_invalidate": "PASS",
+  "bootstrap_related_event_queues_replacement": "PASS",
+  "late_bootstrap_response_rejected": "PASS",
+  "typecheck": "PASS",
+  "lint": "PASS",
+  "frontend_boundary_scan": "PASS",
+  "expanded_affected_suite_after_resolution": "19 files, 216 tests passed",
+  "full_frontend_suite_before_resolution_follow_up": "67 files, 573 tests passed",
+  "source_size": "KNOWN BASELINE FAIL: seven pre-existing files; no new oversized file"
+}

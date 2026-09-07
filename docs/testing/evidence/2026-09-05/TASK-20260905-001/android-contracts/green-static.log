@@ -1,0 +1,1 @@
+PASS: metadata JSON, source snapshots, targeted rustfmt, and tracked diff whitespace checks

@@ -1,0 +1,12 @@
+{
+  "red": "application regression tests fail before ListenerDraft and the three APIs exist",
+  "application_tests": "all ListenerDraft contract tests pass",
+  "command_contract": "exactly three new draft commands are registered and generated",
+  "bindings": "generated TypeScript is fresh and deterministic",
+  "invariants": {
+    "validation": "valid equals normalized.is_some()",
+    "cas": "stale revision precedes missing draft fields",
+    "domain": "strict domain types and old new/save APIs remain unchanged",
+    "transition": "wrong-data-plane intent returns LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE"
+  }
+}

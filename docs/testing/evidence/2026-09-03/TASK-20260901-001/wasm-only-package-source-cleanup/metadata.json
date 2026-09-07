@@ -1,0 +1,47 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "wasm-only-package-source-cleanup",
+  "executed_at": "2026-09-03 11:06:44 +08:00",
+  "result": "PASS",
+  "tested_commit": "6a2c7a824214730fa650afe8b0c38aeac634d8f9",
+  "tested_state": "uncommitted non-Wasm duplicate implementation deletion, Nuvei fixture relocation, active documentation and validation matrix updates",
+  "derived_from": {
+    "task_id": "TASK-20260901-001",
+    "case_id": "wasm-integrated-runtime",
+    "evidence_path": "docs/testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/"
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "aarch64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "deno": "2.9.6",
+    "pnpm": "11.13.1"
+  },
+  "checks": {
+    "component_tests_and_build": "20/20 PASS across 5 Components",
+    "repository_host_integration": "2/2 PASS",
+    "typescript": "PASS",
+    "eslint": "PASS",
+    "source_size": "PASS",
+    "rustfmt": "PASS",
+    "diff_check": "PASS",
+    "non_wasm_active_file_scan": "0 matches",
+    "built_component_count": 5
+  },
+  "quarantine": {
+    "path": "/tmp/gmofg-non-wasm-packages.IGCRBI",
+    "size": "542 MiB",
+    "contents": "ignored Python environments/caches, legacy Rhai test target, and tracked historical Rhai ZIP moved out of the workspace"
+  },
+  "not_run": [
+    "full Cargo workspace test suite",
+    "remote Windows retest",
+    "remote CI"
+  ],
+  "not_applicable": [
+    "network capture",
+    "database snapshot",
+    "UI screenshot"
+  ]
+}

@@ -1,0 +1,28 @@
+{
+  "commands": [
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-contract --tests", "result": "EXPECTED_RED_EXIT_101", "details": "five auto-discovered targets failed E0432 before contract implementation" },
+    { "command": "reviewer mutation prechecks", "result": "EXPECTED_RED", "details": "missing validated FrameResult construction/buffer check, incomplete TS guards, and five checker false-green classes reproduced before fixes" },
+    { "command": "final delta reviewer mutation prechecks", "result": "EXPECTED_RED", "details": "coherent MCP snapshot/evidence/hash legacy_retry mutation and serde rename/alias wire-owner bypass reproduced before fixes" },
+    { "command": "P2 metadata parity precheck", "result": "EXPECTED_RED", "details": "generated SemVer regex accepted core numeric overflow rejected by ProtocolPackageVersion/semver parser" },
+    { "command": "final owner and dotted-ID precheck", "result": "EXPECTED_RED", "details": "private serde struct, untagged enum struct variant and flatten bypassed owner scan; Domain rejected authoritative com.example.payment Manifest ID" },
+    { "command": "checker positive-control precheck", "result": "EXPECTED_RED", "details": "harmless filters flatten, commented/string Phantom Manifest and non-Serde internal struct were false-positive owners" },
+    { "command": "manual Serde wire-key precheck", "result": "EXPECTED_RED", "details": "custom Serialize and Deserialize/Visitor Manifest keys bypassed declared-shape scan while harmless manual Serde was falsely rejected" },
+    { "command": "pnpm test:task-20260829-002:phase4", "result": "PASS", "details": "checker 21/21 including actual manual Serialize/Deserialize keys, harmless manual positive control, lexical noise and recursive flatten controls; Rust contract 13/13, TS guard 7/7" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-domain --all-targets --all-features", "result": "PASS", "details": "108/108 affected Domain tests" },
+    { "command": "pnpm check:bindings", "result": "PASS", "details": "fresh and deterministic; Rust-generated dotted identity, SemVer core numeric max, Schema and complete stable-code metadata; generated SHA-256 897edb991e8bd7efc6d114ca4eb1c6b67eb162574e0bb764ebed7a93e39c3c9e" },
+    { "command": "pnpm scan:architecture && pnpm scan:source-size && pnpm lint && pnpm typecheck", "result": "PASS" },
+    { "command": "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-contract --all-targets --all-features -- -D warnings", "result": "PASS" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "FAILED_ENVIRONMENT", "details": "frontend 63 files/538 tests PASS; fmt and workspace clippy PASS; top-level Rust 132/133 before existing non-loopback MCP HTTP exchange timed out" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib mcp::tests::g036_behavior_contract::limits::production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture", "result": "FAILED_ENVIRONMENT", "details": "same 10 second complete non-loopback MCP HTTP exchange deadline" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features --no-run", "result": "PASS", "details": "exact executable /Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy-b171a3f7a5c9b203; SHA-256 c7dc870daca6f4f86eeebe29270ef65d4f61eab70b943b55cd994527544143aa" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture --test-threads=1", "result": "NOT_EVIDENCE", "details": "short-name --exact probe discovered 0 tests" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib --all-features mcp::tests::g036_behavior_contract::limits::production_bind_is_reachable_on_current_platform_interfaces_without_false_availability -- --exact --nocapture --test-threads=1", "result": "PASS", "details": "user authorized exact b171 binary and firewall; exact full-name target 1/1 PASS" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "PASS", "details": "independent final ten-gate exit 0; frontend 63 files/541 tests; top-level Rust 133/133; workspace all-target/all-feature exit 0" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features", "result": "PASS", "details": "final checkpoint workspace gate exit 0" },
+    { "command": "git diff --check", "result": "PASS" }
+  ],
+  "historical_environment_failure": "retained: earlier top-level Rust stopped at 132/133 on macOS ALF non-loopback timeout",
+  "final_verifier": "VERIFIED / APPROVED; P0=0, P1=0, P2=0",
+  "checkpoint_ready": true,
+  "next_gate": "create the G045 rollback checkpoint and continue TASK-20260829-002 with the next planned phase"
+}

@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase20-windows-ci-and-schema-runtime",
+  "executed_at": "2026-09-01 17:10:00 +08:00",
+  "result": "PASS",
+  "windows_ci": {
+    "result": "PASS",
+    "run_id": 33486545959,
+    "mode": "build-only/windows",
+    "installers": true,
+    "portable": true
+  },
+  "plain_http": {
+    "result": "PASS",
+    "condition": "/customer/age number equals 18",
+    "match": true,
+    "miss": true,
+    "invalid_json_fail_closed": true
+  },
+  "socket_schema": {
+    "result": "PASS",
+    "package": "iso8583-ascii-standard@1.0.0",
+    "condition": "/message_type string equals 0200",
+    "action": "set /message_type to 0220",
+    "miss_unchanged": true,
+    "invalid_frame_fail_closed": true
+  },
+  "invalid_attempt": {
+    "path": "outputs/attempt-1-invalid-environment",
+    "counted": false,
+    "reason": "Controlled Socket server exited before the valid replay."
+  }
+}

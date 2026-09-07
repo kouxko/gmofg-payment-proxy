@@ -1,0 +1,27 @@
+[package]
+name = "intercept-proxy-android-engine"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[lib]
+crate-type = ["cdylib", "rlib"]
+
+[dependencies]
+intercept-proxy-domain = { path = "../domain" }
+serde.workspace = true
+serde_json.workspace = true
+thiserror.workspace = true
+tokio.workspace = true
+# 数据面最终通过该库把 TUN 中的 IP 包转换为本机代理连接。精确锁版本，避免
+# Android 包处理行为随间接升级漂移。
+tun2proxy = "=0.8.3"
+
+[target.'cfg(target_os = "android")'.dependencies]
+jni = "0.22.4"
+
+[target.'cfg(all(unix, not(target_os = "android")))'.dev-dependencies]
+jni = "0.22.4"
+
+[lints]
+workspace = true

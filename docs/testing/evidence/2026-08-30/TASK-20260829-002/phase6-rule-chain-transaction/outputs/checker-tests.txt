@@ -1,0 +1,15 @@
+Command: node --test scripts/check-task-20260829-002-phase6-contract.test.mjs
+Result: PASS
+Tests: 28 passed, 0 failed, 0 skipped, 0 todo
+Canonical Cargo discovery: Domain=9, Application=11, Infrastructure=8
+Mutations: ignore/empty test, old NthHit owner, HTTP content lifecycle, retry loop,
+renamed retry helper, full snapshot port, direct runtime Message leak, false/default fallback,
+public transaction state, Transaction/LifecycleDelta aliases, lifecycle prewrite, precommit
+output, precommit terminal/control call, old success retry test.
+Positive controls: comments/unrelated retry text accepted; fake discovery environment ignored
+outside explicit checker test mode.
+Repair mutations: terminal-scoped Nth(2), plan/program/lifecycle mismatch, duplicate plan and
+delta owners, writable runtime statistics, AppError downgrade, saturating subtraction, partial
+delta acceptance, hit_count-as-Nth, fake/comment-only discovery, and precommit control calls.
+Second-review mutations: reject Nth-only one-shot disable through the shared Domain validation
+owner; require actor checkpoint restoration when Nth/runtime delta validation fails.

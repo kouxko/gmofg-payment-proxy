@@ -1,0 +1,33 @@
+{
+  "result": "PASS",
+  "package_tests": { "passed": 13, "failed": 0 },
+  "host_component_tests": { "passed": 1, "failed": 0 },
+  "safe_display_tests": { "passed": 11, "failed": 0 },
+  "credit_document_counts": {
+    "card_companies": 13,
+    "card_ranges": 62,
+    "ca_groups": 6,
+    "ca_public_keys": 32,
+    "brands": 6,
+    "ic_card_companies": 10,
+    "risk_tables": 25,
+    "communication_kid_tables": 10
+  },
+  "modified_card_range": {
+    "original_kcci_length": 2478,
+    "encoded_kcci_length": 2510,
+    "decoded_total_card_ranges": 63
+  },
+  "display": {
+    "format": "semantic HTML tables",
+    "html_escaped": true,
+    "json_pre": false,
+    "distinct_deterministic_colors": true,
+    "bytes": 68424,
+    "conservative_dom_nodes": 4107
+  },
+  "artifact": {
+    "bytes": 547533,
+    "sha256": "0af5550bffb871a2390d2ec2651c3a639aa06439c8b0c1057784b5ae87b51f13"
+  }
+}

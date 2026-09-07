@@ -1,0 +1,118 @@
+{
+  "baseline_public": {
+    "revision": null,
+    "selected": false,
+    "workspace_id": null
+  },
+  "candidate_id": "256ea2a1-fbb1-4c15-bd26-fc9ed2502d10",
+  "confirmation_token": "7f17703a-4c96-42d0-92f7-52cb1685b2ad",
+  "errors": [],
+  "expires_on": "app_exit_or_invalidation",
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "phase21-socket",
+          "candidate_local_id": "369912be-e793-4efc-b932-8e971d4c7fbe"
+        }
+      ],
+      "rules": [
+        {
+          "candidate_index": 0,
+          "candidate_local_id": "60b20eee-d6e1-4f55-9a30-c5d182486ed1",
+          "created_order": 1,
+          "listener_alias": "phase21-socket"
+        }
+      ]
+    },
+    "target": {
+      "mode": "new",
+      "name": "Live Socket Replay"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "preview_ready",
+  "target_key": "new:4c69766520536f636b6574205265706c6179",
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

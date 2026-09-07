@@ -1,0 +1,21 @@
+PASS aggregate direct_tls_verified_cleanup_na: VERIFIED
+PASS aggregate split_segments_do_not_prove_full_path: INCONCLUSIVE
+PASS aggregate attempted_full_path_without_causal_link: INCONCLUSIVE
+PASS aggregate verified_target_with_cleanup_failure: FAILED
+PASS aggregate recovered_partial_execution: INCONCLUSIVE
+PASS aggregate final_without_any_validation_action: NOT_RUN
+PASS aggregate running_record_has_no_final_result: null
+PASS transition RESERVED->RUNNING: true
+PASS transition RESERVED->FINAL: true
+PASS transition RUNNING->FINAL: true
+PASS transition FINAL->FINAL: false
+PASS transition RUNNING->RESERVED: false
+PASS transition FINAL->RUNNING: false
+PASS routing existing_task_before_qv: USE_EXISTING_TASK_NO_QV
+PASS routing entry_condition_failed_without_task: CREATE_TASK_NO_QV
+PASS routing valid_new_quick_validation: CREATE_QV
+PASS routing active_qv_triggers_upgrade: FINALIZE_QV_THEN_CREATE_OR_REUSE_TASK
+PASS real concurrent allocation: ["QV-20260826-002","QV-20260826-003"]
+PASS RESERVED exit, recovery ownership persisted, stale runner rejected: QV-20260826-004
+PASS RUNNING exit and two-finalizer race: REJECTED SUCCESS
+PASS repeat execution creates new QV with derived_from: QV-20260826-006 <- QV-20260826-005

@@ -1,0 +1,200 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+mode="${1:-}"
+case "$mode" in
+  android|quality) ;;
+  *)
+    echo "usage: source scripts/ci/bootstrap-gitlab-linux.sh <android|quality>" >&2
+    return 2 2>/dev/null || exit 2
+    ;;
+esac
+
+repository_root="${CI_PROJECT_DIR:-$(cd "$(dirname "${BASH_SOURCE[0]}")/../.." && pwd)}"
+tools_root="$repository_root/.ci-cache/tools"
+export CARGO_HOME="${CARGO_HOME:-$repository_root/.ci-cache/cargo}"
+export RUSTUP_HOME="${RUSTUP_HOME:-$repository_root/.ci-cache/rustup}"
+export DENO_INSTALL="${DENO_INSTALL:-$tools_root/deno}"
+export DENO_DIR="${DENO_DIR:-$repository_root/.ci-cache/deno-cache}"
+export GRADLE_USER_HOME="${GRADLE_USER_HOME:-$repository_root/.ci-cache/gradle-user-home}"
+export ANDROID_SDK_ROOT="${ANDROID_SDK_ROOT:-$repository_root/.ci-cache/android-sdk}"
+export ANDROID_HOME="$ANDROID_SDK_ROOT"
+
+mkdir -p \
+  "$tools_root" \
+  "$CARGO_HOME" \
+  "$RUSTUP_HOME" \
+  "$DENO_INSTALL" \
+  "$DENO_DIR" \
+  "$GRADLE_USER_HOME" \
+  "$ANDROID_SDK_ROOT"
+
+export PATH="$DENO_INSTALL/bin:$CARGO_HOME/bin:$PATH"
+
+printf '%s\n' \
+  '[source.crates-io]' \
+  'replace-with = "rsproxy"' \
+  '' \
+  '[source.rsproxy]' \
+  "registry = \"$CARGO_RSPROXY_INDEX\"" \
+  > "$CARGO_HOME/config.toml"
+
+download_with_parallel_ranges() {
+  local url="$1"
+  local destination="$2"
+
+  aria2c \
+    --allow-overwrite=true \
+    --auto-file-renaming=false \
+    --continue=true \
+    --dir="$(dirname "$destination")" \
+    --file-allocation=none \
+    --max-connection-per-server=16 \
+    --min-split-size=4M \
+    --out="$(basename "$destination")" \
+    --split=16 \
+    "$url"
+}
+
+deno_version() {
+  "$DENO_INSTALL/bin/deno" --version 2>/dev/null | awk 'NR == 1 { print $2; exit }'
+}
+
+install_deno() {
+  local archive="$tools_root/deno-$DENO_VERSION-linux-x64.zip"
+  if [[ ! -x "$DENO_INSTALL/bin/deno" ]] ||
+    [[ "$(deno_version)" != "$DENO_VERSION" ]]; then
+    curl --fail --show-error --silent --location \
+      "$DENO_DIST_BASE_URL/v$DENO_VERSION/deno-x86_64-unknown-linux-gnu.zip" \
+      --output "$archive"
+    mkdir -p "$DENO_INSTALL/bin"
+    unzip -q -o "$archive" -d "$DENO_INSTALL/bin"
+  fi
+  test "$(deno_version)" = "$DENO_VERSION"
+  deno --version
+}
+
+install_rust() {
+  local installer="$tools_root/rustup-init-$RUSTUP_VERSION-linux-x64"
+  if [[ ! -x "$CARGO_HOME/bin/rustup" ]]; then
+    curl --proto '=https' --tlsv1.2 --fail --show-error --silent --location \
+      "$RUSTUP_UPDATE_ROOT/archive/$RUSTUP_VERSION/x86_64-unknown-linux-gnu/rustup-init" \
+      --output "$installer"
+    chmod +x "$installer"
+    "$installer" -y --no-modify-path --profile minimal --default-toolchain none
+  fi
+  rustup toolchain install "$RUST_TOOLCHAIN" --profile minimal
+  rustup default "$RUST_TOOLCHAIN"
+  rustc --version
+  cargo --version
+}
+
+install_gradle() {
+  local gradle_home="$tools_root/gradle-$GRADLE_VERSION"
+  local archive="$tools_root/gradle-$GRADLE_VERSION-bin.zip"
+  if [[ ! -x "$gradle_home/bin/gradle" ]]; then
+    curl --fail --show-error --silent --location \
+      "$GRADLE_DISTRIBUTION_BASE_URL/gradle-$GRADLE_VERSION-bin.zip" \
+      --output "$archive"
+    unzip -q -o "$archive" -d "$tools_root"
+  fi
+
+  export GRADLE_HOME="$gradle_home"
+  export PATH="$GRADLE_HOME/bin:$PATH"
+  gradle --version
+}
+
+install_android_sdk() {
+  local command_line_tools_version="$ANDROID_COMMAND_LINE_TOOLS_VERSION"
+  local tools_archive="$tools_root/commandlinetools-linux-$command_line_tools_version.zip"
+  local tools_home="$tools_root/android-command-line-tools-$command_line_tools_version"
+  local sdkmanager="$tools_home/cmdline-tools/bin/sdkmanager"
+
+  if [[ ! -x "$sdkmanager" ]]; then
+    download_with_parallel_ranges \
+      "https://mirrors.cloud.tencent.com/AndroidSDK/commandlinetools-linux-${command_line_tools_version}_latest.zip" \
+      "$tools_archive"
+    mkdir -p "$tools_home"
+    unzip -q -o "$tools_archive" -d "$tools_home"
+    rm -f "$tools_archive" "$tools_archive.aria2"
+  fi
+
+  export PATH="$(dirname "$sdkmanager"):$ANDROID_SDK_ROOT/platform-tools:$PATH"
+  local android_license="$ANDROID_SDK_ROOT/licenses/android-sdk-license"
+  if [[ ! -s "$android_license" ]]; then
+    set +o pipefail
+    yes | "$sdkmanager" --sdk_root="$ANDROID_SDK_ROOT" --licenses >/dev/null
+    local license_status=$?
+    set -o pipefail
+    if [[ $license_status -ne 0 ]]; then
+      echo "Android SDK license acceptance failed." >&2
+      return "$license_status"
+    fi
+  fi
+
+  local build_tools_home="$ANDROID_SDK_ROOT/build-tools/$ANDROID_BUILD_TOOLS_VERSION"
+  if [[ ! -f "$build_tools_home/source.properties" ]]; then
+    local build_tools_archive="$tools_root/build-tools-$ANDROID_BUILD_TOOLS_VERSION-linux.zip"
+    local unpacked_build_tools="$ANDROID_SDK_ROOT/build-tools/android-16"
+
+    download_with_parallel_ranges "$ANDROID_BUILD_TOOLS_ARCHIVE_URL" "$build_tools_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/build-tools"
+    unzip -q -o "$build_tools_archive" -d "$ANDROID_SDK_ROOT/build-tools"
+    test -f "$unpacked_build_tools/source.properties"
+    test ! -e "$build_tools_home"
+    mv "$unpacked_build_tools" "$build_tools_home"
+    rm -f "$build_tools_archive" "$build_tools_archive.aria2"
+  fi
+  test -f "$build_tools_home/source.properties"
+
+  local platform_home="$ANDROID_SDK_ROOT/platforms/android-$ANDROID_PLATFORM"
+  if [[ ! -f "$platform_home/source.properties" ]]; then
+    local platform_archive="$tools_root/platform-android-$ANDROID_PLATFORM.zip"
+
+    download_with_parallel_ranges "$ANDROID_PLATFORM_ARCHIVE_URL" "$platform_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/platforms"
+    unzip -q -o "$platform_archive" -d "$ANDROID_SDK_ROOT/platforms"
+    rm -f "$platform_archive" "$platform_archive.aria2"
+  fi
+  test -f "$platform_home/source.properties"
+
+  local platform_tools_home="$ANDROID_SDK_ROOT/platform-tools"
+  if [[ ! -f "$platform_tools_home/source.properties" ]]; then
+    local platform_tools_archive="$tools_root/platform-tools-linux.zip"
+
+    download_with_parallel_ranges "$ANDROID_PLATFORM_TOOLS_ARCHIVE_URL" "$platform_tools_archive"
+    unzip -q -o "$platform_tools_archive" -d "$ANDROID_SDK_ROOT"
+    rm -f "$platform_tools_archive" "$platform_tools_archive.aria2"
+  fi
+  test -f "$platform_tools_home/source.properties"
+
+  export ANDROID_NDK_HOME="$ANDROID_SDK_ROOT/ndk/$ANDROID_NDK_VERSION"
+  if [[ ! -f "$ANDROID_NDK_HOME/source.properties" ]]; then
+    local ndk_archive="$tools_root/android-ndk-r29-linux.zip"
+    local unpacked_ndk="$ANDROID_SDK_ROOT/ndk/android-ndk-r29"
+
+    download_with_parallel_ranges "$ANDROID_NDK_ARCHIVE_URL" "$ndk_archive"
+    mkdir -p "$ANDROID_SDK_ROOT/ndk"
+    unzip -q -o "$ndk_archive" -d "$ANDROID_SDK_ROOT/ndk"
+    test -f "$unpacked_ndk/source.properties"
+    test ! -e "$ANDROID_NDK_HOME"
+    mv "$unpacked_ndk" "$ANDROID_NDK_HOME"
+    rm -f "$ndk_archive" "$ndk_archive.aria2"
+  fi
+  test -f "$ANDROID_NDK_HOME/source.properties"
+}
+
+install_rust
+
+if [[ "$mode" == "android" ]]; then
+  install_gradle
+  install_android_sdk
+else
+  install_deno
+  rustup component add llvm-tools-preview --toolchain "$RUST_TOOLCHAIN"
+  rustup target add wasm32-wasip2 --toolchain "$RUST_TOOLCHAIN"
+  if ! cargo llvm-cov --version 2>/dev/null | grep -F "cargo-llvm-cov $CARGO_LLVM_COV_VERSION" >/dev/null; then
+    cargo install cargo-llvm-cov --version "$CARGO_LLVM_COV_VERSION" --locked
+  fi
+  cargo llvm-cov --version
+fi

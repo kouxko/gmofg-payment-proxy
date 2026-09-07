@@ -1,0 +1,68 @@
+# See https://help.github.com/articles/ignoring-files/ for more about ignoring files.
+
+# dependencies
+/node_modules
+/.pnp
+.pnp.*
+.yarn/*
+!.yarn/patches
+!.yarn/plugins
+!.yarn/releases
+!.yarn/versions
+
+# Python interpreter and packaging output
+__pycache__/
+*.py[cod]
+
+# testing
+/coverage
+/.playwright-cli/
+*.profraw
+
+# next.js
+/.next/
+/out/
+
+# production
+/build
+/dist
+/output
+
+# Generated desktop resources and local Rust test targets
+/src-tauri/resources/android-companion.apk
+/src-tauri/binaries/intercept-proxy-package-sidecar-*
+/src-tauri/target-listener-fix/
+
+# Local agent/runtime state and generated scratch assets
+/.omx/
+/.ci-cache/
+/tmp/
+/=
+/examples/protocol-packages/nuvei_tango_rhai/tests/target/
+/.task-manager.lock/
+/.task-manager.abandoned.*/
+
+# Local diagnostics and launch helpers
+/scripts/run-latest-app.sh
+/src-tauri/crates/host/examples/live_listener_diagnostic.rs
+
+# misc
+.DS_Store
+*.pem
+!docs/testing/evidence/**/resources/*.pem
+
+# debug
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.pnpm-debug.log*
+
+# env files (can opt-in for committing if needed)
+.env*
+
+# vercel
+.vercel
+
+# typescript
+*.tsbuildinfo
+next-env.d.ts

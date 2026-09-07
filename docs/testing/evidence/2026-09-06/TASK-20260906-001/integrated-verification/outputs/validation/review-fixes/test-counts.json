@@ -1,0 +1,25 @@
+{
+  "rust": {
+    "groups": 45,
+    "passed": 1647,
+    "failed": 0,
+    "ignored": 0
+  },
+  "frontend": {
+    "files": 73,
+    "passed": 550
+  },
+  "checks": {
+    "source-size": 0,
+    "clippy": 0,
+    "architecture-docs": 0,
+    "rust-tests": 0,
+    "lint": 0,
+    "architecture": 0,
+    "frontend-tests": 0,
+    "typecheck": 0,
+    "diff-check": 0,
+    "rust-fmt": 0,
+    "build": 0
+  }
+}

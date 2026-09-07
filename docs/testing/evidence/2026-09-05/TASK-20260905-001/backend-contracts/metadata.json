@@ -1,0 +1,51 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-001",
+  "case_id": "backend-contracts",
+  "executed_at": "2026-09-05 14:38:06 +08:00",
+  "result": "PASS",
+  "environment": {
+    "os": "macOS 27.0",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "manifest": "src-tauri/Cargo.toml"
+  },
+  "tested_boundaries": [
+    "application bootstrap snapshot-to-event-subscription cursor",
+    "fixed-upstream raw HTTP request normalization",
+    "existing chunked response framing",
+    "existing response fault semantics"
+  ],
+  "red_results": {
+    "bootstrap": "FAIL: snapshot cursor was 1, expected pre-read cursor 0",
+    "http_unit": "FAIL: dynamically declared and Proxy-Connection headers remained",
+    "http_integration": "FAIL: TCP upstream observed a forbidden hop-by-hop field"
+  },
+  "green_results": {
+    "bootstrap": "PASS: 1 passed",
+    "http_unit": "PASS: 1 passed",
+    "http_integration": "PASS: 1 passed",
+    "fault_semantics": "PASS: 4 passed",
+    "chunked_response": "PASS: 3 passed",
+    "application_event_module": "PASS: 8 passed",
+    "message_unit_module": "PASS: 11 passed",
+    "upstream_http_suite": "PASS: 7 passed",
+    "cargo_check": "PASS: application and runtime crates",
+    "clippy": "PASS: application and runtime all targets with warnings denied",
+    "format_and_diff": "PASS"
+  },
+  "state_during_test": "The backend source files were stable during each retained RED or GREEN command. Other agents edited disjoint Android, routing, frontend, and documentation files.",
+  "not_applicable": {
+    "tls_mtls": "No TLS code changed.",
+    "payment_payload": "No business payload or rule action changed.",
+    "remote_service": "No external service was used.",
+    "android_device": "No Android code or device was involved.",
+    "ci_release": "Not authorized for this task."
+  },
+  "derived_from": {
+    "task_id": "TASK-20260904-005",
+    "case_id": "HTTP-CHUNKED-RESPONSE-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-005/HTTP-CHUNKED-RESPONSE-001",
+    "reused_contract_and_change": "复用chunked响应、404和故障注入回归；本次仅修正请求逐跳Header和bootstrap事件游标。"
+  }
+}

@@ -1,0 +1,191 @@
+{
+  "target_key": "new:store lab",
+  "target": {
+    "mode": "new",
+    "name": "Store Lab"
+  },
+  "baseline_public": {
+    "workspace_id": null,
+    "revision": null,
+    "selected": false
+  },
+  "validation_layers": [
+    {
+      "layer": "schema",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "domain",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "material",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "package_projection",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "dns_tcp_port",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "tls_mtls",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    },
+    {
+      "layer": "preview_baseline",
+      "status": "passed",
+      "code": null,
+      "reason": null,
+      "duration_ms": 0
+    }
+  ],
+  "resources": {
+    "listeners": [
+      {
+        "alias": "http-entry",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000101"
+      },
+      {
+        "alias": "socket-entry",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000102"
+      },
+      {
+        "alias": "socket-responder",
+        "candidate_local_id": "00000000-0000-0000-0000-000000000103"
+      }
+    ],
+    "http_rules": [
+      {
+        "candidate_index": 0,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000120",
+        "created_order": 10,
+        "listener_alias": "http-entry"
+      }
+    ],
+    "protocol_rules": [
+      {
+        "candidate_index": 0,
+        "candidate_local_id": "00000000-0000-0000-0000-000000000130",
+        "created_order": 20,
+        "listener_alias": "socket-entry"
+      }
+    ],
+    "android_profile_ids": [
+      "android-lab"
+    ]
+  },
+  "alias_graph": {
+    "certificate_aliases": [
+      "downstream-trust",
+      "http-listener-identity",
+      "http-upstream-client",
+      "socket-listener-identity",
+      "socket-upstream-client",
+      "upstream-trust"
+    ],
+    "secret_aliases": [
+      "proxy-admin"
+    ]
+  },
+  "materials_public": {
+    "certificates": [
+      {
+        "alias": "http-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "label": "HTTP listener identity"
+      },
+      {
+        "alias": "socket-listener-identity",
+        "role": "downstream_server_identity",
+        "encoding": "base64_der",
+        "label": "Socket listener identity"
+      },
+      {
+        "alias": "downstream-trust",
+        "role": "downstream_client_trust",
+        "encoding": "pem",
+        "label": "Downstream trust"
+      },
+      {
+        "alias": "upstream-trust",
+        "role": "upstream_server_trust",
+        "encoding": "pem",
+        "label": "Upstream trust"
+      },
+      {
+        "alias": "http-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "label": "HTTP upstream client"
+      },
+      {
+        "alias": "socket-upstream-client",
+        "role": "upstream_client_identity",
+        "encoding": "pkcs12_base64",
+        "label": "Socket upstream client"
+      }
+    ],
+    "secrets": [
+      {
+        "alias": "proxy-admin",
+        "role": "proxy_basic_auth",
+        "username": "operator",
+        "label": "Proxy operator"
+      }
+    ]
+  },
+  "protocol_document_values": [
+    {
+      "type": "string",
+      "value": "abc"
+    },
+    {
+      "type": "int",
+      "value": 7
+    },
+    {
+      "type": "bool",
+      "value": true
+    },
+    {
+      "type": "blob",
+      "value": [
+        0,
+        255
+      ]
+    }
+  ],
+  "terminal_action_fields": {
+    "TruncateResponse": [
+      "bytes"
+    ],
+    "DisconnectDuringUpstreamWrite": [
+      "after_bytes"
+    ],
+    "DisconnectDuringDownstreamWrite": [
+      "after_bytes"
+    ]
+  }
+}

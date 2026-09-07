@@ -1,0 +1,93 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "CURRENT-DOCUMENTS-001",
+  "result": "PASS",
+  "executed_at": "2026-09-05T14:41:25.874069+08:00",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "sources": [
+    {
+      "source": "README.md",
+      "snapshot": "resources/0-README.md",
+      "sha256": "30c95da7bede82a2691c7c71d68a3ec9edfe7b727b7fa4e4afe5bf06cb3b9261",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "docs/architecture/modules.md",
+      "snapshot": "resources/1-modules.md",
+      "sha256": "3425497fb3c80dd4a5e0fcf55a1bf1e106eae8e2fb69679ad6f3d38b0d5e7269",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/mcp/resources.rs",
+      "snapshot": "resources/2-resources.rs",
+      "sha256": "fa7e955cf87799611e1fc18d6cdf2ab37f2ea5c0097943771b891bf4040dbe1f",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/mcp/tests.rs",
+      "snapshot": "resources/3-tests.rs",
+      "sha256": "eba9decc812bb22d3e2d992047624369254f0dbfcd958bcea87b0ea3735fff09",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/mcp/catalog.rs",
+      "snapshot": "resources/4-catalog.rs",
+      "sha256": "46e557e8c36b88edb3edf3b325a57f1056b791f9d2899ef87d107b0fd1264ad6",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/application/Cargo.toml",
+      "snapshot": "resources/5-Cargo.toml",
+      "sha256": "a6585f615616794bca379837f5debe1ac8cf229ee3ebf84b2fd82ec0c7751618",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "docs/mcp/tool-reference.md",
+      "snapshot": "resources/6-tool-reference.md",
+      "sha256": "4c7a0fd79eeb69410dfda706b5c23e24b9cce2601f51b8c1fba73e4b8cc66457",
+      "purpose": "current authority or checked document",
+      "required": true
+    },
+    {
+      "source": "docs/architecture/android-vpn-transparent-routing.md",
+      "snapshot": "resources/android-vpn-transparent-routing.md",
+      "sha256": "b7a5956e43675e652f1875de405093802afe6bf18ef9d727c5d75b0be2bab499",
+      "purpose": "final implemented behavior documentation",
+      "required": true
+    },
+    {
+      "source": "docs/architecture/data-flow.md",
+      "snapshot": "resources/data-flow.md",
+      "sha256": "8afeff9597087545c04b03e104e462cc23f32c23af42bf67ccb5b4963cd4b4f3",
+      "purpose": "final implemented behavior documentation",
+      "required": true
+    },
+    {
+      "source": "docs/user-operation-guide.md",
+      "snapshot": "resources/user-operation-guide.md",
+      "sha256": "ca43a9d5205b75a960f3b7ce2aa1182d516503f42e482e05a8738d8bb48428dd",
+      "purpose": "final implemented behavior documentation",
+      "required": true
+    }
+  ],
+  "commands": [
+    "deno task scan:architecture",
+    "cargo test --manifest-path src-tauri/Cargo.toml --lib mcp::tests::resources_include_authoring_manifest_and_official_component",
+    "cargo test --manifest-path src-tauri/Cargo.toml --lib mcp::tests::tool_catalog_preserves_the_existing_read_only_runtime_and_portable_protocol_tools"
+  ],
+  "actual": "Architecture gate PASS; MCP resource 1/1; tool catalog 1/1; Application dependencies domain/product-api only; final architecture scan PASS; Android routing/heartbeat/generation and bootstrap/Listener conflict guide synchronized; #3 recovery remains deferred.",
+  "derived_from": null,
+  "not_applicable": {
+    "network": "static catalogs and local architecture checks",
+    "device": "no Android behavior in this case",
+    "binary_packets_and_UI": "documentation and resource text only"
+  },
+  "final_checked_at": "2026-09-05T14:55:56.993864+08:00"
+}

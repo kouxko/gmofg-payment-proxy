@@ -1,0 +1,11 @@
+{
+  "result": "PASS",
+  "task_id": "TASK-20260905-004",
+  "completed_at": "2026-09-06 09:59:31 +08:00",
+  "task_path": "docs/tasks/completed/2026-09-06/unify-http-socket-runtime-contracts.md",
+  "pending_entry_count": 0,
+  "completion_entry_count": 1,
+  "evidence_case_count": 12,
+  "task_links_valid": true,
+  "unrelated_tasks_preserved": true
+}

@@ -1,0 +1,54 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "frontend-contracts",
+  "executed_at_start": "2026-09-05 14:34:02 +08:00",
+  "executed_at_end": "2026-09-05 14:51:42 +08:00",
+  "source_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "environment": {
+    "os": "macOS arm64",
+    "deno": "2.9.6",
+    "typescript": "6.0.3",
+    "vitest": "4.1.11",
+    "browser_runtime": "jsdom"
+  },
+  "result": "PASS",
+  "commands": [
+    "deno task test src/features/listeners/listener-workspace-draft.test.ts src/features/shell/bootstrap-context.test.tsx",
+    "deno task test src/features/listeners/listener-workspace-draft.test.ts src/features/listeners/listeners-view.external-refresh.test.tsx src/features/shell/bootstrap-context.test.tsx",
+    "deno task test src/features/listeners src/features/shell/bootstrap-context.test.tsx src/features/shell/workspace-query-invalidation.test.tsx",
+    "deno task test",
+    "deno task typecheck",
+    "deno task lint",
+    "deno task scan:frontend-boundaries",
+    "git diff --check -- src/features/listeners src/features/shell",
+    "deno task scan:source-size",
+    "deno task test src/features/listeners/listeners-view.external-refresh.test.tsx",
+    "deno task test src/features/listeners src/features/shell/bootstrap-context.test.tsx src/features/shell/workspace-query-invalidation.test.tsx",
+    "git diff --check -- src/features/listeners src/features/shell docs/testing/evidence/2026-09-05/TASK-20260905-001/frontend-contracts"
+  ],
+  "counts": {
+    "focused_test_files": 3,
+    "focused_tests": 11,
+    "expanded_test_files": 19,
+    "expanded_tests": 216,
+    "full_frontend_test_files": 67,
+    "full_frontend_tests": 573,
+    "full_frontend_stage": "before conflict-resolution follow-up",
+    "expanded_stage": "final conflict-resolution implementation"
+  },
+  "known_preexisting_gate": {
+    "source_size": "FAIL",
+    "reported_files": 7,
+    "task_added_oversized_files": 0
+  },
+  "resources": "N/A: no external or user-provided resources",
+  "network": "N/A: deterministic frontend tests",
+  "screenshots": "N/A: no visual layout change requiring image comparison",
+  "ci": "N/A: not authorized",
+  "derived_from": {
+    "task_id": "TASK-20260828-006",
+    "case_id": "WORKSPACE-LIVE-REFRESH-001",
+    "evidence_path": "docs/testing/evidence/2026-08-28/TASK-20260828-006/WORKSPACE-LIVE-REFRESH-001",
+    "reused_contract_and_change": "复用权威事件刷新和本地草稿保留合同；新增逐Listener三方合并、显式冲突解决与在途bootstrap事件分类。"
+  }
+}

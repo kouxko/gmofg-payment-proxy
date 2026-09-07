@@ -1,0 +1,32 @@
+{
+  "result": "APPROVED_WITH_EXPECTED_RELEASE_BLOCKER",
+  "checks": [
+    { "command": "pnpm test:task-20260829-002:phase2", "result": "PASS", "details": "Node 8/8; Infrastructure core 6/6; Host policy 3/3" },
+    { "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host --all-targets --all-features", "result": "PASS", "details": "Host unit 12/12 and all host integrations; Infrastructure unit 651/651 and all infrastructure integrations" },
+    { "command": "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure -p intercept-proxy-host -p intercept-proxy --all-targets --all-features -- -D warnings", "result": "PASS" },
+    { "command": "cargo check --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy --lib", "result": "PASS" },
+    { "command": "pnpm check:task-20260829-002:phase2-release-ready", "result": "EXPECTED_EXIT_1", "details": "NOT_RELEASE_READY; one marker blocker and 32 reset-contract references summarized as one independent contract blocker across six explicit production Rust files" },
+    { "command": "pnpm tauri:build", "result": "EXPECTED_EXIT_1", "details": "release checker blocks before Android companion build and tauri build" },
+    { "command": "pnpm tauri build", "result": "EXPECTED_EXIT_1", "details": "Tauri runs build.beforeBuildCommand and the checker blocks before pnpm build" },
+    { "command": "pnpm check:task-20260829-002:checkpoint", "result": "PASS", "details": "all ten ordered gates; frontend 61 files/531 tests; Rust workspace all targets/features 0 failed" },
+    { "command": "git diff --check", "result": "PASS" }
+  ],
+  "red": {
+    "command": "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib sqlite::core::tests::recreate_current -- --nocapture",
+    "result": "FAIL_EXPECTED",
+    "exit_code": 101,
+    "diagnostic": "E0425 missing recreate_current_schema and recreate_current_schema_with"
+  },
+  "gate_repair": {
+    "first_source_size_result": "FAIL: src-tauri/crates/host/src/tests.rs 696 lines",
+    "repair": "split Phase 2 fixture into src-tauri/crates/host/src/tests/phase2_database_startup.rs",
+    "rerun": "PASS at unchanged 500-line limit",
+    "first_independent_verifier": "FAILED: marker-only checker could false-pass while RecreateCurrent remained",
+    "verifier_repair": "independent marker and production reset-contract scan, tauri:build pre-gate, no pre-subscriber log, public list identity absence assertions",
+    "generic_build_bypass_review": "FAILED: generic pnpm tauri build bypassed the package-only gate",
+    "generic_build_bypass_repair": "same checker added to Tauri build.beforeBuildCommand; package early gate retained; beforeDevCommand unchanged",
+    "review_state": "APPROVE",
+    "delta_review_findings": { "p0": 0, "p1": 0, "p2": 0 },
+    "checkpoint_ready": true
+  }
+}

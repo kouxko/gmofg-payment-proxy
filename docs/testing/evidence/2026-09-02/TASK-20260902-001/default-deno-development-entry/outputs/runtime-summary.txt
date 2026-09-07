@@ -1,0 +1,42 @@
+TASK-20260902-001 default-deno-development-entry
+executed: 2026-09-02 10:27:05 +08:00 .. 2026-09-02 10:33:48 +08:00
+
+versions
+deno 2.9.6 (stable, release, aarch64-apple-darwin)
+node v26.8.1
+pnpm 11.13.1
+tauri-cli 2.11.4
+next 16.2.12
+
+config
+base beforeDevCommand: deno task dev
+node overlay beforeDevCommand: pnpm dev
+deno overlay beforeDevCommand: inherited from base
+base beforeBuildCommand: pnpm build
+
+deno task tauri:dev
+BeforeDevCommand: deno task dev
+Next.js: Ready
+listener: deno on TCP 3000
+HTTP: 200, 31678 bytes, title=网络代理工具
+Rust app: built and launched
+setup: CERTIFICATE_ROOT_REVOKED
+main window: INCONCLUSIVE
+
+pnpm tauri:dev
+BeforeDevCommand: pnpm dev
+Next.js: Ready
+Rust app: built and launched
+setup: CERTIFICATE_ROOT_REVOKED
+main window: INCONCLUSIVE
+
+shared blocker
+Both routes reached the same Rust application setup boundary and stopped on the
+existing revoked test Root CA state. No application data, database, Keychain
+certificate, or certificate configuration was cleared.
+
+temporary paths
+/tmp/task-20260831-deno-snapshot.d5X0GX: source path absent, moved to Trash
+/tmp/task-20260831-deno-bin.A8bByt: source path absent, moved to Trash
+
+result: VERIFIED_WITH_APP_STATE_BLOCKER

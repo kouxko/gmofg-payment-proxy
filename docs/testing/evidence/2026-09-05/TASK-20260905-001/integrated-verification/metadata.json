@@ -1,0 +1,246 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "INTEGRATED-VERIFICATION-001",
+  "executed_at": "2026-09-05T14:56:47.500712+08:00",
+  "source_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "result": "CHECKS_PASS_REVIEW_APPROVED_DEVICE_NOT_RUN",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application -p intercept-proxy-infrastructure -p intercept-proxy-runtime -p intercept-proxy-android-engine --lib",
+    "deno task build",
+    "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "deno task scan:architecture",
+    "git diff --check"
+  ],
+  "rust_counts": {
+    "android_engine": 48,
+    "application": 418,
+    "infrastructure": 469,
+    "runtime": 185,
+    "total": 1120
+  },
+  "frontend_evidence": {
+    "full_before_final_conflict_resolution": 573,
+    "affected_after_final_conflict_resolution": 216,
+    "test_runtime": "jsdom",
+    "typecheck": "PASS",
+    "lint": "PASS",
+    "boundary_scan": "PASS",
+    "production_build_final": "PASS"
+  },
+  "android_evidence": {
+    "jvm": 32,
+    "four_abi_apk_build": "PASS",
+    "real_device": "NOT_RUN: no attached device"
+  },
+  "source_size": "Known preexisting 7 failures; no new oversized production file",
+  "resources": [
+    {
+      "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt",
+      "snapshot": "resources/android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt",
+      "sha256": "728024b2266fa8b5983dce29451cbe01ce8d8e338fdd296383c4693f66bcc424",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/NativeBridge.kt",
+      "snapshot": "resources/android-companion/app/src/main/java/com/interceptproxy/vpn/NativeBridge.kt",
+      "sha256": "1d222df54d24886bc241a514646a96bd97add518ed6a3ca47104f6451433e6b4",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt",
+      "snapshot": "resources/android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt",
+      "sha256": "6986623a408df7e0bdf664a1588638eae1a885d0dd395d6f4b40d145aeb221f1",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseWatchdogTest.kt",
+      "snapshot": "resources/android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseWatchdogTest.kt",
+      "sha256": "ef216743653835531fb71bb2b7e3c51e9e2475b0c9127208faa38f25875f104c",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/NativeDataPlaneFailureCoordinatorTest.kt",
+      "snapshot": "resources/android-companion/app/src/test/java/com/interceptproxy/vpn/NativeDataPlaneFailureCoordinatorTest.kt",
+      "sha256": "4e80cbf16cd04d56f863fc52d5b033f63fa458d34f1bc24f327e273d83625a95",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/android-engine/src/routing.rs",
+      "snapshot": "resources/src-tauri/crates/android-engine/src/routing.rs",
+      "sha256": "55ba476d11367385749b2e4b5cf137e0bb3bbafece9eb7e7d21e914c32d9dab6",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/android-engine/src/routing_tests.rs",
+      "snapshot": "resources/src-tauri/crates/android-engine/src/routing_tests.rs",
+      "sha256": "4492c083e4a737387e7f555ef30480dd47eeece91ec7614bc6a4f9e3d61b39f0",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/android-engine/src/socks5/tests/tcp.rs",
+      "snapshot": "resources/src-tauri/crates/android-engine/src/socks5/tests/tcp.rs",
+      "sha256": "6700e35c34c9e46b6ad97960a65089f2d36347cdc4617d341779f74261341444",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/application/src/facade/lifecycle.rs",
+      "snapshot": "resources/src-tauri/crates/application/src/facade/lifecycle.rs",
+      "sha256": "500de58abd4efb2e3d35527699443844cdd9391778784ceda03093aa2436e6d6",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/application/src/requirements_tests/events.rs",
+      "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/events.rs",
+      "sha256": "e617aaba11dd18723bbca272402d367dbaea834fadf5268c764837c07765a623",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/application/src/requirements_tests/support/fake_ports.rs",
+      "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/support/fake_ports.rs",
+      "sha256": "0aaa49e03ebea507c7c34e7d1a99314c5f0ba5b837548edafefcb0523cdc0d4a",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/lease.rs",
+      "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/android_adb/lease.rs",
+      "sha256": "40408dfb107c5b62e22dd090ca1a2412d1856e4e47d62c3efc34a1acaa36f0a8",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+      "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+      "sha256": "5c80c24f40388f6414947671852345fc2431a9b6d152bea7740b426578f1c6a2",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs",
+      "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs",
+      "sha256": "192a9758eeb21e0761ae6a42f19b5fe89f30a528f3f8f51fced679395d81a9fa",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/proxy/src/message.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/src/message.rs",
+      "sha256": "016760fef15c54434279d8adf850b5631e14dead63db2581856a91c21932282b",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/proxy/src/message/tests.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/src/message/tests.rs",
+      "sha256": "3f1181dc892ed5f1ab511f3f47a9d52e55dc8a74decdac30846e1a365cb0cd30",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+      "sha256": "157b33755ac7787d7bed755b7e63e746a0b8d43e03444d09b7d020f844e2c160",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/mcp/resources.rs",
+      "snapshot": "resources/src-tauri/src/mcp/resources.rs",
+      "sha256": "fa7e955cf87799611e1fc18d6cdf2ab37f2ea5c0097943771b891bf4040dbe1f",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src-tauri/src/mcp/tests.rs",
+      "snapshot": "resources/src-tauri/src/mcp/tests.rs",
+      "sha256": "eba9decc812bb22d3e2d992047624369254f0dbfcd958bcea87b0ea3735fff09",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/listener-runtime-card.tsx",
+      "snapshot": "resources/src/features/listeners/listener-runtime-card.tsx",
+      "sha256": "e880377866e711442644ac741b36a39219f63130e5b31516d22a2e15da0399c0",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/listener-workspace-draft.test.ts",
+      "snapshot": "resources/src/features/listeners/listener-workspace-draft.test.ts",
+      "sha256": "cfe198e6c98e6b80b7ee750e021dec02cc0acf5b2adf4b96e9bde82cf153edc2",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/listener-workspace-draft.ts",
+      "snapshot": "resources/src/features/listeners/listener-workspace-draft.ts",
+      "sha256": "a8c9b54c908a4b02df9b780b8d5d3e2bd89dbca34157ff43559e9354fd743832",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/listeners-view.external-refresh.test.tsx",
+      "snapshot": "resources/src/features/listeners/listeners-view.external-refresh.test.tsx",
+      "sha256": "336d10c76fa5d70a62d2b9b4cf2e225d3e6b407364392a1c6ac811af0312a7a7",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/listeners-view.tsx",
+      "snapshot": "resources/src/features/listeners/listeners-view.tsx",
+      "sha256": "b34999ba4cc2b41839997db778cbb97e754ef99ac7c17553305f5a85af812ccb",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/listeners/use-listener-persistence.ts",
+      "snapshot": "resources/src/features/listeners/use-listener-persistence.ts",
+      "sha256": "38114e458c25e777adec6d830b15ca4c0d43456297ef8f1ebc00d106e1aef362",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/shell/bootstrap-context.test.tsx",
+      "snapshot": "resources/src/features/shell/bootstrap-context.test.tsx",
+      "sha256": "c94b849b6da12dca61573cc668a9d245a3f8f75a703f6c44c3e2ab7585aef374",
+      "purpose": "source state of integrated verification",
+      "required": true
+    },
+    {
+      "source": "src/features/shell/bootstrap-context.tsx",
+      "snapshot": "resources/src/features/shell/bootstrap-context.tsx",
+      "sha256": "7746c95b09b4faa486c8841602049d085fd4e4138aa27e85d72e7e04a01e6fb7",
+      "purpose": "source state of integrated verification",
+      "required": true
+    }
+  ],
+  "state_during_checks": "Production sources stable during final corresponding checks. Evidence and task documentation updated separately.",
+  "not_run": {
+    "recovery_item_3": "awaiting product choice; implementation unchanged",
+    "listener_draft_dto_item_9": "separate design required; implementation unchanged",
+    "ci_push_release": "not requested"
+  },
+  "not_applicable": {
+    "external_business_transactions": "No transaction acceptance requested in this correction task"
+  },
+  "review": {
+    "reviewer": "/root/final_architecture_review",
+    "role": "architect",
+    "result": "APPROVE_IMPLEMENTED_SCOPE",
+    "P0": 0,
+    "P1": 0,
+    "in_scope_P2": 0,
+    "report": "independent-review.md",
+    "reviewed_at": "2026-09-05 15:07:49 +08:00"
+  }
+}

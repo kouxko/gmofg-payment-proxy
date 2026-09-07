@@ -1,0 +1,64 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase5-unified-rule-domain",
+  "executed_at": "2026-08-30 08:50:00 +08:00",
+  "completed_at": "2026-08-30 11:57:30 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase4-package-contract",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase4-package-contract/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "fd014005d39ea3281d8c473920fe3f358e35f917",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase 5 changes and unrelated user docs/README.md",
+    "changed_during_final_checkpoint": false
+  },
+  "resources": {
+    "active_fixture": "test-support/fixtures/task-20260829-002/phase-5/unified-rule-domain/contract-inventory.json",
+    "snapshot": "inputs/contract-inventory.json",
+    "snapshot_sha256": "7ab7677a659968136cfd35fe3ed8b5508e218f3156526be5291529d695742f3e",
+    "generated_sha256": "ec7e2e01d0e8172915fd5aed79b160f28aa3ebd4554f6034593efd5255b9feaf",
+    "generated_wire_golden_sha256": "42450f54d8a3063731e6f89781b67c5ae13ed9fee5c28f2a86b6493f0247d689",
+    "rust_contract_test_sha256": "2a1fbea2cdb19a4727f65dbea8b98eb180fbdefc1f5fc679e5eeb2d36d4391bf",
+    "rust_save_contract_test_sha256": "8e14a3f9f7e1873709aa80dc1b0ad2c064e88930ec26f9bb9a66ca9f148bd9ab",
+    "typescript_contract_test_sha256": "2e6c5448493662a5b9d0c5b1d19d7e064199fd2feb54107ac71a060eeb2ede11",
+    "checker_sha256": "f6442422aa98fcbcff1c0aca1d04f40f0202488a91ca745a16020ac602f553e4",
+    "checker_test_sha256": "a628c4ac2b76b6e276d40a5ddddf3099a283c600c4aef86f3f7b15dc1f1a644f"
+  },
+  "independent_findings": {
+    "initial_verifier": "FAILED P0=0 P1=3 P2=1",
+    "initial_review": "REQUEST CHANGES P1=6 P2=1",
+    "repair": "all findings have focused RED or mutation coverage and local GREEN evidence",
+    "final_reviewer": "APPROVE P0=0 P1=0 P2=0",
+    "final_verifier": "VERIFIED / APPROVED / CHECKPOINT READY P0=0 P1=0 P2=0",
+    "blockers": []
+  },
+  "results": {
+    "tdd_red": "EXPECTED COMPILE FAIL exit 101 after Cargo discovered the Phase5 integration target; missing Phase5 domain owners",
+    "phase5_checker_mutations_and_controls": { "passed": 15, "failed": 0 },
+    "phase5_rust_contract": { "passed": 9, "failed": 0 },
+    "phase5_typescript_contract": { "passed": 4, "failed": 0 },
+    "domain_all_targets_all_features": { "passed": 119, "failed": 0 },
+    "application_all_targets_all_features": { "passed": 497, "failed": 0 },
+    "infrastructure_all_targets_all_features": { "passed": 690, "failed": 0 },
+    "host_all_targets_all_features": { "passed": 33, "failed": 0 },
+    "tauri_all_targets_all_features": { "passed": 133, "failed": 0 },
+    "frontend_full": { "files": 63, "passed": 542, "failed": 0 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_lint_typecheck_fmt_workspace_clippy_diff": "PASS",
+    "first_repair_checkpoint": "FAILED at gate 7; frontend 541/542; protocol-package-dialog focus timing; gates 8-10 NOT_RUN",
+    "focused_flaky_recheck": "PASS 3/3 with complete file and test name; no product/test timeout/retry change",
+    "global_checkpoint": "PASS exit 0 on complete fresh rerun; ten ordered gates; frontend 542/542; workspace all-target/all-feature exit 0"
+  },
+  "not_run": [
+    "Phase6 RuleChainTransaction and lifecycle commit",
+    "Phase10/11 pipeline and codec switch",
+    "Phase12 removal of legacy four-stage runtime and enum",
+    "Phase15 complete modal/editor",
+    "remote CI, push and Release"
+  ],
+  "checkpoint_ready": true
+}

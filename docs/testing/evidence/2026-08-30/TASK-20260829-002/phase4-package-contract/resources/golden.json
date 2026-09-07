@@ -1,0 +1,84 @@
+{
+  "manifest": {
+    "api": 1,
+    "kind": "socket",
+    "package": {
+      "id": "iso8583",
+      "version": "1.0.0-beta.1+build.7",
+      "name": "ISO 8583",
+      "description": "Canonical contract golden"
+    },
+    "document": {
+      "upstream": {
+        "schema": {
+          "type": "object",
+          "properties": {
+            "message": { "type": "string", "title": "Message" },
+            "items": { "type": "array", "items": { "type": "number" } }
+          }
+        }
+      },
+      "downstream": {
+        "schema": { "type": "boolean" }
+      }
+    }
+  },
+  "registration": {
+    "jsonrpc": "2.0",
+    "method": "package.register",
+    "params": {
+      "api": 1,
+      "kind": "socket",
+      "package": {
+        "id": "iso8583",
+        "version": "1.0.0-beta.1+build.7",
+        "name": "ISO 8583",
+        "description": "Canonical contract golden"
+      },
+      "document": {
+        "upstream": {
+          "schema": {
+            "type": "object",
+            "properties": {
+              "message": { "type": "string", "title": "Message" },
+              "items": { "type": "array", "items": { "type": "number" } }
+            }
+          }
+        },
+        "downstream": {
+          "schema": { "type": "boolean" }
+        }
+      }
+    }
+  },
+  "requests": [
+    { "jsonrpc": "2.0", "id": "up-frame", "method": "hooks.upstream.frame", "params": { "buffer": "AP8=" } },
+    { "jsonrpc": "2.0", "id": "down-frame", "method": "hooks.downstream.frame", "params": { "buffer": "AQI=" } },
+    { "jsonrpc": "2.0", "id": "up-decode", "method": "hooks.upstream.decode", "params": { "input": "AP8=" } },
+    { "jsonrpc": "2.0", "id": "down-decode", "method": "hooks.downstream.decode", "params": { "input": "AQI=" } },
+    { "jsonrpc": "2.0", "id": "up-encode", "method": "hooks.upstream.encode", "params": { "originalInput": "AP8=", "document": { "message": "ok", "items": [1.5, true, null] } } },
+    { "jsonrpc": "2.0", "id": "down-encode", "method": "hooks.downstream.encode", "params": { "originalInput": "AQI=", "document": false } },
+    { "jsonrpc": "2.0", "id": "up-display", "method": "document.upstream.display", "params": { "document": { "message": "ok", "items": [] } } },
+    { "jsonrpc": "2.0", "id": "down-display", "method": "document.downstream.display", "params": { "document": true } }
+  ],
+  "successes": {
+    "frame": [
+      { "jsonrpc": "2.0", "id": "up-frame", "result": { "status": "need_more" } },
+      { "jsonrpc": "2.0", "id": "up-frame", "result": { "status": "need_more", "requiredBytes": 4 } },
+      { "jsonrpc": "2.0", "id": "up-frame", "result": { "status": "complete", "consumedBytes": 2 } },
+      { "jsonrpc": "2.0", "id": "up-frame", "result": { "status": "reject", "reason": "invalid frame" } }
+    ],
+    "decode": { "jsonrpc": "2.0", "id": "up-decode", "result": { "message": "ok", "items": [1.5, true, null] } },
+    "encode": { "jsonrpc": "2.0", "id": "up-encode", "result": "AP8=" },
+    "display": { "jsonrpc": "2.0", "id": "up-display", "result": "<p>ok</p>" }
+  },
+  "failure": {
+    "jsonrpc": "2.0",
+    "id": "up-decode",
+    "error": {
+      "code": -32000,
+      "message": "decode rejected",
+      "data": { "code": "BODY_DECODE_FAILED" }
+    }
+  }
+}

@@ -1,0 +1,26 @@
+{
+  "match": {
+    "log_id": 35,
+    "direction": "upstream",
+    "rule_id": "939447d8-db24-4e26-a5a8-a74141597eb4",
+    "matched": true,
+    "operations": [{ "kind": "record_match", "path": null }],
+    "final_document": { "customer": { "age": 18.0 } }
+  },
+  "miss": {
+    "log_id": 18,
+    "direction": "upstream",
+    "rule_id": "939447d8-db24-4e26-a5a8-a74141597eb4",
+    "matched": false,
+    "operations": [],
+    "final_document": { "customer": { "age": 17.0 } }
+  },
+  "invalid": {
+    "log_id": 27,
+    "direction": "upstream",
+    "stage": "decode",
+    "error_code": "JSON_INVALID",
+    "error": "Invalid Document JSON: EOF while parsing an object at line 1 column 1",
+    "outcome": "failed"
+  }
+}

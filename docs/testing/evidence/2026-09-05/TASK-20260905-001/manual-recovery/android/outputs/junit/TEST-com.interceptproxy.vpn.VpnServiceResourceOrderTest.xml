@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.VpnServiceResourceOrderTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-05T09:29:18.633Z" hostname="KQR.local" time="0.007">
+  <properties/>
+  <testcase name="closeCurrentDataPlaneReleasesTunBeforeStoppingNativeRuntime" classname="com.interceptproxy.vpn.VpnServiceResourceOrderTest" time="0.005"/>
+  <testcase name="foregroundStartsAfterExternalControlIsAttached" classname="com.interceptproxy.vpn.VpnServiceResourceOrderTest" time="0.0"/>
+  <testcase name="destroyUnregistersReceiverBeforeClosingTunAndNativeRuntime" classname="com.interceptproxy.vpn.VpnServiceResourceOrderTest" time="0.0"/>
+  <testcase name="revokeStopsVpnBeforeCallingSystemLifecycle" classname="com.interceptproxy.vpn.VpnServiceResourceOrderTest" time="0.0"/>
+  <testcase name="foregroundStopsBeforeServiceInstance" classname="com.interceptproxy.vpn.VpnServiceResourceOrderTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

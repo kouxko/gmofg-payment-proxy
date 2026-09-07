@@ -1,0 +1,18 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.12s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-86ea55d95fa19877)
+
+running 11 tests
+test requirements_tests::listener_certificates::listener_tls_test_rejects_unmanaged_file_and_pkcs12_references ... ok
+test requirements_tests::listener_certificates::listener_connection_test_supports_http_without_tls_evidence ... ok
+test requirements_tests::listener_certificates::listener_validation_uses_persisted_other_listeners_not_unrelated_ui_drafts ... ok
+test requirements_tests::listener_certificates::listener_certificate_discard_rejects_references_used_by_any_workspace ... ok
+test requirements_tests::listener_certificates::listener_tls_test_validates_the_persisted_workspace_candidate ... ok
+test requirements_tests::listener_certificates::listener_certificate_discard_cleans_an_unreferenced_import ... ok
+test requirements_tests::listener_certificates::listener_save_rejects_unmanaged_file_and_pkcs12_references ... ok
+test requirements_tests::listener_certificates::running_workspace_listener_blocks_configuration_save_and_delete ... ok
+test requirements_tests::listener_certificates::running_workspace_listener_allows_device_network_profile_persistence ... ok
+test requirements_tests::listener_certificates::running_workspace_listener_allows_saving_and_starting_a_stopped_listener ... ok
+test requirements_tests::listener_certificates::listener_certificate_discard_is_atomic_with_listener_save ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 424 filtered out; finished in 0.07s
+

@@ -1,0 +1,22 @@
+{
+  "result": "PASS",
+  "hits": [
+    {"package": "au-eftex@1.1.0", "exchange_id": "0ac5adbbec534b03bce36567d99889b2", "request_bytes": 71, "response_bytes": 63, "rule_hit_count": 1},
+    {"package": "iso8583-ascii-standard@1.0.0", "exchange_id": "c4a55bd93ae248d8b23dc37bab15d77b", "input_hex": "000430323030", "upstream_hex": "000430313030", "client_hex": "000430313030", "rule_hit_count": 1},
+    {"package": "iso8583-deno-ascii@1.0.1", "exchange_id": "60763396376c441dad64b1cd29b83ee2", "input_mti": "0200", "upstream_mti": "0100", "client_mti": "0100", "request_bytes": 59, "response_bytes": 59, "rule_hit_count": 1},
+    {"package": "nuvei-tango-json@1.0.1", "exchange_id": "f70011179c924d2183cfa9c12f110156", "request_bytes": 48, "response_bytes": 49, "rule_hit_count": 1, "nested_display": true, "contains_pre": false},
+    {"package": "nuvei-tango-json-rhai@1.0.1", "exchange_id": "079b3f72d24a49eb906516205bd9452b", "request_bytes": 271, "response_bytes": 191, "rule_hit_count": 1, "nested_display": true, "contains_pre": false}
+  ],
+  "misses": [
+    {"package": "iso8583-ascii-standard@1.0.0", "exchange_id": "4d241a79938b43b3bdfcd760dbfa9e45", "bytes": 6, "preserved": true},
+    {"package": "iso8583-deno-ascii@1.0.1", "exchange_id": "2d950b9a674d4d6aaba9103380d6c2d8", "bytes": 59, "preserved": true},
+    {"package": "nuvei-tango-json@1.0.1", "exchange_id": "e0a5e0a190a34d639d305f6301d33488", "bytes": 37, "preserved": true},
+    {"package": "nuvei-tango-json-rhai@1.0.1", "exchange_id": "78674144b1f44307b433de8d45a88774", "bytes": 37, "preserved": true}
+  ],
+  "invalid_frames": [
+    {"package": "iso8583-ascii-standard@1.0.0", "exchange_id": "0f9dcefdddd74c8f909bb481b270a131", "stable_code": "DECODE_FAILED", "upstream_bytes": 0},
+    {"package": "iso8583-deno-ascii@1.0.1", "exchange_id": "98459d41672e4caba5087e4028fe8838", "stable_code": "DECODE_FAILED", "upstream_bytes": 0},
+    {"package": "nuvei-tango-json@1.0.1", "exchange_id": "8fdeeba0e3ea4cf8975db429241f7d04", "stable_code": "PROCESSING_FAILED", "external_code": "PROTOCOL_PACKAGE_INVALID", "upstream_bytes": 0},
+    {"package": "nuvei-tango-json-rhai@1.0.1", "exchange_id": "25e6322f34d64b73b5954bda6296ea1f", "stable_code": "PROCESSING_FAILED", "upstream_bytes": 0}
+  ]
+}

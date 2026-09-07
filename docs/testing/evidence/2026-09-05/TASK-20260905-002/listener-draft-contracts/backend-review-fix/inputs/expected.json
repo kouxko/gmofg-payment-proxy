@@ -1,0 +1,7 @@
+{
+  "both_intents": {
+    "result": "error",
+    "code": "LISTENER_DRAFT_TRANSITION_NOT_APPLICABLE"
+  },
+  "relay_contract": "unchanged"
+}

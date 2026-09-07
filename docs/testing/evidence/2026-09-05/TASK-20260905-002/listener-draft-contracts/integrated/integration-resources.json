@@ -1,0 +1,59 @@
+{
+  "captured_at": "2026-09-05T16:37:57.067860+08:00",
+  "resources": [
+    {
+      "original_path": "docs/architecture/modules.md",
+      "archive": "resources/integration-freeze/docs/architecture/modules.md",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "e48d4c527bd53a4c630c3943ac8ef0db5f80948660b46ae8be138ed3cf6193e4"
+    },
+    {
+      "original_path": "docs/architecture/data-flow.md",
+      "archive": "resources/integration-freeze/docs/architecture/data-flow.md",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "a792d8edd1b5f645e42dfe3093bddde699776bd49f68bbcbc78b4f7ed3b81c80"
+    },
+    {
+      "original_path": "docs/user-operation-guide.md",
+      "archive": "resources/integration-freeze/docs/user-operation-guide.md",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "bb1687392f822cec6f2d7c28cf65c3f39d2234f7a2fe4b42fe9a9968a8a3acb5"
+    },
+    {
+      "original_path": "tsconfig.json",
+      "archive": "resources/integration-freeze/tsconfig.json",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "ec1fc97d0fc38951c8db9833407cb8184896f59923056a1da2898df36dac539c"
+    },
+    {
+      "original_path": "eslint.config.mjs",
+      "archive": "resources/integration-freeze/eslint.config.mjs",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "68962e7bacb6f7505cdb9a2bad699d8699828da08baf34e3dd8df639e8b89366"
+    },
+    {
+      "original_path": "package.json",
+      "archive": "resources/integration-freeze/package.json",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "4605374e87b05b43b8b63d1e6b51fb38ae9110a920ed72cd5c91faf989837a49"
+    },
+    {
+      "original_path": "deno.json",
+      "archive": "resources/integration-freeze/deno.json",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "129c4a7a7d2cb6223a396506130718f9e68a5dc0c24f31e57e7847d06f6e7b4e"
+    },
+    {
+      "original_path": "deno.lock",
+      "archive": "resources/integration-freeze/deno.lock",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "d196e1b88846dfb8e3d82fc03171a4f0b420f5f40400ad44ebebf556fe95a77a"
+    },
+    {
+      "original_path": "vitest.config.ts",
+      "archive": "resources/integration-freeze/vitest.config.ts",
+      "purpose": "Current architecture/user documentation or actual frontend tool configuration used in final validation",
+      "sha256": "ffac1cff69e58a8cd7771c3fc4116e29e6360b3bc01f372ad627dead2d8bcaaf"
+    }
+  ]
+}

@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-003",
+  "case_id": "HTTP-RESPONSE-SELECT-001",
+  "executed_at": "2026-09-03 15:31:46 +08:00",
+  "base_commit": "f58e181",
+  "environment": {
+    "platform": "macOS arm64",
+    "application": "/Applications/Intercept Proxy.app",
+    "application_pid": 35652,
+    "executable_sha256": "6dc4a5b5dc00c8274ac5f106041691c48585e0d603b2bdf0cee252c476fb0c23"
+  },
+  "result": "PASS",
+  "checks": [
+    {
+      "command": "deno task test src/features/listeners/listeners-view.test.tsx src/features/listeners/listeners-view.certificates.test.tsx",
+      "result": "PASS",
+      "details": "2 files, 32 tests"
+    },
+    {
+      "command": "deno task typecheck",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task lint",
+      "result": "PASS"
+    },
+    {
+      "command": "git diff --check",
+      "result": "PASS"
+    },
+    {
+      "command": "deno task tauri build --bundles app",
+      "result": "PASS",
+      "details": "13 static pages and one macOS app bundle"
+    },
+    {
+      "command": "codesign --verify --deep --strict --verbose=2 /Applications/Intercept Proxy.app",
+      "result": "PASS"
+    },
+    {
+      "command": "live installed-app accessibility inspection",
+      "result": "PASS",
+      "details": "Three response options visible; legacy fixed-server switch absent"
+    }
+  ],
+  "retest": [
+    "deno task test src/features/listeners/listeners-view.test.tsx src/features/listeners/listeners-view.certificates.test.tsx",
+    "deno task typecheck",
+    "deno task lint",
+    "deno task tauri build --bundles app"
+  ],
+  "not_applicable": {
+    "network_packets": "UI-only change; runtime contract unchanged",
+    "remote_device": "UI-only change; A920MAX not affected",
+    "screenshot": "Live accessibility tree used instead",
+    "ci_push_release": "Local delivery only",
+    "adversarial_review": "Skipped by explicit user instruction for this low-risk task"
+  }
+}

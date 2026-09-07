@@ -1,0 +1,72 @@
+[
+  {
+    "kind": "request",
+    "request_id": "306215d8-ba5b-4218-b32e-1e9204c517bd",
+    "path": "inputs/request-01.bin",
+    "payload_bytes": 99,
+    "sha256": "8e4db761ef66d658bc9c51a6afd9d9f4ebba25c1ef5d5382e7a076a8a4a97728"
+  },
+  {
+    "kind": "request",
+    "request_id": "fe5f62cd-ab1d-4cc6-96bd-563c019cfdd5",
+    "path": "inputs/request-02.bin",
+    "payload_bytes": 1615,
+    "sha256": "45233d818af8ffed1f0718ec958c443d73dabca7ace6865d17848e9f7df1e995"
+  },
+  {
+    "kind": "request",
+    "request_id": "11f1f238-b0ee-41a9-84b6-a33a326c2092",
+    "path": "inputs/request-03.bin",
+    "payload_bytes": 1615,
+    "sha256": "06ce4d523fed56756d4155f590e574972881108b3abb4831851b58a2e49728a8"
+  },
+  {
+    "kind": "response",
+    "request_id": "306215d8-ba5b-4218-b32e-1e9204c517bd",
+    "path": "outputs/frames/response-01.bin",
+    "payload_bytes": 425,
+    "sha256": "2a0fa5a818fedd62f25ed841d07cca36a3f1de3c85d1745727960cbec665567e"
+  },
+  {
+    "kind": "response",
+    "request_id": "fe5f62cd-ab1d-4cc6-96bd-563c019cfdd5",
+    "path": "outputs/frames/response-02.bin",
+    "payload_bytes": 218,
+    "sha256": "7cacd92be2c3a918dcca19226827f20d249a99cfe845d0989b9feeacb4fa91c6"
+  },
+  {
+    "kind": "response",
+    "request_id": "11f1f238-b0ee-41a9-84b6-a33a326c2092",
+    "path": "outputs/frames/response-03.bin",
+    "payload_bytes": 561,
+    "sha256": "9648ea865b341618d7e6c0d5a3e22e22b1c4a7e8de691e11b3401afa8ccd786d"
+  },
+  {
+    "kind": "request",
+    "request_id": "82a93ec0-ec3c-4b71-b3c0-376df9d873fe",
+    "path": "inputs/request-04.bin",
+    "payload_bytes": 1608,
+    "sha256": "4fd17dc45008e83dd36645e791f2c41453dcab48c78c7fd635256184f996cc91"
+  },
+  {
+    "kind": "request",
+    "request_id": "afa7d08d-955b-48c3-81fa-500871b08197",
+    "path": "inputs/request-05.bin",
+    "payload_bytes": 1608,
+    "sha256": "e6693d9e985b7027ddc45a4964ed04a4c3f3e6a4b9d8877fb676cc04a457f51f"
+  },
+  {
+    "kind": "response",
+    "request_id": "82a93ec0-ec3c-4b71-b3c0-376df9d873fe",
+    "path": "outputs/frames/response-04.bin",
+    "payload_bytes": 561,
+    "sha256": "edc7878ffdd055728ff28dc1b1acfd92e945c3bd24b8907bded2c6a7afa4d023"
+  },
+  {
+    "kind": "response",
+    "request_id": "afa7d08d-955b-48c3-81fa-500871b08197",
+    "path": "outputs/frames/response-05.bin",
+    "payload_bytes": 561,
+    "sha256": "b5f7e23b332ef049d16fd76d3f1637c3dc9b47a53abd013126e40b047f23be2e"
+  }
+]

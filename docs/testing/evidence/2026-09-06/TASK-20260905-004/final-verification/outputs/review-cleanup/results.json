@@ -1,0 +1,50 @@
+[
+  {
+    "name": "frontend-tests",
+    "command": [
+      "deno",
+      "task",
+      "test",
+      "src/features/android-network/android-network-view.test.tsx",
+      "src/features/android-network/android-network-view.network-intent.test.tsx"
+    ],
+    "started_at": "2026-09-06T09:56:25.891043+08:00",
+    "finished_at": "2026-09-06T09:56:40.865972+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "started_at": "2026-09-06T09:56:40.866946+08:00",
+    "finished_at": "2026-09-06T09:56:45.295339+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "lint",
+    "command": [
+      "deno",
+      "task",
+      "lint",
+      "--max-warnings",
+      "0"
+    ],
+    "started_at": "2026-09-06T09:56:45.295816+08:00",
+    "finished_at": "2026-09-06T09:56:53.456302+08:00",
+    "exit_code": 0
+  },
+  {
+    "name": "diff-check",
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "started_at": "2026-09-06T09:56:53.457958+08:00",
+    "finished_at": "2026-09-06T09:56:53.521903+08:00",
+    "exit_code": 0
+  }
+]

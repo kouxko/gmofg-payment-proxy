@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-004",
+  "case_id": "http-upstream-commit",
+  "executed_at": "2026-09-06 00:49:07 +08:00",
+  "environment": {
+    "os": "Darwin 27.0.0 arm64",
+    "rustc": "1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "1.98.0 (797e8a9bc 2026-08-05)",
+    "manifest": "src-tauri/Cargo.toml"
+  },
+  "inputs": [
+    "complete request flush followed by a delayed response",
+    "pending request flush timeout",
+    "valid final response before request flush completion",
+    "cancellation and receipt owner drop",
+    "existing upstream HTTP and Socket relay regression suites"
+  ],
+  "expected": [
+    "Writer returns Committed immediately after confirmed flush",
+    "Reader continues waiting for the delayed response",
+    "failed flush emits no commit",
+    "early response returns ReadReady and remains readable",
+    "cancel and drop release completion channels",
+    "existing Socket behavior remains unchanged"
+  ],
+  "result": "PASS",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime upstream_write_commit --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime http::exchange_runtime::endpoints::tests --lib",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test upstream_http",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime socket_relay --lib",
+    "cargo check --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange -p intercept-proxy-runtime",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange -p intercept-proxy-runtime --lib --tests -- -D warnings"
+  ],
+  "outputs": [
+    "outputs/verification.txt"
+  ],
+  "additional_results": {
+    "proxy_library": "195 passed",
+    "raw_http_proxy": "19 passed"
+  },
+  "not_applicable": {
+    "ci": "Not requested for this subtask.",
+    "deployment": "No application deployment was performed.",
+    "external_service": "Deterministic in-process and local TCP test servers were used.",
+    "hashes": "No hashes were requested or generated."
+  }
+}

@@ -1,0 +1,12 @@
+RED commands:
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-exchange error::tests::structured_annotations_do_not_modify_the_human_message
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime socket_relay::raw_exchange::tests --lib
+
+Observed before implementation:
+error[E0432]: unresolved import `intercept_proxy_exchange::ErrorStage`
+error[E0599]: no function or associated item named `coded` found for struct `intercept_proxy_exchange::Error`
+error[E0609]: no field `code` on type `intercept_proxy_exchange::Error`
+error[E0609]: no field `stage` on type `intercept_proxy_exchange::Error`
+error[E0609]: no field `direction` on type `intercept_proxy_exchange::Error`
+
+Result: RED as expected; the structured contract did not exist.

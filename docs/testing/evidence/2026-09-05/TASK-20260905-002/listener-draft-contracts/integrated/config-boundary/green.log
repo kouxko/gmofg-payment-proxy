@@ -1,0 +1,4 @@
+{"file":"docs/testing/evidence/2026-09-05/TASK-20260905-001/integrated-verification/resources/src/features/listeners/listener-workspace-draft.ts","expected":{"included":false,"ignored":true},"actual":{"included":false,"ignored":true},"pass":true}
+{"file":"src/features/listeners/listener-workspace-draft.ts","expected":{"included":true,"ignored":false},"actual":{"included":true,"ignored":false},"pass":true}
+{"file":"src/features/listeners/listener-workspace-draft.test.ts","expected":{"included":true,"ignored":false},"actual":{"included":true,"ignored":false},"pass":true}
+{"file":"vitest.config.ts","expected":{"included":true,"ignored":false},"actual":{"included":true,"ignored":false},"pass":true}

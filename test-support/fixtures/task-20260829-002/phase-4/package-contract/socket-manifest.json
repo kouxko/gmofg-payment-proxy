@@ -1,0 +1,26 @@
+{
+  "api": 1,
+  "kind": "socket",
+  "package": {
+    "id": "iso8583",
+    "version": "1.0.0",
+    "name": "ISO 8583",
+    "description": "Socket package"
+  },
+  "document": {
+    "upstream": {
+      "schema": {
+        "type": "object",
+        "properties": {
+          "mti": { "type": "string", "title": "MTI" }
+        }
+      }
+    },
+    "downstream": {
+      "schema": {
+        "type": "array",
+        "items": { "type": "number" }
+      }
+    }
+  }
+}

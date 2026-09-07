@@ -1,0 +1,459 @@
+//! 代理配置及其领域校验。
+//!
+//! 监听地址、通道、上游、TLS、超时和容量都在这里形成唯一业务真相。无论入口是桌面
+//! UI、未来 TUI/CLI 还是测试，都必须经过同一套 Rust 校验。
+
+use crate::{ChannelId, DomainError, ErrorCode, Revision};
+use serde::{Deserialize, Serialize};
+use specta::Type;
+use std::net::IpAddr;
+
+pub const DEFAULT_TIMEOUT_MS: u64 = 70_000;
+pub const DEFAULT_MAX_BODY_BYTES: u64 = 4 * 1024 * 1024;
+pub const DEFAULT_MAX_SESSIONS: u32 = 500;
+pub const DEFAULT_MAX_MEMORY_BYTES: u64 = 256 * 1024 * 1024;
+pub const DEFAULT_UI_EVENT_CAPACITY: u32 = 4_096;
+pub const MAX_UI_EVENT_CAPACITY: u32 = 65_536;
+
+#[derive(Clone, Copy, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 当前产品允许选择的 TLS 协议版本。
+///
+/// 目前只允许 TLS 1.2，是明确的产品约束，不应由前端提供任意字符串。
+pub enum TlsVersion {
+    Tls12,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 一个监听通道的配置，例如“交易”或“DLL”。
+pub struct ChannelSettings {
+    /// 产品定义的稳定通道 ID，不等同于界面显示名称。
+    pub id: ChannelId,
+    /// 关闭后不创建监听器，但配置仍保留。
+    pub enabled: bool,
+    /// Proxy 在本机监听客户端连接的端口。
+    pub port: u16,
+    /// Proxy 转发到的 HTTPS 上游 origin，不允许携带业务路径或查询参数。
+    pub upstream_url: String,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 网络三个阶段各自的超时，单位均为毫秒。
+pub struct TimeoutSettings {
+    pub connect_ms: u64,
+    pub write_ms: u64,
+    pub read_ms: u64,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 防止内存或单条报文无限增长的容量上限。
+pub struct CapacitySettings {
+    pub max_sessions: u32,
+    pub max_memory_bytes: u64,
+    pub max_body_bytes: u64,
+    pub ui_event_capacity: u32,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 已保存且经过校验的完整代理设置。
+pub struct Settings {
+    pub revision: Revision,
+    pub bind_address: String,
+    pub channels: Vec<ChannelSettings>,
+    pub tls_version: TlsVersion,
+    pub follow_redirects: bool,
+    pub automatic_retries: bool,
+    pub rewrite_host: bool,
+    pub timeouts: TimeoutSettings,
+    pub capacity: CapacitySettings,
+    pub leaf_certificate_sans: Vec<String>,
+}
+
+impl Default for Settings {
+    fn default() -> Self {
+        Self {
+            revision: Revision::INITIAL,
+            bind_address: "0.0.0.0".into(),
+            channels: Vec::new(),
+            tls_version: TlsVersion::Tls12,
+            follow_redirects: false,
+            automatic_retries: false,
+            rewrite_host: true,
+            timeouts: TimeoutSettings {
+                connect_ms: DEFAULT_TIMEOUT_MS,
+                write_ms: DEFAULT_TIMEOUT_MS,
+                read_ms: DEFAULT_TIMEOUT_MS,
+            },
+            capacity: CapacitySettings {
+                max_sessions: DEFAULT_MAX_SESSIONS,
+                max_memory_bytes: DEFAULT_MAX_MEMORY_BYTES,
+                max_body_bytes: DEFAULT_MAX_BODY_BYTES,
+                ui_event_capacity: DEFAULT_UI_EVENT_CAPACITY,
+            },
+            leaf_certificate_sans: Vec::new(),
+        }
+    }
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// 用户准备提交的设置及其基准版本。
+pub struct SettingsDraft {
+    pub expected_revision: Revision,
+    pub values: Settings,
+}
+
+#[derive(Clone, Debug, Deserialize, Eq, PartialEq, Serialize, Type)]
+/// “磁盘已保存值”与“当前运行值”的并列快照。
+///
+/// 两者不同时 `restart_required` 为真，说明保存成功但必须重启代理才会生效。
+pub struct SettingsSnapshot {
+    pub stored: Settings,
+    pub effective: Option<Settings>,
+    pub restart_required: bool,
+}
+
+impl Settings {
+    /// 收集全部配置字段错误，而不是发现第一个错误就返回。
+    ///
+    /// 这样 UI/TUI 一次即可标出所有问题。此函数只验证，不修改原值。
+    pub fn validate(&self) -> Result<(), DomainError> {
+        let mut error = DomainError::new(ErrorCode::ConfigInvalid, "设置存在字段错误");
+        let bind_ip = self.bind_address.parse::<IpAddr>();
+        if bind_ip.is_err() {
+            error = error.with_field_error("bind_address", "绑定地址必须是有效 IP 地址");
+        }
+        let mut channel_ids = std::collections::BTreeSet::new();
+        let mut ports = std::collections::BTreeMap::new();
+        for channel in &self.channels {
+            if !channel_ids.insert(channel.id.as_str()) {
+                error = error.with_field_error(
+                    format!("channels.{}.id", channel.id.as_str()),
+                    "通道 ID 不能重复",
+                );
+            }
+            if channel.enabled
+                && let Some(existing) = ports.insert(channel.port, channel.id.as_str())
+            {
+                error = error.with_field_error(
+                    format!("channels.{}.port", channel.id.as_str()),
+                    format!("监听端口与通道 {existing} 重复"),
+                );
+            }
+            validate_channel(channel, &mut error);
+        }
+        if self.follow_redirects {
+            error = error.with_field_error("follow_redirects", "HTTP 重定向固定关闭");
+        }
+        if self.automatic_retries {
+            error = error.with_field_error("automatic_retries", "自动重试固定关闭");
+        }
+        if self.timeouts.connect_ms == 0
+            || self.timeouts.write_ms == 0
+            || self.timeouts.read_ms == 0
+        {
+            error = error.with_field_error("timeouts", "超时必须大于 0 毫秒");
+        }
+        if self.capacity.max_sessions == 0
+            || self.capacity.max_memory_bytes == 0
+            || self.capacity.max_body_bytes == 0
+            || self.capacity.ui_event_capacity == 0
+        {
+            error = error.with_field_error("capacity", "容量限制必须大于 0");
+        }
+        if self.capacity.ui_event_capacity > MAX_UI_EVENT_CAPACITY {
+            error = error.with_field_error(
+                "capacity.ui_event_capacity",
+                format!("UI 事件容量不能超过 {MAX_UI_EVENT_CAPACITY}"),
+            );
+        }
+        if let Ok(bind_ip) = bind_ip
+            && !bind_ip.is_unspecified()
+            && !self
+                .leaf_certificate_sans
+                .iter()
+                .any(|san| san == &self.bind_address)
+        {
+            error = error.with_field_error(
+                "leaf_certificate_sans",
+                "叶子证书 SAN 必须包含非通配绑定 IP",
+            );
+        }
+        if error.field_errors.is_empty() {
+            Ok(())
+        } else {
+            Err(error)
+        }
+    }
+
+    pub fn apply_draft(&mut self, draft: SettingsDraft) -> Result<Revision, DomainError> {
+        // 乐观锁保证调用方修改的是自己刚刚看到的版本；完整校验通过后才整体替换，
+        // 因而不会留下“只保存了一半字段”的中间状态。
+        self.revision.verify(draft.expected_revision)?;
+        draft.values.validate()?;
+        let next = self.revision.next();
+        *self = draft.values;
+        self.revision = next;
+        Ok(next)
+    }
+}
+
+fn validate_channel(channel: &ChannelSettings, error: &mut DomainError) {
+    if !channel.enabled {
+        return;
+    }
+    let prefix = format!("channels.{}", channel.id.as_str());
+    if channel.port == 0 {
+        *error = std::mem::replace(
+            error,
+            DomainError::new(ErrorCode::ConfigInvalid, "设置存在字段错误"),
+        )
+        .with_field_error(format!("{prefix}.port"), "端口必须大于 0");
+    }
+    if !is_valid_https_upstream_url(&channel.upstream_url) {
+        *error = std::mem::replace(
+            error,
+            DomainError::new(ErrorCode::ConfigInvalid, "设置存在字段错误"),
+        )
+        .with_field_error(
+            format!("{prefix}.upstream_url"),
+            "上游 URL 必须是 HTTPS origin（仅允许主机和可选端口）",
+        );
+    }
+}
+
+/// 判断字符串是否是可用于上游通道的 HTTPS origin。
+///
+/// 代理会原样转发下游 request-target，因此配置中的 path、query 或 fragment 无法安全
+/// 合并，只会被丢弃，必须拒绝。单个结尾 `/` 表示规范化空路径，允许使用。
+#[must_use]
+pub fn is_valid_https_upstream_url(value: &str) -> bool {
+    let Some(rest) = value.strip_prefix("https://") else {
+        return false;
+    };
+    if rest.is_empty() || rest.chars().any(char::is_whitespace) {
+        return false;
+    }
+    let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
+    let authority = &rest[..authority_end];
+    if authority.is_empty() || authority.contains('@') {
+        return false;
+    }
+    if !matches!(&rest[authority_end..], "" | "/") {
+        return false;
+    }
+
+    let host = if let Some(bracketed) = authority.strip_prefix('[') {
+        let Some(end) = bracketed.find(']') else {
+            return false;
+        };
+        let host = &bracketed[..end];
+        let suffix = &bracketed[end + 1..];
+        if !valid_optional_port(suffix) {
+            return false;
+        }
+        return host
+            .parse::<IpAddr>()
+            .is_ok_and(|address| matches!(address, IpAddr::V6(_)));
+    } else if let Some((host, port)) = authority.rsplit_once(':') {
+        if host.contains(':') || !valid_port(port) {
+            return false;
+        }
+        host
+    } else {
+        authority
+    };
+
+    host.parse::<IpAddr>().is_ok() || valid_dns_name(host)
+}
+
+fn valid_optional_port(value: &str) -> bool {
+    value.is_empty() || value.strip_prefix(':').is_some_and(valid_port)
+}
+
+fn valid_port(value: &str) -> bool {
+    value.parse::<u16>().is_ok_and(|port| port > 0)
+}
+
+fn valid_dns_name(value: &str) -> bool {
+    !value.is_empty()
+        && value.len() <= 253
+        && value.split('.').all(|label| {
+            !label.is_empty()
+                && label.len() <= 63
+                && !label.starts_with('-')
+                && !label.ends_with('-')
+                && label
+                    .bytes()
+                    .all(|byte| byte.is_ascii_alphanumeric() || byte == b'-')
+        })
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    fn valid_settings() -> Settings {
+        Settings {
+            channels: vec![
+                ChannelSettings {
+                    id: ChannelId::new("alpha").unwrap(),
+                    enabled: true,
+                    port: 20_001,
+                    upstream_url: "https://alpha.example.test".into(),
+                },
+                ChannelSettings {
+                    id: ChannelId::new("beta").unwrap(),
+                    enabled: true,
+                    port: 20_002,
+                    upstream_url: "https://beta.example.test/".into(),
+                },
+            ],
+            ..Settings::default()
+        }
+    }
+
+    // SETTINGS-002, SETTINGS-003, SETTINGS-004, SETTINGS-005, SETTINGS-007, SETTINGS-008
+    #[test]
+    fn defaults_are_frozen_and_safe() {
+        let defaults = Settings::default();
+        assert_eq!(defaults.bind_address, "0.0.0.0");
+        assert!(defaults.channels.is_empty());
+        assert_eq!(defaults.tls_version, TlsVersion::Tls12);
+        assert!(!defaults.follow_redirects);
+        assert!(!defaults.automatic_retries);
+        assert_eq!(defaults.timeouts.connect_ms, 70_000);
+        assert_eq!(defaults.capacity.max_sessions, 500);
+        assert_eq!(defaults.capacity.max_memory_bytes, 256 * 1024 * 1024);
+        assert_eq!(defaults.capacity.ui_event_capacity, 4_096);
+        assert!(defaults.capacity.ui_event_capacity <= MAX_UI_EVENT_CAPACITY);
+    }
+
+    #[test]
+    fn rejects_ui_event_capacity_that_could_preallocate_an_unbounded_channel() {
+        let mut settings = valid_settings();
+        settings.capacity.ui_event_capacity = MAX_UI_EVENT_CAPACITY + 1;
+
+        let error = settings.validate().expect_err("capacity must be bounded");
+
+        assert!(
+            error
+                .field_errors
+                .contains_key("capacity.ui_event_capacity")
+        );
+    }
+
+    // STATE-005, SETTINGS-012, TEST-SETTINGS
+    #[test]
+    fn validates_channels_ports_urls_and_certificate_san() {
+        let mut settings = valid_settings();
+        settings.bind_address = "192.168.1.10".into();
+        settings.channels[1].port = settings.channels[0].port;
+        let error = settings.validate().unwrap_err();
+        assert!(error.field_errors.contains_key("channels.beta.port"));
+        assert!(error.field_errors.contains_key("leaf_certificate_sans"));
+    }
+
+    // PROXY-001, SETTINGS-012: production upstream transport is HTTPS only.
+    #[test]
+    fn rejects_plain_http_upstream_urls() {
+        let mut settings = valid_settings();
+        settings.channels[0].upstream_url = "http://alpha.example.test".into();
+        let error = settings.validate().expect_err("http must be rejected");
+        assert!(
+            error
+                .field_errors
+                .contains_key("channels.alpha.upstream_url")
+        );
+    }
+
+    #[test]
+    fn rejects_https_urls_without_a_valid_authority() {
+        for invalid in [
+            "https://?query",
+            "https:///missing-host",
+            "https://user@example.test",
+            "https://bad host.test",
+            "https://example.test:0",
+            "https://-invalid.example.test",
+        ] {
+            assert!(
+                !is_valid_https_upstream_url(invalid),
+                "{invalid} must be rejected"
+            );
+        }
+        assert!(is_valid_https_upstream_url(
+            "https://transaction.example.test:443"
+        ));
+        assert!(is_valid_https_upstream_url("https://[::1]:8443/"));
+    }
+
+    #[test]
+    fn upstream_url_is_an_origin_and_cannot_discard_a_configured_request_target() {
+        for invalid in [
+            "https://example.test/api",
+            "https://example.test//",
+            "https://example.test/?mode=test",
+            "https://example.test?mode=test",
+            "https://example.test/#fragment",
+            "https://example.test#fragment",
+            "https://user:secret@example.test",
+            " https://example.test",
+            "https://example.test ",
+        ] {
+            assert!(
+                !is_valid_https_upstream_url(invalid),
+                "{invalid} must be rejected because downstream request-targets are preserved"
+            );
+        }
+
+        assert!(is_valid_https_upstream_url("https://example.test"));
+        assert!(is_valid_https_upstream_url("https://example.test/"));
+        assert!(is_valid_https_upstream_url("https://example.test:16627"));
+    }
+
+    #[test]
+    fn settings_save_rejects_non_origin_upstream_urls_without_mutating_stored_values() {
+        let mut stored = valid_settings();
+        let before = stored.clone();
+        let mut candidate = valid_settings();
+        candidate.channels[0].upstream_url = "https://alpha.example.test/base?mode=test".into();
+
+        let error = stored
+            .apply_draft(SettingsDraft {
+                expected_revision: Revision::INITIAL,
+                values: candidate,
+            })
+            .expect_err("a configured request target must not be silently discarded");
+
+        assert!(
+            error
+                .field_errors
+                .get("channels.alpha.upstream_url")
+                .is_some_and(|messages| messages.iter().any(|message| {
+                    message == "上游 URL 必须是 HTTPS origin（仅允许主机和可选端口）"
+                }))
+        );
+        assert_eq!(stored, before);
+    }
+
+    // ENGINE-008, SETTINGS-010
+    #[test]
+    fn settings_apply_uses_optimistic_revision_without_changing_effective_snapshot() {
+        let mut stored = valid_settings();
+        let effective = stored.clone();
+        let mut candidate = valid_settings();
+        candidate.channels[0].port = 20_003;
+        let revision = stored
+            .apply_draft(SettingsDraft {
+                expected_revision: Revision::INITIAL,
+                values: candidate,
+            })
+            .unwrap();
+        let snapshot = SettingsSnapshot {
+            restart_required: stored != effective,
+            stored,
+            effective: Some(effective),
+        };
+        assert_eq!(revision, Revision::new(2));
+        assert_eq!(snapshot.effective.unwrap().revision, Revision::INITIAL);
+    }
+}

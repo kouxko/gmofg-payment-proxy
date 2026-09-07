@@ -1,0 +1,50 @@
+{
+  "task_id": "TASK-20260829-001",
+  "case_id": "DB-SCHEMA-100-001",
+  "executed_at": "2026-08-29 10:46:46 +08:00",
+  "environment": "macOS Release application, default application data directory, SQLite WAL mode",
+  "result": "PASS",
+  "inputs": {
+    "pre_release_versions": [19, 20, 21, 99],
+    "formal_baseline_version": 100,
+    "future_version": 101,
+    "invalid_markers": ["empty", "wrong singleton", "multiple rows", "damaged value", "missing with view-only schema"]
+  },
+  "observed": {
+    "infrastructure_unit_tests": "648 passed",
+    "infrastructure_archive_tests": "24 passed",
+    "infrastructure_export_tests": "7 passed",
+    "infrastructure_import_token_tests": "8 passed",
+    "host_tests": "30 passed",
+    "strict_rust_static_analysis": "passed",
+    "rust_format": "passed",
+    "typescript_typecheck": "passed",
+    "architecture_gates": "passed",
+    "source_size_gate": "passed",
+    "release_application_build": "passed",
+    "release_application_startup": "passed",
+    "database_version_after_startup": 100,
+    "workspace_count_after_restart": 1,
+    "proxy_listener": "TCP 8765 listening",
+    "mcp_listener": "TCP 17653 listening on IPv4 and IPv6",
+    "workspace_ui": "rendered",
+    "independent_review": "P0=0, P1=0, P2=0"
+  },
+  "resources": {
+    "ui_screenshot": "outputs/workspace-ui.jpeg"
+  },
+  "not_applicable": [
+    "A version 100 to 101 migration is not defined by this task",
+    "Windows packaging is recorded by the subsequent CI run"
+  ],
+  "replay": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host",
+    "cargo clippy --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features -- -D warnings",
+    "cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check",
+    "pnpm typecheck",
+    "pnpm scan:architecture",
+    "pnpm scan:source-size",
+    "./scripts/run-latest-app.sh"
+  ]
+}

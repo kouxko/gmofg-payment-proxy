@@ -1,0 +1,44 @@
+{
+  "schema_version": 1,
+  "source_directory": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1",
+  "snapshot_directory": "resources/active-fixtures/environment_configuration_candidate_v1",
+  "snapshot_method": "byte-preserving apply_patch copy",
+  "files": [
+    {
+      "name": "existing-target-retained-selector.json",
+      "purpose": "Valid existing-target rule identity and retained selector contract",
+      "required": true
+    },
+    {
+      "name": "expected-preview.json",
+      "purpose": "Expected validation preview document shape",
+      "required": true
+    },
+    {
+      "name": "full-shape.json",
+      "purpose": "Canonical complete candidate input",
+      "required": true
+    },
+    {
+      "name": "literal-coverage.json",
+      "purpose": "Closed public literal coverage",
+      "required": true
+    },
+    {
+      "name": "negative-cases.json",
+      "purpose": "Named invalid candidate mutations and stable failures",
+      "required": true
+    },
+    {
+      "name": "schema.snapshot.json",
+      "purpose": "Manual published MCP tool and output schema snapshot",
+      "required": true
+    },
+    {
+      "name": "weak-network-null.json",
+      "purpose": "Required-present nullable WeakNetwork fields",
+      "required": true
+    }
+  ],
+  "result": "PASS"
+}

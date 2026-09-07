@@ -1,0 +1,32 @@
+{
+  "protected_saved_recovery": {
+    "stop_vpn_on_control_loss": true,
+    "entry_points": ["boot_job", "null_intent", "action_revalidate"],
+    "existing_registry_state": "any",
+    "expected": {
+      "admission": "waiting_for_desktop_control",
+      "enqueue_count": 0,
+      "generation_change": false,
+      "lease_change": false,
+      "startup_failure_counted": false
+    }
+  },
+  "unprotected_device_only_recovery": {
+    "stop_vpn_on_control_loss": false,
+    "route_count": 0,
+    "expected": {
+      "admission": "started",
+      "enqueue_count": 1,
+      "lease_armed": false
+    }
+  },
+  "explicit_desktop_start_after_wait": {
+    "owner_epoch": "desktop-epoch",
+    "lease_timeout_millis": 5000,
+    "expected": {
+      "heartbeat_accepted": true,
+      "expires_before_5000_millis": false,
+      "expires_at_5000_millis": true
+    }
+  }
+}

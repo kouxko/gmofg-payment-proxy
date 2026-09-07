@@ -1,0 +1,8 @@
+{
+  "examples/protocol-packages/nuvei_tango_rhai/manifest.toml": "5c26bf6245b5bbd62e9767630fd8a131b8796326d8061365c3728d7de9b55e5d",
+  "examples/protocol-packages/nuvei_tango_rhai/document.toml": "d44aa07530fc7c1e4f28ab38bde50885ba165a6fe10e6361e8938aa895a6d26e",
+  "examples/protocol-packages/nuvei_tango_rhai/protocol.rhai": "5a3d4918475f9499a8fa40bc91f0fb4cb24956d4ac93bd885d47ee1b6462dfa4",
+  "examples/protocol-packages/nuvei_tango_rhai/display.rhai": "7ba51fac9dd449f72650dc4cb622352779ff8187245de112d2c8e9e9c4839746",
+  "examples/protocol-packages/nuvei_tango_rhai/tests/fixtures/request.json": "078bba2d13cbf8a107c332c08c53790546677ffcb8466f6c4bec3ba169173bff",
+  "examples/protocol-packages/nuvei_tango_rhai/tests/fixtures/response.json": "91c1d16c2891b48a6591e51639ba6515d589f3695b886d7e269f3020728b4159"
+}

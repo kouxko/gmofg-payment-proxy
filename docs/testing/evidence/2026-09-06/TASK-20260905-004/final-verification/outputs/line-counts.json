@@ -1,0 +1,27 @@
+[
+  {
+    "file": "src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "physical_lines": 399,
+    "gate_lines": 400
+  },
+  {
+    "file": "src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "physical_lines": 298,
+    "gate_lines": 299
+  },
+  {
+    "file": "src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "physical_lines": 410,
+    "gate_lines": 411
+  },
+  {
+    "file": "src/features/android-network/android-network-view.test.tsx",
+    "physical_lines": 415,
+    "gate_lines": 416
+  },
+  {
+    "file": "src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "physical_lines": 444,
+    "gate_lines": 445
+  }
+]

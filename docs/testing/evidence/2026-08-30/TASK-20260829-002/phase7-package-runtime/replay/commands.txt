@@ -1,0 +1,25 @@
+pnpm test:task-20260829-002:phase7
+node --test scripts/check-task-20260829-002-phase4-contract.test.mjs
+pnpm check:task-20260829-002:phase4-contract
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib packages_websocket_uses_rpc_ceiling_but_rejects_rpc_plus_one
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib active_socket_failure_exposes_external_package_stable_code
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-package-runtime --all-targets --all-features
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --all-targets --all-features
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib
+pnpm check:bindings
+pnpm scan:architecture
+pnpm scan:source-size
+pnpm lint
+pnpm typecheck
+pnpm check:task-20260829-002:checkpoint
+cmp -s test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/inputs/inventory.json
+shasum -a 256 test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/inputs/inventory.json
+cmp -s test-support/fixtures/task-20260829-002/phase-4/package-contract/inventory.json docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/inputs/phase4-active-inventory.json
+shasum -a 256 test-support/fixtures/task-20260829-002/phase-4/package-contract/inventory.json docs/testing/evidence/2026-08-30/TASK-20260829-002/phase7-package-runtime/inputs/phase4-active-inventory.json
+git diff --check
+
+# Phase 6 RED replay: in a temporary detached worktree at
+# 56becb38decb5fc836d8274f65cc0a10b0761260, copy only the current Phase 7
+# transport test, checker, and inventory, then run:
+cargo test --quiet --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --test phase7_transport_contract
+node scripts/check-task-20260829-002-phase7-package-runtime.mjs

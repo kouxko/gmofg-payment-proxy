@@ -1,0 +1,6 @@
+PASS  Rule UI tests: 2 files, 14/14
+PASS  deno task typecheck
+PASS  deno task lint
+PASS  git diff --check
+PASS  deno task tauri build --bundles app
+PASS  installed app: blank name/priority still shows content, condition and action; save disabled

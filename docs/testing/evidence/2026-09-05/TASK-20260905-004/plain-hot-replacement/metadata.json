@@ -1,0 +1,29 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "plain-hot-replacement",
+  "red_executed_at": "2026-09-06 00:04:03 +08:00",
+  "green_executed_at": "2026-09-06 01:14:47 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure existing_plain_http_connection_switches_document_capability_after_hot_replacement -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure live_plain_keep_alive_connection_observes_document_rule_add_and_remove -- --nocapture"
+  ],
+  "expected": "The same client keep-alive connection passes non-JSON before rules, applies an added Document mutation, and passes non-JSON after removal.",
+  "actual_red": {"exit_code": 101, "tests_passed": 0, "tests_failed": 1, "error_code": "CONFIG_INVALID", "failed_phase": "same connection after Document rule addition"},
+  "actual_green": {
+    "capability_test": "1 passed, 0 failed",
+    "live_tcp_test": "1 passed, 0 failed",
+    "live_tcp_exchanges": [
+      {"sent": "plain-before", "origin_received": "plain-before", "client_received": "plain-before"},
+      {"sent": "{\"value\":\"old\"}", "origin_received": "{\"value\":\"created\"}", "client_received": "{\"value\":\"created\"}"},
+      {"sent": "plain-after", "origin_received": "plain-after", "client_received": "plain-after"}
+    ]
+  },
+  "evidence": ["README.md", "inputs/scenario.json", "outputs/red.log", "outputs/capability-green.txt", "outputs/live-tcp-green.txt"],
+  "not_applicable": {"external_package_tls_ui_device": "not exercised by this focused regression"},
+  "not_run": {
+    "full_workspace_clippy_guards": "root agent owns final whole-task verification",
+    "ci_commit_push_publish": "outside assigned scope"
+  }
+}

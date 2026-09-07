@@ -1,0 +1,11 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "typecheck"
+  ],
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "started_at": "2026-09-06T11:04:11.240324+08:00",
+  "completed_at": "2026-09-06T11:04:17.792091+08:00",
+  "exit_code": 0
+}

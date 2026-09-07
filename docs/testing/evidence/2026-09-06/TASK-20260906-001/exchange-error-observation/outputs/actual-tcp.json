@@ -1,0 +1,18 @@
+{
+  "source_log": "../runs/socket-green.log",
+  "source_line": "App input=03616263; Server received=[85, 97, 98, 99]; Server response=EOF; App response=[]; terminal=SocketRelayFailure { stage: RelayRead, direction: Some(ServerToClient), code: \"READ_FAILED\", external_package_call: None }; bytes=SocketRelayBytes { client_to_server_read: 4, client_to_server: 4, server_to_client_read: 0, server_to_client: 0 }",
+  "app_sent_hex": "03616263",
+  "server_received_hex": "55616263",
+  "server_result": "EOF before required response",
+  "app_received_bytes": 0,
+  "terminal_count": 1,
+  "code": "READ_FAILED",
+  "stage": "RelayRead",
+  "direction": "ServerToClient",
+  "byte_counts": {
+    "client_to_server_read": 4,
+    "client_to_server": 4,
+    "server_to_client_read": 0,
+    "server_to_client": 0
+  }
+}

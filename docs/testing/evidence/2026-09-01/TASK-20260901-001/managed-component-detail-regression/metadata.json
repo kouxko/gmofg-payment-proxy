@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260901-001",
+  "case_id": "managed-component-detail-regression",
+  "executed_at": "2026-09-01 23:18:03 +08:00",
+  "result": "VERIFIED",
+  "derived_from": {
+    "task_id": "TASK-20260901-001",
+    "case_id": "wasm-integrated-runtime",
+    "evidence": "docs/testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md"
+  },
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-application --lib requirements_tests::protocol_package_lifecycle::queries::managed_component_detail_omits_remote_connection_metadata -- --exact --nocapture",
+    "pnpm exec vitest run src/features/protocol-packages"
+  ],
+  "counts": {
+    "rust_passed": 1,
+    "rust_failed": 0,
+    "vitest_files_passed": 7,
+    "vitest_tests_passed": 77
+  },
+  "not_applicable": [
+    "new manual UI screenshot",
+    "network traffic",
+    "filesystem capability",
+    "outbound HTTP capability"
+  ]
+}

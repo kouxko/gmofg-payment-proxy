@@ -1,0 +1,14 @@
+Source: main-agent final validation summary.
+Exact execution time: not separately retained.
+
+PASS  Application unit tests: 211
+PASS  environment_configuration_contract: 14
+PASS  environment_configuration_document_contract: 7
+PASS  environment_configuration_negative_contract: 5
+PASS  remaining Application integration group: 12
+PASS  Application total: 249
+PASS  MCP filtered suite: 31 (62 filtered out)
+PASS  cargo clippy, strict -D warnings
+PASS  cargo fmt --check
+PASS  pnpm scan:architecture
+PASS  pnpm scan:source-size

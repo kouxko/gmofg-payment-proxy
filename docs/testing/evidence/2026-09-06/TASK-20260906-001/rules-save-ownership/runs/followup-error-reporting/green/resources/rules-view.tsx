@@ -1,0 +1,218 @@
+"use client";
+
+import { useEffect, useRef, useState } from "react";
+import { toast } from "@heroui/react";
+import type { RuleDefinitionSaveInput, RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+import { commands } from "@/generated/rust-types";
+import { useAppEventRefresh } from "@/features/shell/bootstrap-context";
+import { useWorkspaceNavigation } from "@/features/shell/workspace-navigation";
+import { appErrorViewModel, callCommand, errorMessage } from "@/lib/ipc/client";
+import { RuleCreationEditor } from "./rule-creation-editor";
+import { RuleDefinitionEditor } from "./rule-definition-editor";
+import { RuleDefinitionList } from "./rule-definition-list";
+import { RulesWorkspaceShell } from "./rules-workspace-shell";
+import { useRuleDefinitionSource } from "./use-rule-definition-source";
+
+export function RulesView() {
+  const source = useRuleDefinitionSource();
+  const { navigate, searchParams } = useWorkspaceNavigation();
+  const sourceExchangeId = searchParams.get("exchangeId");
+  const sourceResponseEvent = searchParams.get("responseEvent");
+  const [selected, setSelected] = useState<RuleDefinition_Serialize>();
+  const [input, setInput] = useState<RuleDefinitionSaveInput>();
+  const [context, setContext] = useState<RuleEditorContext>();
+  const [loadingEditor, setLoadingEditor] = useState(false);
+  const [pending, setPending] = useState(false);
+  const [creationOpen, setCreationOpen] = useState(false);
+  const [fieldErrors, setFieldErrors] = useState<Record<string, string[]>>({});
+  const editorGeneration = useRef(0);
+  const mutationPending = useRef(false);
+  const listener = source.listeners.find((item) => item.id === input?.draft.listener_id);
+  useAppEventRefresh(["rule_hit", "snapshot_required"], source.refresh);
+
+  useEffect(() => {
+    if (!sourceExchangeId || sourceResponseEvent == null) return;
+    const responseEventIndex = Number(sourceResponseEvent);
+    if (!Number.isSafeInteger(responseEventIndex) || responseEventIndex < 0) {
+      toast("抓包响应事件索引无效。", { variant: "danger" });
+      navigate("/rules");
+      return;
+    }
+    let active = true;
+    void callCommand(commands.ruleDefinitionCreateFromExchangeObservation(sourceExchangeId, responseEventIndex))
+      .then(async (draft) => {
+        const editorContext = await callCommand(commands.ruleEditorContext(draft.draft.listener_id));
+        if (!active) return;
+        editorGeneration.current += 1;
+        setCreationOpen(false);
+        setSelected(undefined);
+        setInput(draft);
+        setContext(editorContext);
+        setFieldErrors({});
+        navigate("/rules");
+      })
+      .catch((reason) => {
+        if (active) toast(errorMessage(reason), { variant: "danger" });
+      });
+    return () => { active = false; };
+  }, [navigate, sourceExchangeId, sourceResponseEvent]);
+
+  async function selectRule(rule: RuleDefinition_Serialize) {
+    const generation = ++editorGeneration.current;
+    setCreationOpen(false);
+    setLoadingEditor(true);
+    setFieldErrors({});
+    try {
+      const [definition, editorContext] = await Promise.all([
+        callCommand(commands.ruleDefinitionGet(rule.rule_id)),
+        callCommand(commands.ruleEditorContext(rule.listener_id)),
+      ]);
+      if (editorGeneration.current !== generation) return;
+      setSelected(definition);
+      setInput(toSaveInput(definition));
+      setContext(editorContext);
+    } catch (reason) {
+      if (editorGeneration.current === generation) toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      if (editorGeneration.current === generation) setLoadingEditor(false);
+    }
+  }
+
+  async function save(materialized: RuleDefinitionSaveInput) {
+    if (mutationPending.current) return;
+    const generation = editorGeneration.current;
+    mutationPending.current = true;
+    setPending(true);
+    try {
+      const saved = await callCommand(commands.ruleDefinitionSave(materialized));
+      if (editorGeneration.current === generation) {
+        setSelected(saved);
+        setInput(toSaveInput(saved));
+        setCreationOpen(false);
+        setFieldErrors({});
+      }
+      await source.refresh();
+      toast(`规则“${saved.name}”已保存。`, { variant: "success" });
+    } catch (reason) {
+      if (editorGeneration.current === generation) {
+        setFieldErrors(appErrorViewModel(reason)?.field_errors ?? {});
+      }
+      toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      mutationPending.current = false;
+      setPending(false);
+    }
+  }
+
+  async function copy() {
+    if (!selected || mutationPending.current) return;
+    const generation = editorGeneration.current;
+    mutationPending.current = true;
+    setPending(true);
+    try {
+      const copied = await callCommand(commands.ruleDefinitionCopy(selected.rule_id));
+      const editorContext = await callCommand(commands.ruleEditorContext(copied.listener_id));
+      if (editorGeneration.current === generation) {
+        setSelected(copied);
+        setInput(toSaveInput(copied));
+        setContext(editorContext);
+      }
+      await source.refresh();
+    } catch (reason) {
+      toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      mutationPending.current = false;
+      setPending(false);
+    }
+  }
+
+  async function remove() {
+    if (!selected || mutationPending.current) return;
+    const generation = editorGeneration.current;
+    mutationPending.current = true;
+    setPending(true);
+    try {
+      const result = await callCommand(commands.ruleDefinitionDelete(selected.rule_id, selected.revision, true));
+      if (!result.success || result.entity_id !== selected.rule_id) throw new Error("规则删除响应无效。");
+      if (editorGeneration.current === generation) {
+        setSelected(undefined);
+        setInput(undefined);
+        setContext(undefined);
+      }
+      await source.refresh();
+      toast(result.message, { variant: "success" });
+    } catch (reason) {
+      toast(errorMessage(reason), { variant: "danger" });
+    } finally {
+      mutationPending.current = false;
+      setPending(false);
+    }
+  }
+
+  return (
+    <div aria-label="统一规则工作区" className="h-full min-h-0 overflow-auto p-3">
+      <div className="h-full min-h-[42rem] max-[1280px]:h-auto">
+        <RulesWorkspaceShell>
+          <RuleDefinitionList
+            error={source.error}
+            loading={source.isLoading}
+            onNew={() => {
+              editorGeneration.current += 1;
+              setSelected(undefined);
+              setInput(undefined);
+              setContext(undefined);
+              setFieldErrors({});
+              setCreationOpen(true);
+            }}
+            onRefresh={() => void source.refresh()}
+            onSelect={(rule) => void selectRule(rule)}
+            pending={pending || loadingEditor}
+            rules={source.rules}
+            selectedId={selected?.rule_id}
+          />
+          {creationOpen ? <RuleCreationEditor
+            fieldErrors={fieldErrors}
+            listeners={source.listeners}
+            onCancel={() => {
+              editorGeneration.current += 1;
+              setCreationOpen(false);
+              setInput(undefined);
+              setContext(undefined);
+            }}
+            onSave={save}
+            pending={pending}
+          /> : <RuleDefinitionEditor
+            context={context}
+            fieldErrors={fieldErrors}
+            input={input}
+            listener={listener}
+            loading={loadingEditor}
+            onChange={(change) => {
+              setInput((current) => typeof change === "function" ? (current ? change(current) : current) : change);
+              setFieldErrors({});
+            }}
+            onCopy={() => void copy()}
+            onDelete={() => void remove()}
+            onSave={save}
+            pending={pending}
+          />}
+        </RulesWorkspaceShell>
+      </div>
+    </div>
+  );
+}
+
+function toSaveInput(rule: RuleDefinition_Serialize): RuleDefinitionSaveInput {
+  return {
+    rule_id: rule.rule_id,
+    expected_revision: rule.revision,
+    draft: {
+      name: rule.name,
+      enabled: rule.enabled,
+      priority: rule.priority,
+      listener_id: rule.listener_id,
+      stage: rule.stage,
+      content: rule.content,
+    },
+  };
+}

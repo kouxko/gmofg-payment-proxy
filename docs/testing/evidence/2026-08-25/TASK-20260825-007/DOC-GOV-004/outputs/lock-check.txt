@@ -1,0 +1,22 @@
+Command: bash replay/lock-protocol.sh
+
+initial_acquire=PASS
+wait_retry_1=LOCKED
+wait_retry_2=LOCKED
+wait_retry_3=LOCKED
+wrong_owner_release=REFUSED
+partial_state_release=REFUSED_LOCK_RETAINED
+owner_repair_and_release=PASS
+recovery_window_insertion=REFUSED
+inactive_owner_recovery=PASS
+missing_owner_recovery_window=REFUSED
+missing_owner_recovery=PASS
+damaged_owner_raw_preserved=PASS
+recovery_died_before_main_lock_takeover=PASS
+recovery_died_after_main_lock_takeover=PASS
+multi_generation_missing_and_damaged_recovery=PASS
+mismatched_recovered_from=REFUSED
+multiple_abandoned_dirs=REFUSED
+interrupted_target_collision=REFUSED
+normal_acquire_after_recovery=PASS
+result=PASS

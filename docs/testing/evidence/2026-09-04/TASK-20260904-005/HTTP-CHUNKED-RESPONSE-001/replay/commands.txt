@@ -1,0 +1,10 @@
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test raw_http_proxy keep_alive_request_forwards_chunked_close_response_without_header_conflict -- --exact --nocapture
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test raw_http_proxy conflicting_upstream_length_is_removed_when_transfer_encoding_is_present -- --exact
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test raw_http_proxy close_delimited_transfer_coding_is_reframed_as_chunked_downstream -- --exact
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test raw_http_proxy chunked_truncation_closes_without_a_terminal_chunk -- --exact
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --test fault_semantics custom_status_preserves_composite_transfer_encoding_without_content_length -- --exact
+cargo fmt --manifest-path src-tauri/Cargo.toml --all -- --check
+cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime
+cargo clippy --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --all-targets --all-features -- -D warnings
+deno task lint
+git diff --check

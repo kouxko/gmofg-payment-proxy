@@ -1,0 +1,65 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase19-flat-rule-ui-plain-body-runtime",
+  "executed_at": "2026-09-01 13:03:20 +08:00",
+  "result": "PASS_WITH_NOT_RUN",
+  "environment": {
+    "platform": "macOS arm64",
+    "app": "src-tauri/target/aarch64-apple-darwin/release/bundle/macos/Intercept Proxy.app",
+    "profile_root": "/tmp/gmofg-rule-round2.58al97/home",
+    "visual_profile_root": "/tmp/gmofg-rule-root-button/home",
+    "proxy_listener": "127.0.0.1:8080",
+    "server": "127.0.0.1:18083"
+  },
+  "tested_state": {
+    "rule_name": "Body age 18",
+    "stage": "proxy_to_upstream",
+    "condition": "/customer/age number equals 18",
+    "action": "record_match",
+    "ui_labels": {
+      "match_value": true,
+      "action_value": true,
+      "json_value": false
+    },
+    "http_action_parameters_own_row": true,
+    "document_root": {
+      "separate_button": false,
+      "manual_input": "/",
+      "rust_path": ""
+    }
+  },
+  "results": {
+    "match": "matched=true; record_match; HTTP 200",
+    "miss": "matched=false; operations=[]; HTTP 200",
+    "invalid_body": "JSON_INVALID at decode; exchange failed closed",
+    "frontend_focused": "4 files / 19 tests passed",
+    "full_frontend_before_final_layout_delta": "64 files / 534 tests passed",
+    "node_contracts": "31/31 passed",
+    "bundle": "arm64 build and strict ad-hoc codesign verification passed",
+    "cleanup": "no App/Sidecar/Server process; ports 8080/8765/17653/18083 released"
+  },
+  "resources": [
+    "inputs/match.json",
+    "inputs/miss.json",
+    "inputs/invalid.txt",
+    "outputs/runtime-readback.json",
+    "outputs/server-readback.json",
+    "outputs/workspace-readback.json",
+    "outputs/ui-accessibility-summary.json",
+    "outputs/rule-editor-text-labels.jpeg",
+    "outputs/http-action-parameters-own-row.jpeg",
+    "outputs/document-root-direct-input.png",
+    "steps/replay.md"
+  ],
+  "not_run": [
+    "external network and system permission prompts",
+    "Windows",
+    "Android",
+    "Developer ID signing and notarization",
+    "CI",
+    "push",
+    "release"
+  ],
+  "hash_contract": "N/A: user cancelled hash acceptance"
+}

@@ -1,0 +1,9 @@
+HTTP/1.1 200 OK
+Transfer-Encoding: gzip, chunked
+Connection: close
+
+7
+encoded
+0
+
+比较结果：保留 gzip coding 并追加下游实际使用的 chunked framing；无 Content-Length，Body 字节不变，连接错误为 None。

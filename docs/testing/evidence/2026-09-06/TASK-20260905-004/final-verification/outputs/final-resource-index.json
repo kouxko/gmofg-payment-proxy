@@ -1,0 +1,622 @@
+[
+  {
+    "source": "deno.json",
+    "snapshot": "resources/deno.json",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/architecture/data-flow.md",
+    "snapshot": "resources/docs/architecture/data-flow.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/architecture/exchange-pipeline.md",
+    "snapshot": "resources/docs/architecture/exchange-pipeline.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/architecture/modules.md",
+    "snapshot": "resources/docs/architecture/modules.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/architecture/rules-and-protocol-packages.md",
+    "snapshot": "resources/docs/architecture/rules-and-protocol-packages.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/architecture/runtime-observability.md",
+    "snapshot": "resources/docs/architecture/runtime-observability.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/requirements.md",
+    "snapshot": "resources/docs/requirements.md",
+    "byte_equal": true
+  },
+  {
+    "source": "docs/user-operation-guide.md",
+    "snapshot": "resources/docs/user-operation-guide.md",
+    "byte_equal": true
+  },
+  {
+    "source": "package.json",
+    "snapshot": "resources/package.json",
+    "byte_equal": true
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "byte_equal": true
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "byte_equal": true
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "byte_equal": true
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/Cargo.lock",
+    "snapshot": "resources/src-tauri/Cargo.lock",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/Cargo.toml",
+    "snapshot": "resources/src-tauri/Cargo.toml",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/environment_configuration/listener/materials.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/environment_configuration/listener/materials.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/listener_certificates/runtime_guards.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/listener_certificates/runtime_guards.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/workspace/listener_model/socket.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/workspace/listener_model/socket.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "snapshot": "resources/src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/endpoint.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/error.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/error.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/lib.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/local_server.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/local_server.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/observation.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/observation.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/support.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+    "snapshot": "resources/final-delta/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/body.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/body.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/http.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/capabilities.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/contracts.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/contracts.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/egress.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/egress.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/helpers.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/helpers.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/request_service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/request_service.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/response_write.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/response_write.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tracking.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tracking.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/upstream.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/upstream.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/wire.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/wire.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/lib.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "byte_equal": true
+  },
+  {
+    "source": "src/features/android-network/android-network-view.network-intent.test.tsx",
+    "snapshot": "resources/review-delta/src/features/android-network/android-network-view.network-intent.test.tsx",
+    "byte_equal": true
+  },
+  {
+    "source": "src/features/android-network/android-network-view.test.tsx",
+    "snapshot": "resources/final-delta/src/features/android-network/android-network-view.test.tsx",
+    "byte_equal": true
+  },
+  {
+    "source": "src/features/android-network/android-network-view.test-support.ts",
+    "snapshot": "resources/final-delta/src/features/android-network/android-network-view.test-support.ts",
+    "byte_equal": true
+  }
+]

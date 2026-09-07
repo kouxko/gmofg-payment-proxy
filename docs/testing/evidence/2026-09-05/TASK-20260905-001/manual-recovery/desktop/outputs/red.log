@@ -1,0 +1,40 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 53.73s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-ea420da7964faa6e)
+
+running 3 tests
+CONTROL_REQUEST {"version":2,"request_id":"00bab0bb-3215-4d92-b038-7b2e4ae41f84","operation":"status","payload":{}}
+CONTROL_REQUEST {"version":2,"request_id":"9793629b-dfd0-4630-b9fd-bc0727c41772","operation":"apply","payload":{"profile":{"auto_resume_after_reboot":false,"confirmed_shared_uids":[],"destination_targets":[],"id":"profile-manual","name":"profile-manual","proxy_routes":[{"destination":"203.0.113.10","listener_id":"588a1812-2a1d-47da-ab2d-f5f392ea48c1","ports":[443]}],"stop_vpn_on_control_loss":true,"target_applications":[],"weak_network":{"blackout_windows":[],"burst_loss":null,"corruption":{"bits_per_packet":0,"probability_basis_points":0},"dns_blackhole":false,"download_bytes_per_second":null,"duplicate_basis_points":0,"fixed_delay_millis":0,"maximum_reorder_hold_millis":0,"nth_tcp_flag_drops":[],"path_mtu":{"mode":"pass","mss_clamp":null,"mtu":null},"random_loss_basis_points":0,"reorder_basis_points":0,"seed":1,"uniform_jitter_millis":0,"upload_bytes_per_second":null}},"proxy_runtime":{"profile_fingerprint":"50cefa79c6d19521ebf556a2a09821f217f0d0cd4b65a36d41451e8812ebb873","route_count":1,"route_fingerprint":"0cea4572f45bb6c8f40d32adb98f501cbfacc80f8592266be631152f76d006a0","route_source":[{"desktop_listener_bind_address":"0.0.0.0","desktop_listener_port":8080,"listener_id":"588a1812-2a1d-47da-ab2d-f5f392ea48c1","listener_name":"Test listener","original_destination":"203.0.113.10","original_ports":[443]}],"routes":[{"listener_id":"588a1812-2a1d-47da-ab2d-f5f392ea48c1","original_destination":"203.0.113.10","original_ports":[443],"proxy_host":"192.168.1.20","proxy_port":8080,"resolved_original_ips":[]}]}}}
+CONTROL_REQUEST {"version":2,"request_id":"bc0f5301-e74e-411c-b498-a884039efbfa","operation":"apply","payload":{"profile":{"auto_resume_after_reboot":false,"confirmed_shared_uids":[],"destination_targets":[],"id":"profile-manual","name":"profile-manual","proxy_routes":[{"destination":"203.0.113.10","listener_id":"30e1edc8-c63b-46f9-b513-6dd39549a3f6","ports":[443]}],"stop_vpn_on_control_loss":true,"target_applications":[],"weak_network":{"blackout_windows":[],"burst_loss":null,"corruption":{"bits_per_packet":0,"probability_basis_points":0},"dns_blackhole":false,"download_bytes_per_second":null,"duplicate_basis_points":0,"fixed_delay_millis":0,"maximum_reorder_hold_millis":0,"nth_tcp_flag_drops":[],"path_mtu":{"mode":"pass","mss_clamp":null,"mtu":null},"random_loss_basis_points":0,"reorder_basis_points":0,"seed":1,"uniform_jitter_millis":0,"upload_bytes_per_second":null}},"proxy_runtime":{"profile_fingerprint":"9a932705b0b10396741c987f8888b8dc54f1db9816d1c8226f75c21eee4aa4e0","route_count":1,"route_fingerprint":"905e086183fbe265e0c8e5c73990ac575f5fb310bc8d881789657863d6912372","route_source":[{"desktop_listener_bind_address":"0.0.0.0","desktop_listener_port":8080,"listener_id":"30e1edc8-c63b-46f9-b513-6dd39549a3f6","listener_name":"Test listener","original_destination":"203.0.113.10","original_ports":[443]}],"routes":[{"listener_id":"30e1edc8-c63b-46f9-b513-6dd39549a3f6","original_destination":"203.0.113.10","original_ports":[443],"proxy_host":"192.168.1.20","proxy_port":8080,"resolved_original_ips":[]}]}}}
+CONTROL_RESPONSE {"error_code":"ANDROID_CONTROL_LEASE_REQUIRED","error_message":"protected apply requires current lease","ok":false,"request_id":"9793629b-dfd0-4630-b9fd-bc0727c41772","status":null,"version":2}
+CONTROL_RESPONSE {"error_code":"ANDROID_CONTROL_LEASE_REQUIRED","error_message":"protected apply requires current lease","ok":false,"request_id":"bc0f5301-e74e-411c-b498-a884039efbfa","status":null,"version":2}
+CONTROL_RESPONSE {"error_code":null,"error_message":null,"ok":true,"request_id":"00bab0bb-3215-4d92-b038-7b2e4ae41f84","status":{"active_profile_fingerprint":null,"active_profile_id":null,"active_route_count":0,"active_route_fingerprint":null,"companion_process_running":true,"message":"test control response","serial":"","state":"stopped","stats":null,"transport":"local_abstract_socket","unsupported_fields":[],"verified":true},"version":2}
+
+thread 'adapters::android_adb::tests::manual_recovery::stopped_owner_waits_until_explicit_apply_and_gets_a_new_lease_epoch' (4740015) panicked at crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:164:5:
+assertion `left == right` failed
+  left: Active
+ right: CleanupRequired
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'adapters::android_adb::tests::manual_recovery::active_lan_address_change_keeps_hot_apply_and_current_control_lease' (4740013) panicked at crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:193:5:
+assertion `left == right` failed
+  left: Faulted
+ right: Healthy
+
+thread 'adapters::android_adb::tests::manual_recovery::lan_recovery_queries_never_apply_without_active_runtime_ownership' (4740014) panicked at crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs:146:9:
+state=Active, runtime=false
+test adapters::android_adb::tests::manual_recovery::active_lan_address_change_keeps_hot_apply_and_current_control_lease ... FAILED
+test adapters::android_adb::tests::manual_recovery::stopped_owner_waits_until_explicit_apply_and_gets_a_new_lease_epoch ... FAILED
+test adapters::android_adb::tests::manual_recovery::lan_recovery_queries_never_apply_without_active_runtime_ownership ... FAILED
+
+failures:
+
+failures:
+    adapters::android_adb::tests::manual_recovery::active_lan_address_change_keeps_hot_apply_and_current_control_lease
+    adapters::android_adb::tests::manual_recovery::lan_recovery_queries_never_apply_without_active_runtime_ownership
+    adapters::android_adb::tests::manual_recovery::stopped_owner_waits_until_explicit_apply_and_gets_a_new_lease_epoch
+
+test result: FAILED. 0 passed; 3 failed; 0 ignored; 0 measured; 469 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p intercept-proxy-infrastructure --lib`

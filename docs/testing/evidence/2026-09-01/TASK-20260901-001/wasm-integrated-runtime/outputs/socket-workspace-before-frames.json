@@ -1,0 +1,96 @@
+{
+  "android_network_profiles": [],
+  "certificate_references": [],
+  "id": "d7c07776-6a6d-4834-9609-39b3584699be",
+  "listeners": [
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "socket",
+        "settings": {
+          "maximum_connections": 8,
+          "processing": {
+            "mode": "scripted",
+            "settings": {
+              "package": {
+                "id": "iso8583-ascii-standard",
+                "version": "1.0.0"
+              }
+            }
+          },
+          "runtime_limits": {
+            "diagnostic_event_capacity": 256,
+            "diagnostic_memory_bytes": 1048576,
+            "read_chunk_bytes": 16384
+          },
+          "topology": {
+            "mode": "relay",
+            "settings": {
+              "security": {
+                "mode": "transparent"
+              },
+              "upstream": {
+                "host": "127.0.0.1",
+                "port": 18084
+              }
+            }
+          }
+        }
+      },
+      "enabled": true,
+      "id": "71fb2c6e-b008-4f3d-a71b-804595305b91",
+      "name": "Phase21 Socket schema matrix",
+      "port": 8081,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    }
+  ],
+  "name": "默认 Workspace",
+  "revision": 11,
+  "rule_created_order_high_water": 1,
+  "rule_definitions": [
+    {
+      "content": {
+        "type": "socket",
+        "value": {
+          "action": {
+            "source": "document",
+            "value": {
+              "path": "/message_type",
+              "type": "set",
+              "value": "0100"
+            }
+          },
+          "condition": {
+            "path": "/message_type",
+            "predicate": {
+              "type": "string",
+              "value": {
+                "operator": "equal",
+                "value": "0200"
+              }
+            },
+            "source": "document"
+          },
+          "package": {
+            "id": "iso8583-ascii-standard",
+            "version": "1.0.0"
+          }
+        }
+      },
+      "created_order": 1,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "71fb2c6e-b008-4f3d-a71b-804595305b91",
+      "name": "MTI 0200 to 0100",
+      "priority": 10,
+      "revision": 1,
+      "rule_id": "31df5d54-4a74-4354-b647-64e7932530ee",
+      "stage": "proxy_to_upstream"
+    }
+  ]
+}

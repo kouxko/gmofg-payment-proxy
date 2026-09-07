@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "MANUAL-RECOVERY-001",
+  "result": "LOCAL_PASS_REVIEW_APPROVED_DEVICE_NOT_RUN",
+  "created_at": "2026-09-05 17:19:36 +08:00",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "android-contracts",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/android-contracts"
+  },
+  "user_decision": "wait for explicit desktop start/apply",
+  "verified_at": "2026-09-05 17:59:05 +08:00",
+  "review": "APPROVE",
+  "review_report": "independent-review.md",
+  "current_source_map": "verified-current-sources.json",
+  "tests": {
+    "application": 432,
+    "infrastructure": 474,
+    "focused_control": 5,
+    "android_jvm": 45,
+    "clippy_fmt_architecture_docs": "PASS",
+    "android_lint_release_signature_alignment_4abi": "PASS",
+    "device_instrumentation": "NOT_RUN: no attached device"
+  },
+  "final_apk": "android-atomic-hot-apply/resources/apk/android-companion-release.apk",
+  "final_apk_sha256": "ced81ae37ef0415f38dfe5d8d0d830a359bb6999ebc86a2b6a46536e03f3e1df",
+  "remaining": [
+    "real Android device acceptance"
+  ],
+  "known_unrelated": [
+    "six pre-existing source size violations"
+  ]
+}

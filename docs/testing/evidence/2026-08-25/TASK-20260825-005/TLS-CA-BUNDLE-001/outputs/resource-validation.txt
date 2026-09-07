@@ -1,0 +1,16 @@
+Executed at: 2026-08-25 20:44:12 +08:00
+Working directory: /Users/codin/Code/gmofg-payment-proxy
+
+OpenSSL 3.6.3 9 Jun 2026 (Library: OpenSSL 3.6.3 9 Jun 2026)
+
+subject=DC=com, DC=1dc, DC=ne, CN=First Data Latvia Internal CA
+issuer=CN=First Data Baltics root CA
+notBefore=May 26 13:10:45 2015 GMT
+notAfter=May 11 13:40:20 2035 GMT
+
+subject=CN=First Data Baltics root CA
+issuer=CN=First Data Baltics root CA
+notBefore=May 11 13:30:23 2015 GMT
+notAfter=May 11 13:40:20 2035 GMT
+
+/Users/codin/WxWork/WXWork Files/Caches/Files/2026-08/ed68a42df6b1bd43a067828a55d30f19/sub.pem: OK

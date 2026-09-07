@@ -1,0 +1,157 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260829-002",
+  "phase": 1,
+  "purpose": "Compileable GREEN baseline for the contracts that later TASK-20260829-002 phases replace.",
+  "checkpoint": {
+    "package_script": "check:task-20260829-002:checkpoint",
+    "commands": [
+      "deno task test:task-20260829-002:phase1",
+      "deno task check:bindings",
+      "deno task scan:architecture",
+      "deno task scan:source-size",
+      "deno task lint",
+      "deno task typecheck",
+      "deno task test",
+      "deno task check:rust:fmt",
+      "deno task check:rust:clippy",
+      "cargo test --manifest-path src-tauri/Cargo.toml --workspace --all-targets --all-features"
+    ],
+    "rules": [
+      "Every phase checkpoint keeps the touched Rust crates and workspace tests GREEN.",
+      "Every phase checkpoint keeps deno task typecheck GREEN.",
+      "A phase may introduce a temporary compile adapter only while that phase is active; no checkpoint may retain a second runtime behavior path.",
+      "The next phase starts only after the current phase has a local Git rollback point."
+    ]
+  },
+  "harnesses": [
+    {
+      "id": "domain-contract-tests",
+      "kind": "rust-integration-test",
+      "path": "src-tauri/crates/domain/tests/unified_rule_contract.rs",
+      "owner_phase": 3
+    },
+    {
+      "id": "protocol-package-tests",
+      "kind": "rust-integration-test",
+      "path": "src-tauri/crates/package-runtime/tests/phase13_builtin_package.rs",
+      "owner_phase": 13
+    },
+    {
+      "id": "infrastructure-contract-tests",
+      "kind": "rust-unit-test-module",
+      "path": "src-tauri/crates/infrastructure/src/sqlite/core.rs",
+      "owner_phase": 2
+    },
+    {
+      "id": "frontend-rule-order-model-tests",
+      "kind": "vitest",
+      "path": "src/features/rules/rule-definition-model.test.ts",
+      "owner_phase": 5,
+      "required_fragments": [
+        "groupRulesByStage",
+        "created_order"
+      ]
+    },
+    {
+      "id": "frontend-two-stage-model-tests",
+      "kind": "vitest",
+      "path": "src/features/rules/rule-definition-model.test.ts",
+      "owner_phase": 12,
+      "required_fragments": [
+        "RULE_STAGE_ORDER",
+        "\"proxy_to_upstream\"",
+        "\"proxy_to_app\""
+      ]
+    },
+    {
+      "id": "generated-types",
+      "kind": "typescript-generated-contract",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 3
+    }
+  ],
+  "baselines": [
+    {
+      "id": "database-schema-version-100",
+      "path": "src-tauri/crates/infrastructure/src/sqlite/schema.rs",
+      "owner_phase": 2,
+      "required_fragments": [
+        "COMPATIBILITY_BASELINE_SCHEMA_VERSION: i64 = 100",
+        "CURRENT_SCHEMA_VERSION: i64 = COMPATIBILITY_BASELINE_SCHEMA_VERSION"
+      ]
+    },
+    {
+      "id": "recursive-document-value",
+      "path": "src-tauri/crates/domain/src/document/model.rs",
+      "owner_phase": 3,
+      "required_fragments": [
+        "pub struct DocumentNumber(f64)",
+        "pub enum DocumentValue",
+        "Number(DocumentNumber)",
+        "Object(BTreeMap<String, DocumentValue>)",
+        "Array(Vec<DocumentValue>)"
+      ]
+    },
+    {
+      "id": "recursive-document-schema",
+      "path": "src-tauri/crates/domain/src/document/schema.rs",
+      "owner_phase": 3,
+      "required_fragments": [
+        "pub enum DocumentSchemaNode",
+        "properties: BTreeMap<String, DocumentSchemaNode>",
+        "items: Box<DocumentSchemaNode>"
+      ]
+    },
+    {
+      "id": "two-stage-document-rules",
+      "path": "src-tauri/crates/domain/src/protocol_document_rule.rs",
+      "owner_phase": 12,
+      "required_fragments": [
+        "pub enum ProtocolRuleStage",
+        "ProxyToUpstream",
+        "ProxyToApp"
+      ]
+    },
+    {
+      "id": "socket-specific-external-rpc",
+      "path": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/contract.rs",
+      "owner_phase": 7,
+      "required_fragments": [
+        "trait ExternalPackageRpc",
+        "request: FrameParams",
+        "ExternalSocketPackageBinding"
+      ]
+    },
+    {
+      "id": "generated-recursive-document-types",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 3,
+      "required_fragments": [
+        "export type Document = DocumentValue",
+        "export type DocumentSchemaNode =",
+        "properties: { [key in string]: DocumentSchemaNode_Deserialize }",
+        "items: DocumentSchemaNode_Deserialize",
+        "export type DocumentValue ="
+      ]
+    },
+    {
+      "id": "generated-two-stage-types",
+      "path": "src/generated/rust-types.ts",
+      "owner_phase": 12,
+      "required_fragments": [
+        "export type ProtocolRuleStage =",
+        "\"proxy_to_upstream\"",
+        "\"proxy_to_app\""
+      ]
+    },
+    {
+      "id": "cargo-workspace-future-crate-slot",
+      "path": "src-tauri/Cargo.toml",
+      "owner_phase": 4,
+      "required_fragments": [
+        "members = [\".\", \"crates/*\"]"
+      ]
+    }
+  ]
+}

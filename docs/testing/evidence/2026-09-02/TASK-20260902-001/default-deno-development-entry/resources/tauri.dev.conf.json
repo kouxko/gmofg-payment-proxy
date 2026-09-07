@@ -1,0 +1,10 @@
+{
+  "build": {
+    "beforeDevCommand": "pnpm dev"
+  },
+  "app": {
+    "security": {
+      "freezePrototype": false
+    }
+  }
+}

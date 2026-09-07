@@ -1,0 +1,17 @@
+{
+  "checked_at": "2026-09-06 15:33:27 +08:00",
+  "source_and_contract_files_verified": 1385,
+  "published_resource_files_verified": 290,
+  "mismatches": [],
+  "case_count": 5,
+  "pending_entry_count": 1,
+  "evidence_index_rows": 5,
+  "completed_index_entry_count": 0,
+  "task_links_and_parent_references": "PASS",
+  "live_architecture_documentation": "PASS",
+  "diff_check": "PASS",
+  "replay_script": "syntax and verify-only execution PASS",
+  "implemented_subset_review": "APPROVE / CLEAR",
+  "whole_task": "待确认：read_chunk_bytes cap not selected",
+  "source_changed_after_tests": false
+}

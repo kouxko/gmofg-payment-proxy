@@ -1,0 +1,18 @@
+[package]
+name = "intercept-proxy-traffic-observation"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+
+[dependencies]
+chrono.workspace = true
+intercept-proxy-application = { path = "../application" }
+intercept-proxy-runtime = { path = "../proxy" }
+serde_json.workspace = true
+uuid.workspace = true
+
+[dev-dependencies]
+bytes.workspace = true
+
+[lints]
+workspace = true

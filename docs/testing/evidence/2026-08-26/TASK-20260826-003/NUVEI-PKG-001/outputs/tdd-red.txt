@@ -1,0 +1,6 @@
+Command:
+PYTHONPATH=examples/external-packages/nuvei_tango_json python3 -m unittest discover -s examples/external-packages/nuvei_tango_json/tests -v
+
+Result: RED as expected
+- test_codec: ModuleNotFoundError: No module named 'nuvei_tango_json'
+- test_rpc: ModuleNotFoundError: No module named 'nuvei_tango_json'

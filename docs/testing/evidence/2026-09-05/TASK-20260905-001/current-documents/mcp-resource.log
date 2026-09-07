@@ -1,0 +1,23 @@
+    Blocking waiting for file lock on build directory
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+   Compiling intercept-proxy v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri)
+   Compiling intercept-proxy-package-contract v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-contract)
+   Compiling intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+   Compiling intercept-proxy-host v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/host)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `intercept-proxy` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 55s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy-e918842a7ee432af)
+
+running 1 test
+test mcp::tests::resources_include_authoring_manifest_and_official_component ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 132 filtered out; finished in 0.00s
+

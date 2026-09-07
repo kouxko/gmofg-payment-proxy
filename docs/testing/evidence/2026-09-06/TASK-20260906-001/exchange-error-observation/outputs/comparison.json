@@ -1,0 +1,8 @@
+{
+  "raw_app_input": "matches test literal 03616263",
+  "frame_decode_rules_encode": "ScriptedFactory length frame -> payload abc -> upstream prefix U -> 55616263",
+  "server_received": "byte-for-byte 55616263 as captured",
+  "response": "EOF; no response Frame was produced; no empty-frame placeholder written",
+  "terminal": "one downstream READ_FAILED / RelayRead / ServerToClient as asserted",
+  "result": "PASS"
+}

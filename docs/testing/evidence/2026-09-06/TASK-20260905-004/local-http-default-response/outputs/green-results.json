@@ -1,0 +1,10 @@
+[
+  {
+    "name": "connector-green",
+    "exit_code": 0
+  },
+  {
+    "name": "live-green",
+    "exit_code": 0
+  }
+]

@@ -1,0 +1,23 @@
+    Blocking waiting for file lock on build directory
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.39s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-ea420da7964faa6e)
+
+running 1 test
+test adapters::android_adb::tests::lease_heartbeat::same_serial_business_gate_does_not_block_real_heartbeat_path ... FAILED
+
+failures:
+
+---- adapters::android_adb::tests::lease_heartbeat::same_serial_business_gate_does_not_block_real_heartbeat_path stdout ----
+
+thread 'adapters::android_adb::tests::lease_heartbeat::same_serial_business_gate_does_not_block_real_heartbeat_path' (4263871) panicked at crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs:93:6:
+heartbeat must bypass the held same-serial business gate: Elapsed(())
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    adapters::android_adb::tests::lease_heartbeat::same_serial_business_gate_does_not_block_real_heartbeat_path
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 468 filtered out; finished in 0.52s
+
+error: test failed, to rerun pass `-p intercept-proxy-infrastructure --lib`

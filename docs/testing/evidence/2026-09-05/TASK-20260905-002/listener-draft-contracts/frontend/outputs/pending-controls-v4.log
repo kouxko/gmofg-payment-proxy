@@ -1,0 +1,10 @@
+Task test vitest run 'src/features/listeners/socket-listener-settings.test.tsx' 'src/features/listeners/use-listener-draft-transition.test.tsx' 'src/features/listeners/listener-editor.test.tsx'
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+
+
+ Test Files  3 passed (3)
+      Tests  39 passed (39)
+   Start at  16:33:13
+   Duration  5.72s (transform 3.25s, setup 688ms, import 5.28s, tests 4.16s, environment 1.98s)
+

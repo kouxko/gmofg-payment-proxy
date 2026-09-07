@@ -1,0 +1,630 @@
+[
+  {
+    "source": "deno.json",
+    "snapshot": "resources/deno.json",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/architecture/data-flow.md",
+    "snapshot": "resources/docs/architecture/data-flow.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/architecture/exchange-pipeline.md",
+    "snapshot": "resources/docs/architecture/exchange-pipeline.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/architecture/modules.md",
+    "snapshot": "resources/docs/architecture/modules.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/architecture/rules-and-protocol-packages.md",
+    "snapshot": "resources/docs/architecture/rules-and-protocol-packages.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/architecture/runtime-observability.md",
+    "snapshot": "resources/docs/architecture/runtime-observability.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/requirements.md",
+    "snapshot": "resources/docs/requirements.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "docs/user-operation-guide.md",
+    "snapshot": "resources/docs/user-operation-guide.md",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "package.json",
+    "snapshot": "resources/package.json",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.mjs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase10-http-pipeline.test.mjs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.mjs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "snapshot": "resources/scripts/check-task-20260829-002-phase11-socket-pipeline.test.mjs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/Cargo.lock",
+    "snapshot": "resources/src-tauri/Cargo.lock",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/Cargo.toml",
+    "snapshot": "resources/src-tauri/Cargo.toml",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/application/src/environment_configuration/listener/materials.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/environment_configuration/listener/materials.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/listener_certificates.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/listener_certificates/runtime_guards.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/listener_certificates/runtime_guards.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "snapshot": "resources/src-tauri/crates/application/src/requirements_tests/unified_rules.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/unified_rule/validation.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/workspace/listener_model.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/domain/src/workspace/listener_model/socket.rs",
+    "snapshot": "resources/src-tauri/crates/domain/src/workspace/listener_model/socket.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "snapshot": "resources/src-tauri/crates/domain/tests/unified_rule_contract.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/endpoint.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/error.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/error.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/lib.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/local_server.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/local_server.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/observation.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/observation.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/exchange/src/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/exchange/src/tests/support.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/bundle.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/document_rules.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/joint_socket_tests.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/programs.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document/error.rs",
+    "deleted": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/package_error.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/scripted.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/plan/socket_config.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/rule_program_compilation.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/live_plain_hot_replacement.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/unified_working_exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/core.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/mapping.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/message_projection.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/ports.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_actions.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor/evaluation.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/body.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/body.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/exchange_connector.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/pipeline.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/pipeline/drop_response.rs",
+    "deleted": true
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/http.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/service/lifecycle.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tests/connection_exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/forward/tunnel.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/capabilities.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/contracts.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/contracts.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/egress.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/egress.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/helpers.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/helpers.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/request_service.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/request_service.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/response_write.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/response_write.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/upstream_write_commit.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tests/write_commit.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/tracking.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/tracking.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/upstream.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/upstream.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/http/wire.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/http/wire.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/lib.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/lib.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/supervisor.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/listener/task_scope.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/reverse/dynamic_identity.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/handler.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/io.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/output_validation.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/processing.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/capabilities.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/io.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/protocol_exchange/server.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/raw_exchange/tests.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/remote_endpoint.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/socket_relay/tests/support.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/src/supervisor/tests/support.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/raw_http_proxy/support.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/tls_mtls.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/connection_faults.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/disconnects.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/limits.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "snapshot": "resources/src-tauri/crates/proxy/tests/upstream_http/support_and_fidelity.rs",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src/features/android-network/android-network-view.network-intent.test.tsx",
+    "snapshot": "resources/src/features/android-network/android-network-view.network-intent.test.tsx",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src/features/android-network/android-network-view.test-fixtures.ts",
+    "snapshot": "resources/src/features/android-network/android-network-view.test-fixtures.ts",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  },
+  {
+    "source": "src/features/android-network/android-network-view.test.tsx",
+    "snapshot": "resources/src/features/android-network/android-network-view.test.tsx",
+    "purpose": "final source, inline input/expected fixtures and toolchain contract"
+  }
+]

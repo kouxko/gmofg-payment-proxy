@@ -1,0 +1,69 @@
+{
+  "task_id": "TASK-20260905-004",
+  "case_id": "source-size-cleanup",
+  "executed_at": "2026-09-06 09:35:20 +08:00",
+  "result": "PASS",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "scope": [
+    "domain Listener model Socket DTO extraction",
+    "Application Listener certificate runtime guard test extraction",
+    "environment Listener material reference projection extraction",
+    "Android network view fixture and routing-intent test extraction"
+  ],
+  "before": {
+    "line_counts": [
+      545,
+      515,
+      503,
+      515
+    ],
+    "domain_workspace_tests": 31,
+    "listener_certificate_tests": 11,
+    "environment_configuration_tests": 212,
+    "android_network_view_tests": 18
+  },
+  "after": {
+    "line_counts": {
+      "listener_model.rs": 399,
+      "listener_model/socket.rs": 158,
+      "listener_certificates.rs": 298,
+      "listener_certificates/runtime_guards.rs": 220,
+      "environment_configuration/listener.rs": 410,
+      "environment_configuration/listener/materials.rs": 103,
+      "android-network-view.test.tsx": 415,
+      "android-network-view.network-intent.test.tsx": 260,
+      "android-network-view.test-fixtures.ts": 223
+    },
+    "domain_workspace_tests": 31,
+    "listener_certificate_tests": 11,
+    "environment_configuration_tests": 212,
+    "android_network_view_tests": 18,
+    "deno_check": "PASS",
+    "diff_check": "PASS"
+  },
+  "source_size_scan": {
+    "assigned_scope": "PASS",
+    "repository_result": "PASS"
+  },
+  "evidence": [
+    "README.md",
+    "outputs/domain-workspace-baseline.txt",
+    "outputs/domain-workspace-after.txt",
+    "outputs/application-listener-certificates-baseline.txt",
+    "outputs/application-listener-certificates-after.txt",
+    "outputs/application-environment-listener-baseline.txt",
+    "outputs/application-environment-listener-after.txt",
+    "outputs/android-network-view-baseline.txt",
+    "outputs/android-network-view-after.txt",
+    "outputs/source-size-scan.txt",
+    "resources/before/",
+    "resources/after/"
+  ],
+  "not_applicable": {
+    "protocol_frames_external_services_tls_screenshots_devices": "pure source responsibility split"
+  },
+  "not_run": {
+    "ci_commit_push_publish": "outside assigned scope",
+    "full_workspace_clippy": "root agent owns final verification after concurrent changes freeze"
+  }
+}

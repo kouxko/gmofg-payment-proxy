@@ -1,0 +1,38 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.23s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 1 test
+test http::contracts::tests::default_socket_policy_preserves_encode_error_location ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 200 filtered out; finished in 0.00s
+
+     Running tests/fault_semantics.rs (src-tauri/target/debug/deps/fault_semantics-b6385877dc89e1df)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 4 filtered out; finished in 0.00s
+
+     Running tests/raw_http_proxy.rs (src-tauri/target/debug/deps/raw_http_proxy-03642ff640266325)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 19 filtered out; finished in 0.00s
+
+     Running tests/reverse_listener.rs (src-tauri/target/debug/deps/reverse_listener-b95b0cbca9f43800)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 16 filtered out; finished in 0.00s
+
+     Running tests/tls_mtls.rs (src-tauri/target/debug/deps/tls_mtls-735d6eeb23ace9b1)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 6 filtered out; finished in 0.00s
+
+     Running tests/upstream_http.rs (src-tauri/target/debug/deps/upstream_http-d92d3acfba650ddc)
+
+running 0 tests
+
+test result: ok. 0 passed; 0 failed; 0 ignored; 0 measured; 7 filtered out; finished in 0.00s
+

@@ -1,0 +1,44 @@
+[
+  {
+    "content": {
+      "type": "socket",
+      "value": {
+        "action": {
+          "source": "document",
+          "value": {
+            "path": "/message_type",
+            "type": "set",
+            "value": "0100"
+          }
+        },
+        "condition": {
+          "path": "/message_type",
+          "predicate": {
+            "type": "string",
+            "value": {
+              "operator": "equal",
+              "value": "0200"
+            }
+          },
+          "source": "document"
+        },
+        "package": {
+          "id": "iso8583-ascii-standard",
+          "version": "1.0.0"
+        }
+      }
+    },
+    "created_order": 1,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 1,
+      "last_hit_at": "2026-09-01T14:44:41.264911Z"
+    },
+    "listener_id": "369912be-e793-4efc-b932-8e971d4c7fbe",
+    "name": "MTI 0200 to 0100",
+    "priority": 10,
+    "revision": 1,
+    "rule_id": "60b20eee-d6e1-4f55-9a30-c5d182486ed1",
+    "stage": "proxy_to_upstream"
+  }
+]

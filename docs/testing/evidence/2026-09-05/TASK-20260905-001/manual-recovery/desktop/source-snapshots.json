@@ -1,0 +1,57 @@
+[
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs",
+    "snapshot": "resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs",
+    "sha256": "3e8eab96f4a88033481e3d4f5758d9552e94b19412ddbe0d375925785c5c8701"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs",
+    "snapshot": "resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/owner.rs",
+    "sha256": "c549d494b788f7ad56881f93870b477904ef820782eca0b171c35a4a037230bf"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+    "snapshot": "resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests.rs",
+    "sha256": "bdc9ab3445734dee9e64ce78596dc67c966225bbc5fc532bae1babc0261a855b"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs",
+    "snapshot": "resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs",
+    "sha256": "931e5f22776f01b0f11f4fd7c6b7835ee30497aaf753feeabf0e3e2bb7b021a5"
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs",
+    "snapshot": "resources/after/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/runtime_endpoints.rs",
+    "sha256": "6872ed58f67d25893b2ded9231548bfc7836c6acdd07b7b9cf8368f343e54ea9"
+  },
+  {
+    "source": "src-tauri/crates/application/src/android.rs",
+    "snapshot": "resources/after/src-tauri/crates/application/src/android.rs",
+    "sha256": "ed6b51abc5b4e768329cdd7d198413a80618608004a48f046f35db4cfa2e5593"
+  },
+  {
+    "source": "src-tauri/crates/application/src/android/tests.rs",
+    "snapshot": "resources/after/src-tauri/crates/application/src/android/tests.rs",
+    "sha256": "ba530d1fad992c640f98a382e00a8627ed005aa89fffa8af329c410059a19d94"
+  },
+  {
+    "source": "android-companion/README.md",
+    "snapshot": "resources/after/android-companion/README.md",
+    "sha256": "f6f0171b751889d26b1ed861558f8c1cb3b62e71c779389f61c786f32a56608b"
+  },
+  {
+    "source": "docs/requirements.md",
+    "snapshot": "resources/after/docs/requirements.md",
+    "sha256": "34aea9dd0d196f556594cd5f689d7d7dded8eb2d1b7be5612b2cf1b54e987aad"
+  },
+  {
+    "source": "docs/architecture/android-vpn-transparent-routing.md",
+    "snapshot": "resources/after/docs/architecture/android-vpn-transparent-routing.md",
+    "sha256": "07709460387cef2aec7c2798de9d6fe9470e6e578202600feb765b8239481b4f"
+  },
+  {
+    "source": "docs/user-operation-guide.md",
+    "snapshot": "resources/after/docs/user-operation-guide.md",
+    "sha256": "91722e08b75d12ff371f47d8e512be1865aa3690bf4c28161c272ac3375c1b8b"
+  }
+]

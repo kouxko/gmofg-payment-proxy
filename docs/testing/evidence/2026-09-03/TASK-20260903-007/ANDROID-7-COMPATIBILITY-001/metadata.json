@@ -1,0 +1,52 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-007",
+  "case_id": "ANDROID-7-COMPATIBILITY-001",
+  "executed_at": "2026-09-03 16:36:05 +08:00",
+  "environment": {
+    "platform": "macOS arm64",
+    "commit": "167192a6b85992170c692279871c13965db4aaff",
+    "agp": "9.0.0",
+    "gradle": "9.1.0",
+    "compile_sdk": 36,
+    "target_sdk": 36,
+    "minimum_sdk": 24
+  },
+  "result": "PASS_WITH_ANDROID_7_RUNTIME_NOT_RUN",
+  "checks": [
+    { "name": "jvm_unit_tests", "result": "PASS", "detail": "8 classes, 28 tests" },
+    { "name": "lint_release", "result": "PASS", "detail": "0 errors, 5 pre-existing warnings, no NewApi finding" },
+    { "name": "rust_android_api24_four_abis", "result": "PASS" },
+    { "name": "main_release_apk", "result": "PASS", "detail": "sdkVersion 24, targetSdkVersion 36" },
+    { "name": "probe_apks", "result": "PASS", "detail": "both sdkVersion 24" },
+    { "name": "signer_abi_alignment_gate", "result": "PASS" },
+    { "name": "tauri_staged_apk", "result": "PASS", "detail": "byte-identical to verified release APK" },
+    { "name": "independent_code_review", "result": "PASS", "detail": "APPROVE after production branches reused the tested API-level policy" },
+    { "name": "android_7_runtime", "result": "NOT_RUN", "detail": "no API 24 or 25 device/AVD available" },
+    { "name": "ci", "result": "NOT_RUN", "detail": "not requested" }
+  ],
+  "apk": {
+    "build_path": "android-companion/app/build/outputs/apk/release/app-release.apk",
+    "staged_path": "src-tauri/resources/android-companion.apk",
+    "size_bytes": 34841581,
+    "sha256": "5fa98df0dda2c856bafd4d18f3992cd6351420248416d899edcb40ecbb1696aa",
+    "abis": ["arm64-v8a", "armeabi-v7a", "x86", "x86_64"]
+  },
+  "subject_sha256": {
+    "android-companion/app/build.gradle.kts": "994497e946a2994b9787c47398ff3c64be4f1fd22be5b5a864b4f43fc9f72ef9",
+    "android-companion/isolation-probe/build.gradle.kts": "35f26edcbc7daa6e694e486c662442e78093cf4e79025b2c37a086da53fd797d",
+    "android-companion/target-probe/build.gradle.kts": "c7fb27c83a585c564a0c52bbea937dddeb4a1d519bad7fb49cf025a97e9949fd",
+    "android-companion/scripts/build-rust-android.sh": "d59e7371d4392d2763bba961b70aace8ce6bbf90a64b4f1a32300d269f5c7518",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/AndroidPlatformCompatibility.kt": "b284a3c7a3b8fd854303d56d52b16741c768f692c30896090aceba1c741ae7af",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/AdbControlActivity.kt": "c22ed2baa8e4e39cf8b576523a93d3cbfdc785f37dcbc3a4c64357cb53f24f32",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/CompanionControlServer.kt": "e658ddc953a34238914ff5da06384bd3123063c26cbcf89b199a3a823a4c55d8",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/ResumeVpnJobService.kt": "898e9667e67e27bb0d820b372478138deee959dbf3cf1a70ae5ea23d96584e69",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnForegroundNotification.kt": "ea25cfa53f2667393a1df8837989acc85858dc5c539bc330426f987c5359b66f",
+    "android-companion/app/src/test/java/com/interceptproxy/vpn/AndroidPlatformCompatibilityTest.kt": "77aab73b11351eafde149900f6a9e3c9155e506de8ecb1973e02e1e9cef7ccc2"
+  },
+  "not_applicable": {
+    "business_protocol": "no desktop listener or protocol behavior changed",
+    "screenshots": "no visual UI change",
+    "archived_apk_copy": "standard build and staged paths are byte-identical; evidence records size and SHA-256"
+  }
+}

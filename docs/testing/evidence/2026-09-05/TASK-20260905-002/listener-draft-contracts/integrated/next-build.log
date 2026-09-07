@@ -1,0 +1,31 @@
+Task build next build
+▲ Next.js 16.2.12 (Turbopack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 7.6s
+  Running TypeScript ...
+  Finished TypeScript in 6.2s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/13) ...
+  Generating static pages using 7 workers (3/13) 
+  Generating static pages using 7 workers (6/13) 
+  Generating static pages using 7 workers (9/13) 
+✓ Generating static pages using 7 workers (13/13) in 255ms
+  Finalizing page optimization ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /android-network
+├ ○ /capture
+├ ○ /certificates
+├ ○ /diagnostics
+├ ○ /listeners
+├ ○ /protocol-packages
+├ ○ /rules
+├ ○ /settings
+└ ○ /workspaces
+
+
+○  (Static)  prerendered as static content
+

@@ -1,0 +1,11 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "typecheck"
+  ],
+  "started_at": "2026-09-06T09:52:24.975566+08:00",
+  "finished_at": "2026-09-06T09:52:29.615386+08:00",
+  "exit_code": 0,
+  "reason": "Archive delta snapshot moved under the existing resources directory convention. tsconfig and source unchanged."
+}

@@ -1,0 +1,40 @@
+{
+  "raw_malformed_websocket": {
+    "expected_offending_connection": "EXTERNAL_PACKAGE_TRANSPORT_ERROR",
+    "actual_offending_connection": "EXTERNAL_PACKAGE_TRANSPORT_ERROR",
+    "expected_healthy_package_result": {"status": "need_more"},
+    "actual_healthy_package_result": {"status": "need_more"},
+    "result": "PASS"
+  },
+  "oversized_consumed_bytes": {
+    "expected_malformed_business_response_hex": "",
+    "actual_malformed_business_response_hex": "",
+    "package_online_after_failure": true,
+    "listener_running_after_failure": true,
+    "expected_follow_up_response_hex": "03 78 79",
+    "actual_follow_up_response_hex": "03 78 79",
+    "result": "PASS"
+  },
+  "registration_timeout": {
+    "initial_write_bounded": true,
+    "heartbeat_flush_bounded": true,
+    "heartbeat_send_bounded": true,
+    "response_wait_bounded": true,
+    "stable_method": "package.register",
+    "result": "PASS"
+  },
+  "package_independence": {
+    "malformed_package_does_not_block_healthy_package": true,
+    "stalled_package_does_not_consume_healthy_package_capacity": true,
+    "failed_package_cleanup_does_not_stop_healthy_package_progress": true,
+    "result": "PASS"
+  },
+  "accepted_connection_limit": {
+    "maximum": 256,
+    "at_capacity": "fail_fast",
+    "stable_diagnostic_code": "EXTERNAL_PACKAGE_CONNECTION_LIMIT_REACHED",
+    "permit_released_after_handshake_failure": true,
+    "permit_released_after_connection_exit": true,
+    "result": "PASS"
+  }
+}

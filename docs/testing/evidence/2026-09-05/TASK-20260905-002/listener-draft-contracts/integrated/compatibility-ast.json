@@ -1,0 +1,20 @@
+{
+  "result": "PASS",
+  "comparison_base": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+  "legacy_command_count": 111,
+  "added_commands": [
+    "listenerDraftCopy",
+    "listenerDraftTransition",
+    "listenerDraftValidate"
+  ],
+  "removed_commands": [],
+  "changed_existing_command_declarations": [],
+  "protected_paths_unchanged": [
+    "src-tauri/crates/domain",
+    "src/features/shared/protocol-safe-display.tsx",
+    "src/features/shared/protocol-safe-display.test.tsx",
+    "src-tauri/crates/package-runtime",
+    "src-tauri/crates/infrastructure/src/sqlite"
+  ],
+  "method": "TypeScript AST exact command declarations and targeted git diff; not a runtime acceptance claim"
+}

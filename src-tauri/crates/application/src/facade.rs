@@ -1,0 +1,198 @@
+//! 与界面无关的应用用例门面。
+//!
+//! `Application` 是桌面 UI、未来 TUI/CLI 和无界面测试共同入口。它仅依赖端口 trait，
+//! 不知道 Tauri、WebView 或具体数据库；实现按规则、设置、流量、校验分在子模块中。
+
+use std::{collections::BTreeMap, sync::Arc};
+
+use chrono::Utc;
+
+use crate::{
+    AndroidControlPort, AppError, AppResult, ApplicationBundleReplacementPort,
+    BuiltinProtocolPackagePort, CertificateOverviewViewModel, CertificateServicePort,
+    CertificateValidationViewModel, ChannelPresentationViewModel, EventHub,
+    ExternalPackageApplicationPort, FaultServicePort, ListenerCertificateImportPort,
+    ListenerRuntimePort, OperationResultViewModel, ProtectedSecretPort,
+    ProtocolPackageApplicationServices, ProtocolPackageImportPort, ProtocolPackageUsageQueryPort,
+    SessionQueryPort, SettingsRepositoryPort, SettingsViewModel, UiEventPayload,
+    WorkspaceRepositoryPort,
+};
+
+mod android;
+mod application_backup;
+mod application_backup_import;
+mod application_snapshot;
+mod bootstrap;
+mod certificate_portability;
+mod certificates;
+mod configuration;
+mod diagnostic_report;
+mod diagnostics;
+mod environment_candidates;
+mod exchange_observations;
+pub use exchange_observations::ExchangeObservationQueries;
+mod lifecycle;
+mod listener_certificates;
+mod listeners;
+mod protocol_package_portability;
+pub use protocol_package_portability::validate_portable_protocol_bindings;
+mod protocol_packages;
+mod protocol_rule_values;
+mod rule_capabilities;
+mod rules;
+mod secrets;
+mod settings;
+pub use protocol_rule_values::parse_protocol_rule_value;
+mod traffic;
+mod unified_rule_editor;
+mod unified_rules;
+mod validation;
+mod workspaces;
+
+use validation::{normalize_sans, require_confirmation};
+
+/// 全部业务用例的统一入口。
+///
+/// 调用者应通过公开用例方法操作，不能绕过权限检查、事件发布和事务顺序直接使用端口。
+pub struct Application {
+    product_name: String,
+    capture: Arc<dyn crate::CaptureRepositoryPort>,
+    sessions: Arc<dyn SessionQueryPort>,
+    faults: Arc<dyn FaultServicePort>,
+    certificates: Arc<dyn CertificateServicePort>,
+    settings: Arc<dyn SettingsRepositoryPort>,
+    workspaces: Arc<dyn WorkspaceRepositoryPort>,
+    android: Arc<dyn AndroidControlPort>,
+    /// 按设备序列号隔离的完整应用清单缓存。缓存不是运行所有权来源。
+    android_package_cache:
+        tokio::sync::Mutex<BTreeMap<String, Vec<crate::AndroidPackageViewModel>>>,
+    listener_runtime: Arc<dyn ListenerRuntimePort>,
+    listener_certificates: Arc<dyn ListenerCertificateImportPort>,
+    protocol_package_importer: Arc<dyn ProtocolPackageImportPort>,
+    protocol_package_builtin: Arc<dyn BuiltinProtocolPackagePort>,
+    protocol_package_usage: Arc<dyn ProtocolPackageUsageQueryPort>,
+    external_packages: Arc<dyn ExternalPackageApplicationPort>,
+    bundle_replacement: Arc<dyn ApplicationBundleReplacementPort>,
+    protected_secrets: Arc<dyn ProtectedSecretPort>,
+    events: Arc<EventHub>,
+    mutation_gate: Arc<crate::coordination::ConfigurationMutationCoordinator>,
+    environment: crate::environment_configuration::EnvironmentConfigurationService,
+}
+
+impl std::fmt::Debug for Application {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("Application")
+            .field("product_name", &self.product_name)
+            .finish_non_exhaustive()
+    }
+}
+
+/// 应用门面所需的全部、与 UI 无关的依赖。
+///
+/// 使用具名字段而不是十几个位置参数，使桌面、TUI、CLI 和无界面测试的装配代码容易
+/// 阅读，也避免交换两个同类型依赖。每个具体能力仍由独立端口约束。
+pub struct ApplicationDependencies {
+    pub capture: Arc<dyn crate::CaptureRepositoryPort>,
+    pub sessions: Arc<dyn SessionQueryPort>,
+    pub faults: Arc<dyn FaultServicePort>,
+    pub certificates: Arc<dyn CertificateServicePort>,
+    pub settings: Arc<dyn SettingsRepositoryPort>,
+    pub workspaces: Arc<dyn WorkspaceRepositoryPort>,
+    pub listener_runtime: Arc<dyn ListenerRuntimePort>,
+    pub listener_certificates: Arc<dyn ListenerCertificateImportPort>,
+    pub protocol_packages: ProtocolPackageApplicationServices,
+    pub events: Arc<EventHub>,
+    pub environment_baseline_capture: Arc<dyn crate::EnvironmentApplyBaselineCapturePort>,
+    pub environment_identity_allocator: crate::EnvironmentIdentityAllocator,
+    pub environment_apply_lease: Arc<dyn crate::EnvironmentApplyLeasePort>,
+    pub environment_material_preparer: Arc<dyn crate::EnvironmentProtectedMaterialPreparePort>,
+    pub environment_commit: Arc<dyn crate::EnvironmentCommitPort>,
+    pub environment_validator: Arc<dyn crate::EnvironmentValidationLayerPort>,
+}
+
+impl std::fmt::Debug for ApplicationDependencies {
+    fn fmt(&self, formatter: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        formatter
+            .debug_struct("ApplicationDependencies")
+            .finish_non_exhaustive()
+    }
+}
+
+impl Application {
+    pub fn new(
+        product_name: String,
+        dependencies: ApplicationDependencies,
+        android: Arc<dyn AndroidControlPort>,
+        protected_secrets: Arc<dyn ProtectedSecretPort>,
+    ) -> Self {
+        let mutation_gate =
+            Arc::new(crate::coordination::ConfigurationMutationCoordinator::default());
+        let environment = crate::environment_configuration::EnvironmentConfigurationService::new(
+            dependencies.workspaces.clone(),
+            dependencies.events.clone(),
+            mutation_gate.clone(),
+            crate::EnvironmentConfigurationApplicationServices {
+                baseline_capture: dependencies.environment_baseline_capture,
+                identity_allocator: dependencies.environment_identity_allocator,
+                apply_lease: dependencies.environment_apply_lease,
+                material_preparer: dependencies.environment_material_preparer,
+                commit: dependencies.environment_commit,
+                validator: dependencies.environment_validator,
+            },
+        );
+        Self {
+            product_name,
+            capture: dependencies.capture,
+            sessions: dependencies.sessions,
+            faults: dependencies.faults,
+            certificates: dependencies.certificates,
+            settings: dependencies.settings,
+            workspaces: dependencies.workspaces,
+            android,
+            android_package_cache: tokio::sync::Mutex::new(BTreeMap::new()),
+            listener_runtime: dependencies.listener_runtime,
+            listener_certificates: dependencies.listener_certificates,
+            protocol_package_importer: dependencies.protocol_packages.importer,
+            protocol_package_builtin: dependencies.protocol_packages.builtin,
+            protocol_package_usage: dependencies.protocol_packages.usage_query,
+            external_packages: dependencies.protocol_packages.external,
+            bundle_replacement: dependencies.protocol_packages.application_bundle,
+            protected_secrets,
+            events: dependencies.events,
+            mutation_gate,
+            environment,
+        }
+    }
+
+    fn publish_certificate(&self, overview: &CertificateOverviewViewModel) {
+        self.events.publish(
+            None,
+            Utc::now(),
+            Some("certificates".into()),
+            Some(overview.revision),
+            UiEventPayload::CertificateStatusChanged(overview.clone()),
+        );
+    }
+
+    fn publish_settings(&self, settings: &SettingsViewModel) {
+        self.events.publish(
+            None,
+            Utc::now(),
+            Some("settings".into()),
+            Some(settings.revision),
+            UiEventPayload::SettingsChanged(Box::new(settings.clone())),
+        );
+    }
+
+    async fn ensure_proxy_stopped_for_write(&self) -> AppResult<()> {
+        let active_listeners = self.listener_runtime.statuses().await?;
+        if !active_listeners.is_empty() {
+            return Err(AppError::new(
+                "OPERATION_IN_PROGRESS",
+                "只有全部 Workspace 代理入口停止后才能变更证书。",
+            ));
+        }
+        Ok(())
+    }
+}

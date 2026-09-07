@@ -1,0 +1,15 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-c8c37ca5c1a6cffd)
+
+running 8 tests
+test requirements_tests::events::app_error_view_model_preserves_stable_contract ... ok
+test requirements_tests::events::expired_event_cursor_requires_bootstrap ... ok
+test requirements_tests::events::event_subscription_drop_and_explicit_cancel_release_all_live_state ... ok
+test requirements_tests::events::event_subscriptions_are_bounded_and_queue_bytes_are_released_on_receive ... ok
+test requirements_tests::events::subscriber_overflow_is_non_blocking_and_replay_log_is_independent ... ok
+test requirements_tests::events::bootstrap_cursor_replays_events_published_while_snapshot_is_read ... ok
+test requirements_tests::events::capture_flush_task_flushes_partial_batch_on_clock ... ok
+test requirements_tests::events::capture_batching_uses_size_and_time_boundaries ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 410 filtered out; finished in 0.68s
+

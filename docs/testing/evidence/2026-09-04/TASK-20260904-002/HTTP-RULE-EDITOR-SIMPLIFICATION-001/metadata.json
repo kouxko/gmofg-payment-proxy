@@ -1,0 +1,38 @@
+{
+  "task_id": "TASK-20260904-002",
+  "case_id": "HTTP-RULE-EDITOR-SIMPLIFICATION-001",
+  "derived_from": {
+    "task_id": "TASK-20260904-001",
+    "case_id": "RULE-WILDCARD-ACTIONS-001",
+    "evidence_path": "docs/testing/evidence/2026-09-04/TASK-20260904-001/RULE-WILDCARD-ACTIONS-001"
+  },
+  "environment": {
+    "os": "macOS 27.0 (26A5425a)",
+    "architecture": "arm64",
+    "rustc": "1.98.0",
+    "deno": "2.9.6",
+    "installed_app": "/Applications/Intercept Proxy.app",
+    "bundle_id": "com.interceptproxy.desktop",
+    "version": "1.0.0",
+    "executable_sha256": "ff21f80b323c901241db65459d705894b13b825d9b2e129e1b2c2d04dd56d824",
+    "pid": 87690,
+    "recoverable_previous_app": "/Users/codin/.Trash/Intercept Proxy.app.codex-old-20260904-124937"
+  },
+  "started_at": "2026-09-04 11:53:10 +08:00",
+  "completed_at": "2026-09-04 12:51:07 +08:00",
+  "tested_state": "shared worktree with TASK-20260904-002 changes and unrelated untracked scripts/delete-windows-proxy-data.ps1 preserved",
+  "result": "PASS_WITH_INSTALLED_UI_AUTOMATION_NOT_RUN_AND_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE",
+  "counts": {
+    "application_full": "417/417",
+    "frontend_targeted": "17/17",
+    "frontend_full": "554/554",
+    "static_routes": "13/13",
+    "source_size": "7 unrelated pre-existing files over 500 lines; changed files all below 500"
+  },
+  "not_applicable": {
+    "installed_app_click_through": "Computer Use confirmed the app process but timed out attaching to the app accessibility surface",
+    "real_local_http_exchange": "no real transaction was sent for this editor and draft-shape change",
+    "windows_android_ci_push_release": "outside user-authorized scope",
+    "ui_screenshot_file": "accessibility attachment timed out; no screenshot evidence was fabricated"
+  }
+}

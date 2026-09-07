@@ -1,0 +1,58 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-004",
+  "case_id": "local-http-default-response",
+  "executed_at": "2026-09-06 09:40:29 +08:00",
+  "result": "PASS",
+  "requirement": "User confirmed 200, effective upstream Body, only Content-Type/Content-Encoding retained, Content-Length recomputed, downstream rules may modify response",
+  "derived_from": {
+    "task_id": "TASK-20260903-002",
+    "case_id": "HTTP-LOCAL-MOCK-001",
+    "evidence_path": "docs/testing/evidence/2026-09-03/TASK-20260903-002/HTTP-LOCAL-MOCK-001/",
+    "reused": "Local topology, no real upstream, two rule directions and BodyCodec handling",
+    "changed": "current public ReplaceBodyText with a legitimate default response; no dependency on legacy complete MockResponse"
+  },
+  "commands": [
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-runtime --lib local_http_default_response -- --nocapture",
+    "cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib local_http_default_response -- --nocapture"
+  ],
+  "actual": {
+    "connector": "1 passed; empty, binary, UTF-8 bodies; raw content header OWS retained; stale Content-Length/Transfer-Encoding/request headers removed",
+    "real_tcp": "2 passed; keep-alive sequential requests, zero connection to localhost Host trap; real RuntimePipelineAdapter actor",
+    "rule_output": "/echo -> 200/upstream-effective; /modified -> 207/downstream-effective/x-local-rule=applied; hit counts=[2,1,1,1]"
+  },
+  "red": [
+    "outputs/connector-red.log",
+    "outputs/live-red.log"
+  ],
+  "green": [
+    "outputs/connector-green.log",
+    "outputs/live-green.log"
+  ],
+  "intermediate_failure": "outputs/live-red-build-intermediate.log records concurrent Application split compile failure and is not behavioral RED",
+  "resources": [
+    {
+      "source": "src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+      "snapshot": "resources/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests/local_response.rs",
+      "purpose": "exact unit input headers/body/expected response and receipt assertions"
+    },
+    {
+      "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+      "snapshot": "resources/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/local_http_response.rs",
+      "purpose": "actual TCP setup/input/response parser, public rules, expected bytes/counts and stop procedure"
+    },
+    {
+      "source": "binary input in both tests",
+      "snapshot": "inputs/binary-body.bin",
+      "readable": "inputs/binary-body.hex",
+      "purpose": "actual 00 ff 81 body vector"
+    }
+  ],
+  "not_applicable": {
+    "socket_frame_hook": "HTTP framing is already owned by Hyper; no Socket Frame hook involved",
+    "external_package": "Plain HTTP mode with real host HTTP rules; no protocol package used",
+    "ui_device_remote_business": "local automatic TCP and unit tests only",
+    "ci_publish": "not requested"
+  },
+  "final_matrix": "../final-verification/README.md"
+}

@@ -1,0 +1,41 @@
+{
+  "task_id": "TASK-20260826-003",
+  "case_id": "NUVEI-PKG-003",
+  "executed_at": "2026-08-26 15:36:32 +08:00",
+  "result": "PASS",
+  "derived_from": {
+    "task_id": "TASK-20260826-003",
+    "case_id": "NUVEI-PKG-002",
+    "evidence": "docs/testing/evidence/2026-08-26/TASK-20260826-003/NUVEI-PKG-002/"
+  },
+  "subject": "examples/external-packages/nuvei_tango_json",
+  "environment": {
+    "python": "3.14.7",
+    "websockets": "17.0.1",
+    "external_package_url": "ws://10.0.28.85:8765/packages",
+    "backend": "tangodev.nuvei.com:9081"
+  },
+  "inputs": [
+    "inputs/invalid-response-summary.json"
+  ],
+  "outputs": [
+    "outputs/tdd-red.txt",
+    "outputs/tests-and-static.txt",
+    "outputs/live-exchange-log.jsonl"
+  ],
+  "replay": "steps/replay.md",
+  "result_detail": {
+    "tests": 14,
+    "first_upstream_bytes": 1602,
+    "first_downstream_bytes": 647,
+    "document_fields": 6,
+    "invalid_response_after_fix": false,
+    "decode_failed_after_fix": false,
+    "payload_logged": false
+  },
+  "not_applicable": {
+    "proxy_source_change": "not modified",
+    "ci": "not authorized",
+    "adversarial_review": "explicitly waived by user for this low-priority small task"
+  }
+}

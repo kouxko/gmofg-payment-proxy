@@ -1,0 +1,24 @@
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/android-engine)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3.52s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_android_engine-66d329b0732e7481)
+
+running 1 test
+test socks5::tests::tcp::unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy ... FAILED
+
+failures:
+
+---- socks5::tests::tcp::unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy stdout ----
+
+thread 'socks5::tests::tcp::unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy' (4177840) panicked at crates/android-engine/src/socks5/tests/tcp.rs:210:5:
+assertion `left == right` failed
+  left: [80, 82, 79, 88]
+ right: [79, 82, 73, 71]
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    socks5::tests::tcp::unknown_ip_on_a_unique_domain_port_connects_original_instead_of_proxy
+
+test result: FAILED. 0 passed; 1 failed; 0 ignored; 0 measured; 47 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-android-engine --lib`

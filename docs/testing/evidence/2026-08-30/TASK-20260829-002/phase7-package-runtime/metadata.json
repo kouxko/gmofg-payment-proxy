@@ -1,0 +1,73 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase7-package-runtime",
+  "executed_at": "2026-08-30 15:53:00 +08:00",
+  "completed_at": "2026-08-30 21:21:22 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase6-rule-chain-transaction",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase6-rule-chain-transaction/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "56becb38decb5fc836d8274f65cc0a10b0761260",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase7 changes and unrelated user docs/README.md"
+  },
+  "resources": {
+    "active_fixture": "test-support/fixtures/task-20260829-002/phase-7/package-runtime/inventory.json",
+    "snapshot": "inputs/inventory.json",
+    "snapshot_byte_identical": true,
+    "snapshot_sha256": "67759552cc4e815bbd9ae866cd3b1e7a3b9d212e8ae4aa254477b53fc6f849c4",
+    "checker_sha256": "7cc5c4533ce143ceecf59d5b3b3f4b68389469194e75a25c0789491bf68f3bb8",
+    "checker_test_sha256": "e77e511ffedd2a171a7e9079356456793861f11097fdd7fabbd220c10c20fc2b",
+    "transport_test_sha256": "861b8d75a4eac44dcd786004087f42bf497567bcdd0377daaacdff89b2ea1cda",
+    "archive_test_sha256": "abca72e86ae5776d1f933fd2cc2461a40e78bc01537357cdc47f2b5187a1d127",
+    "generated_sha256": "413e42788f02a616b18141bf9e7bbcc5217f775fc636b53a3f2d4bdd3b144123",
+    "phase4_active_inventory": "test-support/fixtures/task-20260829-002/phase-4/package-contract/inventory.json",
+    "phase4_active_inventory_snapshot": "inputs/phase4-active-inventory.json",
+    "phase4_active_inventory_snapshot_byte_identical": true,
+    "phase4_active_inventory_sha256": "49939bd1b1f6408b693a3d6e3aaf48906a3dd8f606b01d81495a90471c0d58e7",
+    "phase4_checker_sha256": "2552d4815f6df61c5e7da515806173d3e61c43bf4155f6745f9076aa702633f7",
+    "phase4_checker_test_sha256": "4d4a4127706331b3dad9a3fa172ef1aea4cc5807edde9b2d0ebbdf95f7fb9789",
+    "package_scripts_sha256": "f1ad987c140471584cd06a62348c8cf8079593f2bd610d7ec59278c649dcfa95",
+    "phase6_transport_red_sha256": "e7973b217c2dc5d95992cca51fba2fe96231a86090f82733f848a5004ad17185",
+    "phase6_checker_red_sha256": "9b5d723f0ce8922c058843fec5bea32e1e0a4b55ee85c484bdee2758f729509e"
+  },
+  "results": {
+    "phase6_clean_baseline_transport_red": { "exit": 101, "result": "RED" },
+    "phase6_clean_baseline_checker_red": { "exit": 1, "result": "RED" },
+    "phase7_checker_mutations_and_controls": { "passed": 23, "failed": 0 },
+    "phase4_cross_phase_mutations_and_controls": { "passed": 23, "failed": 0 },
+    "phase4_contract_checker": "PASS",
+    "phase7_archive": { "passed": 6, "failed": 0 },
+    "phase7_transport": { "passed": 7, "failed": 0 },
+    "active_package_peer_e2e": { "passed": 4, "failed": 0 },
+    "production_websocket_wire_ceiling": { "passed": 1, "failed": 0 },
+    "active_socket_stable_code_diagnostic": { "passed": 1, "failed": 0 },
+    "tauri_full": { "passed": 130, "failed": 0 },
+    "application_full": { "passed": 458, "failed": 0 },
+    "host_full": { "passed": 12, "failed": 0 },
+    "infrastructure_full": { "passed": 585, "failed": 0 },
+    "frontend_full": { "files": 63, "passed": 543, "failed": 0 },
+    "bindings": "PASS fresh and deterministic",
+    "architecture_source_size_lint_typecheck_fmt_clippy": "PASS",
+    "global_checkpoint": "PASS exit 0; unique session 51772"
+  },
+  "not_run": [
+    "Phase8 Boa Sidecar and ESM execution",
+    "Phase9 registry lifecycle and duplicate state",
+    "Phase10/11 complete HTTP and Socket pipeline/codec switch",
+    "Phase12 full legacy deletion",
+    "Phase13 built-in and template conversion",
+    "Phase15 complete UI",
+    "remote CI, push and Release"
+  ],
+  "blockers": [],
+  "checkpoint_ready": true,
+  "review_status": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "review_findings": { "p0": 0, "p1": 0, "p2": 0 },
+  "reviewer_verdict": "APPROVE",
+  "verifier_verdict": "VERIFIED"
+}

@@ -1,0 +1,6 @@
+{
+  "case": "schema-invalid-short",
+  "request_hex": "0003616263",
+  "response_hex": "",
+  "response_message_type": null
+}

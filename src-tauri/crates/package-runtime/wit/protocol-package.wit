@@ -1,0 +1,55 @@
+package intercept-proxy:protocol-package@1.0.0;
+
+interface types {
+  record package-error {
+    code: string,
+    message: string,
+  }
+
+  variant frame-result {
+    need-more(option<u64>),
+    complete(u64),
+    reject(string),
+  }
+}
+
+interface websocket {
+  variant message {
+    text(string),
+    binary(list<u8>),
+    closed(option<string>),
+  }
+
+  resource connection {
+    open: static func(url: string) -> result<connection, string>;
+    send-text: func(value: string) -> result<_, string>;
+    send-binary: func(value: list<u8>) -> result<_, string>;
+    receive: func() -> result<message, string>;
+    close: func() -> result<_, string>;
+  }
+}
+
+world http-package {
+  use types.{package-error};
+  import websocket;
+  export upstream-decode: func(input: string) -> result<string, package-error>;
+  export downstream-decode: func(input: string) -> result<string, package-error>;
+  export upstream-encode: func(original-input: string, document-json: string) -> result<string, package-error>;
+  export downstream-encode: func(original-input: string, document-json: string) -> result<string, package-error>;
+  export upstream-display: func(document-json: string) -> result<string, package-error>;
+  export downstream-display: func(document-json: string) -> result<string, package-error>;
+}
+
+world socket-package {
+  use types.{frame-result, package-error};
+  import websocket;
+
+  export upstream-frame: func(buffer: list<u8>) -> result<frame-result, package-error>;
+  export downstream-frame: func(buffer: list<u8>) -> result<frame-result, package-error>;
+  export upstream-decode: func(input: list<u8>) -> result<string, package-error>;
+  export downstream-decode: func(input: list<u8>) -> result<string, package-error>;
+  export upstream-encode: func(original-input: list<u8>, document-json: string) -> result<list<u8>, package-error>;
+  export downstream-encode: func(original-input: list<u8>, document-json: string) -> result<list<u8>, package-error>;
+  export upstream-display: func(document-json: string) -> result<string, package-error>;
+  export downstream-display: func(document-json: string) -> result<string, package-error>;
+}

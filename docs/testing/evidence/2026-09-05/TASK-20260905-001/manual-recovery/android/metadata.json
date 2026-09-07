@@ -1,0 +1,127 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260905-001",
+  "case_id": "manual-recovery/android",
+  "executed_at": "2026-09-05 17:30:17 +08:00",
+  "timezone": "Asia/Shanghai",
+  "result": "PASS",
+  "requirements": {
+    "protected_saved_recovery": "waits without enqueue, generation, lease or TUN admission",
+    "unprotected_device_only_recovery": "retains automatic recovery without lease expiry",
+    "explicit_desktop_start": "retains owner epoch heartbeat and exact 5000ms expiry",
+    "stale_cleanup": "cannot close an interleaved newer generation"
+  },
+  "tests": {
+    "red": "compile failed on absent recover/RecoveryAdmission in old production code",
+    "affected_jvm": {
+      "tests": 25,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "all_jvm": {
+      "tests": 39,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "android_instrumentation_compile": "PASS",
+    "android_instrumentation_execution": "NOT_RUN: no attached adb device",
+    "lint_release": "PASS",
+    "release_apk_gate": "PASS"
+  },
+  "artifacts": {
+    "release_apk": "resources/apk/android-companion-release.apk",
+    "release_apk_sha256": "f881cf4e8bdd6fb1444134a87b297134815f60025b0a691d47d2483412c3f6f3",
+    "junit_xml": "outputs/junit/",
+    "lint_report": "outputs/lint-results-release.html"
+  },
+  "source_snapshots": {
+    "before": [
+      {
+        "snapshot_path": "resources/before/ControlLeaseCoordinator.kt",
+        "sha256": "101f29c00058ac5b4ebe502e806d52c9d279265cae42599e22f3f0345ec465d7"
+      },
+      {
+        "snapshot_path": "resources/before/ControlLeaseManager.kt",
+        "sha256": "375d56ada43d1ac7dff40c0e6dc53d9d3fbe677ab02a836b43021002a37f4097"
+      },
+      {
+        "snapshot_path": "resources/before/InterceptVpnService.kt",
+        "sha256": "728024b2266fa8b5983dce29451cbe01ce8d8e338fdd296383c4693f66bcc424"
+      },
+      {
+        "snapshot_path": "resources/before/InterceptVpnServiceControl.kt",
+        "sha256": "fa1c7f8b247bfa01722e485350711f0ae17203617395d6dfa1a0ef77cfaf864d"
+      },
+      {
+        "snapshot_path": "resources/before/ResumeVpnJobService.kt",
+        "sha256": "898e9667e67e27bb0d820b372478138deee959dbf3cf1a70ae5ea23d96584e69"
+      },
+      {
+        "snapshot_path": "resources/before/VpnRuntimeRegistry.kt",
+        "sha256": "6986623a408df7e0bdf664a1588638eae1a885d0dd395d6f4b40d145aeb221f1"
+      }
+    ],
+    "after": [
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseCoordinator.kt",
+        "snapshot_path": "resources/after/ControlLeaseCoordinator.kt",
+        "sha256": "5964288703cf6c5757eaf9467ecad35c4b87b015749247a61dfe60a2fdd8429c",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt",
+        "snapshot_path": "resources/after/ControlLeaseManager.kt",
+        "sha256": "0959d44c622936fff95adddb8b35de82e370e736cadefe25a14add48b22384eb",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnServiceControl.kt",
+        "snapshot_path": "resources/after/InterceptVpnServiceControl.kt",
+        "sha256": "96d60d2cd9be776f1ec2d8d1a10a0987f69de363db7c3c8916253d498e27239b",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/InterceptVpnService.kt",
+        "snapshot_path": "resources/after/InterceptVpnService.kt",
+        "sha256": "121b01ef214352e60955c38d5c4bb39119f365ac795ed81a167d4221e46bbd40",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/ResumeVpnJobService.kt",
+        "snapshot_path": "resources/after/ResumeVpnJobService.kt",
+        "sha256": "a0d89a2251098cba618e1509bab3aa481763d4f5dd5364c43eff4e70dd7f9d9b",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnRuntimeRegistry.kt",
+        "snapshot_path": "resources/after/VpnRuntimeRegistry.kt",
+        "sha256": "a229211fba302233c132d6aec5eb87a1a9c72fb61692c86a6bbc9b5998dd9eff",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseRecoveryTest.kt",
+        "snapshot_path": "resources/after/ControlLeaseRecoveryTest.kt",
+        "sha256": "1c805800bb46aaa76f6fb1a3f08466407ca025edf1932bfb48365eda281f0e15",
+        "matches_current_source": true
+      },
+      {
+        "source_path": "android-companion/app/src/androidTest/java/com/interceptproxy/vpn/SavedRecoveryAdmissionInstrumentedTest.kt",
+        "snapshot_path": "resources/after/SavedRecoveryAdmissionInstrumentedTest.kt",
+        "sha256": "87ccd4add6959b4ba8948b6f11c70b0d823f42d1b850a39757c688c319a00be8",
+        "matches_current_source": true
+      }
+    ]
+  },
+  "source_state": {
+    "git_head": "c7a70d3ef63719ae3bb7f9b3e6dca8db995c6525",
+    "shared_dirty_worktree": true
+  },
+  "replay": "replay/commands.sh",
+  "not_applicable": {
+    "network_frames": "No network protocol exchange is exercised by this lifecycle contract.",
+    "screenshots": "No UI behavior is changed or exercised.",
+    "device_execution": "No Android device or emulator was attached."
+  }
+}

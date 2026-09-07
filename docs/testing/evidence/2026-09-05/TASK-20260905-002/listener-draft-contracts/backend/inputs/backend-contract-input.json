@@ -1,0 +1,28 @@
+{
+  "task_id": "TASK-20260905-002",
+  "apis": [
+    "listener_draft_copy",
+    "listener_draft_transition",
+    "listener_draft_validate"
+  ],
+  "allowed_incomplete_fields": [
+    "socket scripted package",
+    "socket downstream TLS server_identity",
+    "HTTP/Socket optional or required client-auth trust"
+  ],
+  "transition_intents": [
+    "data_plane",
+    "http_response_mode",
+    "socket_topology",
+    "processing",
+    "app_tls",
+    "server_tls"
+  ],
+  "required_order": [
+    "workspace existence",
+    "workspace revision CAS",
+    "draft missing-field conversion",
+    "existing domain validation",
+    "existing protocol-package validation"
+  ]
+}

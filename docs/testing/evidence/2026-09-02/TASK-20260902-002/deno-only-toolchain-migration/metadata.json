@@ -1,0 +1,59 @@
+{
+  "task_id": "TASK-20260902-002",
+  "case_id": "deno-only-toolchain-migration",
+  "derived_from": {
+    "task_id": "TASK-20260902-001",
+    "case_id": "default-deno-development-entry",
+    "evidence": "docs/testing/evidence/2026-09-02/TASK-20260902-001/default-deno-development-entry/README.md"
+  },
+  "executed_at": {
+    "started": "2026-09-02 10:40:16 +08:00",
+    "finished": "2026-09-02 11:01:59 +08:00"
+  },
+  "environment": {
+    "os": "macOS",
+    "architecture": "aarch64",
+    "deno": "2.9.6",
+    "typescript": "6.0.3",
+    "next": "16.2.12",
+    "tauri_cli": "2.11.4",
+    "deno_only_path": "<temporary-deno-bin>:/Users/codin/.cargo/bin:/usr/bin:/bin:/usr/sbin:/sbin",
+    "node_in_test_path": false,
+    "npm_in_test_path": false,
+    "pnpm_in_test_path": false
+  },
+  "tested_files": {
+    "deno.json": "129c4a7a7d2cb6223a396506130718f9e68a5dc0c24f31e57e7847d06f6e7b4e",
+    "deno.lock": "178b7a2377686fe2909e847aecd94cc81e0b201fac97534fc9866b148e1a2505",
+    "package.json": "7ed3e0fdd5be1489242d56eee6ffe86abd382991487e5419636994fa772baf49",
+    "src-tauri/tauri.conf.json": "342c2cf2d45dc68f380b81fc20b31c62fa7c161534fb057dbb1332de0e5f882e",
+    "src-tauri/tauri.dev.conf.json": "5c77e5c340f278733947b79ec199fb6adcd346e5838b6a7631eda4bda925f525",
+    ".github/workflows/ci.yml": "e257bc525e40205343e2b9840deed85450eb0537f5fb320d61f229cd7085c933",
+    ".github/workflows/windows-release.yml": "fe02eee127932b8b68cd9d89d6e3c4b988ad7735bb177f6f89ba21da2583fb8b",
+    ".github/workflows/windows-quick-build.yml": "bf2bf30b90fe775d99dfa805a93398a6683f88e4f824a269601f2ab2246a889c",
+    "scripts/deno-toolchain-contract.test.mjs": "f02958f8eebfdbce82fea972f542ea52d44e7182c994661cf86e9410b9de5344"
+  },
+  "results": {
+    "deno_ci": "VERIFIED_507_PACKAGES_WITH_ALLOWED_POSTINSTALL",
+    "deno_toolchain_contract": "VERIFIED_3_OF_3",
+    "workflow_contracts": "VERIFIED_5_OF_5_COMBINED",
+    "lint": "VERIFIED",
+    "typecheck": "VERIFIED",
+    "frontend_tests": "VERIFIED_63_FILES_532_TESTS",
+    "next_production_build": "VERIFIED_13_STATIC_ROUTES",
+    "tauri_formal_app_build": "VERIFIED",
+    "architecture_scan": "VERIFIED",
+    "source_size_scan": "VERIFIED",
+    "dependency_audit": "FAILED_5_ADVISORIES_1_CRITICAL_4_HIGH",
+    "bundle_branding": "FAILED_GMOFG_MATCH_IN_BUILT_EXECUTABLE",
+    "remote_ci": "NOT_RUN_BY_USER_INSTRUCTION",
+    "temporary_paths": "ABSENT"
+  },
+  "not_run": [
+    "GitHub Actions remote runners",
+    "Windows and Linux builds",
+    "code signing and release publishing",
+    "push"
+  ],
+  "result": "LOCAL_VERIFIED_CI_NOT_RUN_WITH_KNOWN_BLOCKERS"
+}

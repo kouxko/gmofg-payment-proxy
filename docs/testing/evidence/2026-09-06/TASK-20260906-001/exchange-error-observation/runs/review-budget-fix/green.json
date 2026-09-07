@@ -1,0 +1,18 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--offline",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "-p",
+    "intercept-proxy-exchange",
+    "--lib",
+    "--all-features",
+    "--",
+    "--nocapture"
+  ],
+  "started_at": "2026-09-06T15:03:01.947304+08:00",
+  "completed_at": "2026-09-06T15:03:08.940116+08:00",
+  "exit_code": 0
+}

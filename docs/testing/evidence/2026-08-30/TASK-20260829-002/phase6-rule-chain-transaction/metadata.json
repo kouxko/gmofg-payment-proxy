@@ -1,0 +1,59 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "phase6-rule-chain-transaction",
+  "executed_at": "2026-08-30 12:20:00 +08:00",
+  "completed_at": "2026-08-30 15:38:58 +08:00",
+  "result": "VERIFIED_APPROVED_CHECKPOINT_READY",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase5-unified-rule-domain",
+    "evidence_path": "docs/testing/evidence/2026-08-30/TASK-20260829-002/phase5-unified-rule-domain/"
+  },
+  "environment": {
+    "branch": "codex/task-20260829-002",
+    "rollback_baseline": "1f2090ab2243cd9c67411eb4ed410f1f27742d1d",
+    "platform": "macOS",
+    "worktree": "dirty with uncommitted TASK-20260829-002 Phase6 changes and unrelated user docs/README.md",
+    "changed_during_final_checkpoint": false
+  },
+  "resources": {
+    "active_fixture": "test-support/fixtures/task-20260829-002/phase-6/rule-chain-transaction/contract-inventory.json",
+    "snapshot": "inputs/contract-inventory.json",
+    "snapshot_sha256": "7a72a87e4ee018607a2f2044e30a2d31cb3978bf5100689f5c488d1c58f420f8",
+    "domain_test_sha256": "eb309c4d59508cbeb6f0e3da742813dd72da33b6931661bdd68c8c96f19d6f7d",
+    "application_test_sha256": "605a228fb96963cd9b6d935760bcec7a604897cd773f5785a52414598c5ff2bf",
+    "application_repair_test_sha256": "4d0672d576f338d3584b56f7d4dabae04bef8617e3e091d76fa0fa2823c7c190",
+    "infrastructure_conflict_test_sha256": "ef7844a079c5f660f089585882d7d86b1cd5062115175d4bd54bcba3ed1a27eb",
+    "infrastructure_joint_test_sha256": "ef92712e985dddd25a7e9f82a6f5f3e3be9bf44a1410d119d7f6c7738f649e52",
+    "checker_sha256": "19b9af919866bb64c3180d6dbceaa4c6de7f35f977fed69abaf38f657687f468",
+    "checker_test_sha256": "e81ad7d5468fe66acdea2cc7c7d8f32e926b8e4389c0edc5ac34785e5938d965",
+    "generated_sha256": "3f574daea6de39f754112c521b976be0731bf7b419100c338863b8f4737f7c59"
+  },
+  "results": {
+    "initial_review": { "verdict": "REQUEST_CHANGES", "p1": 4, "p2": 1 },
+    "initial_verifier": { "verdict": "FAILED", "p1": 2 },
+    "second_independent_review": { "verdict": "REQUEST_CHANGES", "p1": 2, "p2": 0 },
+    "final_reviewer": { "verdict": "APPROVE", "p0": 0, "p1": 0, "p2": 0 },
+    "final_verifier": { "verdict": "VERIFIED", "p0": 0, "p1": 0, "p2": 0 },
+    "phase6_checker_mutations_and_controls": { "passed": 28, "failed": 0 },
+    "phase6_domain": { "passed": 9, "failed": 0 },
+    "phase6_application": { "passed": 11, "failed": 0 },
+    "phase6_infrastructure_exact": { "passed": 8, "failed": 0 },
+    "domain_all_targets_all_features": { "passed": 128, "failed": 0 },
+    "application_all_targets_all_features": { "passed": 508, "failed": 0 },
+    "infrastructure_all_targets_all_features": { "passed": 695, "failed": 0 },
+    "host_all_targets_all_features": { "passed": 33, "failed": 0 },
+    "tauri_all_targets_all_features": { "passed": 133, "failed": 0 },
+    "frontend_full": { "files": 63, "passed": 543, "failed": 0 },
+    "global_checkpoint": "PASS exit 0 on one complete ten-gate process"
+  },
+  "not_run": [
+    "Phase7 external package runtime migration",
+    "Phase10/11 complete HTTP and Socket pipeline/codec switch",
+    "Phase12 removal of legacy four-stage runtime and enum",
+    "Phase15 complete modal/editor",
+    "remote CI, push and Release"
+  ],
+  "blockers": [],
+  "checkpoint_ready": true
+}

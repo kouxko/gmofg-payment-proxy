@@ -1,0 +1,285 @@
+// @vitest-environment jsdom
+
+import "@testing-library/jest-dom/vitest";
+import { act, render, screen, waitFor, within } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { beforeEach, describe, expect, it, vi } from "vitest";
+import type { RuleDefinition_Serialize, RuleEditorContext } from "@/generated/rust-types";
+import { RulesView } from "./rules-view";
+import { httpCondition, httpListener, httpRule, socketListener } from "./rules-view-test-fixtures";
+
+const commandMocks = vi.hoisted(() => ({
+  workspaceList: vi.fn(), workspaceGet: vi.fn(), ruleDefinitionList: vi.fn(),
+  ruleDefinitionGet: vi.fn(), ruleEditorContext: vi.fn(), ruleDefinitionSave: vi.fn(),
+  ruleDefinitionDelete: vi.fn(), ruleDefinitionCopy: vi.fn(),
+  ruleDefinitionCreateFromExchangeObservation: vi.fn(), ruleDefinitionHttpConditionDraft: vi.fn(),
+  ruleDefinitionActionDraft: vi.fn(),
+  ruleDefinitionDocumentConditionDraft: vi.fn(), ruleDefinitionDocumentActionDraft: vi.fn(),
+  ruleDefinitionDocumentCommonActionDraft: vi.fn(),
+}));
+
+const navigationState = vi.hoisted(() => ({ searchParams: new URLSearchParams(), navigate: vi.fn() }));
+vi.mock("@/generated/rust-types", () => ({ commands: commandMocks }));
+vi.mock("@/lib/ipc/client", () => ({
+  appErrorViewModel: () => undefined,
+  callCommand: async <T,>(value: Promise<T> | T) => value,
+  errorMessage: (reason: unknown) => reason instanceof Error ? reason.message : "Rust 操作失败",
+}));
+vi.mock("@/features/shell/bootstrap-context", () => ({ useAppEventRefresh: vi.fn() }));
+vi.mock("@/features/shell/selected-workspace-context", () => ({
+  useSelectedWorkspace: () => ({
+    selected: { id: "workspace", name: "Workspace", revision: 1 },
+    summaries: [], isLoading: false, error: undefined, refresh: vi.fn().mockResolvedValue(undefined),
+  }),
+}));
+vi.mock("@/features/shell/workspace-navigation", () => ({
+  useWorkspaceQueryInvalidation: vi.fn(),
+  useWorkspaceNavigation: () => navigationState,
+}));
+
+const context: RuleEditorContext = {
+  listener_id: httpListener.id,
+  local_document_types: [],
+  document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
+  content: { type: "http", value: { stages: [{
+    stage: "proxy_to_upstream",
+    http: { stage: "proxy_to_upstream", match_fields: [
+      { kind: "method", operators: ["equals"], selector: null },
+      { kind: "request_target", operators: ["equals"], selector: null },
+    ], actions: [{ kind: "jitter", terminal: false, traffic_direction: null, parameters_required: true }] },
+    package: null, document_fields: [], document_common_actions: ["record_match"],
+    new_rule_draft: { listener_id: httpListener.id, stage: "proxy_to_upstream", content: { type: "http", value: { description: "" } } },
+  }] } },
+};
+
+describe("RulesView inline editor", () => {
+  beforeEach(() => {
+    vi.clearAllMocks();
+    navigationState.searchParams = new URLSearchParams();
+    commandMocks.workspaceList.mockResolvedValue([{ id: "workspace", name: "Workspace", selected: true }]);
+    commandMocks.workspaceGet.mockResolvedValue({ id: "workspace", listeners: [httpListener] });
+    commandMocks.ruleDefinitionList.mockResolvedValue([httpRule()]);
+    commandMocks.ruleDefinitionGet.mockResolvedValue(httpRule());
+    commandMocks.ruleEditorContext.mockResolvedValue(context);
+    commandMocks.ruleDefinitionSave.mockImplementation(async (input) => ({ ...httpRule(), ...input.draft, revision: 4 }));
+    commandMocks.ruleDefinitionHttpConditionDraft.mockResolvedValue(httpCondition);
+    commandMocks.ruleDefinitionDocumentCommonActionDraft.mockResolvedValue({ source: "record_match" });
+  });
+
+  it("keeps the rule list and fixed editor visible in one workspace without an editor dialog", async () => {
+    render(<RulesView />);
+
+    expect(await screen.findByRole("button", { name: /HTTP combined/ })).toBeVisible();
+    expect(screen.getByText("选择一条规则或新建规则进行编辑。")).toBeVisible();
+    expect(screen.queryByRole("dialog", { name: /编辑规则/ })).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole("button", { name: /HTTP combined/ }));
+    expect(await screen.findByDisplayValue("HTTP combined")).toBeVisible();
+    expect(screen.getAllByTestId("condition-form")).toHaveLength(1);
+    expect(screen.getAllByTestId("action-form")).toHaveLength(1);
+    expect(screen.getByTestId("rule-definition-list")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-definition-editor")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-editor-actions")).toContainElement(screen.getByRole("button", { name: "保存规则" }));
+    expect(screen.queryByRole("tab", { name: "基本信息" })).not.toBeInTheDocument();
+  });
+
+  it("starts rule creation inside the fixed editor without opening a dialog", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+
+    expect(screen.queryByRole("dialog", { name: "创建统一规则" })).not.toBeInTheDocument();
+    expect(screen.getByRole("heading", { name: "新建规则" })).toBeVisible();
+    const listenerSelect = screen.getByRole("button", { name: /创建规则的 Listener/ });
+    expect(listenerSelect).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expect(listenerSelect.querySelector(".min-w-0.flex-1.truncate.whitespace-nowrap")).not.toBeNull();
+    expect(screen.getByRole("textbox", { name: "说明" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "基本信息" })).toHaveAttribute("aria-selected", "true");
+    expect(screen.getByRole("tab", { name: "匹配条件" })).toBeVisible();
+    expect(screen.getByRole("tab", { name: "执行动作" })).toBeVisible();
+    const header = screen.getByTestId("rule-creation-header");
+    expect(within(header).getByRole("button", { name: "保存规则" })).toBeDisabled();
+    expect(within(header).getByRole("button", { name: "取消" })).toBeVisible();
+    expect(screen.getByTestId("rule-definition-list")).toHaveClass("p-4");
+    expect(screen.getByTestId("rule-creation-editor")).toHaveClass("p-4");
+    expect(screen.queryByTestId("rule-editor-actions")).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole("tab", { name: "匹配条件" }));
+    expect(screen.getByText("请先在基本信息中选择 Listener。")).toBeVisible();
+    await user.click(screen.getByRole("tab", { name: "基本信息" }));
+    expect(screen.getByRole("button", { name: /创建规则的 Listener/ })).toBeVisible();
+  });
+
+  it("separates creation metadata, condition, and action into tabs without an enter step", async () => {
+    const user = userEvent.setup();
+    render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+    await user.type(screen.getByRole("textbox", { name: "说明" }), "创建前说明");
+    await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP Listener · HTTP" }));
+    const stageSelect = screen.getByRole("button", { name: /处理阶段/ });
+    expect(stageSelect).toHaveClass("h-10", "min-h-10", "w-full", "min-w-0", "overflow-hidden");
+    expect(stageSelect.querySelector(".min-w-0.flex-1.truncate.whitespace-nowrap")).not.toBeNull();
+    await user.click(stageSelect);
+    await user.click(await screen.findByRole("option", { name: "Proxy → Server" }));
+
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("");
+    expect(await screen.findByRole("heading", { name: "HTTP 规则内容" })).toBeVisible();
+    expect(screen.getByRole("textbox", { name: "说明" })).toHaveValue("创建前说明");
+    expect(screen.getByRole("button", { name: "保存规则" })).toBeDisabled();
+
+    await user.type(screen.getByRole("textbox", { name: "规则名称" }), "Inline HTTP rule");
+    const enabled = screen.getByRole("switch", { name: "启用规则" });
+    expect(enabled).not.toBeChecked();
+    expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /新规则是否启用/ })).not.toBeInTheDocument();
+    await user.type(screen.getByLabelText("阶段内优先级"), "10");
+    await user.click(enabled);
+    expect(enabled).toBeChecked();
+
+    expect(screen.queryByRole("button", { name: /新规则是否单次/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();
+    expect(screen.queryByRole("button", { name: "进入规则编辑器" })).not.toBeInTheDocument();
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+
+    await user.click(screen.getByRole("tab", { name: "匹配条件" }));
+    expect(screen.getByTestId("condition-form")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /条件来源/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP" }));
+
+    await user.click(screen.getByRole("tab", { name: "执行动作" }));
+    expect(screen.getByTestId("action-form")).toBeVisible();
+    await user.click(screen.getByRole("button", { name: /动作来源/ }));
+    await user.click(await screen.findByRole("option", { name: "HTTP" }));
+
+    await user.click(screen.getByRole("tab", { name: "基本信息" }));
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Inline HTTP rule");
+  });
+
+  it("uses the same initially-disabled enable switch for Socket creation", async () => {
+    const socketContext: RuleEditorContext = {
+      listener_id: socketListener.id,
+      local_document_types: [],
+      document_condition_path: { wildcard_token: "*", wildcard_matches_exactly_one_level: true, multiple_matches_use_any: true },
+      content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" }, stages: [{
+        stage: "proxy_to_app", document_fields: [], common_actions: ["record_match"],
+        new_rule_draft: { listener_id: socketListener.id, stage: "proxy_to_app", content: { type: "socket", value: { package: { id: "iso8583", version: "1.0.0" } } } },
+      }] } },
+    };
+    commandMocks.workspaceGet.mockResolvedValue({ id: "workspace", listeners: [socketListener] });
+    commandMocks.ruleEditorContext.mockResolvedValue(socketContext);
+    const user = userEvent.setup(); render(<RulesView />);
+
+    await user.click(await screen.findByRole("button", { name: "新建规则" }));
+    await user.click(screen.getByRole("button", { name: /创建规则的 Listener/ }));
+    await user.click(await screen.findByRole("option", { name: "Socket Listener · Socket" }));
+    const metadata = screen.getByTestId("rule-metadata-fields");
+    await user.click(within(metadata).getByRole("button", { name: /处理阶段/ }));
+    await user.click(await screen.findByRole("option", { name: "Proxy → App" }));
+
+    const enabled = within(metadata).getByRole("switch", { name: "启用规则" });
+    expect(within(metadata).getByTestId("rule-enabled-control")).toHaveClass("h-10", "items-center");
+    expect(enabled).not.toBeChecked();
+    expect(screen.queryByRole("textbox", { name: "说明" })).not.toBeInTheDocument();
+    expect(screen.getAllByRole("switch", { name: "启用规则" })).toHaveLength(1);
+    expect(screen.queryByRole("button", { name: /新规则是否启用|新规则是否单次/ })).not.toBeInTheDocument();
+    expect(screen.queryByText(/是否单次|单次|持续/)).not.toBeInTheDocument();
+  });
+
+  it("shows both proxy directions in one list with a direction badge on each card", async () => {
+    commandMocks.ruleDefinitionList.mockResolvedValue([
+      httpRule({ rule_id: "upstream", name: "Request rule", stage: "proxy_to_upstream" }),
+      httpRule({ rule_id: "app", name: "Response rule", stage: "proxy_to_app" }),
+    ]);
+
+    render(<RulesView />);
+
+    expect(await screen.findByRole("button", { name: /Request rule.*上行/ })).toBeVisible();
+    expect(screen.getByRole("button", { name: /Response rule.*下行/ })).toBeVisible();
+    expect(screen.queryByTestId("rule-stage-heading")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proxy → Server")).not.toBeInTheDocument();
+    expect(screen.queryByText("Proxy → App")).not.toBeInTheDocument();
+  });
+
+  it("materializes the single condition and action before saving", async () => {
+    render(<RulesView />);
+    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    const save = await screen.findByRole("button", { name: "保存规则" });
+    expect(save).toBeEnabled();
+    await userEvent.click(save);
+
+    await waitFor(() => expect(commandMocks.ruleDefinitionHttpConditionDraft).toHaveBeenCalledWith("request_target", null, "equals", "/", "proxy_to_upstream"));
+    expect(commandMocks.ruleDefinitionDocumentCommonActionDraft).toHaveBeenCalledWith("record_match");
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledWith(expect.objectContaining({
+      draft: expect.objectContaining({ content: { type: "http", value: expect.objectContaining({ condition: httpCondition, action: { source: "record_match" } }) } }),
+    })));
+  });
+
+  it("ignores an older rule selection response after a newer selection starts", async () => {
+    const second: RuleDefinition_Serialize = { ...httpRule(), rule_id: "second", name: "Second" };
+    commandMocks.ruleDefinitionList.mockResolvedValue([httpRule(), second]);
+    let finishFirst!: (rule: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionGet
+      .mockReturnValueOnce(new Promise((resolve) => { finishFirst = resolve; }))
+      .mockResolvedValueOnce(second);
+    render(<RulesView />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
+    expect(await screen.findByDisplayValue("Second")).toBeVisible();
+    await act(async () => { finishFirst(httpRule()); await Promise.resolve(); });
+    expect(screen.getByDisplayValue("Second")).toBeVisible();
+  });
+
+  it("keeps a newer rule selected when an older save completes", async () => {
+    const first = httpRule();
+    const second = httpRule({ rule_id: "second", name: "Second" });
+    commandMocks.ruleDefinitionList.mockResolvedValue([first, second]);
+    commandMocks.ruleDefinitionGet.mockImplementation(async (id) => id === second.rule_id ? second : first);
+    let finishSave!: (rule: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { finishSave = resolve; }));
+    render(<RulesView />);
+
+    await userEvent.click(await screen.findByRole("button", { name: /HTTP combined/ }));
+    await userEvent.click(await screen.findByRole("button", { name: "保存规则" }));
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+    await userEvent.click(screen.getByRole("button", { name: /Second/ }));
+    await waitFor(() => expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second"));
+    await act(async () => { finishSave({ ...first, revision: 4 }); await Promise.resolve(); });
+
+    expect(screen.getByRole("textbox", { name: "规则名称" })).toHaveValue("Second");
+  });
+
+  it("admits only one creation while draft materialization is pending", async () => {
+    const rule = httpRule();
+    navigationState.searchParams = new URLSearchParams("exchangeId=observed&responseEvent=0");
+    commandMocks.ruleDefinitionCreateFromExchangeObservation.mockResolvedValue({
+      rule_id: null,
+      expected_revision: null,
+      draft: {
+        name: rule.name,
+        enabled: rule.enabled,
+        priority: rule.priority,
+        listener_id: rule.listener_id,
+        stage: rule.stage,
+        content: rule.content,
+      },
+    });
+    let completeCondition!: (value: typeof httpCondition) => void;
+    commandMocks.ruleDefinitionHttpConditionDraft.mockReturnValue(new Promise((resolve) => { completeCondition = resolve; }));
+    let completeSave!: (value: RuleDefinition_Serialize) => void;
+    commandMocks.ruleDefinitionSave.mockReturnValue(new Promise((resolve) => { completeSave = resolve; }));
+    render(<RulesView />);
+
+    const save = await screen.findByRole("button", { name: "保存规则" });
+    await waitFor(() => expect(save).toBeEnabled());
+    await userEvent.click(save);
+    await userEvent.click(save);
+    await act(async () => { completeCondition(httpCondition); await Promise.resolve(); });
+    await waitFor(() => expect(commandMocks.ruleDefinitionSave).toHaveBeenCalledOnce());
+    await act(async () => { completeSave({ ...rule, rule_id: "new-rule" }); await Promise.resolve(); });
+
+    expect(commandMocks.ruleDefinitionSave.mock.calls.map(([input]) => input.rule_id)).toEqual([null]);
+  });
+});

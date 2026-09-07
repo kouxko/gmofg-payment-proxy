@@ -1,0 +1,83 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "android-contracts",
+  "executed_at": "2026-09-05 14:45:41 +08:00",
+  "result": "PASS_WITH_DEVICE_NOT_RUN",
+  "repository_root": "/Users/codin/Code/gmofg-payment-proxy",
+  "tested_state": {
+    "heartbeat_path": "AndroidAdbAdapter::renew_control_lease_target",
+    "native_failure_path": "NativeDataPlaneFailureCoordinator.failOpenIfCurrent",
+    "companion_jvm_tests": {
+      "tests": 32,
+      "failures": 0,
+      "errors": 0,
+      "skipped": 0
+    },
+    "release_apk_sha256": "be5b6247035bd0cc7ed4dd8b7aaaadcac1f8cb06e779d8e5e20cd1294415cce1",
+    "release_apk_abis": [
+      "arm64-v8a",
+      "armeabi-v7a",
+      "x86",
+      "x86_64"
+    ]
+  },
+  "evidence": [
+    "red-heartbeat-gate.log",
+    "red-native-generation-race.log",
+    "green-heartbeat.log",
+    "green-forward-port-isolation.log",
+    "green-forward-cancel-cleanup.log",
+    "green-companion-targeted.log",
+    "green-companion-full.log",
+    "green-companion-release-build.log",
+    "green-static.log",
+    "jni-libraries-sha256.log",
+    "apk-sha256.log",
+    "test-source-sha256.log",
+    "device-availability.log",
+    "toolchain.log",
+    "inputs/lease_heartbeat.rs",
+    "inputs/NativeDataPlaneFailureCoordinatorTest.kt",
+    "inputs/ControlLeaseWatchdogTest.kt",
+    "resources/android-companion-release.apk"
+  ],
+  "resources": [
+    {
+      "path": "resources/android-companion-release.apk",
+      "source": "android-companion/app/build/outputs/apk/release/app-release.apk",
+      "purpose": "exact release APK verified and staged by scripts/build-android-companion.sh",
+      "required": true
+    },
+    {
+      "path": "inputs/lease_heartbeat.rs",
+      "source": "src-tauri/crates/infrastructure/src/adapters/android_adb/tests/lease_heartbeat.rs",
+      "purpose": "exact Rust regression test source used by the RED and GREEN runs",
+      "required": true
+    },
+    {
+      "path": "inputs/NativeDataPlaneFailureCoordinatorTest.kt",
+      "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/NativeDataPlaneFailureCoordinatorTest.kt",
+      "purpose": "exact native-generation regression test source used by the RED and GREEN runs",
+      "required": true
+    },
+    {
+      "path": "inputs/ControlLeaseWatchdogTest.kt",
+      "source": "android-companion/app/src/test/java/com/interceptproxy/vpn/ControlLeaseWatchdogTest.kt",
+      "purpose": "exact late-heartbeat lease regression test source used by the GREEN run",
+      "required": true
+    }
+  ],
+  "not_run": {
+    "real_device": "applicable, but adb devices -l reported no attached device",
+    "ci": "not authorized or invoked"
+  },
+  "not_applicable": {
+    "external_payment_network": "outside this task"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260828-004",
+    "case_id": "ANDROID-CONTROL-LEASE-001",
+    "evidence_path": "docs/testing/evidence/2026-08-28/TASK-20260828-004/ANDROID-CONTROL-LEASE-001",
+    "reused_contract_and_change": "复用默认5秒、关闭开关、epoch/generation隔离；本次增加真实业务gate占用与native代次清理竞态。"
+  }
+}

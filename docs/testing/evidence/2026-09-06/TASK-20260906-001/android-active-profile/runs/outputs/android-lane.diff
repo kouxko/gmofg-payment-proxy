@@ -1,0 +1,205 @@
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
+index 0d4c9daf..27e44631 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/endpoint_reconciliation.rs
+@@ -1,9 +1,10 @@
+-use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload};
++use super::{ActiveRuntimeFacts, AndroidAdbAdapter, lease::control_request_payload, sha256_json};
+ use intercept_proxy_application::{
+     AndroidNetworkActivation, AndroidRuntimeEndpointHealth, AndroidRuntimeEndpointViewModel,
+     AndroidRuntimeOwnerMode, AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason,
+     AndroidRuntimeOwnerViewModel, AppError, AppResult,
+ };
++use serde_json::json;
+ 
+ pub(super) fn is_owner_unreachable(error: &AppError) -> bool {
+     matches!(
+@@ -38,11 +39,16 @@ impl AndroidAdbAdapter {
+         if owner.mode != AndroidRuntimeOwnerMode::Lan {
+             return Ok(endpoints_with_owner_health(persisted, owner.state));
+         }
+-        let has_active_runtime = owner_state
++        let active_runtime = owner_state
+             .active_runtime
+             .as_ref()
+-            .is_some_and(|runtime| runtime.serial == owner.serial && runtime.epoch == owner.epoch);
+-        if owner.state != AndroidRuntimeOwnerState::Active || !has_active_runtime {
++            .filter(|runtime| {
++                runtime.serial == owner.serial
++                    && runtime.epoch == owner.epoch
++                    && runtime.profile_id == owner.profile_id
++            })
++            .cloned();
++        if owner.state != AndroidRuntimeOwnerState::Active || active_runtime.is_none() {
+             let state = if owner.state == AndroidRuntimeOwnerState::Active {
+                 AndroidRuntimeOwnerState::Faulted
+             } else {
+@@ -61,6 +67,13 @@ impl AndroidAdbAdapter {
+                 AndroidRuntimeEndpointHealth::Faulted,
+             ));
+         };
++        let active_runtime = active_runtime.expect("active runtime was checked above");
++        if sha256_json(&activation.profile)? != active_runtime.profile_fingerprint {
++            return Ok(endpoints_with_health(
++                persisted,
++                AndroidRuntimeEndpointHealth::Faulted,
++            ));
++        }
+         let lan_host = match self
+             .preferred_lan_proxy_host_strict(&owner.serial, &activation)
+             .await
+@@ -81,9 +94,8 @@ impl AndroidAdbAdapter {
+             return Ok(endpoints_with_owner_health(persisted, owner.state));
+         }
+ 
+-        let Ok((proxy_runtime, runtime)) = self
+-            .build_lan_runtime_for_owner(&activation, &owner, lan_host)
+-            .await
++        let Ok((proxy_runtime, runtime)) =
++            refresh_lan_runtime_host(&activation, active_runtime, lan_host)
+         else {
+             return self.fault_lan_endpoints(owner, persisted).await;
+         };
+@@ -149,6 +161,40 @@ impl AndroidAdbAdapter {
+     }
+ }
+ 
++fn refresh_lan_runtime_host(
++    activation: &AndroidNetworkActivation,
++    mut runtime: ActiveRuntimeFacts,
++    lan_host: std::net::Ipv4Addr,
++) -> AppResult<(serde_json::Value, ActiveRuntimeFacts)> {
++    let host = lan_host.to_string();
++    for endpoint in &mut runtime.endpoints {
++        endpoint.proxy_host.clone_from(&host);
++    }
++    let routes = runtime
++        .endpoints
++        .iter()
++        .map(|endpoint| {
++            json!({
++                "listener_id": endpoint.listener_id,
++                "original_destination": endpoint.original_destination,
++                "original_ports": endpoint.original_ports,
++                "resolved_original_ips": endpoint.resolved_original_ips,
++                "proxy_host": endpoint.proxy_host,
++                "proxy_port": endpoint.proxy_port,
++            })
++        })
++        .collect::<Vec<_>>();
++    runtime.route_fingerprint = sha256_json(&routes)?;
++    let payload = json!({
++        "routes": routes,
++        "route_source": activation.proxy_routes,
++        "profile_fingerprint": runtime.profile_fingerprint,
++        "route_fingerprint": runtime.route_fingerprint,
++        "route_count": runtime.route_count,
++    });
++    Ok((payload, runtime))
++}
++
+ fn endpoints_with_owner_health(
+     endpoints: Vec<AndroidRuntimeEndpointViewModel>,
+     state: AndroidRuntimeOwnerState,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
+index b2920a39..ccf780f0 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/reverse/preparation.rs
+@@ -25,6 +25,7 @@ struct ReverseCreationFailure {
+ }
+ 
+ impl AndroidAdbAdapter {
++    #[cfg(test)]
+     pub(in crate::adapters::android_adb) async fn build_lan_runtime_for_owner(
+         &self,
+         activation: &AndroidNetworkActivation,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs b/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
+index 2bfe643e..b4728c9c 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/android_adb/tests/manual_recovery.rs
+@@ -4,6 +4,7 @@ use intercept_proxy_application::{
+     AndroidControlPort, AndroidNetworkActivation, AndroidNetworkState,
+     AndroidRuntimeEndpointHealth, AndroidRuntimeOwnerMode, AndroidRuntimeOwnerSource,
+     AndroidRuntimeOwnerState, AndroidRuntimeOwnerTransitionReason, AndroidRuntimeTarget,
++    AndroidTargetApplication,
+ };
+ use serde_json::{Value, json};
+ use std::{collections::HashMap, net::Ipv4Addr, sync::Mutex as StdMutex};
+@@ -386,3 +387,77 @@ async fn active_lan_address_change_keeps_hot_apply_and_current_control_lease() {
+         owner.epoch.to_string()
+     );
+ }
++
++#[tokio::test]
++async fn saved_target_application_change_never_enters_lan_hot_apply() {
++    let temp = tempfile::tempdir().unwrap();
++    let runner = Arc::new(RecoveryRunner::default());
++    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
++    adapter.lan_address = Arc::new(DesktopLan);
++    let active_activation = activation();
++    let owner = seed_lan(
++        &adapter,
++        &active_activation,
++        AndroidRuntimeOwnerState::Active,
++        true,
++    )
++    .await;
++    let mut saved_activation = active_activation;
++    saved_activation
++        .profile
++        .target_applications
++        .push(AndroidTargetApplication {
++            package_name: "com.example.saved-only".into(),
++            uid: 10_001,
++            display_name: None,
++        });
++
++    let endpoints = adapter
++        .network_runtime_endpoints(
++            AndroidDeviceTarget {
++                serial: owner.serial,
++            },
++            Some(saved_activation),
++        )
++        .await
++        .unwrap();
++
++    assert!(runner.requests.lock().unwrap().is_empty());
++    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
++    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
++}
++
++#[tokio::test]
++async fn saved_total_packet_loss_never_enters_lan_hot_apply() {
++    let temp = tempfile::tempdir().unwrap();
++    let runner = Arc::new(RecoveryRunner::default());
++    let mut adapter = AndroidAdbAdapter::with_runner(temp.path(), runner.clone());
++    adapter.lan_address = Arc::new(DesktopLan);
++    let active_activation = activation();
++    let owner = seed_lan(
++        &adapter,
++        &active_activation,
++        AndroidRuntimeOwnerState::Active,
++        true,
++    )
++    .await;
++    let mut saved_activation = active_activation;
++    saved_activation
++        .profile
++        .weak_network
++        .random_loss_basis_points = 10_000;
++
++    let endpoints = adapter
++        .network_runtime_endpoints(
++            AndroidDeviceTarget {
++                serial: owner.serial,
++            },
++            Some(saved_activation),
++        )
++        .await
++        .unwrap();
++
++    assert!(runner.requests.lock().unwrap().is_empty());
++    assert_eq!(endpoints[0].proxy_host, "192.168.1.10");
++    assert_eq!(endpoints[0].health, AndroidRuntimeEndpointHealth::Faulted);
++}

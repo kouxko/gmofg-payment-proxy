@@ -1,0 +1,20 @@
+{
+  "phase": "post-followup matrix",
+  "tracked_source_files": 1352,
+  "changed_during_tests": [],
+  "archived_source_byte_comparison": {
+    "different": []
+  },
+  "rust": {
+    "groups": 45,
+    "passed": 1645,
+    "failed": 0,
+    "ignored": 0
+  },
+  "frontend": {
+    "files": 72,
+    "passed": 548,
+    "failed": 0
+  },
+  "claims": "Local source/test/build only; Android device, native App installation, long-run load and remote CI not executed."
+}

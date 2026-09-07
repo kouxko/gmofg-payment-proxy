@@ -1,0 +1,49 @@
+{
+  "result": "PASS",
+  "bindings_sha256": "15d730c6afae0f9011bd6539ea98f339342d4e4b22a4751bff595d893815891c",
+  "commands": [
+    {
+      "command": "pnpm test:bindings-check",
+      "exit_code": 0,
+      "summary": "5 passed, 0 failed; includes unlink-then-throw restoration and original generator error identity"
+    },
+    {
+      "command": "pnpm test:task-20260829-002:phase1",
+      "exit_code": 0,
+      "summary": "4 passed, 0 failed; current inventory GREEN and checkpoint/package/path drift fail-closed"
+    },
+    {
+      "command": "pnpm check:bindings",
+      "exit_code": 0,
+      "summary": "two real Release generations; checked-in equals first equals second; restored SHA-256 unchanged"
+    },
+    {
+      "command": "pnpm check:task-20260829-002:checkpoint",
+      "attempt": 1,
+      "exit_code": 101,
+      "summary": "first nine gates passed; existing ADB deadline test failed once in final Rust workspace gate: 647 passed, 1 failed, 0 ignored"
+    },
+    {
+      "command": "for run_index in 1 2 3; do printf 'TARGETED_RUN=%s\\n' \"$run_index\"; cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib --all-features adapters::android_adb::tests::forward_control::cancelled_stalled_response_removes_owned_forward_without_blocking_other_serial -- --exact || exit $?; done",
+      "exit_code": 0,
+      "summary": "3/3 consecutive runs passed; each 1 passed, 0 failed, 647 filtered"
+    },
+    {
+      "command": "pnpm check:task-20260829-002:checkpoint",
+      "attempt": 2,
+      "exit_code": 0,
+      "summary": "all ten gates passed; frontend 61 files/531 tests; Rust all-target/all-feature final run had 0 failed and 0 ignored"
+    },
+    {
+      "command": "git diff --check",
+      "exit_code": 0,
+      "summary": "no whitespace errors"
+    }
+  ],
+  "independent_verifier": {
+    "status": "VERIFIED",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0
+  }
+}

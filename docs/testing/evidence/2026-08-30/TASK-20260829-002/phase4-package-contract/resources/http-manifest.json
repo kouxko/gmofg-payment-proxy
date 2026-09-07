@@ -1,0 +1,22 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "com.example.payment",
+    "version": "1.0.0",
+    "name": "Payment JSON",
+    "description": ""
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {
+      "schema": {
+        "type": "object",
+        "title": "Response",
+        "properties": {
+          "approved": { "type": "boolean" }
+        }
+      }
+    }
+  }
+}

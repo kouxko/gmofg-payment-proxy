@@ -1,0 +1,85 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-004",
+  "case_id": "STANDALONE-WEAK-NETWORK-UI-001",
+  "executed_at": "2026-09-03 15:46:18 +08:00",
+  "environment": {
+    "platform": "macOS arm64",
+    "branch": "codex/intercept-proxy-generalization",
+    "baseline_commit": "d2346ca167e884927873922bb785ec07398b3e97",
+    "deno": "2.9.6"
+  },
+  "subject": [
+    "src/features/android-network",
+    "src/features/help/general-page-help-guides.ts",
+    "src/features/help/page-help.test.tsx",
+    "docs/user-operation-guide.md",
+    "DESIGN.md"
+  ],
+  "result": "PASS_WITH_KNOWN_UNRELATED_SOURCE_SIZE_FAILURE_AND_MANUAL_NOT_RUN",
+  "checks": [
+    {
+      "name": "targeted_vitest",
+      "result": "PASS",
+      "detail": "9 files, 90 tests"
+    },
+    {
+      "name": "typecheck",
+      "result": "PASS"
+    },
+    {
+      "name": "targeted_eslint",
+      "result": "PASS"
+    },
+    {
+      "name": "next_production_build",
+      "result": "PASS",
+      "detail": "13 static pages including /android-network"
+    },
+    {
+      "name": "source_size",
+      "result": "FAIL_UNRELATED",
+      "detail": "six pre-existing or other-task files exceeded the repository limit; no task-owned file was reported"
+    },
+    {
+      "name": "diff_check",
+      "result": "PASS"
+    },
+    {
+      "name": "independent_code_review",
+      "result": "APPROVE",
+      "detail": "P0 0, P1 0, P2 0 after two findings were repaired and re-reviewed"
+    },
+    {
+      "name": "manual_visual",
+      "result": "NOT_RUN",
+      "detail": "user elected to inspect the interface"
+    },
+    {
+      "name": "android_device_data_plane",
+      "result": "NOT_RUN",
+      "detail": "no engine or runtime behavior changed"
+    },
+    {
+      "name": "ci",
+      "result": "NOT_RUN",
+      "detail": "not requested or authorized"
+    }
+  ],
+  "sources": [
+    "https://www.sitespeed.io/documentation/throttle/",
+    "https://github.com/GoogleChrome/lighthouse/blob/main/docs/throttling.md"
+  ],
+  "retest": [
+    "deno run -A --unstable-detect-cjs node_modules/vitest/vitest.mjs run src/features/android-network src/features/help/page-help.test.tsx --reporter=dot",
+    "deno task typecheck",
+    "deno run -A --unstable-detect-cjs node_modules/next/dist/bin/next build",
+    "deno task scan:source-size",
+    "git diff --check"
+  ],
+  "not_applicable": {
+    "protocol_frames": "frontend presentation and existing profile-field mapping only",
+    "binary_resources": "no file-based external resources were used",
+    "screenshots": "manual visual inspection retained by the user; no placeholder evidence created"
+  }
+}

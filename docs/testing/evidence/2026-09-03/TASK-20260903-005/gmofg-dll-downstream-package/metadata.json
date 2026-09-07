@@ -1,0 +1,54 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260903-005",
+  "case_id": "gmofg-dll-downstream-package",
+  "executed_at": "2026-09-03 16:08:06 +08:00",
+  "result": "PASS",
+  "repository": "/Users/codin/Code/gmofg-payment-proxy",
+  "branch": "codex/intercept-proxy-generalization",
+  "baseline_commit": "3586ea2ca2dbe1f56ea0ad472190947594573505",
+  "environment": {
+    "os": "macOS arm64",
+    "rustc": "1.98.0",
+    "cargo": "1.98.0",
+    "deno": "2.9.6"
+  },
+  "component": {
+    "package": "gmofg-payment-dll@1.0.0",
+    "path": "outputs/gmofg-payment-dll-1.0.0.wasm",
+    "bytes": 547533,
+    "sha256": "0af5550bffb871a2390d2ec2651c3a639aa06439c8b0c1057784b5ae87b51f13"
+  },
+  "display": {
+    "credit_sample_bytes": 68424,
+    "credit_sample_conservative_dom_nodes": 4107,
+    "proxy_source_limit_bytes": 1048576,
+    "proxy_node_limit": 8192,
+    "distinct_deterministic_table_colors": true
+  },
+  "tests": {
+    "package_tests": "13 passed",
+    "host_component_tests": "1 passed",
+    "safe_display_tests": "11 passed",
+    "strict_clippy": "PASS",
+    "typecheck": "PASS",
+    "targeted_eslint": "PASS",
+    "build_and_manifest_validation": "PASS"
+  },
+  "resources": [
+    "resources/fixtures/connection-test.json",
+    "resources/fixtures/credit-success.json",
+    "resources/fixtures/d48.json",
+    "resources/fixtures/union-pay-success.json",
+    "resources/manifest.json"
+  ],
+  "not_applicable": {
+    "socket_frame": "HTTP Component",
+    "rules": "not modified",
+    "raw_shift_jis_bytes": "Host Body Codec boundary not modified"
+  },
+  "not_run": [
+    "real GMO-FG Server replay",
+    "Android device end-to-end acceptance"
+  ]
+}
