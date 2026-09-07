@@ -1,6 +1,6 @@
 # Intercept Proxy 架构文档
 
-状态：当前实现基线（2026-08-31）。本目录以源码为事实来源，描述已经落地的模块边界、
+状态：当前实现架构（HTTP Finalize 更新于 2026-09-07）。本目录以源码为事实来源，描述已经落地的模块边界、
 Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论稿不属于当前架构契约。
 
 第一次接手项目时，先阅读[新人接手与项目全景指南](../onboarding-guide.md)，完成首次运行和术语学习后，
@@ -12,6 +12,7 @@ Exchange/Pipeline 模型、HTTP/Socket 数据流和验证逻辑。历史讨论�
 2. [Exchange 与 Pipeline](exchange-pipeline.md)：协议无关核心、强类型方向和可替换能力。
 3. [数据流、错误与验证](data-flow.md)：真实连接如何按顺序转发、观察和失败。
 4. [规则、Document 与协议包](rules-and-protocol-packages.md)：统一规则聚合、Schema、本地 Component 与远程调试包。
+   HTTP 包的可选写出扩展见 [本地 Wasm HTTP Finalize](http-finalize.md)。
 5. [运行时观测与诊断](runtime-observability.md)：内存证据、日志、UI 实时刷新、MCP 和复现报告。
 6. [安全、TLS 与持久化](security-and-persistence.md)：双连接 TLS/mTLS、SQLite 与应用导入导出。
 7. [Android VPN 透明路由](android-vpn-transparent-routing.md)：设备侧 TUN、SOCKS5 与流量恢复。
@@ -63,7 +64,8 @@ flowchart LR
 ## 维护规则
 
 - 新业务判断先放进 Rust，并通过生成的 IPC 类型暴露；不要在前端复制校验。
-- 新协议阶段必须实现 `exchange` 已有 capability trait；不要创建第二套组合处理器。
+- 通用协议阶段复用 `exchange` 的 capability trait；HTTP 专有 Finalize 在 HTTP 层定义独立端口，
+  通过既有写准备与规则事务编排，不创建第二套 Pipeline。
 - 新 transport 适配器只实现 Reader、Writer、Connection 或 Server；不要拥有交易顺序状态机。
 - 修改依赖方向、Exchange 顺序、规则能力或错误语义时，必须同步对应详细文档及相应测试。
 - 运行 `deno task scan:architecture` 检查架构边界和文档链接，运行 `deno task check` 执行完整质量门禁。
@@ -73,6 +75,8 @@ flowchart LR
 - 当前递归 Document、两写出阶段和 JavaScript package API 1 边界以
   [ADR-009](decisions/ADR-009-nested-document-javascript-package-runtime.md) 与
   [ADR-010](decisions/ADR-010-in-process-webassembly-protocol-packages.md) 为准。
+- HTTP 可选 Finalize 的能力、事务位置和兼容选择见
+  [ADR-011](decisions/ADR-011-http-finalize-capability.md)。
 - [ADR-002](decisions/ADR-002-protocol-packages-http.md)、
   [ADR-006](decisions/ADR-006-unified-exchange-observation.md) 和
   [ADR-007](decisions/ADR-007-exchange-pipeline-runtime-boundary.md) 已被替代，仅保留历史原因和被否决方案。

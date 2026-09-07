@@ -36,6 +36,7 @@ impl SequencedHttpCapabilities {
                 events: Arc::clone(&self.events),
                 event: events[2],
             }),
+            capabilities.finalize,
         )
     }
 }

@@ -66,6 +66,10 @@ WebSocket 建立后，软件包必须先发送无 `id` 的 JSON-RPC 2.0 notifica
 版本化 Host WebSocket；本地 Hook 不使用 JSON-RPC 或 Base64。跨 `/packages` 的远端 Socket wire 仍使用
 Base64，第三方进程只实现上述 JSON-RPC wire，不应把某个源码语言或 runtime 当作协议要求。
 
+本地 HTTP Component 还可以独立导出 `upstream-finalize` / `downstream-finalize`，在规则和正文编码后
+交换五字段 HTTP JSON。该扩展不增加远端 RPC 方法；输入输出、旧包兼容及失败语义见
+[本地 Wasm HTTP Finalize](../architecture/http-finalize.md)。
+
 ## 4. 规则事务与过程证据
 
 Proxy 只在两个写出边界执行统一规则：`Proxy -> Server` 和 `Proxy -> App`。HTTP Body 与 Socket 的

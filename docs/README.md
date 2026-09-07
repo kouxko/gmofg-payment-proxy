@@ -50,6 +50,7 @@
 - [ADR-008：MCP 环境配置合同与分阶段启用](architecture/decisions/ADR-008-mcp-environment-configuration.md)
 - [ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时（本地运行时已被 ADR-010 替代）](architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md)
 - [ADR-010：进程内 WebAssembly Component 协议包](architecture/decisions/ADR-010-in-process-webassembly-protocol-packages.md)
+- [ADR-011：HTTP 写准备中的独立 Finalize 能力](architecture/decisions/ADR-011-http-finalize-capability.md)
 
 ADR-002、ADR-006 和 ADR-007 仅作为决策历史保留；统一规则以 ADR-009 为准，本地协议包运行时以
 ADR-010 为准，当前源码是最终事实来源。

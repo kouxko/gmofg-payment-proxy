@@ -17,6 +17,7 @@ pub enum ErrorStage {
     Display,
     Rules,
     Encode,
+    Finalize,
     Write,
     Flush,
     Shutdown,
@@ -34,6 +35,7 @@ impl ErrorStage {
             Self::Display => "display",
             Self::Rules => "rules",
             Self::Encode => "encode",
+            Self::Finalize => "finalize",
             Self::Write => "write",
             Self::Flush => "flush",
             Self::Shutdown => "shutdown",
@@ -48,6 +50,7 @@ pub enum ExternalPackageCallStage {
     Decode,
     Display,
     Encode,
+    Finalize,
 }
 
 #[derive(Clone, Debug, Eq, PartialEq)]

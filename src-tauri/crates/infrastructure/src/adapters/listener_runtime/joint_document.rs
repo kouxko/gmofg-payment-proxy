@@ -11,12 +11,13 @@ use intercept_proxy_exchange::{
 };
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{
-    HttpJointEvaluation, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
+    Finalize, HttpJointEvaluation, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
 };
 use uuid::Uuid;
 
 use crate::adapters::ProtocolPackageRuntime;
 
+use super::http_finalize::ExternalHttpFinalizeCall;
 use super::package_error::external_rpc_error;
 
 pub(crate) struct JointDocumentEvaluation {
@@ -38,6 +39,7 @@ enum JointDocumentEncoder {
         direction: ProtocolDirection,
         codec: Arc<dyn BodyCodec>,
         package: ProtocolPackageRef,
+        finalizer: ExternalHttpFinalizeCall,
     },
     SocketExternal {
         original_input: Vec<u8>,
@@ -86,6 +88,12 @@ impl JointDocumentEvaluation {
         programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
     ) -> Self {
         let programs = program_index(programs);
+        let finalizer = ExternalHttpFinalizeCall::new(
+            Arc::clone(&runtime),
+            package.clone(),
+            direction,
+            Arc::clone(&codec),
+        );
         Self {
             document,
             original_document,
@@ -95,6 +103,7 @@ impl JointDocumentEvaluation {
                 direction,
                 codec,
                 package,
+                finalizer,
             },
             programs,
             changes: RuleProcessingAccumulator::default(),
@@ -201,14 +210,14 @@ impl JointDocumentEvaluation {
         ))
     }
 
-    pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
+    pub(crate) async fn encode_into(&mut self, message: &mut Message) -> Result<(), Error> {
         let direction = match &self.encoder {
             JointDocumentEncoder::PlainJson { direction }
             | JointDocumentEncoder::External { direction, .. }
             | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
         };
         rules_processed(direction, &self.changes, &self.document);
-        let written = match self.encoder {
+        let written = match &self.encoder {
             JointDocumentEncoder::PlainJson { .. } => {
                 if self.document == self.original_document {
                     return Ok(());
@@ -224,17 +233,18 @@ impl JointDocumentEvaluation {
                 direction,
                 codec,
                 package,
+                ..
             } => {
                 if self.document == self.original_document {
                     return Ok(());
                 }
                 let encoded = runtime
-                    .encode_http(direction, original_input, self.document)
+                    .encode_http(*direction, original_input.clone(), self.document.clone())
                     .await
                     .map_err(|error| {
                         external_rpc_error(
-                            package,
-                            direction,
+                            package.clone(),
+                            *direction,
                             ExternalPackageCallStage::Encode,
                             "hooks.encode",
                             &error,
@@ -253,6 +263,23 @@ impl JointDocumentEvaluation {
         };
         message.replace_body(written.into());
         Ok(())
+    }
+
+    async fn finalize_into(
+        &mut self,
+        request: &intercept_proxy_runtime::HttpRequestMetadata,
+        message: &mut Message,
+    ) -> Result<(), Error> {
+        match &mut self.encoder {
+            JointDocumentEncoder::PlainJson { .. } => Ok(()),
+            JointDocumentEncoder::External { finalizer, .. } => {
+                finalizer.finalize(request, message).await
+            }
+            JointDocumentEncoder::SocketExternal { .. } => Err(Error::coded(
+                "SOCKET_JOINT_OUTPUT_MISMATCH",
+                "Socket evaluation reached HTTP Finalize",
+            )),
+        }
     }
 
     async fn encode_socket(self) -> Result<SocketContext, Error> {
@@ -310,8 +337,19 @@ impl HttpJointEvaluation for JointDocumentEvaluation {
         self.gate_http(RuleId::from_uuid(rule_id), context, message, apply_action)
     }
 
-    async fn encode(self: Box<Self>, message: &mut Message) -> Result<(), Error> {
-        (*self).encode_into(message).await
+    async fn encode(&mut self, message: &mut Message) -> Result<(), Error> {
+        self.encode_into(message).await
+    }
+}
+
+#[async_trait]
+impl Finalize for JointDocumentEvaluation {
+    async fn finalize(
+        &mut self,
+        request: &intercept_proxy_runtime::HttpRequestMetadata,
+        message: &mut Message,
+    ) -> Result<(), Error> {
+        self.finalize_into(request, message).await
     }
 }
 

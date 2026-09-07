@@ -48,6 +48,8 @@ mod capabilities;
 mod contracts;
 mod egress;
 mod exchange;
+mod finalize;
+mod joint;
 pub(crate) use egress::{Http1TransportSettings, send_http1_exchange};
 mod exchange_runtime;
 pub(crate) use exchange_runtime::{
@@ -83,6 +85,8 @@ pub use contracts::{
     ForwardRequest, HttpRequestMetadata, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
     UpstreamExchange,
 };
+pub use finalize::{Finalize, NoopHttpFinalize};
+pub use joint::HttpJointEvaluation;
 pub use local_server::{LocalHttpServerConfig, LocalHttpServerService};
 pub use service::{ConnectionAdmission, ConnectionService};
 pub use stream_io::InformationalResponseSink;

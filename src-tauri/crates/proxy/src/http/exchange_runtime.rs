@@ -18,17 +18,19 @@ use tokio_util::sync::CancellationToken;
 use tracing::Instrument;
 
 use super::{
-    Clock, ConnectionContext, ErrorCode, FaultAction, ForwardRequest, HttpConnectionIdentity,
-    HttpDirectionCapabilities, HttpMessagePrepare, HttpProtocolCapabilityFactory,
-    InformationalResponseSink, Message, PipelinePorts, ProxyError, ResponseDisposition, Result,
-    UpstreamConnector,
+    Clock, ConnectionContext, ErrorCode, FaultAction, Finalize, ForwardRequest,
+    HttpConnectionIdentity, HttpDirectionCapabilities, HttpMessagePrepare,
+    HttpProtocolCapabilityFactory, InformationalResponseSink, Message, PipelinePorts, ProxyError,
+    ResponseDisposition, Result, UpstreamConnector,
 };
 use crate::listener::{ChildTaskError, ConnectionTaskScope};
 
 mod endpoints;
+mod request_target;
 
 pub(crate) use endpoints::LocalHttpServerConnector;
 use endpoints::{BufferedApp, BufferedHttpServer};
+use request_target::finalized_upstream_uri;
 
 /// Exchange 完成后交回 HTTP wire 层的结果。
 pub(crate) struct HttpExchangeOutput {
@@ -67,6 +69,7 @@ pub(super) struct HttpExchangeState {
 struct HttpTransaction {
     method: Method,
     uri: Uri,
+    app_request_url: String,
     request: Option<Message>,
     response: Option<Message>,
     request_actions: Option<Vec<FaultAction>>,
@@ -93,15 +96,29 @@ impl HttpExchangeState {
         }
     }
 
-    fn begin(&mut self, command: HttpExchangeCommand) {
+    fn begin(&mut self, command: HttpExchangeCommand) -> Result<()> {
         debug_assert!(
             self.current.is_none(),
             "HTTP transactions are strictly paired"
         );
         let close_requested = requests_connection_close(&command.request.message);
+        let app_request_url = command
+            .request
+            .message
+            .start_line
+            .split_ascii_whitespace()
+            .nth(1)
+            .map(str::to_owned)
+            .ok_or_else(|| {
+                ProxyError::new(
+                    ErrorCode::Internal,
+                    "HTTP request start-line has no request target",
+                )
+            })?;
         self.current = Some(HttpTransaction {
             method: command.request.method,
             uri: command.request.uri,
+            app_request_url,
             request: Some(command.request.message),
             response: None,
             request_actions: None,
@@ -113,6 +130,7 @@ impl HttpExchangeState {
             drop_response_after_read: false,
             completed: Some(command.completed),
         });
+        Ok(())
     }
 
     fn complete(&mut self) -> Option<oneshot::Receiver<Result<()>>> {
@@ -315,6 +333,7 @@ fn pipeline<D: intercept_proxy_exchange::Direction>(
         Box::new(Write::prepared(Box::new(BufferedHttpPrepare {
             state,
             prepare: capabilities.prepare,
+            finalize: capabilities.finalize,
         }))),
     )
 }
@@ -322,6 +341,7 @@ fn pipeline<D: intercept_proxy_exchange::Direction>(
 struct BufferedHttpPrepare<D: Direction> {
     state: Arc<Mutex<HttpExchangeState>>,
     prepare: Box<dyn HttpMessagePrepare<D>>,
+    finalize: Box<dyn Finalize>,
 }
 
 #[async_trait::async_trait]
@@ -338,7 +358,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
             let transaction = state.current.as_ref().ok_or_else(|| {
                 ExchangeError::coded("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
             })?;
-            let request = super::HttpRequestMetadata::from_method_and_uri(
+            let mut request = super::HttpRequestMetadata::from_method_and_uri(
                 &transaction.method,
                 &transaction.uri,
             )
@@ -353,6 +373,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
                     "HTTP transaction message missing before write preparation",
                 )
             })?;
+            request.url.clone_from(&transaction.app_request_url);
             (
                 state.context.clone(),
                 Arc::clone(&state.ports),
@@ -362,6 +383,10 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
             )
         };
         let actions = if D::KIND == DirectionKind::Downstream && mocked {
+            self.finalize
+                .finalize(&request, &mut message)
+                .await
+                .map_err(|error| error.at(ErrorStage::Finalize, D::KIND))?;
             Vec::new()
         } else {
             self.prepare
@@ -385,6 +410,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
         })?;
         match D::KIND {
             DirectionKind::Upstream => {
+                transaction.uri = finalized_upstream_uri(&transaction.uri, &request, &message)?;
                 transaction.request = Some(message);
                 transaction.request_actions = Some(actions);
             }

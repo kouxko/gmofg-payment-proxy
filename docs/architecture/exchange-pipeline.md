@@ -15,7 +15,8 @@
 | `Server` | 创建时已经固定的 Local 或 Remote Endpoint |
 | `Envelope` | Reader Pipeline 产生的不可变消息事实 |
 | `Pipeline` | 同一协议、同一方向上的 Reader Pipeline 与 Writer Pipeline |
-| `PrepareWrite` | 明确编排写出前的 Rules 与 Encode；不负责网络写入 |
+| `PrepareWrite` | 编排写出前的 Rules、Encode 及适用的 HTTP Finalize；不负责网络写入 |
+| HTTP `Finalize` | 独立的 HTTP 能力端口，对本轮正文处理完成后的 Message 做最终变换 |
 | `Exchange` | 一个 App connection 的连接级运行器和观察边界 |
 
 ## 2. 协议与方向强约束
@@ -206,7 +207,8 @@ flowchart LR
     DISPLAY --> ENVELOPE[Envelope]
     ENVELOPE --> RULES[Rules]
     RULES --> ENCODE[Encode]
-    ENCODE --> WRITE[Writer]
+    ENCODE --> FINALIZE[可选 HTTP Finalize]
+    FINALIZE --> WRITE[Writer]
 ```
 
 HTTP transport 已经完成 HTTP framing，Context 保存 header/body 文本，因此 Reader Pipeline
@@ -217,6 +219,9 @@ HTTP transport 已经完成 HTTP framing，Context 保存 header/body 文本，�
   后续消息使用新快照；一笔消息的 Decode 与 Prepare 使用同一代规则。
 - Protocol：绑定精确 HTTP 协议包版本；Decode/Display 使用固定 Hook，Prepare 明确调用
   joint evaluation，在一个 actor 事务中执行有序规则与一次 Encode。
+  本地 HTTP Wasm 包的可选 Finalize 在本轮正文动作之后、actor 生命周期提交之前完成；它复用现有
+  `PrepareWrite`，不另建 Pipeline。旧 Mock 只补 Finalize，不重跑原先跳过的规则和 Encode。
+  详见 [HTTP Finalize](http-finalize.md)。
 
 HTTP 的 `HttpMessagePrepare` 接收当前 Message、请求元数据与 PipelinePorts，并返回准备好的故障动作。
 `BufferedHttpPrepare` 只使用 `HttpExchangeState.current` 这一笔交易；joint evaluation 经参数直接

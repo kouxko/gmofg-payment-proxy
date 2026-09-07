@@ -31,6 +31,7 @@ pub(super) struct EvaluationInput {
     pub(super) stage: MessageStage,
     pub(super) method: Option<String>,
     pub(super) request_target: Option<String>,
+    pub(super) request: Option<intercept_proxy_runtime::HttpRequestMetadata>,
     pub(super) joint_document: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
     pub(super) socket_joint: Option<Box<dyn SocketJointEvaluation>>,
     pub(super) message: Option<intercept_proxy_runtime::Message>,
@@ -155,7 +156,7 @@ async fn evaluate_owned(
         input.body_codec.as_deref(),
     )?;
     let hit_rules = matched_rule_summaries(&evaluation, &current.snapshot.rules, channel_labels);
-    let (prepared_message, prepared_socket, fault_actions) =
+    let (prepared_message, prepared_socket, fault_actions, joint_transaction) =
         match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
             Ok(prepared) => prepared,
             Err(error) => {
@@ -191,6 +192,7 @@ async fn evaluate_owned(
             }
         }
     }
+    drop(joint_transaction);
     let traces = rule_trace_text(&evaluation);
     let matched_ids = evaluation
         .traces
@@ -216,6 +218,7 @@ async fn prepare_evaluated_message(
     Option<intercept_proxy_runtime::Message>,
     Option<SocketContext>,
     Vec<intercept_proxy_runtime::FaultAction>,
+    Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
 )> {
     let mut prepared_message = input.message.clone();
     let Some(message) = prepared_message.as_mut() else {
@@ -226,9 +229,10 @@ async fn prepare_evaluated_message(
             })?),
             None => None,
         };
-        return Ok((prepared_message, prepared_socket, Vec::new()));
+        return Ok((prepared_message, prepared_socket, Vec::new(), None));
     };
-    if let Some(joint) = input.joint_document.take() {
+    let mut joint = input.joint_document.take();
+    if let Some(joint) = joint.as_mut() {
         joint.encode(message).await.map_err(|error| {
             let message = format!("联合 Document Encode 失败：{}", error.message);
             joint_encode_error(error, input.stage, message)
@@ -249,7 +253,17 @@ async fn prepare_evaluated_message(
         &evaluation.composed_actions,
         seed,
     )?;
-    Ok((prepared_message, None, fault_actions))
+    if let Some(joint) = joint.as_mut() {
+        let request = input
+            .request
+            .as_ref()
+            .expect("HTTP joint message policy input always includes associated request metadata");
+        joint.finalize(request, message).await.map_err(|error| {
+            let message = format!("联合 HTTP Finalize 失败：{}", error.message);
+            joint_finalize_error(error, input.stage, message)
+        })?;
+    }
+    Ok((prepared_message, None, fault_actions, joint))
 }
 
 fn joint_encode_error(
@@ -272,6 +286,29 @@ fn joint_encode_error(
         intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
         message,
         error.at(intercept_proxy_exchange::ErrorStage::Encode, direction),
+    )
+}
+
+fn joint_finalize_error(
+    error: intercept_proxy_exchange::Error,
+    stage: intercept_proxy_domain::MessageStage,
+    message: String,
+) -> intercept_proxy_runtime::ProxyError {
+    let direction = match stage {
+        intercept_proxy_domain::MessageStage::Request => {
+            intercept_proxy_exchange::DirectionKind::Upstream
+        }
+        intercept_proxy_domain::MessageStage::Response => {
+            intercept_proxy_exchange::DirectionKind::Downstream
+        }
+        intercept_proxy_domain::MessageStage::TlsHandshake => {
+            unreachable!("HTTP Finalize cannot run during TLS handshake")
+        }
+    };
+    intercept_proxy_runtime::ProxyError::from_exchange_error(
+        intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
+        message,
+        error.at(intercept_proxy_exchange::ErrorStage::Finalize, direction),
     )
 }
 

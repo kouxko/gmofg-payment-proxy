@@ -22,6 +22,7 @@ pub(super) fn external_package_call_view(
             ExchangeExternalPackageCallStage::Decode => ExternalPackageCallStage::Decode,
             ExchangeExternalPackageCallStage::Display => ExternalPackageCallStage::Display,
             ExchangeExternalPackageCallStage::Encode => ExternalPackageCallStage::Encode,
+            ExchangeExternalPackageCallStage::Finalize => ExternalPackageCallStage::Finalize,
         },
         method: call.method.clone(),
         request_id: call.request_id.clone(),

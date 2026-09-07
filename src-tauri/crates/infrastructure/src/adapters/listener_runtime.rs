@@ -43,6 +43,7 @@ use crate::SqliteStore;
 use super::common::{app_error, encode_workspace_record};
 use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
 
+mod http_finalize;
 mod joint_document;
 mod package_error;
 pub(super) use joint_document::JointDocumentEvaluation;

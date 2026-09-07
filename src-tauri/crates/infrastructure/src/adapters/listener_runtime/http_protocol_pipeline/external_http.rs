@@ -8,7 +8,7 @@ use intercept_proxy_exchange::{
 };
 use intercept_proxy_product_api::BodyCodec;
 use intercept_proxy_runtime::{
-    ConnectionContext, FaultAction, HttpDirectionCapabilities, HttpMessagePrepare,
+    ConnectionContext, FaultAction, Finalize, HttpDirectionCapabilities, HttpMessagePrepare,
     HttpRequestMetadata, Message, PipelinePorts,
 };
 use parking_lot::Mutex;
@@ -16,6 +16,7 @@ use parking_lot::Mutex;
 use crate::adapters::{ProtocolPackageRuntime, body_codecs::resolve_message_codec};
 
 use super::super::external_relay::RuntimeExternalSocketPackageBinding;
+use super::super::http_finalize::{ExternalHttpFinalizeCall, local_finalize_error};
 use super::super::package_error::external_rpc_error;
 use super::{HttpDocumentRulePrograms, JointDocumentEvaluation};
 
@@ -93,6 +94,13 @@ pub(super) fn build_capabilities<D: Direction>(
             package.clone(),
         )),
         Box::new(ExternalHttpPrepare::<D> {
+            package_runtime: Arc::clone(&runtime_handle),
+            direction,
+            observed: Arc::clone(&observed),
+            package: package.clone(),
+            marker: PhantomData,
+        }),
+        Box::new(ExternalHttpFinalize::<D> {
             package_runtime: runtime_handle,
             direction,
             observed,
@@ -259,5 +267,59 @@ impl<D: Direction> HttpMessagePrepare<D> for ExternalHttpPrepare<D> {
             Some(Box::new(evaluation)),
         )
         .await
+    }
+}
+
+struct ExternalHttpFinalize<D: Direction> {
+    package_runtime: Arc<dyn ProtocolPackageRuntime>,
+    direction: ProtocolDirection,
+    observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
+    package: intercept_proxy_domain::ProtocolPackageRef,
+    marker: PhantomData<fn() -> D>,
+}
+
+#[async_trait]
+impl<D: Direction> Finalize for ExternalHttpFinalize<D> {
+    async fn finalize(
+        &mut self,
+        request: &HttpRequestMetadata,
+        message: &mut Message,
+    ) -> Result<(), Error> {
+        let observed = self
+            .observed
+            .lock()
+            .take()
+            .ok_or_else(|| {
+                Error::coded(
+                    "HTTP_PROTOCOL_CONTEXT_MISSING",
+                    "Document 缺少对应 HTTP 上下文",
+                )
+            })
+            .map_err(|error| {
+                local_finalize_error(
+                    &self.package,
+                    self.direction,
+                    finalize_method(self.direction),
+                    error,
+                )
+                .at(intercept_proxy_exchange::ErrorStage::Finalize, D::KIND)
+            })?;
+        let mut finalize = ExternalHttpFinalizeCall::new(
+            Arc::clone(&self.package_runtime),
+            self.package.clone(),
+            self.direction,
+            observed.codec,
+        );
+        finalize
+            .finalize(request, message)
+            .await
+            .map_err(|error| error.at(intercept_proxy_exchange::ErrorStage::Finalize, D::KIND))
+    }
+}
+
+fn finalize_method(direction: ProtocolDirection) -> &'static str {
+    match direction {
+        ProtocolDirection::Upstream => "upstream-finalize",
+        ProtocolDirection::Downstream => "downstream-finalize",
     }
 }

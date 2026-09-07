@@ -928,7 +928,7 @@ export type ExchangeObservationRecord = {
 export type ExchangeProtocol = "http" | "socket";
 
 /**
- *  外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+ *  本地 Wasm 或远端 JSON-RPC 包调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
  *  在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
  */
 export type ExternalPackageCallDiagnosticViewModel = {
@@ -944,7 +944,7 @@ export type ExternalPackageCallDiagnosticViewModel = {
 	remote_data_summary: string | null,
 };
 
-export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display";
+export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display" | "finalize";
 
 /**  外部协议包详情的严格连接投影。 */
 export type ExternalPackageDetailViewModel = {

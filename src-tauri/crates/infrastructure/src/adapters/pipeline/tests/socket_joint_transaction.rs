@@ -2,6 +2,7 @@
 struct SocketTransactionRules {
     snapshot: Mutex<RuleRuntimeSnapshot>,
     commit_attempts: AtomicUsize,
+    commit_guard: Option<Arc<std::sync::atomic::AtomicBool>>,
 }
 
 #[async_trait]
@@ -15,6 +16,12 @@ impl RuntimeRuleRepository for SocketTransactionRules {
         snapshot: &RuleRuntimeSnapshot,
         deltas: &[RuleLifecycleDelta],
     ) -> AppResult<u64> {
+        if let Some(guard) = &self.commit_guard {
+            assert!(
+                guard.load(std::sync::atomic::Ordering::Acquire),
+                "HTTP joint transaction must remain alive through lifecycle commit"
+            );
+        }
         self.commit_attempts.fetch_add(1, AtomicOrdering::AcqRel);
         let mut current = self.snapshot.lock();
         let revision = current.collection_revision + 1;
@@ -141,6 +148,7 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
     let rules = Arc::new(SocketTransactionRules {
         snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
         commit_attempts: AtomicUsize::new(0),
+        commit_guard: None,
     });
     let pipeline = RuntimePipelineAdapter::new(
         test_product_hooks(),

@@ -40,6 +40,25 @@ world http-package {
   export downstream-display: func(document-json: string) -> result<string, package-error>;
 }
 
+world http-package-upstream-finalize {
+  include http-package;
+  use types.{package-error as finalize-package-error};
+  export upstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
+}
+
+world http-package-downstream-finalize {
+  include http-package;
+  use types.{package-error as finalize-package-error};
+  export downstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
+}
+
+world http-package-finalize {
+  include http-package;
+  use types.{package-error as finalize-package-error};
+  export upstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
+  export downstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
+}
+
 world socket-package {
   use types.{frame-result, package-error};
   import websocket;
