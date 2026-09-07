@@ -12,6 +12,7 @@ const currentDocuments = [
   "exchange-pipeline.md",
   "data-flow.md",
   "rules-and-protocol-packages.md",
+  "http-finalize.md",
   "runtime-observability.md",
   "security-and-persistence.md",
   "android-vpn-transparent-routing.md",
@@ -23,6 +24,7 @@ const mermaidDocuments = new Set([
   "modules.md",
   "exchange-pipeline.md",
   "data-flow.md",
+  "http-finalize.md",
 ]);
 
 const decisions = new Map([
@@ -79,6 +81,7 @@ const decisions = new Map([
     "decisions/ADR-010-in-process-webassembly-protocol-packages.md",
     { status: "Accepted" },
   ],
+  ["decisions/ADR-011-http-finalize-capability.md", { status: "Accepted" }],
 ]);
 
 const rootDocuments = [

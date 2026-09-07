@@ -65,6 +65,49 @@ impl Rules for SuffixRules {
 
 struct TextEncode;
 
+struct FailingFinalize;
+
+#[async_trait]
+impl PrepareWrite<Http, Downstream> for FailingFinalize {
+    async fn prepare(
+        &mut self,
+        _envelope: &Envelope<Http, Downstream>,
+    ) -> Result<HttpContext, Error> {
+        Err(
+            Error::coded("FINALIZE_REJECTED", "finalized response rejected")
+                .with_stage(ErrorStage::Finalize),
+        )
+    }
+}
+
+#[tokio::test]
+async fn finalize_failure_keeps_its_stage_and_never_reaches_writer() {
+    let mut reader = QueueReader::<Http, Downstream>::contexts([HttpContext {
+        header: "HTTP/1.1 200 OK".into(),
+        body: "response".into(),
+        body_is_utf8: true,
+        wire_body: b"response".to_vec(),
+    }]);
+    let mut pipeline = Pipeline::new(
+        Box::new(HttpRead::new(
+            Box::new(TextDecode),
+            Box::new(DocumentDisplay { fail: false }),
+        )),
+        Box::new(Write::prepared(Box::new(FailingFinalize))),
+    );
+    let envelope = pipeline.read(&mut reader).await.unwrap().unwrap();
+    let recorded = Arc::new(Mutex::new(Vec::new()));
+    let mut writer = RecordingWriter::<Http, Downstream>::new(Arc::clone(&recorded));
+
+    let error = pipeline.write(&mut writer, &envelope).await.unwrap_err();
+
+    assert_eq!(error.stage, Some(ErrorStage::Finalize));
+    assert_eq!(error.direction, Some(DirectionKind::Downstream));
+    assert_eq!(error.code.as_deref(), Some("FINALIZE_REJECTED"));
+    assert_eq!(envelope.context().body, "response");
+    assert!(recorded.lock().is_empty());
+}
+
 #[async_trait]
 impl<D: Direction> Encode<Http, D> for TextEncode {
     async fn encode(

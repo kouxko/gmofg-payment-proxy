@@ -1,0 +1,19 @@
+[package]
+name = "intercept-proxy-http-finalize-component"
+version = "1.0.0"
+edition = "2024"
+publish = false
+
+[lib]
+crate-type = ["cdylib"]
+
+[features]
+default = []
+upstream = []
+downstream = []
+invalid-signature = []
+
+[dependencies]
+wit-bindgen = "=0.48.1"
+
+[workspace]

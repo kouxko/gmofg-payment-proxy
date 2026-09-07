@@ -4,6 +4,7 @@ pub(super) fn http_request_metadata() -> intercept_proxy_runtime::http::HttpRequ
     intercept_proxy_runtime::http::HttpRequestMetadata {
         method: "POST".into(),
         request_target: "/phase10".into(),
+        url: "/phase10".into(),
     }
 }
 
