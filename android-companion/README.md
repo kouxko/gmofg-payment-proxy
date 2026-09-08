@@ -3,6 +3,11 @@
 Android Companion 使用 `VpnService` 只接管 Profile 中明确选择的应用流量。未选择应用、
 Android 系统流量和 ADB 不进入 TUN。
 
+VPN 允许 bypass，以保留目标应用的 LAN 入站服务（例如 Launcher TCP 7788）。目标应用的
+默认出站仍进入 TUN，但应用显式绑定底层 `Network` 时可以绕过 VPN；该策略作用于整个 VPN，
+不是单端口例外，也不提供强制隔离。升级到此策略后需停止并重新启动 VPN，已有 TUN 不会改变。
+系统强制 lockdown 可能禁止 bypass，不在此兼容保证范围内。
+
 ## 当前实现
 
 - 包名固定为 `com.interceptproxy.vpn`。

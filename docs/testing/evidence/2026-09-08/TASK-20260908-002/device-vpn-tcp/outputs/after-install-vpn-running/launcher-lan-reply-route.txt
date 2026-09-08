@@ -1,0 +1,2 @@
+10.0.34.43 dev wlan0 table 1026 src 10.0.34.117 mark 0x3006d uid 10116 
+    cache 

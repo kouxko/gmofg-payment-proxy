@@ -1,0 +1,9 @@
+{
+  "local_apk": "/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build/outputs/apk/release/app-release.apk",
+  "device": "10.0.34.117:5555",
+  "installed_path": "/data/app/com.interceptproxy.vpn-hRkvgopE0lYtgNqNtaiJOg==/base.apk",
+  "local_sha256": "8c8fe7048d29c5f85cae4a704fb2af9493ba710c581678bf67549a661b97cfd9",
+  "installed_sha256": "8c8fe7048d29c5f85cae4a704fb2af9493ba710c581678bf67549a661b97cfd9",
+  "match": true,
+  "signer_sha256": "c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2"
+}

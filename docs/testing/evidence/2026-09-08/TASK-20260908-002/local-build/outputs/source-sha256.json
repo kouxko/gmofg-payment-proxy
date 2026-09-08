@@ -1,0 +1,10 @@
+{
+  "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnTunFactory.kt": "d6410164c6e99882ce05641635ec8ceac7fc41378bea7616d747471b6b62aeb8",
+  "android-companion/app/build.gradle.kts": "994497e946a2994b9787c47398ff3c64be4f1fd22be5b5a864b4f43fc9f72ef9",
+  "android-companion/build.gradle.kts": "3a47e0cb9a666961e0c602dee4b6108135529f44f1ee1be4adddafd2df83a9d4",
+  "android-companion/settings.gradle.kts": "eb0736d31283ce5480341f4e268ad2027623843431058fef9c37cd3733441078",
+  "android-companion/scripts/build-rust-android.sh": "d59e7371d4392d2763bba961b70aace8ce6bbf90a64b4f1a32300d269f5c7518",
+  "scripts/build-android-companion.sh": "ad41d472ccb36414f5060256e4eefa041e005e7a519c347a4fcc67b806e7876a",
+  "scripts/verify-android-companion.sh": "162928d9d216735365d417444a33a6d11b028634fc32f51c4bcf457e1b949b59",
+  "android-companion/signing/certificate-sha256.txt": "316527a0bfa958beecb0147b432ed3b5af9a2c86c07cc870d2b74e03ac9b7aee"
+}

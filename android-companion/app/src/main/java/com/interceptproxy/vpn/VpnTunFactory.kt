@@ -13,6 +13,8 @@ internal object VpnTunFactory {
     ): ParcelFileDescriptor? = runCatching {
         builder
             .setSession(profile.targetPackages.joinToString { it.packageName })
+            // 保留目标应用的 LAN 入站连接；默认出站仍进 TUN，显式绑定底层网络可绕过 VPN。
+            .allowBypass()
             .setMtu(profile.mtu)
             .addAddress("10.254.0.2", 32)
             .addAddress("fd00:6970:7670::2", 128)

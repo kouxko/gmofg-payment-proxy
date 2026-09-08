@@ -20,6 +20,10 @@
 非目标 App 不进入 TUN。Companion 自身禁止加入目标列表；所有对外 Socket 必须先 `protect(fd)`，
 否则会再次进入自己的 VPN 形成递归。
 
+`VpnTunFactory` 在建立 VPN 时启用 `allowBypass()`，保留目标应用的 LAN 入站服务。
+默认出站接管、显式绑定底层网络的绕过能力、lockdown 限制和升级后重建要求统一见
+[Companion 安全边界](../../android-companion/README.md)。
+
 ## 2. 三个职责边界
 
 ### 2.1 桌面 Application/Infrastructure

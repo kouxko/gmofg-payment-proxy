@@ -1,0 +1,2 @@
+1.1.1.1 dev tun0 table 1039 src 10.254.0.2 uid 10116 
+    cache 

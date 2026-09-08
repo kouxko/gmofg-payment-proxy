@@ -1,0 +1,21 @@
+{
+  "checks": {
+    "vpn_verified_running_before_and_after": true,
+    "nonempty_profile_stable": true,
+    "proxy_routes_stable": true,
+    "launcher_default_route_tun": true,
+    "permission_monitor_iif_empty_before_and_after": true,
+    "tcp_7788_three_success": true,
+    "zero_application_bytes": true
+  },
+  "result": "VPN_LAN_TCP_REGRESSION_PASS",
+  "outbound_end_to_end": "NOT_VERIFIED",
+  "stats": {
+    "socks_connect_attempts": 1,
+    "socks_connect_successes": 0,
+    "tun_upload_packets": 14,
+    "tun_download_packets": 4
+  },
+  "application_protocol": "NOT_RUN",
+  "note": "Default TUN route and observed TUN packets do not prove successful upstream or desktop proxy capture."
+}

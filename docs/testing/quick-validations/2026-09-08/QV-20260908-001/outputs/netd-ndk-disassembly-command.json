@@ -1,0 +1,10 @@
+{
+  "command": [
+    "/Users/codin/Library/Android/sdk/ndk/29.0.14206865/toolchains/llvm/prebuilt/darwin-x86_64/bin/llvm-objdump",
+    "-dr",
+    "--no-show-raw-insn",
+    "docs/testing/quick-validations/2026-09-08/QV-20260908-001/resources/device-netd.o"
+  ],
+  "exit_code": 0,
+  "note": "BTF.ext metadata warning; ingress instruction disassembly and relocations available."
+}

@@ -1,0 +1,2 @@
+tcpdump: en0: You don't have permission to capture on that device
+((cannot open BPF device) /dev/bpf0: Permission denied)

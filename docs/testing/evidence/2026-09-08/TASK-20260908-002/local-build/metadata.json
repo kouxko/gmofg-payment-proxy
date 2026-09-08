@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-20260908-002",
+  "case_id": "local-build",
+  "updated_at": "2026-09-08 16:45:20 +08:00",
+  "result": "PASS_WITH_5_LINT_WARNINGS",
+  "base_commit": "6764210eb057bb482b86a05cd1df23d7cdea5c5c",
+  "state_record": "resources snapshots and outputs/source-sha256.json for build; packages/status/routes before and after for device",
+  "replay": "README.md",
+  "derived_from_quick_validation": null,
+  "not_applicable": {
+    "application_payload": "No business payload sent; TCP handshake only",
+    "screenshots": "No UI change or UI acceptance",
+    "ci": "Not authorized, not triggered"
+  },
+  "pending": []
+}

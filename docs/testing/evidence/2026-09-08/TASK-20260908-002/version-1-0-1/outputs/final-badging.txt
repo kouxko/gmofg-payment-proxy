@@ -1,0 +1,26 @@
+package: name='com.interceptproxy.vpn' versionCode='101' versionName='1.0.1' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+sdkVersion:'24'
+targetSdkVersion:'36'
+uses-permission: name='android.permission.INTERNET'
+uses-permission: name='android.permission.ACCESS_NETWORK_STATE'
+uses-permission: name='android.permission.RECEIVE_BOOT_COMPLETED'
+uses-permission: name='android.permission.FOREGROUND_SERVICE'
+uses-permission: name='android.permission.FOREGROUND_SERVICE_SPECIAL_USE'
+uses-permission: name='android.permission.POST_NOTIFICATIONS'
+uses-permission: name='android.permission.QUERY_ALL_PACKAGES'
+application-label:'Intercept Proxy VPN'
+application-icon-160:'res/Yd.xml'
+application: label='Intercept Proxy VPN' icon='res/Yd.xml'
+launchable-activity: name='com.interceptproxy.vpn.VpnConsentActivity'  label='' icon=''
+feature-group: label=''
+  uses-feature: name='android.hardware.faketouch'
+  uses-implied-feature: name='android.hardware.faketouch' reason='default feature for all apps'
+main
+other-activities
+other-receivers
+other-services
+supports-screens: 'small' 'normal' 'large' 'xlarge'
+supports-any-density: 'true'
+locales: '--_--'
+densities: '160'
+native-code: 'arm64-v8a' 'armeabi-v7a' 'x86' 'x86_64'
