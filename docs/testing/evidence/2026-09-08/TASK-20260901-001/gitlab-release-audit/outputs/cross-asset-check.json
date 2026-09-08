@@ -1,0 +1,12 @@
+{
+  "portable_executable_pe_machine": "AMD64 (0x8664)",
+  "portable_embedded_apk_matches_release_apk": true,
+  "apk_signature_verification_exit_code": 0,
+  "apk_abis": [
+    "arm64-v8a",
+    "armeabi-v7a",
+    "x86",
+    "x86_64"
+  ],
+  "windows_installer_execution": "NOT_RUN on current macOS; user manual acceptance is separate"
+}

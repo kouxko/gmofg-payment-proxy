@@ -1,0 +1,392 @@
+[
+  {
+    "id": 104429,
+    "status": "success",
+    "stage": "package",
+    "name": "windows_build_only",
+    "ref": "feature/0907-001-http-finalize-cps-signing",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T09:26:52.457Z",
+    "started_at": "2026-09-07T10:12:23.414Z",
+    "finished_at": "2026-09-07T10:22:22.631Z",
+    "erased_at": null,
+    "duration": 599.217285,
+    "queued_duration": 0.875062,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "short_id": "561fd57a",
+      "created_at": "2026-09-07T17:26:33.000+08:00",
+      "parent_ids": [
+        "d6b4cdbe0544e6dfd9f044d6da833af6aeb0f4fa"
+      ],
+      "title": "ci: share project caches and build Android and Windows in parallel",
+      "message": "ci: share project caches and build Android and Windows in parallel\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-07T17:26:33.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-07T17:26:33.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/561fd57a3875629c25de7b984f3f36a1b46d2511"
+    },
+    "pipeline": {
+      "id": 34145,
+      "iid": 38,
+      "project_id": 1023,
+      "sha": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "ref": "feature/0907-001-http-finalize-cps-signing",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T09:26:52.435Z",
+      "updated_at": "2026-09-07T10:22:22.753Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34145"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104429",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "Intercept-Proxy-android-windows-build.zip",
+      "size": 103423195
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 103423195,
+        "filename": "Intercept-Proxy-android-windows-build.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 367,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 111548,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-10-07T10:22:22.207Z",
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104428,
+    "status": "success",
+    "stage": "prepare",
+    "name": "windows_compile",
+    "ref": "feature/0907-001-http-finalize-cps-signing",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T09:26:52.449Z",
+    "started_at": "2026-09-07T09:26:55.421Z",
+    "finished_at": "2026-09-07T10:12:22.338Z",
+    "erased_at": null,
+    "duration": 2726.917308,
+    "queued_duration": 2.474455,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "short_id": "561fd57a",
+      "created_at": "2026-09-07T17:26:33.000+08:00",
+      "parent_ids": [
+        "d6b4cdbe0544e6dfd9f044d6da833af6aeb0f4fa"
+      ],
+      "title": "ci: share project caches and build Android and Windows in parallel",
+      "message": "ci: share project caches and build Android and Windows in parallel\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-07T17:26:33.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-07T17:26:33.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/561fd57a3875629c25de7b984f3f36a1b46d2511"
+    },
+    "pipeline": {
+      "id": 34145,
+      "iid": 38,
+      "project_id": 1023,
+      "sha": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "ref": "feature/0907-001-http-finalize-cps-signing",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T09:26:52.435Z",
+      "updated_at": "2026-09-07T10:22:22.753Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34145"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104428",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "Intercept-Proxy-windows-compiled.zip",
+      "size": 27310904
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 797485,
+        "filename": "job.log",
+        "file_format": null
+      },
+      {
+        "file_type": "archive",
+        "size": 27310904,
+        "filename": "Intercept-Proxy-windows-compiled.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 209,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-21T10:12:22.082Z",
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104427,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_companion",
+    "ref": "feature/0907-001-http-finalize-cps-signing",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T09:26:52.442Z",
+    "started_at": "2026-09-07T09:26:53.225Z",
+    "finished_at": "2026-09-07T09:49:05.404Z",
+    "erased_at": null,
+    "duration": 1332.178985,
+    "queued_duration": 0.34419,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "short_id": "561fd57a",
+      "created_at": "2026-09-07T17:26:33.000+08:00",
+      "parent_ids": [
+        "d6b4cdbe0544e6dfd9f044d6da833af6aeb0f4fa"
+      ],
+      "title": "ci: share project caches and build Android and Windows in parallel",
+      "message": "ci: share project caches and build Android and Windows in parallel\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-07T17:26:33.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-07T17:26:33.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/561fd57a3875629c25de7b984f3f36a1b46d2511"
+    },
+    "pipeline": {
+      "id": 34145,
+      "iid": 38,
+      "project_id": 1023,
+      "sha": "561fd57a3875629c25de7b984f3f36a1b46d2511",
+      "ref": "feature/0907-001-http-finalize-cps-signing",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T09:26:52.435Z",
+      "updated_at": "2026-09-07T10:22:22.753Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34145"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104427",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "intercept-proxy-android-companion.zip",
+      "size": 12486386
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 12486386,
+        "filename": "intercept-proxy-android-companion.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 214,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 129637,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-21T09:49:04.678Z",
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  }
+]

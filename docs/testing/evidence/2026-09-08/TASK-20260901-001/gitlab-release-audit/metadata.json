@@ -1,0 +1,23 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "gitlab-release-audit",
+  "status": "PARTIAL_EXISTING_RELEASE_VERIFIED",
+  "started_at": "2026-09-08 11:27:34 +08:00",
+  "scope": "Read-only existing GitLab master/v1.0.0 release and assets audit; no push/tag/CI/publish",
+  "finished_at": "2026-09-08 11:44:08 +08:00",
+  "release_tag": "v1.0.0",
+  "release_commit": "a146e75ca03cefc52858887a47f832c9b71d8c5e",
+  "source_pipeline": 34120,
+  "source_pipeline_status": "success",
+  "source_commit": "caa36022f1070caad58085870a4c33c1e6246bbd",
+  "verified_assets": 4,
+  "remaining": [
+    "macOS assets absent from existing release",
+    "full release CI not run for current local branch; source push/new version authorization not specified"
+  ],
+  "replay": "replay/audit.py",
+  "not_applicable": {
+    "windows_installation": "N/A macOS host; user manual acceptance remains separate",
+    "new_remote_mutation": "N/A read-only GET/downloads only"
+  }
+}
