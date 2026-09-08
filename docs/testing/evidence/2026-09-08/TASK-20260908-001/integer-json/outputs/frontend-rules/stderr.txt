@@ -1,0 +1,1 @@
+Task test vitest run 'src/features/rules/rule-definition-editor.test.tsx' 'src/features/rules/rule-definition-model.test.ts' 'src/features/capture/exchange-observation-detail.test.tsx'

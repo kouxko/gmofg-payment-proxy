@@ -1,0 +1,18 @@
+{
+  "version_code": 101,
+  "version_name": "1.0.1",
+  "apk_sha256": "ecfb9c5696f7ea48faf112ff7a2393380419efc7c6bc75796c11b76d38bf4ef2",
+  "unit_tests": {
+    "tests": 45,
+    "failures": 0,
+    "errors": 0,
+    "skipped": 0
+  },
+  "native_abis_match_rebuilt_libraries": true,
+  "merge_target_sha": "5fd873d703a5d9a81d290693a982133c8f42b957",
+  "source_sha256": {
+    "android-companion/app/build.gradle.kts": "502ebd80a0316ed55194ce784bd83648f6b7029505377fc6773a3342abd48806",
+    "android-companion/app/src/main/java/com/interceptproxy/vpn/VpnTunFactory.kt": "d6410164c6e99882ce05641635ec8ceac7fc41378bea7616d747471b6b62aeb8",
+    "src-tauri/crates/domain/src/document/model.rs": "0e03459ba11530129cb9619f0b2d4c3561f2762e88eddd0a6fce1d32f0fba509"
+  }
+}

@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "comparison": "exact UTF-8 bytes",
+  "actual_sha256": "be095f044c52579eb00731618f6731042da46bb68a5afaa96de889fcfa107865",
+  "expected_sha256": "be095f044c52579eb00731618f6731042da46bb68a5afaa96de889fcfa107865",
+  "source_log": "../../wasm-json-wire/stdout.txt",
+  "package_source": "examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm",
+  "direction": "Upstream"
+}

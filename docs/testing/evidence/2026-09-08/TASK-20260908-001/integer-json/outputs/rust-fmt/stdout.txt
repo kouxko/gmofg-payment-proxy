@@ -1,0 +1,18 @@
+Diff in /Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs:99:
+     workspace
+ }
+ 
++#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
++mod cps_checksum_wire;
+ #[path = "phase10_http_pipeline/live_plain_hot_replacement.rs"]
+ mod live_plain_hot_replacement;
+ #[path = "phase10_http_pipeline/local_http_response.rs"]
+Diff in /Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs:107:
+ mod plain_json_rules;
+ #[path = "phase10_http_pipeline/production_shape.rs"]
+ mod production_shape;
+-#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
+-mod cps_checksum_wire;
+ #[path = "phase10_http_pipeline/real_wasm_finalize_wire.rs"]
+ mod real_wasm_finalize_wire;
+ #[path = "phase10_http_pipeline/request_metadata.rs"]

@@ -1,9 +1,9 @@
 {
   "task_id": "TASK-20260908-002",
   "case_id": "version-1-0-1",
-  "updated_at": "2026-09-08 17:09:11 +08:00",
-  "result": "PRE_INTEGRATION_BUILD_PASS_FINAL_BUILD_PENDING",
-  "version_code": 2,
+  "updated_at": "2026-09-08 17:19:27 +08:00",
+  "result": "FINAL_VERSION_101_BUILD_PASS",
+  "version_code": 101,
   "version_name": "1.0.1",
   "before_integration_sha256": "c476dd7228d44c451039d35bc9f528a2a01b94698833f06769d4599240654251",
   "replay": "bash scripts/build-android-companion.sh",
@@ -15,5 +15,8 @@
     "task_id": "TASK-20260908-002",
     "case_id": "local-build",
     "path": "docs/testing/evidence/2026-09-08/TASK-20260908-002/local-build"
-  }
+  },
+  "final_apk_sha256": "ecfb9c5696f7ea48faf112ff7a2393380419efc7c6bc75796c11b76d38bf4ef2",
+  "final_resource": "resources/companion-1.0.1-code101.apk",
+  "upstream_develop": "5fd873d703a5d9a81d290693a982133c8f42b957"
 }

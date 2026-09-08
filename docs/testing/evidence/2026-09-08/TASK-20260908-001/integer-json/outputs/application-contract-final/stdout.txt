@@ -1,0 +1,13 @@
+
+running 8 tests
+test candidate_schema_version_is_exact_literal_one ... ok
+test document_condition_and_action_use_authoritative_typed_wire ... ok
+test document_contract_rejects_variant_and_tag_drift ... ok
+test document_value_recursive_json_wire_uses_canonical_integer_numbers ... ok
+test expected_preview_contains_all_document_variants_and_terminal_field_contract ... ok
+test legacy_document_rule_wire_saves_integer_numbers_and_reloads_without_behavior_drift ... ok
+test terminal_action_rejects_wrong_offset_fields ... ok
+test terminal_result_union_rejects_status_literal_and_shape_drift ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.17s
+

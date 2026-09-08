@@ -1,7 +1,10 @@
 use intercept_proxy_application::{
     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
 };
-use intercept_proxy_domain::{Condition, DocumentNumber, DocumentValue, UnifiedAction};
+use intercept_proxy_domain::{
+    Condition, Document, DocumentNumber, DocumentValue, RuleContent, UnifiedAction,
+    matches_document_condition,
+};
 use serde_json::{Value, json};
 use std::collections::BTreeMap;
 
@@ -14,7 +17,7 @@ where
 }
 
 #[test]
-fn document_value_recursive_json_wire_round_trips_without_drift() {
+fn document_value_recursive_json_wire_uses_canonical_integer_numbers() {
     for (typed, expected) in [
         (DocumentValue::String("abc".to_owned()), json!("abc")),
         (
@@ -34,7 +37,7 @@ fn document_value_recursive_json_wire_round_trips_without_drift() {
             DocumentValue::Array(vec![DocumentValue::Number(
                 DocumentNumber::new(0.0).unwrap(),
             )]),
-            json!([0.0]),
+            json!([0]),
         ),
     ] {
         assert_eq!(serde_json::to_value(&typed).unwrap(), expected);
@@ -52,13 +55,49 @@ fn document_condition_and_action_use_authoritative_typed_wire() {
         "path": "/amount",
         "predicate": {
             "type": "number",
-            "value": { "operator": "equal", "value": 7.0 }
+            "value": { "operator": "equal", "value": 7 }
         }
     }));
     round_trip::<UnifiedAction>(&json!({
         "source": "document",
         "value": { "type": "set", "path": "/approval_code", "value": "abc" }
     }));
+}
+
+#[test]
+fn legacy_document_rule_wire_saves_integer_numbers_and_reloads_without_behavior_drift() {
+    fn execute(rule: &RuleContent) -> Document {
+        let RuleContent::Socket(content) = rule else {
+            panic!("fixture is a socket rule");
+        };
+        let mut document = Document::parse_json(r#"{"amount":7.0,"payload":null}"#).unwrap();
+        assert!(matches_document_condition(&content.condition, &document).unwrap());
+        let UnifiedAction::Document(mutation) = &content.action else {
+            panic!("fixture has a document mutation");
+        };
+        mutation.apply(&mut document).unwrap();
+        document
+    }
+
+    let legacy_wire = r#"{"type":"socket","value":{"package":{"id":"legacy","version":"1.0.0"},"condition":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"equal","value":7.0}}},"action":{"source":"document","value":{"type":"set","path":"/payload","value":[0.0,2.5,"2.0"]}}}}"#;
+    let loaded: RuleContent = serde_json::from_str(legacy_wire).expect("legacy rule wire loads");
+
+    let saved = serde_json::to_string(&loaded).expect("loaded rule saves");
+    assert_eq!(
+        saved,
+        r#"{"type":"socket","value":{"package":{"id":"legacy","version":"1.0.0"},"condition":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"equal","value":7}}},"action":{"source":"document","value":{"type":"set","path":"/payload","value":[0,2.5,"2.0"]}}}}"#
+    );
+
+    let reloaded: RuleContent = serde_json::from_str(&saved).expect("saved rule reloads");
+    assert_eq!(reloaded, loaded);
+
+    let loaded_result = execute(&loaded);
+    let reloaded_result = execute(&reloaded);
+    assert_eq!(reloaded_result, loaded_result);
+    assert_eq!(
+        reloaded_result.to_json().unwrap(),
+        r#"{"amount":7,"payload":[0,2.5,"2.0"]}"#
+    );
 }
 
 #[test]
@@ -89,7 +128,7 @@ fn expected_preview_contains_all_document_variants_and_terminal_field_contract()
         json!(true),
         Value::Null,
         json!({"nested":"value"}),
-        json!([0.0]),
+        json!([0]),
     ];
     assert_eq!(actual_values, &expected_values);
     assert_eq!(

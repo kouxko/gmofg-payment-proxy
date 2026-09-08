@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 16:03:20 +08:00 | [TASK-20260908-001：Document整数JSON序列化](completed/2026-09-08/fix-document-integer-json-serialization.md) | 统一整数输出、保留小数/字符串/负零，旧配置兼容 | PASS；领域109、应用477、包23、HTTP22、前端27、Java14及严格静态/绑定/独立APPROVE；真实设备NOT_RUN | 高 | DocumentNumber、JSON、整数、Wasm、CPS |
 | 12:03:49 +08:00 | [TASK-20260905-001：整体审查问题修复与A920验收](completed/2026-09-08/fix-reviewed-architecture-contracts.md) | 活动归属、手动恢复、严格路由、草稿与错误合同 | PASS；原本地回归、真机准入2/2、四条真实wire、失联/新epoch恢复及设备还原；独立APPROVE | 高 | Android、TUN、租约、恢复、架构 |
 | 11:39:16 +08:00 | [TASK-20260906-001：六项架构与逻辑修复](completed/2026-09-08/fix-six-architecture-review-findings.md) | 活动归属、异步保存、错误观测及Socket资源约束；1MiB读取上限 | PASS；新增6专项、受影响1111测试、严格静态门禁及独立APPROVE；默认16KiB保持 | 高 | Socket、资源、并发、错误、Android |
 | 11:24:03 +08:00 | [TASK-20260829-002：递归Document与统一扁平规则](completed/2026-09-08/nested-document-rules-javascript-websocket-packages.md) | 递归Document、统一规则、Schema100；旧Sidecar已由Wasm替代 | 自动化PASS；本机HTTP7/Socket3与持久化PASS；跨平台/签名USER_REPORTED_PASS；独立审计通过 | 高 | Document、规则、Wasm、Schema100、人工验收 |

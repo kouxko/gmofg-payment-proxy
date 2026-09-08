@@ -24,6 +24,14 @@ Workspace 只保存一个 `rule_definitions` 集合。HTTP 与 Socket 内容保�
 Pointer 定位具体值；Schema 的 object properties 与 array items 描述能力。array items 只是元素类型
 模板，只有用户显式创建 index 后，规则本地路径才出现具体索引。
 
+`DocumentNumber` 保持有限 `f64` 与 JavaScript 安全整数校验，数字输出由该类型的 `Serialize`
+统一处理，覆盖 Document JSON、规则配置和 Wasm JSON 边界。重编码时，`2`、`2.0` 输出为 `2`，
+`2.5` 仍为 `2.5`，字符串 `"2.0"` 保持字符串；负零沿用原有的 `-0.0` 表示。
+对象和数组递归遵循同一规则。这是数值表示规范化，
+不保留 `2.00` 等原始数字写法，也不扩展数值精度。Document 未实际变化时，现有 HTTP/Socket
+Document 编码环节仍保留原输入；其他 HTTP 动作和 Finalize 按各自合同运行。修改任一字段后，
+其他字段可能随整个 Document 一起重新编码。
+
 Schema-free 编辑通过 Rust typed factory 创建第一条规则本地叶子。叶子的 predicate/action 保留
 `DocumentValueType`，包括只清除值的 Clear；不另建独立 metadata 持久化字段。现有规则本地叶子按
 value type 重新读取 Rust capability，因此 null、object、array 和未来由 Rust 暴露的类型不会被 UI

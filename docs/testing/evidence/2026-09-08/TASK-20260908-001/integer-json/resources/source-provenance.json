@@ -1,0 +1,352 @@
+[
+  {
+    "source": "examples/protocol-packages/gmofg_cps/src/finalize.rs",
+    "archive": "resources/tested-source/examples/protocol-packages/gmofg_cps/src/finalize.rs",
+    "sha256": "639736d536e31c52f17d64db0bf134c3e0309a65eed86e3678c97ba3b30765a3",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.prefix",
+    "archive": "resources/tested-source/examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.prefix",
+    "sha256": "258e39238b681e669c66915340899b6b1d587468cb9d61aae382bb05d3cf7aae",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.suffix",
+    "archive": "resources/tested-source/examples/protocol-packages/gmofg_cps/tests/java_reference/OracleMain.suffix",
+    "sha256": "59247f1b738c922923707ec8a86529382afc55e7bf6f95fcad24f15c96523f82",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_cps/tests/java_reference/run.sh",
+    "archive": "resources/tested-source/examples/protocol-packages/gmofg_cps/tests/java_reference/run.sh",
+    "sha256": "4146d7a9c83113e72e4b316c3a8e523ef257aa423e5c23401eb64d783a92dac1",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/Cargo.lock",
+    "archive": "resources/tested-source/src-tauri/Cargo.lock",
+    "sha256": "58c178b835dbf7d05a97eb5cbb98a324d38e012448cb07086d5db56a489ed383",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/Cargo.toml",
+    "archive": "resources/tested-source/src-tauri/Cargo.toml",
+    "sha256": "ac74ead484a999b3da25c219514d520830f374841b1d9b2b54ebf50f33eb8b7b",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/application/Cargo.toml",
+    "archive": "resources/tested-source/src-tauri/crates/application/Cargo.toml",
+    "sha256": "cfdc353fb3e6dca22dab8af3aaa17bd080738fe0afa8c72e0afd6d0aa1c2795c",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs",
+    "archive": "resources/tested-source/src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs",
+    "sha256": "623d53e4cab94749de171078ca999d5875f8ef562f3e9ce04ea089b25e342341",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/application/tests/environment_configuration_document_contract.rs",
+    "archive": "resources/tested-source/src-tauri/crates/application/tests/environment_configuration_document_contract.rs",
+    "sha256": "ae43a061d22be4dba26e2ada8d27127106450f6c1bd3bfd7c9d5ccbd153798e8",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/Cargo.toml",
+    "archive": "resources/tested-source/src-tauri/crates/domain/Cargo.toml",
+    "sha256": "8ecd8f9938df91d26f482aa075e0127029b9932180544b1b05138b527063ca55",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/document/model.rs",
+    "archive": "resources/tested-source/src-tauri/crates/domain/src/document/model.rs",
+    "sha256": "0e03459ba11530129cb9619f0b2d4c3561f2762e88eddd0a6fce1d32f0fba509",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/document/tests/mod.rs",
+    "archive": "resources/tested-source/src-tauri/crates/domain/src/document/tests/mod.rs",
+    "sha256": "e54b7af27db59fd13ca8afc0e50288f44d40f740c9a582b72871ab00bcf8156b",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/document/tests/number_serialization.rs",
+    "archive": "resources/tested-source/src-tauri/crates/domain/src/document/tests/number_serialization.rs",
+    "sha256": "ea78c3541bd3a327743960e53b26e0b7eb7d94492bc769561e6c202934da5e32",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/src/document/tests/recursive.rs",
+    "archive": "resources/tested-source/src-tauri/crates/domain/src/document/tests/recursive.rs",
+    "sha256": "6850697482aff6e8f41fa8050a71293d0b3fd26f893627d8afcecc998be1b296",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs",
+    "archive": "resources/tested-source/src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs",
+    "sha256": "3aea8a1db18a121f4fdffbb68e7e9e72961eb2409d9cfae946b29f8f813e6493",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/Cargo.toml",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/Cargo.toml",
+    "sha256": "726b8d2f1aeb4dfb132a831c2d8de436787e9d972cf349454573c0177959e9ec",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs",
+    "sha256": "e409e4707a725bdbf75f4c657399f2848bf6c0435fe83909e82ea982548a9770",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs",
+    "sha256": "8353de2cab826b2edea704cc17348fa3c87d4dbd1f38ff177f8f6d82929bea47",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs",
+    "sha256": "8015c71569ba26f91e1563c230cf72689085ca68fbadd74e8d74e9473aef6f9e",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs",
+    "sha256": "48b4ba3ae6aaa3667e381fa81c9e3dfe83987d17393a196016f6e6f2bab9a7e8",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "archive": "resources/tested-source/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs",
+    "sha256": "51ca52f264751e229beef7ecb31351e34b2b491a2038a8133b1c9b8877ee0497",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/Cargo.toml",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/Cargo.toml",
+    "sha256": "cd945f7a76b8d43f4c42c681102c7998f4a37ab8f8eda0962342c08ed9bc5b9f",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/src/wasm_component.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/src/wasm_component.rs",
+    "sha256": "5dae419f1091d95a1a03854ade1bc82ff03aa2f50629a550ea110fe841e6cb7e",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-echo/src/lib.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-echo/src/lib.rs",
+    "sha256": "2d8c6e34326d9acd18d27e14b5297f110516cdea88393d3f52a5a324d030d78c",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde-17b87713c7ef237f/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde-17b87713c7ef237f/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde_core-23e72b7637d8e6e8/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde_core-23e72b7637d8e6e8/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-echo/target/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/src/lib.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/src/lib.rs",
+    "sha256": "5cfacdc042a6f699581c4d384003a03be9065d344d9efa853655b2545cb1e9c3",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/downstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/downstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/downstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/downstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/invalid-signature/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/invalid-signature/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/invalid-signature/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/invalid-signature/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/non-function/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/non-function/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/non-function/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/non-function/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/none/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/none/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/none/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/none/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream-downstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream-downstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream-downstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream-downstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream/debug/build/serde-e69ccc0d280be59a/out/private.rs",
+    "sha256": "edaefc31eb178d1c82d9ab94c18a374316f8ff13ad55147cc631698dc9498162",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/target/upstream/debug/build/serde_core-7e903c06f619ed9c/out/private.rs",
+    "sha256": "899563ce84b59b13cd7036e25f7897c1e730906f62a43aff14472d11c4229f34",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/gmofg_cps_component.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/gmofg_cps_component.rs",
+    "sha256": "3f84f286f8f8864903fbbe99327ed711d2ea0e094877439beca9e8716af87114",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/gmofg_payment_dll_component.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/gmofg_payment_dll_component.rs",
+    "sha256": "1dfb05c839f5b6c0025bf6e90c9d8740de3f680279ad5cafc83ae6f350f651d0",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/http_document_number_wire.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/http_document_number_wire.rs",
+    "sha256": "d43bf6712948f665e1a7a84c5dde9398bd9e8eca29c9d45763bdbf9f50da1cfe",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/repository_components.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/repository_components.rs",
+    "sha256": "f35434bb533b2a601fccb788899acda3005fc4bba90f913b1fee2afd31a94d51",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/wasm_component_contract.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/wasm_component_contract.rs",
+    "sha256": "2539fb0c4aee196776ba9f4294abd718bf87ae1f39555d027be23fb0f9036e79",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/crates/package-runtime/tests/wasm_http_finalize.rs",
+    "archive": "resources/tested-source/src-tauri/crates/package-runtime/tests/wasm_http_finalize.rs",
+    "sha256": "eff14800d413be065c383b1f4ee0545d27954de42fc05fdaf5e1a66da32f288d",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json",
+    "archive": "resources/tested-source/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json",
+    "sha256": "53d5e83bd63940ec2959e3278141e1e7a42c1fd6016f73f5090d48536a200002",
+    "purpose": "test source, affected production boundary or build/replay input",
+    "required": true
+  }
+]

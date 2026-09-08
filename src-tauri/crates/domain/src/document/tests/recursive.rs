@@ -17,7 +17,7 @@ fn json_value_tree_round_trips_standard_json_and_uses_last_duplicate_key() {
     .expect("recursive JSON document");
     assert_eq!(
         document.to_json().expect("encode recursive JSON"),
-        r#"{"active":true,"amount":12.5,"missing":null,"name":"merchant","nested":{"items":[1.0,"two",false]}}"#
+        r#"{"active":true,"amount":12.5,"missing":null,"name":"merchant","nested":{"items":[1,"two",false]}}"#
     );
 
     let duplicate = Document::parse_json(r#"{"value":1,"value":2}"#)
@@ -124,7 +124,7 @@ fn set_clear_insert_and_append_have_strict_existing_parent_semantics() {
         .unwrap();
     assert_eq!(
         serde_json::to_value(document).unwrap(),
-        json!({"object": {"new": true}, "array": [2.0, 3.0, null]})
+        json!({"object": {"new": true}, "array": [2, 3, null]})
     );
 
     let mut document = Document::new(DocumentValue::Object(BTreeMap::new()));

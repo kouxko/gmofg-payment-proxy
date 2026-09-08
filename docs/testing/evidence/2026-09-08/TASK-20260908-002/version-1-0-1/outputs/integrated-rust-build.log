@@ -1,0 +1,16 @@
+info: component rust-std for target aarch64-linux-android is up to date
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 39.03s
+info: component rust-std for target armv7-linux-androideabi is up to date
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 29.96s
+info: component rust-std for target x86_64-linux-android is up to date
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 58.49s
+info: component rust-std for target i686-linux-android is up to date
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 33.42s

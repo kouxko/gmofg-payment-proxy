@@ -1,0 +1,114 @@
+[
+  {
+    "id": "pay-before",
+    "operation": "pay",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\"OK\"},\"data\":{\"errorCode\":\"\",\"errorInfo\":null,\"subErrorCode\":\"\",\"sign\":\"OLD\",\"result\":{\"currencyCode\":\"JPY\",\"amount\":100,\"amountRmb\":0,\"payType\":\"99\",\"extendedInfo\":\"paired\",\"orderDetailId\":\"PAIR-D\",\"orderId\":\"PAIR-O\",\"transTime\":\"20260907123456\",\"transStatus\":\"PAY_SUCCESS\"}}}",
+    "token": "MERCHANT  TERMINAL  TOKEN",
+    "canonical": "{data={errorCode=&result={amount=100&currencyCode=JPY&extendedInfo=paired&orderDetailId=PAIR-D&orderId=PAIR-O&payType=99&transStatus=PAY_SUCCESS&transTime=20260907123456}&subErrorCode=}&meta={code=00&message=OK}&key=B2BMERCHANT  TERMINAL  TOKEN}",
+    "sign": "79A34C9A4170AE8A202955FAAE937BDA"
+  },
+  {
+    "id": "pay-after",
+    "operation": "pay",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\"OK\"},\"data\":{\"errorCode\":\"\",\"errorInfo\":null,\"subErrorCode\":\"\",\"sign\":\"OLD\",\"result\":{\"currencyCode\":\"JPY\",\"amount\":250,\"amountRmb\":0,\"payType\":\"99\",\"extendedInfo\":\"paired\",\"orderDetailId\":\"PAIR-D\",\"orderId\":\"PAIR-O\",\"transTime\":\"20260907123456\",\"transStatus\":\"PAY_SUCCESS\"}}}",
+    "token": "MERCHANT  TERMINAL  TOKEN",
+    "canonical": "{data={errorCode=&result={amount=250&currencyCode=JPY&extendedInfo=paired&orderDetailId=PAIR-D&orderId=PAIR-O&payType=99&transStatus=PAY_SUCCESS&transTime=20260907123456}&subErrorCode=}&meta={code=00&message=OK}&key=B2BMERCHANT  TERMINAL  TOKEN}",
+    "sign": "F070F340438D40D0BC07295E241EE519"
+  },
+  {
+    "id": "pay-normal-inherited-zero",
+    "operation": "pay",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\"OK\"},\"data\":{\"errorCode\":\"\",\"errorInfo\":null,\"subErrorCode\":\"S 1\",\"sign\":\"IGNORED\",\"result\":{\"currencyCode\":\"JPY\",\"amount\":100,\"amountRmb\":0,\"payType\":\"99\",\"extendedInfo\":\"A B\",\"orderDetailId\":\"D1\",\"orderId\":\"O1\",\"transTime\":\"2026-09-07 12:34:56\",\"transStatus\":\"PAY_SUCCESS\"}},\"unknownTop\":\"ignored\"}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorCode=&result={amount=100&currencyCode=JPY&extendedInfo=AB&orderDetailId=D1&orderId=O1&payType=99&transStatus=PAY_SUCCESS&transTime=2026-09-0712:34:56}&subErrorCode=S1}&meta={code=00&message=OK}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "716BC634F81276B31A5981F3C5BA42C8"
+  },
+  {
+    "id": "pay-business-error",
+    "operation": "pay",
+    "body": "{\"meta\":{\"code\":\"09\",\"message\":\"business error\"},\"data\":{\"errorCode\":\"09103\",\"errorInfo\":\"not found\",\"subErrorCode\":\"\",\"sign\":\"OLD\",\"result\":null}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorCode=09103&errorInfo=notfound&subErrorCode=}&meta={code=09&message=businesserror}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "C604243A0E4D9DF510479909362E05F0"
+  },
+  {
+    "id": "confirm-normal-unicode-whitespace-unknown",
+    "operation": "confirm",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\" 日 本\\t行\\n次 \"},\"data\":{\"sign\":\"OLD\",\"result\":{\"payType\":\"A B\",\"payCheckDate\":\"確認 日\",\"orderDetailId\":\"D 2\",\"orderId\":\"O2\",\"transTime\":\"T\\t2\",\"transStatus\":\"SUCCESS\",\"unknownNested\":123}},\"unknownData\":{\"x\":1}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={result={orderDetailId=D2&orderId=O2&payCheckDate=確認日&payType=AB&transStatus=SUCCESS&transTime=T\t2}}&meta={code=00&message=日本\t行\n次}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "51964F2DC48B941FEF0D3398A3C9DD78"
+  },
+  {
+    "id": "confirm-business-error-string-coercion",
+    "operation": "confirm",
+    "body": "{\"meta\":{\"code\":9,\"message\":true},\"data\":{\"errorCode\":931,\"errorInfo\":false,\"subErrorCode\":301,\"sign\":\"OLD\",\"result\":{\"payType\":99,\"payCheckDate\":20260907,\"transStatus\":false}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorCode=931&errorInfo=false&result={payCheckDate=20260907&payType=99&transStatus=false}&subErrorCode=301}&meta={code=9&message=true}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "8C6797B9CEEF5768A44E107325027D73"
+  },
+  {
+    "id": "refund-normal-int-string",
+    "operation": "refund",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\"OK\"},\"data\":{\"sign\":\"OLD\",\"result\":{\"currencyCode\":\"JPY\",\"refundAmount\":\"500\",\"orderDetailId\":\"RD1\",\"orderId\":\"RO1\",\"transTime\":\"RT1\",\"transStatus\":\"REFUND_SUCCESS\"}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={result={currencyCode=JPY&orderDetailId=RD1&orderId=RO1&refundAmount=500&transStatus=REFUND_SUCCESS&transTime=RT1}}&meta={code=00&message=OK}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "F5480AA084B74AB281BBDFFD215C1534"
+  },
+  {
+    "id": "refund-business-error-int-decimal",
+    "operation": "refund",
+    "body": "{\"meta\":{\"code\":\"09\",\"message\":\"NG\"},\"data\":{\"errorCode\":\"09301\",\"errorInfo\":\"failed\",\"subErrorCode\":\"E1\",\"sign\":\"OLD\",\"result\":{\"currencyCode\":\"JPY\",\"refundAmount\":1.0,\"transStatus\":\"REFUND_FAILED\"}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorCode=09301&errorInfo=failed&result={currencyCode=JPY&refundAmount=1&transStatus=REFUND_FAILED}&subErrorCode=E1}&meta={code=09&message=NG}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "3C7BE9766327BBFC881D1C8F0964F0A3"
+  },
+  {
+    "id": "reverse-normal-empty-and-zero",
+    "operation": "reverse",
+    "body": "{\"meta\":{\"code\":\"00\",\"message\":\"\"},\"data\":{\"errorCode\":null,\"errorInfo\":\"\",\"subErrorCode\":null,\"sign\":\"OLD\",\"result\":{\"amount\":0,\"currencyCode\":\"\",\"orderDetailId\":\"D3\",\"orderId\":\"O3\",\"transTime\":\"T3\",\"transStatus\":\"REVERSE_SUCCESS\"}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorInfo=&result={currencyCode=&orderDetailId=D3&orderId=O3&transStatus=REVERSE_SUCCESS&transTime=T3}}&meta={code=00&message=}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "3CB105364CB5F7B5488716BF3092FFDA"
+  },
+  {
+    "id": "reverse-business-error",
+    "operation": "reverse",
+    "body": "{\"meta\":{\"code\":\"09\",\"message\":\"not found\"},\"data\":{\"errorCode\":\"09103\",\"errorInfo\":\"none\",\"subErrorCode\":\"\",\"sign\":\"OLD\",\"result\":{\"amount\":25,\"currencyCode\":\"JPY\",\"transStatus\":\"REVERSE_FAILED\"}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "canonical": "{data={errorCode=09103&errorInfo=none&result={amount=25&currencyCode=JPY&transStatus=REVERSE_FAILED}&subErrorCode=}&meta={code=09&message=notfound}&key=B2BMID-01      TERM-01      20260907123456000000000000100}",
+    "sign": "E52547267B3F1C6E6026F198F1DDCEE6"
+  },
+  {
+    "id": "pay-invalid-int-string",
+    "operation": "pay",
+    "body": "{\"meta\":{\"code\":\"00\"},\"data\":{\"sign\":\"OLD\",\"result\":{\"amount\":\"abc\"}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "expect_error": true,
+    "error_kind": "NumberFormatException"
+  },
+  {
+    "id": "refund-invalid-int-object",
+    "operation": "refund",
+    "body": "{\"meta\":{\"code\":\"00\"},\"data\":{\"sign\":\"OLD\",\"result\":{\"refundAmount\":{}}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "expect_error": true,
+    "error_kind": "IllegalStateException"
+  },
+  {
+    "id": "reverse-invalid-fractional-int",
+    "operation": "reverse",
+    "body": "{\"meta\":{\"code\":\"00\"},\"data\":{\"sign\":\"OLD\",\"result\":{\"amount\":1.5}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "expect_error": true,
+    "error_kind": "NumberFormatException"
+  },
+  {
+    "id": "confirm-invalid-string-object",
+    "operation": "confirm",
+    "body": "{\"meta\":{\"code\":{}},\"data\":{\"sign\":\"OLD\",\"result\":{}}}",
+    "token": "MID-01      TERM-01      20260907123456000000000000100",
+    "expect_error": true,
+    "error_kind": "IllegalStateException"
+  }
+]

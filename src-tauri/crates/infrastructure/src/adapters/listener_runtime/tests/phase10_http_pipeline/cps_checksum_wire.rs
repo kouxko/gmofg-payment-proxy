@@ -167,9 +167,15 @@ async fn real_cps_wasm_resigns_modified_pay_response_on_app_wire() {
     let actual: serde_json::Value = serde_json::from_slice(&app_response.body).unwrap();
     assert_eq!(actual["data"]["result"]["amount"].as_f64(), Some(250.0));
     assert_eq!(actual["data"]["sign"], EXPECTED_SIGN);
-    after["data"]["result"]["amount"] = actual["data"]["result"]["amount"].clone();
     after["data"]["sign"] = serde_json::json!(EXPECTED_SIGN);
-    assert_json_semantically_eq(&actual, &after, "Java pay-after document");
+    assert_eq!(actual, after, "Java pay-after document");
+    let app_body = std::str::from_utf8(&app_response.body).unwrap();
+    println!("CPS final application body={app_body}");
+    // Finalize emits compact JSON after replacing the signature.
+    assert!(app_body.contains("\"amount\":250"));
+    assert!(app_body.contains("\"amountRmb\":0"));
+    assert!(!app_body.contains("\"amount\":250.0"));
+    assert!(!app_body.contains("\"amountRmb\":0.0"));
     assert_only_amount_and_sign_changed(&before, &actual);
     assert_eq!(rules.commit_attempts.load(Ordering::SeqCst), 1);
     let committed = rules.snapshot.lock().clone();
@@ -255,36 +261,9 @@ fn repository_root() -> PathBuf {
 
 fn assert_only_amount_and_sign_changed(before: &serde_json::Value, actual: &serde_json::Value) {
     let mut expected = before.clone();
-    expected["data"]["result"]["amount"] = actual["data"]["result"]["amount"].clone();
+    expected["data"]["result"]["amount"] = serde_json::json!(250);
     expected["data"]["sign"] = serde_json::json!(EXPECTED_SIGN);
-    assert_json_semantically_eq(actual, &expected, "amount and sign delta");
-}
-
-fn assert_json_semantically_eq(
-    actual: &serde_json::Value,
-    expected: &serde_json::Value,
-    context: &str,
-) {
-    let mut actual = actual.clone();
-    let mut expected = expected.clone();
-    normalize_numbers(&mut actual);
-    normalize_numbers(&mut expected);
-    assert_eq!(actual, expected, "{context}");
-}
-
-fn normalize_numbers(value: &mut serde_json::Value) {
-    match value {
-        serde_json::Value::Number(number) => {
-            *number = serde_json::Number::from_f64(number.as_f64().unwrap()).unwrap();
-        }
-        serde_json::Value::Array(values) => {
-            values.iter_mut().for_each(normalize_numbers);
-        }
-        serde_json::Value::Object(values) => {
-            values.values_mut().for_each(normalize_numbers);
-        }
-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::String(_) => {}
-    }
+    assert_eq!(actual, &expected, "amount and sign delta");
 }
 
 #[allow(clippy::too_many_arguments)]

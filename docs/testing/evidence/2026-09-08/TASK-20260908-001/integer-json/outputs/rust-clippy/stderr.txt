@@ -1,0 +1,26 @@
+    Checking intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Checking intercept-proxy-package-contract v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-contract)
+    Checking intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Checking intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+    Checking intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+    Checking intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+    Checking intercept-proxy-traffic-observation v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/traffic-observation)
+error: adding items after statements is confusing, since items exist from the start of the scope
+  --> crates/application/tests/environment_configuration_document_contract.rs:81:5
+   |
+81 | /     fn execute(rule: &RuleContent) -> Document {
+82 | |         let RuleContent::Socket(content) = rule else {
+83 | |             panic!("fixture is a socket rule");
+84 | |         };
+...  |
+91 | |         document
+92 | |     }
+   | |_____^
+   |
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#items_after_statements
+   = note: `-D clippy::items-after-statements` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::items_after_statements)]`
+
+    Checking intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+error: could not compile `intercept-proxy-application` (test "environment_configuration_document_contract") due to 1 previous error
+warning: build failed, waiting for other jobs to finish...
