@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-08 13:52:49 +08:00`
+- 最后更新时间：`2026-09-08 14:00:31 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -414,3 +414,9 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - 以源提交`ca61e3b4ad9c9b1f24ea4556f24ab5ebe53fbc51`与当前develop `cebb8b6227f68c69c771792fdd258b76a8f34c27`执行隔离合并。产品代码无冲突，只有docs/README.md、docs/tasks/README.md及docs/testing/evidence/README.md三处索引冲突；保留develop新任务/CPS/Finalize/DLL归档条目，保留本轮五项完成状态、日期顺序及证据入口。
 - 针对合并执行冲突标记、pending入口一一对应、完成条目唯一、日期排序、相对链接及非证据文本diff检查；本次没有重新执行产品测试，也不把此前测试报告为最新develop合并后的完整回归。
 - 合并准备提交继续使用[skip ci]，通过git push -o ci.skip更新当前源分支；只创建MR，不执行接受合并、tag或制品发布。
+
+## Merge Request创建完成（2026-09-08 14:00:31 +08:00）
+
+- 已创建[GitLab MR !6](http://172.16.3.60/other/intercept_proxy/-/merge_requests/6)，源分支`codex/complete-pending-tasks-20260907`，目标`develop`。标题为“fix: 限制 Socket 读取大小并补齐监听器回归与验收归档 [skip ci]”；说明依据实际差异写明Socket上限、前端回归、手动构建入口、任务/证据归档及验证边界。
+- 创建后当前API状态opened、mergeable、has_conflicts=false，源SHA为`0c0c2422a77a13241555c2aecd7b7f1d73036b20`。MR关联pipeline 34185, 34183均skipped，jobs均为空；没有执行接受合并或CI。
+- [MR与CI原始核验结果](add-managed-webassembly-protocol-packages.gitlab-merge-request.json)记录本次读取时间及完整返回。此完成记录单独以[skip ci]提交推送，随后核验MR最终HEAD/可合并状态/跳过CI；不覆盖历史交付证据。
