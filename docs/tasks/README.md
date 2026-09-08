@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 17:44:34 +08:00 | [TASK-20260908-003：1.0.1发布分支与MR准备](completed/2026-09-08/prepare-release-1-0-1.md) | release历史整合、App101/1.0.1与Proxy1.0.1、MR!9到release | PASS；5合同测试、版本/静态/独立APPROVE、无冲突、CI skipped且零作业 | 高 | release、GitLab、1.0.1、101 |
 | 16:03:20 +08:00 | [TASK-20260908-001：Document整数JSON序列化](completed/2026-09-08/fix-document-integer-json-serialization.md) | 统一整数输出、保留小数/字符串/负零，旧配置兼容 | PASS；领域109、应用477、包23、HTTP22、前端27、Java14及严格静态/绑定/独立APPROVE；真实设备NOT_RUN | 高 | DocumentNumber、JSON、整数、Wasm、CPS |
 | 12:03:49 +08:00 | [TASK-20260905-001：整体审查问题修复与A920验收](completed/2026-09-08/fix-reviewed-architecture-contracts.md) | 活动归属、手动恢复、严格路由、草稿与错误合同 | PASS；原本地回归、真机准入2/2、四条真实wire、失联/新epoch恢复及设备还原；独立APPROVE | 高 | Android、TUN、租约、恢复、架构 |
 | 11:39:16 +08:00 | [TASK-20260906-001：六项架构与逻辑修复](completed/2026-09-08/fix-six-architecture-review-findings.md) | 活动归属、异步保存、错误观测及Socket资源约束；1MiB读取上限 | PASS；新增6专项、受影响1111测试、严格静态门禁及独立APPROVE；默认16KiB保持 | 高 | Socket、资源、并发、错误、Android |

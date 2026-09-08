@@ -18,4 +18,6 @@ git diff --check
 
 首次全依赖offline metadata因未缓存Linux memfd0.6.5失败，保留stderr和attempt.json；随后采用本范围所需的locked/offline/no-deps元数据检查成功，不隐藏失败、不因此升级/下载外部依赖。
 
-resources保存实际版本输入、派生lock、原baseline lock、当前脚本和两个测试输入；replay/check_versions.py验证当前工作树，输出实际版本、内部包和源SHA。outputs保存原始stdout/stderr及比较。没有网络业务输入、Frame、截图或支付请求，均N/A（本次仅配置与交付准备）。CI保持[skip ci]，MR远端结果后续补充。
+resources保存实际版本输入、派生lock、原baseline lock、当前脚本和两个测试输入；replay/check_versions.py验证当前工作树，输出实际版本、内部包和源SHA。outputs保存原始stdout/stderr及比较。没有网络业务输入、Frame、截图或支付请求，均N/A（本次仅配置与交付准备）。CI保持[skip ci]。
+
+远端验收：MR !9标题1.0.1发布、release-1.0.1→release、无冲突且可合并；提交2a7c2745与远端及MR一致。流水线34236(push)、34237(MR)均skipped且jobs/bridges=0，结果PASS。见outputs/gitlab-mr-created.json与gitlab-mr-verification.json；这是归档提交前的时点快照。复核使用GitLab API GET /projects/1023/merge_requests/9、/repository/branches/release-1.0.1、/merge_requests/9/pipelines、/pipelines/:id及其/jobs和/bridges；使用本机已配置凭据，检查最终头SHA一致、mergeable、skipped和零作业。

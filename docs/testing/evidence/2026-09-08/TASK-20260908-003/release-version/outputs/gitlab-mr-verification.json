@@ -1,0 +1,41 @@
+{
+  "observed_at": "2026-09-08T09:40:51.888699+00:00",
+  "scope": "Release preparation commit before archive-only commit; point-in-time remote evidence",
+  "local_head": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+  "remote_branch_head": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+  "mr": {
+    "iid": 9,
+    "title": "1.0.1发布",
+    "state": "opened",
+    "source_branch": "release-1.0.1",
+    "target_branch": "release",
+    "sha": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests/9",
+    "merge_status": "can_be_merged",
+    "detailed_merge_status": "mergeable",
+    "has_conflicts": false
+  },
+  "pipelines": [
+    {
+      "id": 34236,
+      "status": "skipped",
+      "source": "push",
+      "sha": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+      "ref": "release-1.0.1",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34236",
+      "jobs_count": 0,
+      "bridges_count": 0
+    },
+    {
+      "id": 34237,
+      "status": "skipped",
+      "source": "merge_request_event",
+      "sha": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+      "ref": "refs/merge-requests/9/head",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34237",
+      "jobs_count": 0,
+      "bridges_count": 0
+    }
+  ],
+  "result": "PASS"
+}

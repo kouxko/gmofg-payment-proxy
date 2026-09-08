@@ -1,0 +1,46 @@
+{
+  "checks": [
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+        "HEAD"
+      ],
+      "exit_code": 2,
+      "stdout": "docs/testing/evidence/2026-09-08/TASK-20260908-003/release-version/outputs/config-contract-tests.txt:10: new blank line at EOF.\n",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "diff",
+        "--check",
+        "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+        "HEAD",
+        "--",
+        ".",
+        ":(exclude)docs/testing/evidence/2026-09-08/TASK-20260908-003/release-version/outputs/config-contract-tests.txt"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "command": [
+        "git",
+        "-c",
+        "core.whitespace=-blank-at-eof",
+        "diff",
+        "--check",
+        "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+        "HEAD"
+      ],
+      "exit_code": 0,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "decision": "Preserve exact Deno stdout bytes; sole blank-at-EOF diagnostic belongs to raw captured log. All remaining paths pass default check, full diff passes with only blank-at-EOF disabled."
+}
