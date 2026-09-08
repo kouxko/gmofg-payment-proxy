@@ -1,0 +1,703 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/help/page-help-content.ts</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/help</a> page-help-content.ts</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>1/1</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>0/0</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>1/1</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a>
+<a name='L168'></a><a href='#L168'>168</a>
+<a name='L169'></a><a href='#L169'>169</a>
+<a name='L170'></a><a href='#L170'>170</a>
+<a name='L171'></a><a href='#L171'>171</a>
+<a name='L172'></a><a href='#L172'>172</a>
+<a name='L173'></a><a href='#L173'>173</a>
+<a name='L174'></a><a href='#L174'>174</a>
+<a name='L175'></a><a href='#L175'>175</a>
+<a name='L176'></a><a href='#L176'>176</a>
+<a name='L177'></a><a href='#L177'>177</a>
+<a name='L178'></a><a href='#L178'>178</a>
+<a name='L179'></a><a href='#L179'>179</a>
+<a name='L180'></a><a href='#L180'>180</a>
+<a name='L181'></a><a href='#L181'>181</a>
+<a name='L182'></a><a href='#L182'>182</a>
+<a name='L183'></a><a href='#L183'>183</a>
+<a name='L184'></a><a href='#L184'>184</a>
+<a name='L185'></a><a href='#L185'>185</a>
+<a name='L186'></a><a href='#L186'>186</a>
+<a name='L187'></a><a href='#L187'>187</a>
+<a name='L188'></a><a href='#L188'>188</a>
+<a name='L189'></a><a href='#L189'>189</a>
+<a name='L190'></a><a href='#L190'>190</a>
+<a name='L191'></a><a href='#L191'>191</a>
+<a name='L192'></a><a href='#L192'>192</a>
+<a name='L193'></a><a href='#L193'>193</a>
+<a name='L194'></a><a href='#L194'>194</a>
+<a name='L195'></a><a href='#L195'>195</a>
+<a name='L196'></a><a href='#L196'>196</a>
+<a name='L197'></a><a href='#L197'>197</a>
+<a name='L198'></a><a href='#L198'>198</a>
+<a name='L199'></a><a href='#L199'>199</a>
+<a name='L200'></a><a href='#L200'>200</a>
+<a name='L201'></a><a href='#L201'>201</a>
+<a name='L202'></a><a href='#L202'>202</a>
+<a name='L203'></a><a href='#L203'>203</a>
+<a name='L204'></a><a href='#L204'>204</a>
+<a name='L205'></a><a href='#L205'>205</a>
+<a name='L206'></a><a href='#L206'>206</a>
+<a name='L207'></a><a href='#L207'>207</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import type { WorkspacePath } from "@/features/shell/workspace-navigation";
+import { systemPageHelpGuides } from "./system-page-help-guides";
+import { diagnosticPageHelpGuides } from "./diagnostic-page-help-guide";
+import { generalPageHelpGuides } from "./general-page-help-guides";
+import { protocolPackageHelpGuide } from "./protocol-package-help-guide";
+import type { PageHelpGuide } from "./page-help-types";
+&nbsp;
+export type { PageHelpGuide, PageHelpSection } from "./page-help-types";
+&nbsp;
+/**
+ * 各业务页面的内置操作手册数据。
+ *
+ * 这里只保存面向用户的静态说明，不能复制 Rust 的状态机或校验逻辑。文字中的
+ * 默认值、动作语义和验收边界应与 docs/requirements.md 保持同步。
+ */
+&nbsp;
+export const pageHelpGuides: Record&lt;WorkspacePath, PageHelpGuide&gt; = {
+  "/workspaces": generalPageHelpGuides["/workspaces"],
+  "/listeners": generalPageHelpGuides["/listeners"],
+  ...protocolPackageHelpGuide,
+  "/android-network": generalPageHelpGuides["/android-network"],
+  ...diagnosticPageHelpGuides,
+  "/capture": {
+    title: "实时抓包",
+    summary:
+      "在同一张运行记录表中查看经过代理的 HTTP 与 Socket Exchange，适合在操作客户端应用的同时观察完整连接和规则结果。",
+    recommendedFor:
+      "定位某个 App 连接使用了哪种协议、在哪个读写阶段失败，以及 App、Proxy 与 Server 之间实际收到和发送的内容。",
+    sections: [
+      {
+        id: "capture-start",
+        title: "开始抓包与读取列表",
+        steps: [
+          "先在“入口配置”启动目标入口，再进入本页；页面会持续接收 HTTP 与 Socket 的 Exchange 事件。",
+          "页面只有一张运行记录表；“协议”列明确标识 HTTP 或 SOCKET，不需要切换页签或查看两个区域。",
+          "每行对应一个 App connection，并按建立时间最新优先显示对端、收到/发送/失败计数、连接状态和 Exchange ID。",
+          "连接状态只描述连接生命周期：未出现关闭事件时为“保持连接”，completed 关闭为“正常结束”，错误关闭为“异常结束”并保留原始错误；它不推断协议业务结果。",
+          "使用“上一页/下一页”查看当前工作区内存中保留的更多连接。",
+          "点击任意表格行打开该 Exchange 的完整连接时间线。",
+          "如果列表显示读取失败，点击错误条中的“重试”；失败状态不等同于当前没有流量。",
+        ],
+      },
+      {
+        id: "capture-detail",
+        title: "查看连接时间线",
+        steps: [
+          "详情按真实发生顺序追加连接建立、App 到 Proxy 收到、Proxy 到 Server 发送、Server 到 Proxy 收到、Proxy 到 App 发送、失败和关闭事件。",
+          "HTTP Context 展示 Header 与 Body 文本；Socket Context 展示完整字节数据。",
+          "Reader 已成功解析时，收到事件还会展示协议包固定生成的 Display；规则修改 Document 后不会回写或伪造旧 Display。",
+          "失败事件保留阶段、方向、错误和当时可用的 Context，便于判断失败发生在读取、Frame、Decode、Rules、Encode 还是写入。",
+          "关闭详情后会释放前端对完整报文的引用；内存仓储仍按容量策略保留连接证据。",
+        ],
+      },
+      {
+        id: "capture-refresh",
+        title: "实时刷新与连接生命周期",
+        steps: [
+          "HTTP 或 Socket 产生新证据时，列表会在当前页面立即刷新，不需要切换导航或重新进入抓包页。",
+          "同一 Socket 长连接会持续保留为同一个 Exchange；后续报文按顺序追加，不会覆盖此前证据。",
+          "App 断开、Server 读取失败或业务 Pipeline 失败时，连接会追加关闭或失败事件并结束。",
+          "HTTP 与 Socket 使用同一个实时事件订阅，任何协议的新连接都会刷新这张统一列表。",
+        ],
+      },
+      {
+        id: "capture-capacity",
+        title: "理解内存容量与观测边界",
+        steps: [
+          "运行报文只保存在有界内存中，不写入数据库；重启应用后运行记录会清空。",
+          "容量不足时优先淘汰最旧连接，并在页面显示已淘汰连接和已忽略事件数量。",
+          "观测失败或观测数据淘汰不会影响交易；只有业务 Pipeline 失败才会影响连接。",
+          "出现淘汰提示时，详情只代表当前仍保留的有序证据，不会补写或猜测已经丢失的事件。",
+        ],
+      },
+      {
+        id: "capture-clear",
+        title: "清空运行记录",
+        steps: [
+          "点击“清空运行记录”会要求确认，然后统一清除当前工作区的 HTTP 与 Socket Exchange 内存记录。",
+          "清空不会停止入口，也不会删除 Workspace、Listener、Rules 或协议包配置。",
+          "观测失败或观测数据淘汰不会影响交易；只有业务 Pipeline 失败才会影响连接。",
+          "清空后新建立或仍继续产生事件的连接会按照运行时事实重新出现在列表中。",
+        ],
+      },
+    ],
+  },
+  "/rules": {
+    title: "拦截规则",
+    summary:
+      "在 HTTP 与 Socket 之间切换，创建、编辑和管理拦截规则；HTTP 还提供小白可直接使用的故障预设。",
+    recommendedFor:
+      "重复执行报文修改、延迟、Mock、拒绝、断开、丢弃和截断等自动化场景，或用 HTTP 故障预设快速建立测试规则。",
+    sections: [
+      {
+        id: "rules-list",
+        title: "查看和管理规则列表",
+        steps: [
+          "列表按优先级升序执行；优先级相同的规则按创建顺序执行。",
+          "查看名称、通道、阶段、匹配摘要、动作摘要、命中数和最后命中时间，确认规则是否作用于目标流量。",
+          "点击某一行加载右侧编辑器；窄窗口会自动滚动到编辑区域。",
+          "列表中的冲突提示表示规则可能被更高优先级的终止动作遮蔽，应检查执行顺序。",
+        ],
+      },
+      {
+        id: "rules-basic",
+        title: "新建与基本信息",
+        steps: [
+          "点击“新建规则”，选择空白 HTTP、HTTP Body、Socket 报文规则或 HTTP 故障预设；所有规则都显示在同一列表中。",
+          "在“基本信息”Tab 填写规则名称、说明和优先级。",
+          "选择目标产品通道，再选择请求阶段或响应阶段；阶段会限制可添加的动作类型。",
+          "从抓包页“基于此请求新建规则”进入时，先检查预填的路径、通道和阶段，再补充动作。",
+        ],
+      },
+      {
+        id: "rules-conditions",
+        title: "配置匹配条件",
+        steps: [
+          "打开“匹配条件”Tab，添加所需条件；所有条件共同参与匹配。",
+          "可匹配终端、路径/请求类型、JSON 字段路径以及页面提供的其他字段。",
+          "选择等于、包含、正则等操作符，并输入匹配值；保存时会严格校验正则和 JSON Path。",
+          "删除或切换异步草稿行后，等待状态会被清理，旧请求的迟到结果不会写入新的编辑行。",
+        ],
+      },
+      {
+        id: "rules-actions",
+        title: "配置执行动作",
+        steps: [
+          "打开“执行动作”Tab，按实际执行顺序添加动作。",
+          "Document 动作路径允许完整路径段 * 匹配一层，并把同一动作应用到当前命中的全部节点。",
+          "HTTP 动作使用中文名称；结构化字段修改统一选择 Document 动作，HTTP 只保留 Body、延迟、限速和故障类动作。",
+          "HTTP 动作按类型显示参数字段和单位，不需要手写 JSON；无参数动作不会显示参数区域。",
+          "使用本机应答时，在 Proxy → App 选择“替换当前 Body”即可生成需要的 Mock Body。",
+          "请求阶段和响应阶段支持的动作不同；无效组合会被拒绝。",
+          "Shift-JIS Body、非法 JSON、错误长度和截断参数必须通过校验，页面不会静默沿用旧值。",
+        ],
+      },
+      {
+        id: "rules-save",
+        title: "保存、复制、删除、导入和导出",
+        steps: [
+          "点击“保存规则”后等待完整校验字段、阶段、Document Path、Shift-JIS 和终止动作。",
+          "字段错误会显示在相应控件下；异步草稿仍在等待或无效时保存按钮不可用。",
+          "使用“复制”创建当前规则的独立副本，再修改名称、条件或动作后保存。",
+          "点击删除规则会立即删除，删除后无法恢复。",
+          "“导入规则”会先校验整个文件；任何一条非法都会整体取消写入。",
+          "“导出规则”不包含证书、密码、Payload 或机器专属路径，并使用系统文件对话框。",
+        ],
+      },
+      {
+        id: "rules-test",
+        title: "验证规则是否生效",
+        steps: [
+          "启用规则并在“入口配置”启动目标入口，再在客户端应用发起满足条件的请求。",
+          "到实时抓包查看“匹配规则”和规则轨迹，确认命中顺序、每个动作和最终结果。",
+          "回到规则列表检查命中数和最后命中时间。",
+          "终止动作未生效时检查是否选错通道/阶段、条件不匹配或被更高优先级规则提前终止。",
+          "涉及客户端应用超时、自动取消或错误码的场景必须在真实设备验证，规则命中本身不等同于业务结果符合预期。",
+        ],
+      },
+      {
+        id: "faults-select",
+        title: "HTTP 故障预设：选择模板",
+        steps: [
+          "在左侧表格查看模板的发生阶段、精确行为、影响端、默认参数和风险等级。",
+          "点击某行或“配置”，右侧显示该模板的网络语义和可调整参数。",
+          "区分请求阶段和响应阶段：请求阶段可能阻止 Server 收到请求；响应阶段通常已经让 Server 处理请求。",
+          "高风险模板可能引起客户端应用超时、断开、自动取消或异常流程，使用前先确认测试环境。",
+          "窄窗口中表格可横向滚动；选中模板后页面会自动把配置区域滚动到可见位置。",
+        ],
+      },
+      {
+        id: "faults-parameters",
+        title: "填写模板参数",
+        steps: [
+          "先按模板填写 HTTP 状态、延迟、Body、长度差值、截断位置或其他专属参数。",
+          "“终端过滤”留空表示所有终端；填写终端 ID 或 IP 可缩小作用范围。",
+          "“路径与请求类型”用于限制目标接口或产品请求类型，避免故障影响无关流量。",
+          "“规则优先级”越小越早执行。若前面已有终止规则，当前模板可能无法命中。",
+        ],
+      },
+      {
+        id: "faults-enable",
+        title: "从故障预设创建规则",
+        steps: [
+          "在“新建规则”中选择“从故障预设创建”，填写参数后点击“创建故障规则”。",
+          "创建成功后会关闭模板窗口，并在常规规则列表中选中生成的普通规则，可继续添加复杂条件或组合动作。",
+          "模板不会启动第二套执行引擎；最终执行顺序、命中计数和轨迹与普通规则完全一致。",
+          "正在启动或停止 Proxy 时，故障写操作会被拒绝；等待生命周期操作完成后重试。",
+          "参数错误会显示在对应字段，修正后重新提交。",
+        ],
+      },
+      {
+        id: "faults-semantics",
+        title: "关键故障语义",
+        steps: [
+          "“不连接上游并断开”不会把请求发给 Server，直接关闭 App 连接。",
+          "“发送上游后丢弃响应”会先把请求交给 Server，再不向客户端应用返回响应并断开；Server 可能已经完成处理。",
+          "“Mock Shift-JIS JSON”绕过真实上游并返回 Shift-JIS 编码的模拟响应。",
+          "“非法 JSON”返回可编码但语法非法的 JSON；“错误 Content-Length”和“截断响应”用于测试不完整报文处理。",
+          "“请求前延迟/超时”和“响应延迟”发生阶段不同，应结合最近事件和分阶段耗时确认。",
+          "任何模板都只保证产生定义的网络行为，不保证客户端应用一定显示某个固定 T02/T03/T04 或自动取消结果，必须实机记录。",
+        ],
+      },
+    ],
+  },
+  ...systemPageHelpGuides,
+};
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

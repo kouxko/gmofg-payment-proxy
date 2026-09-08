@@ -1,0 +1,6 @@
+{
+  "result": "HARNESS_TRANSPORT_MISMATCH",
+  "confirmed": "New harness half-closed HTTP write side immediately after sending. Original historical http.client matrix keeps it open while reading response. All seven requests failed at HTTP Read with connection closed before message completed; Socket frames succeeded.",
+  "correction": "Remove HTTP-only shutdown(SHUT_WR) to reproduce original request lifecycle. Preserve first attempt and source snapshot. No App code, expected rule behavior, HTTP timeouts or error model changed.",
+  "outside_scope": "HTTP half-close support is not established by this regression; first attempt is not called a product root-cause fix."
+}

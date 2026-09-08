@@ -1,0 +1,1557 @@
+STEP {"at":"2026-09-08T11:49:22.229+08:00","name":"fixtures_ready","value":{"dll":58614,"transaction":58615}}
+STEP {"at":"2026-09-08T11:49:22.465+08:00","name":"initial_stopped","value":{"serial":"","state":"stopped","verified":true,"transport":"local_abstract_socket","active_profile_id":null,"active_profile_fingerprint":null,"active_route_fingerprint":null,"active_route_count":0,"companion_process_running":true,"message":"VPN 已停止。","unsupported_fields":["serial"],"stats":{"download_ip_checksum_failures":0,"download_ip_length_mismatches":0,"download_tcp_syn_ack_packets":0,"download_transport_checksum_failures":0,"impairment_delay_millis_total":0,"impairment_mss_clamps":0,"impairment_packets_corrupted":0,"impairment_packets_dropped":0,"impairment_packets_duplicated":0,"impairment_packets_reordered":0,"impairment_pmtu_fragments":0,"impairment_pmtu_signals":0,"impairment_unimplemented_pmtu_actions":0,"last_error":null,"protect_failures":0,"proxy_download_packets":0,"proxy_upload_packets":4,"socks_clients":0,"socks_connect_attempts":0,"socks_connect_successes":0,"tun_download_bytes":0,"tun_download_packets":0,"tun_upload_bytes":316,"tun_upload_packets":4,"upload_tcp_ack_packets":0,"upload_tcp_syn_packets":0}}}
+STEP {"at":"2026-09-08T11:49:22.540+08:00","name":"reverse_created","value":{"dll":6555,"transaction":6556}}
+STEP {"at":"2026-09-08T11:49:23.134+08:00","name":"phase1_running","value":{"status":{"serial":"","state":"running","verified":true,"transport":"local_abstract_socket","active_profile_id":"a920-controlled-v2","active_profile_fingerprint":"8d44bc1e2a8e71ee834868bb57051d0947dde5112642399ecfd4f3f9a2ef9088","active_route_fingerprint":"07c2d45058fa0d4b11a8a1b7854847f1aba01987c09e52f7713f2b7308319a98","active_route_count":2,"companion_process_running":true,"message":"目标应用 VPN 与 Rust 数据面正在运行。","unsupported_fields":["serial"],"stats":{"download_ip_checksum_failures":0,"download_ip_length_mismatches":0,"download_tcp_syn_ack_packets":0,"download_transport_checksum_failures":0,"impairment_delay_millis_total":0,"impairment_mss_clamps":0,"impairment_packets_corrupted":0,"impairment_packets_dropped":0,"impairment_packets_duplicated":0,"impairment_packets_reordered":0,"impairment_pmtu_fragments":0,"impairment_pmtu_signals":0,"impairment_unimplemented_pmtu_actions":0,"last_error":null,"protect_failures":0,"proxy_download_packets":0,"proxy_upload_packets":4,"socks_clients":0,"socks_connect_attempts":0,"socks_connect_successes":0,"tun_download_bytes":0,"tun_download_packets":0,"tun_upload_bytes":316,"tun_upload_packets":4,"upload_tcp_ack_packets":0,"upload_tcp_syn_packets":0}},"owner_epoch":"38befdb6-80f4-4d38-aea6-744dc01955c6","identity_fields":{},"tun_before":[],"tun_running":["tun0"]}}
+STEP {"at":"2026-09-08T11:49:32.679+08:00","name":"phase1_probes","value":{"target":[{"package":"com.interceptproxy.vpn.targetprobe","phase":"phase1","channel":"dll","success":true,"bytes":137,"text":"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}"},{"package":"com.interceptproxy.vpn.targetprobe","phase":"phase1","channel":"transaction","success":true,"bytes":145,"text":"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}"}],"isolation":{"package":"com.interceptproxy.vpn.isolationprobe","phase":"isolation","channel":"dll","success":false,"bytes":130,"text":"ERROR:java.net.SocketTimeoutException: failed to connect to /203.0.113.48 (port 16127) from /10.0.34.156 (port 39496) after 7000ms"}}}
+STEP {"at":"2026-09-08T11:49:38.444+08:00","name":"control_loss_stopped","value":{"serial":"","state":"stopped","verified":true,"transport":"local_abstract_socket","active_profile_id":null,"active_profile_fingerprint":null,"active_route_fingerprint":null,"active_route_count":0,"companion_process_running":true,"message":"桌面控制租约连续 5 秒未续期，已自动关闭 VPN。","unsupported_fields":["serial"],"stats":{"download_ip_checksum_failures":0,"download_ip_length_mismatches":0,"download_tcp_syn_ack_packets":3,"download_transport_checksum_failures":0,"impairment_delay_millis_total":1786,"impairment_mss_clamps":0,"impairment_packets_corrupted":0,"impairment_packets_dropped":0,"impairment_packets_duplicated":0,"impairment_packets_reordered":0,"impairment_pmtu_fragments":0,"impairment_pmtu_signals":0,"impairment_unimplemented_pmtu_actions":0,"last_error":null,"protect_failures":0,"proxy_download_packets":14,"proxy_upload_packets":25,"socks_clients":3,"socks_connect_attempts":3,"socks_connect_successes":2,"tun_download_bytes":842,"tun_download_packets":14,"tun_upload_bytes":1771,"tun_upload_packets":25,"upload_tcp_ack_packets":15,"upload_tcp_syn_packets":3}}}
+STEP {"at":"2026-09-08T11:49:38.635+08:00","name":"stale_apply_rejected_no_auto_restore","value":{"version":2,"request_id":"6fbe6282-16c3-458f-a8b8-4047ffb4eef4","ok":false,"status":null,"error_code":"ANDROID_CONTROL_LEASE_STALE","error_message":"控制租约不存在、已到期或不属于当前运行实例。"}}
+STEP {"at":"2026-09-08T11:49:40.592+08:00","name":"explicit_new_epoch_recovered","value":{"status":{"serial":"","state":"running","verified":true,"transport":"local_abstract_socket","active_profile_id":"a920-controlled-v2","active_profile_fingerprint":"8d44bc1e2a8e71ee834868bb57051d0947dde5112642399ecfd4f3f9a2ef9088","active_route_fingerprint":"07c2d45058fa0d4b11a8a1b7854847f1aba01987c09e52f7713f2b7308319a98","active_route_count":2,"companion_process_running":true,"message":"目标应用 VPN 与 Rust 数据面正在运行。","unsupported_fields":["serial"],"stats":{"download_ip_checksum_failures":0,"download_ip_length_mismatches":0,"download_tcp_syn_ack_packets":0,"download_transport_checksum_failures":0,"impairment_delay_millis_total":0,"impairment_mss_clamps":0,"impairment_packets_corrupted":0,"impairment_packets_dropped":0,"impairment_packets_duplicated":0,"impairment_packets_reordered":0,"impairment_pmtu_fragments":0,"impairment_pmtu_signals":0,"impairment_unimplemented_pmtu_actions":0,"last_error":null,"protect_failures":0,"proxy_download_packets":0,"proxy_upload_packets":4,"socks_clients":0,"socks_connect_attempts":0,"socks_connect_successes":0,"tun_download_bytes":0,"tun_download_packets":0,"tun_upload_bytes":316,"tun_upload_packets":4,"upload_tcp_ack_packets":0,"upload_tcp_syn_packets":0}},"probes":[{"package":"com.interceptproxy.vpn.targetprobe","phase":"phase2","channel":"dll","success":true,"bytes":137,"text":"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}"},{"package":"com.interceptproxy.vpn.targetprobe","phase":"phase2","channel":"transaction","success":true,"bytes":145,"text":"HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}"}],"owner_epoch":"2ea85077-17c0-4b2b-827a-a933897371f8","identity_change":{"phase1":{},"phase2":{},"changed_paths":[],"control_owner_epoch":{"phase1":"38befdb6-80f4-4d38-aea6-744dc01955c6","phase2":"2ea85077-17c0-4b2b-827a-a933897371f8"}},"tun_before":[],"tun_running":["tun0"]}}
+STEP {"at":"2026-09-08T11:49:40.793+08:00","name":"final_stopped","value":{"status":{"serial":"","state":"stopped","verified":true,"transport":"local_abstract_socket","active_profile_id":null,"active_profile_fingerprint":null,"active_route_fingerprint":null,"active_route_count":0,"companion_process_running":true,"message":"VPN 已停止。","unsupported_fields":["serial"],"stats":{"download_ip_checksum_failures":0,"download_ip_length_mismatches":0,"download_tcp_syn_ack_packets":3,"download_transport_checksum_failures":0,"impairment_delay_millis_total":1786,"impairment_mss_clamps":0,"impairment_packets_corrupted":0,"impairment_packets_dropped":0,"impairment_packets_duplicated":0,"impairment_packets_reordered":0,"impairment_pmtu_fragments":0,"impairment_pmtu_signals":0,"impairment_unimplemented_pmtu_actions":0,"last_error":null,"protect_failures":0,"proxy_download_packets":14,"proxy_upload_packets":23,"socks_clients":3,"socks_connect_attempts":3,"socks_connect_successes":2,"tun_download_bytes":842,"tun_download_packets":14,"tun_upload_bytes":1675,"tun_upload_packets":23,"upload_tcp_ack_packets":15,"upload_tcp_syn_packets":3}},"tun_before":[],"tun_final":[]}}
+{
+  "scope": "device LocalSocket/TUN/JNI recovery gate only",
+  "serial": "2740072778",
+  "started_at": "2026-09-08T11:49:22.205+08:00",
+  "result": "PASS",
+  "steps": [
+    {
+      "at": "2026-09-08T11:49:22.229+08:00",
+      "name": "fixtures_ready",
+      "value": {
+        "dll": 58614,
+        "transaction": 58615
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:22.465+08:00",
+      "name": "initial_stopped",
+      "value": {
+        "serial": "",
+        "state": "stopped",
+        "verified": true,
+        "transport": "local_abstract_socket",
+        "active_profile_id": null,
+        "active_profile_fingerprint": null,
+        "active_route_fingerprint": null,
+        "active_route_count": 0,
+        "companion_process_running": true,
+        "message": "VPN 已停止。",
+        "unsupported_fields": [
+          "serial"
+        ],
+        "stats": {
+          "download_ip_checksum_failures": 0,
+          "download_ip_length_mismatches": 0,
+          "download_tcp_syn_ack_packets": 0,
+          "download_transport_checksum_failures": 0,
+          "impairment_delay_millis_total": 0,
+          "impairment_mss_clamps": 0,
+          "impairment_packets_corrupted": 0,
+          "impairment_packets_dropped": 0,
+          "impairment_packets_duplicated": 0,
+          "impairment_packets_reordered": 0,
+          "impairment_pmtu_fragments": 0,
+          "impairment_pmtu_signals": 0,
+          "impairment_unimplemented_pmtu_actions": 0,
+          "last_error": null,
+          "protect_failures": 0,
+          "proxy_download_packets": 0,
+          "proxy_upload_packets": 4,
+          "socks_clients": 0,
+          "socks_connect_attempts": 0,
+          "socks_connect_successes": 0,
+          "tun_download_bytes": 0,
+          "tun_download_packets": 0,
+          "tun_upload_bytes": 316,
+          "tun_upload_packets": 4,
+          "upload_tcp_ack_packets": 0,
+          "upload_tcp_syn_packets": 0
+        }
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:22.540+08:00",
+      "name": "reverse_created",
+      "value": {
+        "dll": 6555,
+        "transaction": 6556
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:23.134+08:00",
+      "name": "phase1_running",
+      "value": {
+        "status": {
+          "serial": "",
+          "state": "running",
+          "verified": true,
+          "transport": "local_abstract_socket",
+          "active_profile_id": "a920-controlled-v2",
+          "active_profile_fingerprint": "8d44bc1e2a8e71ee834868bb57051d0947dde5112642399ecfd4f3f9a2ef9088",
+          "active_route_fingerprint": "07c2d45058fa0d4b11a8a1b7854847f1aba01987c09e52f7713f2b7308319a98",
+          "active_route_count": 2,
+          "companion_process_running": true,
+          "message": "目标应用 VPN 与 Rust 数据面正在运行。",
+          "unsupported_fields": [
+            "serial"
+          ],
+          "stats": {
+            "download_ip_checksum_failures": 0,
+            "download_ip_length_mismatches": 0,
+            "download_tcp_syn_ack_packets": 0,
+            "download_transport_checksum_failures": 0,
+            "impairment_delay_millis_total": 0,
+            "impairment_mss_clamps": 0,
+            "impairment_packets_corrupted": 0,
+            "impairment_packets_dropped": 0,
+            "impairment_packets_duplicated": 0,
+            "impairment_packets_reordered": 0,
+            "impairment_pmtu_fragments": 0,
+            "impairment_pmtu_signals": 0,
+            "impairment_unimplemented_pmtu_actions": 0,
+            "last_error": null,
+            "protect_failures": 0,
+            "proxy_download_packets": 0,
+            "proxy_upload_packets": 4,
+            "socks_clients": 0,
+            "socks_connect_attempts": 0,
+            "socks_connect_successes": 0,
+            "tun_download_bytes": 0,
+            "tun_download_packets": 0,
+            "tun_upload_bytes": 316,
+            "tun_upload_packets": 4,
+            "upload_tcp_ack_packets": 0,
+            "upload_tcp_syn_packets": 0
+          }
+        },
+        "owner_epoch": "38befdb6-80f4-4d38-aea6-744dc01955c6",
+        "identity_fields": {},
+        "tun_before": [],
+        "tun_running": [
+          "tun0"
+        ]
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:32.679+08:00",
+      "name": "phase1_probes",
+      "value": {
+        "target": [
+          {
+            "package": "com.interceptproxy.vpn.targetprobe",
+            "phase": "phase1",
+            "channel": "dll",
+            "success": true,
+            "bytes": 137,
+            "text": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}"
+          },
+          {
+            "package": "com.interceptproxy.vpn.targetprobe",
+            "phase": "phase1",
+            "channel": "transaction",
+            "success": true,
+            "bytes": 145,
+            "text": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}"
+          }
+        ],
+        "isolation": {
+          "package": "com.interceptproxy.vpn.isolationprobe",
+          "phase": "isolation",
+          "channel": "dll",
+          "success": false,
+          "bytes": 130,
+          "text": "ERROR:java.net.SocketTimeoutException: failed to connect to /203.0.113.48 (port 16127) from /10.0.34.156 (port 39496) after 7000ms"
+        }
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:38.444+08:00",
+      "name": "control_loss_stopped",
+      "value": {
+        "serial": "",
+        "state": "stopped",
+        "verified": true,
+        "transport": "local_abstract_socket",
+        "active_profile_id": null,
+        "active_profile_fingerprint": null,
+        "active_route_fingerprint": null,
+        "active_route_count": 0,
+        "companion_process_running": true,
+        "message": "桌面控制租约连续 5 秒未续期，已自动关闭 VPN。",
+        "unsupported_fields": [
+          "serial"
+        ],
+        "stats": {
+          "download_ip_checksum_failures": 0,
+          "download_ip_length_mismatches": 0,
+          "download_tcp_syn_ack_packets": 3,
+          "download_transport_checksum_failures": 0,
+          "impairment_delay_millis_total": 1786,
+          "impairment_mss_clamps": 0,
+          "impairment_packets_corrupted": 0,
+          "impairment_packets_dropped": 0,
+          "impairment_packets_duplicated": 0,
+          "impairment_packets_reordered": 0,
+          "impairment_pmtu_fragments": 0,
+          "impairment_pmtu_signals": 0,
+          "impairment_unimplemented_pmtu_actions": 0,
+          "last_error": null,
+          "protect_failures": 0,
+          "proxy_download_packets": 14,
+          "proxy_upload_packets": 25,
+          "socks_clients": 3,
+          "socks_connect_attempts": 3,
+          "socks_connect_successes": 2,
+          "tun_download_bytes": 842,
+          "tun_download_packets": 14,
+          "tun_upload_bytes": 1771,
+          "tun_upload_packets": 25,
+          "upload_tcp_ack_packets": 15,
+          "upload_tcp_syn_packets": 3
+        }
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:38.635+08:00",
+      "name": "stale_apply_rejected_no_auto_restore",
+      "value": {
+        "version": 2,
+        "request_id": "6fbe6282-16c3-458f-a8b8-4047ffb4eef4",
+        "ok": false,
+        "status": null,
+        "error_code": "ANDROID_CONTROL_LEASE_STALE",
+        "error_message": "控制租约不存在、已到期或不属于当前运行实例。"
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:40.592+08:00",
+      "name": "explicit_new_epoch_recovered",
+      "value": {
+        "status": {
+          "serial": "",
+          "state": "running",
+          "verified": true,
+          "transport": "local_abstract_socket",
+          "active_profile_id": "a920-controlled-v2",
+          "active_profile_fingerprint": "8d44bc1e2a8e71ee834868bb57051d0947dde5112642399ecfd4f3f9a2ef9088",
+          "active_route_fingerprint": "07c2d45058fa0d4b11a8a1b7854847f1aba01987c09e52f7713f2b7308319a98",
+          "active_route_count": 2,
+          "companion_process_running": true,
+          "message": "目标应用 VPN 与 Rust 数据面正在运行。",
+          "unsupported_fields": [
+            "serial"
+          ],
+          "stats": {
+            "download_ip_checksum_failures": 0,
+            "download_ip_length_mismatches": 0,
+            "download_tcp_syn_ack_packets": 0,
+            "download_transport_checksum_failures": 0,
+            "impairment_delay_millis_total": 0,
+            "impairment_mss_clamps": 0,
+            "impairment_packets_corrupted": 0,
+            "impairment_packets_dropped": 0,
+            "impairment_packets_duplicated": 0,
+            "impairment_packets_reordered": 0,
+            "impairment_pmtu_fragments": 0,
+            "impairment_pmtu_signals": 0,
+            "impairment_unimplemented_pmtu_actions": 0,
+            "last_error": null,
+            "protect_failures": 0,
+            "proxy_download_packets": 0,
+            "proxy_upload_packets": 4,
+            "socks_clients": 0,
+            "socks_connect_attempts": 0,
+            "socks_connect_successes": 0,
+            "tun_download_bytes": 0,
+            "tun_download_packets": 0,
+            "tun_upload_bytes": 316,
+            "tun_upload_packets": 4,
+            "upload_tcp_ack_packets": 0,
+            "upload_tcp_syn_packets": 0
+          }
+        },
+        "probes": [
+          {
+            "package": "com.interceptproxy.vpn.targetprobe",
+            "phase": "phase2",
+            "channel": "dll",
+            "success": true,
+            "bytes": 137,
+            "text": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}"
+          },
+          {
+            "package": "com.interceptproxy.vpn.targetprobe",
+            "phase": "phase2",
+            "channel": "transaction",
+            "success": true,
+            "bytes": 145,
+            "text": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}"
+          }
+        ],
+        "owner_epoch": "2ea85077-17c0-4b2b-827a-a933897371f8",
+        "identity_change": {
+          "phase1": {},
+          "phase2": {},
+          "changed_paths": [],
+          "control_owner_epoch": {
+            "phase1": "38befdb6-80f4-4d38-aea6-744dc01955c6",
+            "phase2": "2ea85077-17c0-4b2b-827a-a933897371f8"
+          }
+        },
+        "tun_before": [],
+        "tun_running": [
+          "tun0"
+        ]
+      }
+    },
+    {
+      "at": "2026-09-08T11:49:40.793+08:00",
+      "name": "final_stopped",
+      "value": {
+        "status": {
+          "serial": "",
+          "state": "stopped",
+          "verified": true,
+          "transport": "local_abstract_socket",
+          "active_profile_id": null,
+          "active_profile_fingerprint": null,
+          "active_route_fingerprint": null,
+          "active_route_count": 0,
+          "companion_process_running": true,
+          "message": "VPN 已停止。",
+          "unsupported_fields": [
+            "serial"
+          ],
+          "stats": {
+            "download_ip_checksum_failures": 0,
+            "download_ip_length_mismatches": 0,
+            "download_tcp_syn_ack_packets": 3,
+            "download_transport_checksum_failures": 0,
+            "impairment_delay_millis_total": 1786,
+            "impairment_mss_clamps": 0,
+            "impairment_packets_corrupted": 0,
+            "impairment_packets_dropped": 0,
+            "impairment_packets_duplicated": 0,
+            "impairment_packets_reordered": 0,
+            "impairment_pmtu_fragments": 0,
+            "impairment_pmtu_signals": 0,
+            "impairment_unimplemented_pmtu_actions": 0,
+            "last_error": null,
+            "protect_failures": 0,
+            "proxy_download_packets": 14,
+            "proxy_upload_packets": 23,
+            "socks_clients": 3,
+            "socks_connect_attempts": 3,
+            "socks_connect_successes": 2,
+            "tun_download_bytes": 842,
+            "tun_download_packets": 14,
+            "tun_upload_bytes": 1675,
+            "tun_upload_packets": 23,
+            "upload_tcp_ack_packets": 15,
+            "upload_tcp_syn_packets": 3
+          }
+        },
+        "tun_before": [],
+        "tun_final": []
+      }
+    }
+  ],
+  "saved_activation_restore": {
+    "possible_via_public_v2": false,
+    "reason": "accepted start/apply with proxy routes clears prior recovery; v2 has no get/export operation",
+    "external_backup_required": true,
+    "external_restore_owner": "caller/root harness"
+  },
+  "recovery_backup_gate": {
+    "metadata_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/outputs/recovery-backup-gate.json",
+    "backup_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/resources/original-runtime-preferences.json",
+    "metadata": {
+      "package": "com.interceptproxy.vpn",
+      "serial": "2740072778",
+      "backup_complete": true,
+      "restore_supported": true,
+      "backup_file": "../resources/original-runtime-preferences.json",
+      "device_backup_path": "/storage/emulated/0/Android/data/com.interceptproxy.vpn/files/intercept_proxy_vpn_runtime.backup.json"
+    }
+  },
+  "adb_commands": [
+    {
+      "at": "2026-09-08T11:49:22.228+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "get-state"
+      ],
+      "exit": 0,
+      "elapsed_millis": 22,
+      "stdout": "device\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.366+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am",
+        "start",
+        "-n",
+        "com.interceptproxy.vpn/.AdbControlActivity",
+        "--es",
+        "command",
+        "wake_control_server"
+      ],
+      "exit": 0,
+      "elapsed_millis": 136,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn/.AdbControlActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.388+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "forward",
+        "tcp:0",
+        "localabstract:intercept_proxy_vpn"
+      ],
+      "exit": 0,
+      "elapsed_millis": 22,
+      "stdout": "58622\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.464+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 60,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.487+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--list"
+      ],
+      "exit": 0,
+      "elapsed_millis": 22,
+      "stdout": "\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.514+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--no-rebind",
+        "tcp:6555",
+        "tcp:58614"
+      ],
+      "exit": 0,
+      "elapsed_millis": 27,
+      "stdout": "6555\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.540+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--no-rebind",
+        "tcp:6556",
+        "tcp:58615"
+      ],
+      "exit": 0,
+      "elapsed_millis": 26,
+      "stdout": "6556\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.634+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "cmd",
+        "package",
+        "list",
+        "packages",
+        "-U",
+        "com.interceptproxy.vpn.targetprobe"
+      ],
+      "exit": 0,
+      "elapsed_millis": 94,
+      "stdout": "package:com.interceptproxy.vpn.targetprobe uid:10086\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:22.718+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "cmd",
+        "package",
+        "list",
+        "packages",
+        "-U",
+        "com.interceptproxy.vpn.isolationprobe"
+      ],
+      "exit": 0,
+      "elapsed_millis": 83,
+      "stdout": "package:com.interceptproxy.vpn.isolationprobe uid:10089\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:23.134+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 63,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n29: tun0: <POINTOPOINT,UP,LOWER_UP> mtu 1280 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet 10.254.0.2/32 scope global tun0\n       valid_lft forever preferred_lft forever\n    inet6 fd00:6970:7670::2/128 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::20dc:36c6:a378:de4d/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:23.236+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "rm",
+        "-f",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:23.366+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16127 --ei timeout 7000 --es token phase1-dll-2746d689f5 --es path /controlled/phase1/dll --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 130,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:23.466+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase1-dll-2746d689f5.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:23.719+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 99,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase1-dll-2746d689f5.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:23.964+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 92,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase1-dll-2746d689f5.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:24.214+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 96,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase1-dll-2746d689f5.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:24.459+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-2746d689f5.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 94,
+      "stdout": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:24.554+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "rm",
+        "-f",
+        "files/probe-phase1-transaction-e106d7cdc3.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 93,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:24.683+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16627 --ei timeout 7000 --es token phase1-transaction-e106d7cdc3 --es path /controlled/phase1/transaction --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 128,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:24.775+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-transaction-e106d7cdc3.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 92,
+      "stdout": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:24.883+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "rm",
+        "-f",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 105,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:25.030+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.isolationprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16127 --ei timeout 7000 --es token isolation-dll-cd13a21b1b --es path /controlled/isolation/dll --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 147,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.isolationprobe/.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:25.131+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 101,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:25.388+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 103,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:25.645+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 104,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:25.903+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 103,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:26.162+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 106,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:26.410+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:26.663+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:26.914+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 99,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:27.164+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 96,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:27.412+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:27.663+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 98,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:27.916+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:28.166+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:28.415+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 98,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:28.663+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 92,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:28.918+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:29.166+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:29.418+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 97,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:29.665+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:29.918+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 98,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:30.167+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 96,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:30.420+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 99,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:30.669+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 94,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:30.912+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 90,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:31.166+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 101,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:31.417+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 97,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:31.667+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 95,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:31.918+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 98,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:32.166+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 93,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:32.418+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 98,
+      "stdout": "",
+      "stderr": "cat: files/probe-isolation-dll-cd13a21b1b.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:32.678+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.isolationprobe",
+        "cat",
+        "files/probe-isolation-dll-cd13a21b1b.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 107,
+      "stdout": "ERROR:java.net.SocketTimeoutException: failed to connect to /203.0.113.48 (port 16127) from /10.0.34.156 (port 39496) after 7000ms",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:38.635+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 75,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:39.018+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 62,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n30: tun0: <POINTOPOINT,UP,LOWER_UP> mtu 1280 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet 10.254.0.2/32 scope global tun0\n       valid_lft forever preferred_lft forever\n    inet6 fd00:6970:7670::2/128 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::dfb:af03:1d2:c058/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:39.118+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "rm",
+        "-f",
+        "files/probe-phase2-dll-b228382214.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 100,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:39.261+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16127 --ei timeout 7000 --es token phase2-dll-b228382214 --es path /controlled/phase2/dll --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 143,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:39.365+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase2-dll-b228382214.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 104,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase2-dll-b228382214.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:39.687+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase2-dll-b228382214.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 163,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase2-dll-b228382214.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:39.955+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase2-dll-b228382214.txt"
+      ],
+      "exit": 1,
+      "elapsed_millis": 114,
+      "stdout": "",
+      "stderr": "cat: files/probe-phase2-dll-b228382214.txt: No such file or directory\n"
+    },
+    {
+      "at": "2026-09-08T11:49:40.219+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase2-dll-b228382214.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 108,
+      "stdout": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.323+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "rm",
+        "-f",
+        "files/probe-phase2-transaction-37a2d30aa4.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 102,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.462+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16627 --ei timeout 7000 --es token phase2-transaction-37a2d30aa4 --es path /controlled/phase2/transaction --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 139,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.590+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "-T",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase2-transaction-37a2d30aa4.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 128,
+      "stdout": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 40\r\nConnection: close\r\n\r\n{\"channel\":\"transaction\",\"result\":\"D48\"}",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.793+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 68,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.840+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "forward",
+        "--remove",
+        "tcp:58622"
+      ],
+      "exit": 0,
+      "elapsed_millis": 46,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.885+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--remove",
+        "tcp:6556"
+      ],
+      "exit": 0,
+      "elapsed_millis": 45,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:49:40.925+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--remove",
+        "tcp:6555"
+      ],
+      "exit": 0,
+      "elapsed_millis": 39,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "fixture_request_counts": {
+    "dll": 2,
+    "transaction": 2
+  },
+  "heartbeat_errors": [],
+  "finished_at": "2026-09-08T11:49:41.282+08:00"
+}

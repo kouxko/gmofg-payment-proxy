@@ -1,0 +1,39 @@
+{
+  "source": "CUA App.getAXStateAndScreenshot / getAXState",
+  "observations": [
+    {
+      "observed_at": "2026-09-08 10:18:13 +08:00",
+      "type": "visible App UI and accessibility tree",
+      "result": "Workspace page rendered with full navigation and selected default workspace",
+      "exact_accessibility_labels": [
+        "网络代理工具",
+        "全部入口已停止 入口 1 · 活动 0",
+        "默认 Workspace",
+        "ae97a522-4242-4264-af56-5b7f9cd338a2",
+        "当前"
+      ]
+    },
+    {
+      "observed_at": "2026-09-08 10:21:35 +08:00",
+      "type": "full accessibility tree",
+      "result": "Workspace still usable, 1 disabled listener, no live entries"
+    },
+    {
+      "observed_at": "2026-09-08 10:28:37 +08:00",
+      "type": "CUA App.click Start Listener and getAXState",
+      "result": "Both HTTP and Socket entries running; selected Socket binding uses built-in local Wasm package",
+      "exact_accessibility_labels": [
+        "全部入口运行中 入口 2 · 活动 2",
+        "运行状态：运行中",
+        "ISO 8583:1987 ASCII Profile · 1.0.0 · 本地管理 · 运行中",
+        "运行快照已锁定",
+        "代理监听运行中。"
+      ]
+    }
+  ],
+  "startup_observation": {
+    "home_only_started_at": "2026-09-08T10:13:15.277735+08:00",
+    "first_confirmed_render_at": "2026-09-08 10:18:13 +08:00",
+    "note": "No continuous render timing was collected; earlier blank window and later full render are observations, not an exact five-minute startup measurement or a confirmed root cause."
+  }
+}

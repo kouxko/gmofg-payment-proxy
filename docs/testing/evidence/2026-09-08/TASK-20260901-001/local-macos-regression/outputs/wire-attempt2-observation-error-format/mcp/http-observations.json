@@ -1,0 +1,849 @@
+{
+  "dropped_events": 0,
+  "evicted_records": 0,
+  "ignored_events": 14,
+  "page": 1,
+  "page_size": 100,
+  "rows": [
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:25.336863Z"
+        },
+        {
+          "context": {
+            "body": "{",
+            "body_is_utf8": true,
+            "header": "POST /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 1\r\nConnection: close\r\nX-Wire-Case: invalid\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "error": "Invalid Document JSON: EOF while parsing an object at line 1 column 1",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:44:25.341365Z",
+          "stage": "decode"
+        },
+        {
+          "error": "Invalid Document JSON: EOF while parsing an object at line 1 column 1",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:25.341386Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "699bf4977f58483b8535630899063d88",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57803",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:25.216133Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: miss\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":17.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 17.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:25.216213Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: miss\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:25.251506Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: miss\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:25.252611Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"miss\",\"remote\":\"127.0.0.1:57802\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"miss\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 392\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"miss\",\"remote\":\"127.0.0.1:57802\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"miss\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"miss\",\"remote\":\"127.0.0.1:57802\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"miss\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 392\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:25.259257Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"miss\",\"remote\":\"127.0.0.1:57802\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"miss\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 392\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:25.299270Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"miss\",\"remote\":\"127.0.0.1:57802\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"miss\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 392\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:25.299903Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:25.303303Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "f2f1caf128a744319a8fea3ecdf8d7c1",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57799",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:24.703603Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 18, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "POST /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: all\r\nX-Probe: alpha\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":18.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 18.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.703672Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}",
+            "body_is_utf8": true,
+            "header": "POST /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nConnection: close\r\nX-Wire-Case: all\r\nX-Probe: alpha\r\nX-Method-Hit: yes\r\nX-Header-Hit: yes\r\nX-Path-Hit: yes\r\nContent-Length: 42\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.705494Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}",
+            "body_is_utf8": true,
+            "header": "POST /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nConnection: close\r\nX-Wire-Case: all\r\nX-Probe: alpha\r\nX-Method-Hit: yes\r\nX-Header-Hit: yes\r\nX-Path-Hit: yes\r\nContent-Length: 42\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.706471Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"all\",\"remote\":\"127.0.0.1:57796\",\"method\":\"POST\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"all\"],\"x-probe\":[\"alpha\"],\"x-method-hit\":[\"yes\"],\"x-header-hit\":[\"yes\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 484\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"all\",\"remote\":\"127.0.0.1:57796\",\"method\":\"POST\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"all\"],\"x-probe\":[\"alpha\"],\"x-method-hit\":[\"yes\"],\"x-header-hit\":[\"yes\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"all\",\"remote\":\"127.0.0.1:57796\",\"method\":\"POST\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"all\"],\"x-probe\":[\"alpha\"],\"x-method-hit\":[\"yes\"],\"x-header-hit\":[\"yes\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 484\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.709285Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"all\",\"remote\":\"127.0.0.1:57796\",\"method\":\"POST\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"all\"],\"x-probe\":[\"alpha\"],\"x-method-hit\":[\"yes\"],\"x-header-hit\":[\"yes\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 484\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.952562Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"all\",\"remote\":\"127.0.0.1:57796\",\"method\":\"POST\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"all\"],\"x-probe\":[\"alpha\"],\"x-method-hit\":[\"yes\"],\"x-header-hit\":[\"yes\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 484\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:25.190917Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:25.203525Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "465c1137d9b5492bafc5d1f820935daa",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57795",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:24.665898Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 18, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: body\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":18.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 18.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.665999Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nConnection: close\r\nX-Wire-Case: body\r\nContent-Length: 42\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.671095Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nConnection: close\r\nX-Wire-Case: body\r\nContent-Length: 42\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.676276Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"body\",\"remote\":\"127.0.0.1:57794\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"body\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 383\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"body\",\"remote\":\"127.0.0.1:57794\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"body\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"body\",\"remote\":\"127.0.0.1:57794\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"body\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 383\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.690897Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"body\",\"remote\":\"127.0.0.1:57794\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"body\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 383\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.697567Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"body\",\"remote\":\"127.0.0.1:57794\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"body\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"42\"]},\"body_hex\":\"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d\",\"body_text\":\"{\\\"customer\\\":{\\\"age\\\":18.0,\\\"name\\\":\\\"matched\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 383\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.698840Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:24.698900Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9b32b3984f564017ba4086f9732ea2db",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57793",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:24.657656Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: path\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":17.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 17.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.657761Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: path\r\nX-Path-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.659077Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /orders/123?mode=test HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: path\r\nX-Path-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.659463Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"path\",\"remote\":\"127.0.0.1:57792\",\"method\":\"GET\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"path\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 428\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"path\",\"remote\":\"127.0.0.1:57792\",\"method\":\"GET\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"path\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"path\",\"remote\":\"127.0.0.1:57792\",\"method\":\"GET\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"path\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 428\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.662065Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"path\",\"remote\":\"127.0.0.1:57792\",\"method\":\"GET\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"path\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 428\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.662420Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"path\",\"remote\":\"127.0.0.1:57792\",\"method\":\"GET\",\"target\":\"/orders/123?mode=test\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"path\"],\"x-path-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 428\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.663233Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:24.663252Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "8e010cfae696487cac51cd7dbe923374",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57791",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:24.645775Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: header\r\nX-Probe: alpha\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":17.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 17.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.645885Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: header\r\nX-Probe: alpha\r\nX-Header-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.647324Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "GET /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: header\r\nX-Probe: alpha\r\nX-Header-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.647694Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"header\",\"remote\":\"127.0.0.1:57790\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"header\"],\"x-probe\":[\"alpha\"],\"x-header-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 439\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"header\",\"remote\":\"127.0.0.1:57790\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"header\"],\"x-probe\":[\"alpha\"],\"x-header-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"header\",\"remote\":\"127.0.0.1:57790\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"header\"],\"x-probe\":[\"alpha\"],\"x-header-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 439\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.649846Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"header\",\"remote\":\"127.0.0.1:57790\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"header\"],\"x-probe\":[\"alpha\"],\"x-header-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 439\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.650129Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"header\",\"remote\":\"127.0.0.1:57790\",\"method\":\"GET\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"header\"],\"x-probe\":[\"alpha\"],\"x-header-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 439\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.650330Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:24.650349Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "39f07bf84199433e892d4bd2a911cbfb",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57789",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:44:24.586994Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "POST /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: method\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "display": "{\"customer\":{\"age\":17.0,\"name\":\"original\"}}",
+          "document": {
+            "customer": {
+              "age": 17.0,
+              "name": "original"
+            }
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.593983Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "POST /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: method\r\nX-Method-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.635404Z"
+        },
+        {
+          "context": {
+            "body": "{\"customer\": {\"age\": 17, \"name\": \"original\"}}",
+            "body_is_utf8": true,
+            "header": "POST /other HTTP/1.1\r\nHost: 127.0.0.1:28080\r\nContent-Type: application/json\r\nContent-Length: 45\r\nConnection: close\r\nX-Wire-Case: method\r\nX-Method-Hit: yes\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "upstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.636959Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"method\",\"remote\":\"127.0.0.1:57788\",\"method\":\"POST\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"method\"],\"x-method-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 420\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "display": "{\"case\":\"method\",\"remote\":\"127.0.0.1:57788\",\"method\":\"POST\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"method\"],\"x-method-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+          "document": {
+            "body": "{\"case\":\"method\",\"remote\":\"127.0.0.1:57788\",\"method\":\"POST\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"method\"],\"x-method-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 420\r\nConnection: close\r\n\r\n"
+          },
+          "event": "received",
+          "observed_at": "2026-09-08T02:44:24.642434Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"method\",\"remote\":\"127.0.0.1:57788\",\"method\":\"POST\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"method\"],\"x-method-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 420\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "encoded",
+          "observed_at": "2026-09-08T02:44:24.642956Z"
+        },
+        {
+          "context": {
+            "body": "{\"case\":\"method\",\"remote\":\"127.0.0.1:57788\",\"method\":\"POST\",\"target\":\"/other\",\"headers\":{\"content-type\":[\"application/json\"],\"x-wire-case\":[\"method\"],\"x-method-hit\":[\"yes\"],\"host\":[\"127.0.0.1:28081\"],\"connection\":[\"close\"],\"content-length\":[\"45\"]},\"body_hex\":\"7b22637573746f6d6572223a207b22616765223a2031372c20226e616d65223a20226f726967696e616c227d7d\",\"body_text\":\"{\\\"customer\\\": {\\\"age\\\": 17, \\\"name\\\": \\\"original\\\"}}\"}",
+            "body_is_utf8": true,
+            "header": "HTTP/1.1 200 OK\r\nContent-Type: application/json\r\nContent-Length: 420\r\nConnection: close\r\n\r\n",
+            "protocol": "http"
+          },
+          "direction": "downstream",
+          "event": "sent",
+          "observed_at": "2026-09-08T02:44:24.643124Z"
+        },
+        {
+          "error": null,
+          "event": "closed",
+          "observed_at": "2026-09-08T02:44:24.643172Z",
+          "outcome": "completed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "5a74de0c91cf44d6b7940953d54a4531",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:57787",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.814873Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.817884Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.818712Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "f1acd1e6e7e448569d7e7049652c7cdf",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56990",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.759589Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.760290Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.760323Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "1380bfaadd9d42ff96e43260e2d99aea",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56989",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.731496Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.731620Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.731659Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9b6a131253d04778b126776e2f89efe2",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56988",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.703070Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.703169Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.703201Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "dd2e511ec8854b759f5861c9a978190b",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56987",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.644451Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.644544Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.644565Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "e51d1b52ca114552841b9f9c208dfd0c",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56986",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.585280Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.615381Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.615732Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9f76168ba4af48c9b9829ec245eba64a",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56985",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.501035Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.563121Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.563209Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9d3e02d16b034fe3ab578b2d44741531",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56982",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    }
+  ],
+  "total": 14
+}

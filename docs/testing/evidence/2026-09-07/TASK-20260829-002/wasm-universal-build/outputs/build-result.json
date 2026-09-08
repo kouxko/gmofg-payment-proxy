@@ -1,0 +1,12 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "build:macos:universal"
+  ],
+  "env": {
+    "CARGO_BUILD_JOBS": "2"
+  },
+  "exit_code": 0,
+  "completed_at": "2026-09-07T19:39:01.773994+08:00"
+}

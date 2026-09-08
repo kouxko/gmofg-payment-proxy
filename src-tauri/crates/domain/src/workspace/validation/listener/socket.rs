@@ -4,9 +4,9 @@ use std::collections::{BTreeMap, BTreeSet};
 
 use crate::{
     CertificateReferenceId, CertificateReferenceKind, DomainError, MAX_SOCKET_MAXIMUM_CONNECTIONS,
-    SocketDownstreamSecurity, SocketDownstreamTlsSettings, SocketLocalResponderTopology,
-    SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology, SocketTopology,
-    SocketUpstreamTlsSettings,
+    MAX_SOCKET_READ_CHUNK_BYTES, SocketDownstreamSecurity, SocketDownstreamTlsSettings,
+    SocketLocalResponderTopology, SocketRelaySecurity, SocketRelaySettings, SocketRelayTopology,
+    SocketTopology, SocketUpstreamTlsSettings,
 };
 
 use super::super::value::is_valid_socket_host;
@@ -30,11 +30,11 @@ pub(super) fn validate_socket(
             "Socket 最大连接数必须在 1..=5000",
         );
     }
-    if value.runtime_limits.read_chunk_bytes == 0 {
+    if !(1..=MAX_SOCKET_READ_CHUNK_BYTES).contains(&value.runtime_limits.read_chunk_bytes) {
         push_field_error(
             error,
             format!("{field}.runtime_limits.read_chunk_bytes"),
-            "Socket 单次读取字节数必须大于 0",
+            "Socket 单次读取字节数必须在 1..=1048576",
         );
     }
     if value.runtime_limits.diagnostic_event_capacity == 0 {

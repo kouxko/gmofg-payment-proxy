@@ -1,0 +1,364 @@
+[
+  {
+    "id": 104177,
+    "status": "failed",
+    "stage": "package",
+    "name": "windows_build_only",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T05:50:18.542Z",
+    "started_at": "2026-09-04T06:03:03.965Z",
+    "finished_at": "2026-09-04T06:04:03.295Z",
+    "erased_at": null,
+    "duration": 59.329928,
+    "queued_duration": 1.338323,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "short_id": "53cf9b3f",
+      "created_at": "2026-09-04T13:49:49.000+08:00",
+      "parent_ids": [
+        "8263afe87a6099848badb0961a16307113ab943b",
+        "a1692337317ae5e088a07d19cd0ae6f281d781fd"
+      ],
+      "title": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization",
+      "message": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T13:49:49.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T13:49:49.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/53cf9b3f18925df9928bdbd6346e2175fbbfa51a"
+    },
+    "pipeline": {
+      "id": 34043,
+      "iid": 24,
+      "project_id": 1023,
+      "sha": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T05:50:18.511Z",
+      "updated_at": "2026-09-04T06:04:03.413Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34043"
+    },
+    "failure_reason": "script_failure",
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104177",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 19335,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104176,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_companion",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T05:50:18.527Z",
+    "started_at": "2026-09-04T05:55:54.968Z",
+    "finished_at": "2026-09-04T06:03:02.516Z",
+    "erased_at": null,
+    "duration": 427.54816,
+    "queued_duration": 1.807838,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "short_id": "53cf9b3f",
+      "created_at": "2026-09-04T13:49:49.000+08:00",
+      "parent_ids": [
+        "8263afe87a6099848badb0961a16307113ab943b",
+        "a1692337317ae5e088a07d19cd0ae6f281d781fd"
+      ],
+      "title": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization",
+      "message": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T13:49:49.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T13:49:49.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/53cf9b3f18925df9928bdbd6346e2175fbbfa51a"
+    },
+    "pipeline": {
+      "id": 34043,
+      "iid": 24,
+      "project_id": 1023,
+      "sha": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T05:50:18.511Z",
+      "updated_at": "2026-09-04T06:04:03.413Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34043"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104176",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "intercept-proxy-android-companion-53cf9b3f.zip",
+      "size": 12477818
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 12477818,
+        "filename": "intercept-proxy-android-companion-53cf9b3f.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 214,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 92265,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-18T06:03:01.754Z",
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  },
+  {
+    "id": 104175,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_environment",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T05:50:18.518Z",
+    "started_at": "2026-09-04T05:50:21.790Z",
+    "finished_at": "2026-09-04T05:55:53.066Z",
+    "erased_at": null,
+    "duration": 331.276605,
+    "queued_duration": 2.759824,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "short_id": "53cf9b3f",
+      "created_at": "2026-09-04T13:49:49.000+08:00",
+      "parent_ids": [
+        "8263afe87a6099848badb0961a16307113ab943b",
+        "a1692337317ae5e088a07d19cd0ae6f281d781fd"
+      ],
+      "title": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization",
+      "message": "Merge remote-tracking branch 'gitlab/codex/intercept-proxy-generalization' into codex/intercept-proxy-generalization\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T13:49:49.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T13:49:49.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/53cf9b3f18925df9928bdbd6346e2175fbbfa51a"
+    },
+    "pipeline": {
+      "id": 34043,
+      "iid": 24,
+      "project_id": 1023,
+      "sha": "53cf9b3f18925df9928bdbd6346e2175fbbfa51a",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T05:50:18.511Z",
+      "updated_at": "2026-09-04T06:04:03.413Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34043"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104175",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 59228,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  }
+]

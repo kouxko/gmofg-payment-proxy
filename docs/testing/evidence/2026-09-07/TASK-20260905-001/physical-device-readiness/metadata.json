@@ -1,0 +1,152 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "physical-device-readiness",
+  "executed_at": "2026-09-07T19:02:44.595080+08:00",
+  "status": "READ_ONLY_INVENTORY_COMPLETE_DEVICE_ACCEPTANCE_NOT_RUN",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "MANUAL-RECOVERY-001",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/manual-recovery"
+  },
+  "actual": {
+    "2740072778": {
+      "model": {
+        "command": [
+          "adb",
+          "-s",
+          "2740072778",
+          "shell",
+          "getprop",
+          "ro.product.model"
+        ],
+        "exit": 0,
+        "output": "A920MAX"
+      },
+      "sdk": {
+        "command": [
+          "adb",
+          "-s",
+          "2740072778",
+          "shell",
+          "getprop",
+          "ro.build.version.sdk"
+        ],
+        "exit": 0,
+        "output": "29"
+      },
+      "abi": {
+        "command": [
+          "adb",
+          "-s",
+          "2740072778",
+          "shell",
+          "getprop",
+          "ro.product.cpu.abi"
+        ],
+        "exit": 0,
+        "output": "armeabi-v7a"
+      },
+      "companion_path": {
+        "command": [
+          "adb",
+          "-s",
+          "2740072778",
+          "shell",
+          "pm",
+          "path",
+          "com.interceptproxy.vpn"
+        ],
+        "exit": 0,
+        "output": "package:/data/app/com.interceptproxy.vpn-i_QvVpvCIO0OJQ89AEYGRA==/base.apk"
+      },
+      "companion_services": {
+        "command": [
+          "adb",
+          "-s",
+          "2740072778",
+          "shell",
+          "dumpsys",
+          "activity",
+          "services",
+          "com.interceptproxy.vpn"
+        ],
+        "exit": 0,
+        "output": "ACTIVITY MANAGER SERVICES (dumpsys activity services)\n  (nothing)"
+      },
+      "foreground": ""
+    },
+    "3330000478": {
+      "model": {
+        "command": [
+          "adb",
+          "-s",
+          "3330000478",
+          "shell",
+          "getprop",
+          "ro.product.model"
+        ],
+        "exit": 0,
+        "output": "IM28"
+      },
+      "sdk": {
+        "command": [
+          "adb",
+          "-s",
+          "3330000478",
+          "shell",
+          "getprop",
+          "ro.build.version.sdk"
+        ],
+        "exit": 0,
+        "output": "31"
+      },
+      "abi": {
+        "command": [
+          "adb",
+          "-s",
+          "3330000478",
+          "shell",
+          "getprop",
+          "ro.product.cpu.abi"
+        ],
+        "exit": 0,
+        "output": "armeabi-v7a"
+      },
+      "companion_path": {
+        "command": [
+          "adb",
+          "-s",
+          "3330000478",
+          "shell",
+          "pm",
+          "path",
+          "com.interceptproxy.vpn"
+        ],
+        "exit": 1,
+        "output": ""
+      },
+      "companion_services": {
+        "command": [
+          "adb",
+          "-s",
+          "3330000478",
+          "shell",
+          "dumpsys",
+          "activity",
+          "services",
+          "com.interceptproxy.vpn"
+        ],
+        "exit": 0,
+        "output": "ACTIVITY MANAGER SERVICES (dumpsys activity services)\n  (nothing)"
+      },
+      "foreground": "    mResumedActivity: ActivityRecord{d6c3e4c u0 jp.pax.upt.launcher/.MainActivity t3453}"
+    }
+  },
+  "not_run_reason": "Both devices running business launchers; device selection and network-interruption maintenance permission pending user reply",
+  "changes_to_device": "NONE",
+  "not_applicable": {
+    "frames": "No control/request sent",
+    "screenshots": "No UI interaction",
+    "runtime_test": "NOT_RUN"
+  }
+}

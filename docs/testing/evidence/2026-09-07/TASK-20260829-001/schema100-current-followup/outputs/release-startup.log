@@ -1,0 +1,43 @@
+Task test:task-20260829-002:phase17 deno test -A scripts/check-task-20260829-002-phase2-release-blocker.test.mjs && cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-infrastructure --lib sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100 -- --exact && cargo test --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::pre_1_0_schema_is_cleared_and_recreated_as_schema100 -- --exact && cargo test --release --manifest-path src-tauri/Cargo.toml -p intercept-proxy-host --lib tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts -- --exact
+running 14 tests from ./scripts/check-task-20260829-002-phase2-release-blocker.test.mjs
+release scan passes only after the complete temporary reset contract is removed ... ok (1ms)
+release scan blocks when marker is removed but the debug recreate opt-in remains ... ok (212µs)
+release scan blocks when opt-in is removed but the temporary policy remains ... ok (185µs)
+release scan blocks a marker even when the reset contract is absent ... ok (77µs)
+release scan reports each blocker category once and scans production Rust only ... ok (651µs)
+Schema100 startup contract requires exact pre-baseline cleanup and invalid-marker rejection ... ok (223µs)
+current Schema100 startup source is release ready ... ok (8m43s)
+ordinary tauri builds do not run the explicit release readiness gate ... ok (1ms)
+Tauri composition delegates the single Schema100 startup path to Host ... ok (905µs)
+Phase 17 release scan requires the complete current Schema100 startup contract ... ok (435µs)
+Phase 17 release scan blocks an aggregate command that drops the release profile ... ok (522µs)
+Phase 17 release scan rejects stale exact filters that execute zero tests ... ok (157µs)
+Phase 17 release scan rejects zero-test Cargo discovery ... ok (139µs)
+Phase 17 release scan blocks unproven SHM byte preservation claims ... ok (130µs)
+
+ok | 14 passed | 0 failed (8m43s)
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1.16s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 1 test
+test sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 482 filtered out; finished in 0.03s
+
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.52s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_host-7e29dcfdb374754c)
+
+running 1 test
+test tests::pre_1_0_schema_is_cleared_and_recreated_as_schema100 ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 0.08s
+
+    Finished `release` profile [optimized] target(s) in 0.66s
+     Running unittests src/lib.rs (src-tauri/target/release/deps/intercept_proxy_host-7ad3fcdfabdd823c)
+
+running 1 test
+test tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 9 filtered out; finished in 26.26s
+

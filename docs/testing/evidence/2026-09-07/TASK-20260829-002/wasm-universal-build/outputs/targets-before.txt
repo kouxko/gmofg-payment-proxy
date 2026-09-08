@@ -1,0 +1,7 @@
+aarch64-apple-darwin
+aarch64-linux-android
+armv7-linux-androideabi
+i686-linux-android
+wasm32-wasip2
+x86_64-linux-android
+x86_64-pc-windows-msvc

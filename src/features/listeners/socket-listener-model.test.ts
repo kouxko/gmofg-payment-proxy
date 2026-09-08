@@ -2,12 +2,15 @@ import { describe, expect, it } from "vitest";
 import type {
   ListenerProtocolPackageCatalogViewModel,
   ListenerProtocolPackageOptionViewModel,
+  SocketRelaySecurityDraft,
   SocketRelayDraftSettings,
 } from "@/generated/rust-types";
+import { BUILT_IN_ISO_8583_PACKAGE } from "@/lib/protocol-package-identity";
 import {
   appSecurity,
   bindPackage,
   exactPackageKey,
+  httpCatalogOptions,
   isListenerProtocolPackageCatalog,
   matchingOption,
   socketCatalogOptions,
@@ -36,6 +39,18 @@ function settings(): SocketRelayDraftSettings {
   const listener = socketListener();
   if (listener.data_plane.kind !== "socket") throw new Error("expected Socket");
   return listener.data_plane.settings;
+}
+
+function relayWithSecurity(security: SocketRelaySecurityDraft): SocketRelayDraftSettings {
+  const current = settings();
+  if (current.topology.mode !== "relay") throw new Error("expected Relay");
+  return {
+    ...current,
+    topology: {
+      mode: "relay",
+      settings: { ...current.topology.settings, security },
+    },
+  };
 }
 
 describe("Socket Listener presentation model", () => {
@@ -70,6 +85,51 @@ describe("Socket Listener presentation model", () => {
       unavailable_version_count: 0,
       recommended_package: null,
     })).toBe(false);
+  });
+
+  it("fails closed for malformed catalog counts, recommendations and package contracts", () => {
+    const candidate = option();
+    const catalog = (overrides: Record<string, unknown>) => ({
+      options: [candidate],
+      installed_version_count: 1,
+      unavailable_version_count: 0,
+      recommended_package: null,
+      ...overrides,
+    });
+
+    expect(isListenerProtocolPackageCatalog(catalog({ installed_version_count: -1 }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({ unavailable_version_count: 0.5 }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({ recommended_package: { id: "", version: "1.0.0" } }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({ recommended_package: { id: "other", version: "1.0.0" } }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({ options: [{ ...candidate, name: "" }] }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({
+      options: [{ ...candidate, capabilities: { ...candidate.capabilities, display: false } }],
+    }))).toBe(false);
+    expect(isListenerProtocolPackageCatalog(catalog({
+      options: [{ ...candidate, upstream_schema: null }],
+    }))).toBe(false);
+  });
+
+  it("accepts only the installed built-in Socket package as the recommendation", () => {
+    const recommended = { ...option(), package: BUILT_IN_ISO_8583_PACKAGE };
+    const catalog: ListenerProtocolPackageCatalogViewModel = {
+      options: [recommended],
+      installed_version_count: 1,
+      unavailable_version_count: 0,
+      recommended_package: BUILT_IN_ISO_8583_PACKAGE,
+    };
+
+    expect(isListenerProtocolPackageCatalog(catalog)).toBe(true);
+    expect(isListenerProtocolPackageCatalog({
+      ...catalog,
+      options: [{ ...option("http"), package: BUILT_IN_ISO_8583_PACKAGE }],
+    })).toBe(false);
+  });
+
+  it("returns empty package choices when the authoritative catalog is unavailable", () => {
+    expect(socketCatalogOptions(undefined)).toEqual([]);
+    expect(httpCatalogOptions(undefined)).toEqual([]);
+    expect(matchingOption(undefined, option().package)).toBeUndefined();
   });
 
   it("binds an explicitly selected exact package without constructing mode defaults", () => {
@@ -121,5 +181,37 @@ describe("Socket Listener presentation model", () => {
         upstream_tls: serverTls,
       });
     }
+  });
+
+  it("updates each one-sided TLS mode without changing its transport mode", () => {
+    const appTls = { server_identity: "app-id", client_authentication: { mode: "disabled" as const } };
+    const serverTls = { verify_hostname: false, tls_server_name: "server.test", server_trust: null, client_identity: null };
+    const appUpdated = updateAppTls(relayWithSecurity({
+      mode: "tls_to_tcp",
+      downstream_tls: { server_identity: null, client_authentication: { mode: "disabled" } },
+    }), appTls);
+    const serverUpdated = updateServerTls(relayWithSecurity({
+      mode: "tcp_to_tls",
+      upstream_tls: { verify_hostname: true, tls_server_name: null, server_trust: null, client_identity: null },
+    }), serverTls);
+
+    expect(appUpdated.topology).toMatchObject({
+      mode: "relay",
+      settings: { security: { mode: "tls_to_tcp", downstream_tls: appTls } },
+    });
+    expect(serverUpdated.topology).toMatchObject({
+      mode: "relay",
+      settings: { security: { mode: "tcp_to_tls", upstream_tls: serverTls } },
+    });
+  });
+
+  it("does not enable TLS while updating a transport mode that has no matching TLS side", () => {
+    const transparent = relayWithSecurity({ mode: "transparent" });
+    const appTls = { server_identity: "app-id", client_authentication: { mode: "disabled" as const } };
+    const serverTls = { verify_hostname: false, tls_server_name: null, server_trust: null, client_identity: null };
+
+    expect(updateAppTls(transparent, appTls)).toEqual(transparent);
+    expect(updateServerTls(transparent, serverTls)).toEqual(transparent);
+    expect(appSecurity(transparent)).toEqual({ mode: "tcp" });
   });
 });

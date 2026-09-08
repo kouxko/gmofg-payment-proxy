@@ -1,0 +1,360 @@
+[
+  {
+    "id": 104149,
+    "status": "canceled",
+    "stage": "package",
+    "name": "windows_build_only",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T02:53:17.777Z",
+    "started_at": "2026-09-04T03:06:45.963Z",
+    "finished_at": "2026-09-04T03:19:13.668Z",
+    "erased_at": null,
+    "duration": 747.704281,
+    "queued_duration": 0.450858,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "short_id": "b0bf4c75",
+      "created_at": "2026-09-04T10:53:07.000+08:00",
+      "parent_ids": [
+        "40d273ce3fd2a85b8b8e8674f041e0fb5804c17f"
+      ],
+      "title": "ci: preserve Windows dependency cache",
+      "message": "ci: preserve Windows dependency cache\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T10:53:07.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T10:53:07.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/b0bf4c758cfa38ca40c83a96e334912addb74c08"
+    },
+    "pipeline": {
+      "id": 34032,
+      "iid": 20,
+      "project_id": 1023,
+      "sha": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "canceled",
+      "source": "api",
+      "created_at": "2026-09-04T02:53:17.752Z",
+      "updated_at": "2026-09-04T03:19:13.769Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34032"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104149",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 125575,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104148,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_companion",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T02:53:17.768Z",
+    "started_at": "2026-09-04T02:59:25.182Z",
+    "finished_at": "2026-09-04T03:06:45.360Z",
+    "erased_at": null,
+    "duration": 440.178577,
+    "queued_duration": 2.269078,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "short_id": "b0bf4c75",
+      "created_at": "2026-09-04T10:53:07.000+08:00",
+      "parent_ids": [
+        "40d273ce3fd2a85b8b8e8674f041e0fb5804c17f"
+      ],
+      "title": "ci: preserve Windows dependency cache",
+      "message": "ci: preserve Windows dependency cache\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T10:53:07.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T10:53:07.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/b0bf4c758cfa38ca40c83a96e334912addb74c08"
+    },
+    "pipeline": {
+      "id": 34032,
+      "iid": 20,
+      "project_id": 1023,
+      "sha": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "canceled",
+      "source": "api",
+      "created_at": "2026-09-04T02:53:17.752Z",
+      "updated_at": "2026-09-04T03:19:13.769Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34032"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104148",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "intercept-proxy-android-companion-b0bf4c75.zip",
+      "size": 12475934
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 92265,
+        "filename": "job.log",
+        "file_format": null
+      },
+      {
+        "file_type": "archive",
+        "size": 12475934,
+        "filename": "intercept-proxy-android-companion-b0bf4c75.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 214,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-18T03:06:44.631Z",
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  },
+  {
+    "id": 104147,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_environment",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T02:53:17.760Z",
+    "started_at": "2026-09-04T02:53:18.972Z",
+    "finished_at": "2026-09-04T02:59:22.836Z",
+    "erased_at": null,
+    "duration": 363.863612,
+    "queued_duration": 0.809626,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "short_id": "b0bf4c75",
+      "created_at": "2026-09-04T10:53:07.000+08:00",
+      "parent_ids": [
+        "40d273ce3fd2a85b8b8e8674f041e0fb5804c17f"
+      ],
+      "title": "ci: preserve Windows dependency cache",
+      "message": "ci: preserve Windows dependency cache\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T10:53:07.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T10:53:07.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/b0bf4c758cfa38ca40c83a96e334912addb74c08"
+    },
+    "pipeline": {
+      "id": 34032,
+      "iid": 20,
+      "project_id": 1023,
+      "sha": "b0bf4c758cfa38ca40c83a96e334912addb74c08",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "canceled",
+      "source": "api",
+      "created_at": "2026-09-04T02:53:17.752Z",
+      "updated_at": "2026-09-04T03:19:13.769Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34032"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104147",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 59227,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  }
+]

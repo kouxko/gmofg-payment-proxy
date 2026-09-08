@@ -1,0 +1,12 @@
+POST /orders/123?mode=test HTTP/1.1
+Content-Type: application/json
+X-Wire-Case: all
+X-Probe: alpha
+X-Method-Hit: yes
+X-Header-Hit: yes
+X-Path-Hit: yes
+Host: 127.0.0.1:28081
+Connection: close
+Content-Length: 42
+
+{"customer":{"age":18.0,"name":"matched"}}

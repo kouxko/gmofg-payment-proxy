@@ -1,0 +1,1 @@
+{"triggers":["workflow_dispatch"],"jobs":["android-companion","build-windows-executable"],"dependency":"android-companion"}

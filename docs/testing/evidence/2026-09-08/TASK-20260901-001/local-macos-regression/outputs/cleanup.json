@@ -1,0 +1,19 @@
+{
+  "result": "PASS",
+  "checked_at": "2026-09-08T10:48:14.253367+08:00",
+  "app_controller_exit_code": 0,
+  "local_ports_closed": {
+    "17653": true,
+    "8765": true,
+    "28080": true,
+    "28081": true,
+    "28082": true,
+    "28083": true
+  },
+  "dmg_mount_absent": true,
+  "profile_retained": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/intercept-local-regression-5cgcr6lq",
+  "archive": "resources/isolated-app-data-after.tar.gz",
+  "database_integrity": "ok",
+  "application_schema_version": 100,
+  "normal_user_profile_modified": false
+}

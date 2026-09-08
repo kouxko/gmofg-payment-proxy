@@ -1,0 +1,271 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/rules/rule-definition-editor.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/rules</a> rule-definition-editor.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">64.28% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>18/28</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">72.41% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>21/29</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">50% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>7/14</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">66.66% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>14/21</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line medium'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-yes">60x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">69x</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-yes">36x</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Button, Input, Label, TextArea, TextField } from "@heroui/react";
+import type { HttpRuleEditorStageViewModel, ProxyListener, RuleDefinitionSaveInput, RuleEditorContext, SocketRuleEditorStageViewModel } from "@/generated/rust-types";
+import { ruleStageIncompatibility } from "./rule-definition-model";
+import { RuleMetadataFields } from "./rule-metadata-fields";
+import { RuleSinglePairEditor } from "./rule-single-pair-editor";
+&nbsp;
+type Stage = HttpRuleEditorStageViewModel | SocketRuleEditorStageViewModel;
+type RuleDefinitionChange = RuleDefinitionSaveInput | ((current: RuleDefinitionSaveInput) =&gt; RuleDefinitionSaveInput);
+&nbsp;
+export function RuleDefinitionEditor(props: {
+  input?: RuleDefinitionSaveInput;
+  context?: RuleEditorContext;
+  listener?: ProxyListener;
+  loading: boolean;
+  pending: boolean;
+  fieldErrors: Record&lt;string, string[]&gt;;
+  onChange: (change: RuleDefinitionChange) =&gt; void;
+  onSave: (input: RuleDefinitionSaveInput) =&gt; void | Promise&lt;void&gt;;
+  onCopy: () =&gt; void;
+  onDelete: () =&gt; void;
+}) {
+  if (props.loading) return &lt;EditorShell&gt;&lt;p&gt;正在读取规则…&lt;/p&gt;&lt;/EditorShell&gt;;
+  if (!props.input || !props.listener) return &lt;EditorShell&gt;&lt;p className="text-sm text-[var(--telemetry-muted)]"&gt;选择一条规则或新建规则进行编辑。&lt;/p&gt;&lt;/EditorShell&gt;;
+&nbsp;
+  const input = props.input;
+  const existing = input.rule_id != null;
+  const stage = editorStage(props.context, input.draft.stage);
+  const stageOptions = (props.context?.content.value.stages ?? <span class="branch-1 cbranch-no" title="branch not covered" >[])</span>.map((item) =&gt; ({ item, reason: ruleStageIncompatibility(input, props.context, item.stage) }));
+  const currentStageReason = ruleStageIncompatibility(input, props.context, input.draft.stage);
+  const <span class="fstat-no" title="function not covered" >updateDraft = (d</span>raft: RuleDefinitionSaveInput["draft"]) =&gt; <span class="cstat-no" title="statement not covered" >props.onChange({ ...input, draft });</span>
+  const <span class="fstat-no" title="function not covered" >updateDescription = (d</span>escription: string) =&gt; {
+<span class="cstat-no" title="statement not covered" >    if (input.draft.content.type !== "http") <span class="cstat-no" title="statement not covered" >return;</span></span>
+<span class="cstat-no" title="statement not covered" >    updateDraft({ ...input.draft, content: { type: "http", value: { ...input.draft.content.value, description } } });</span>
+  };
+&nbsp;
+  return &lt;EditorShell&gt;
+    &lt;&gt;
+      &lt;header&gt;&lt;h2 className="text-lg font-semibold"&gt;{existing ? "编辑规则" : "新建规则"}&lt;/h2&gt;&lt;p className="text-xs text-[var(--telemetry-muted)]"&gt;Listener 创建后不可切换。&lt;/p&gt;&lt;/header&gt;
+      &lt;RuleMetadataFields
+        enabled={input.draft.enabled}
+        listenerControl={&lt;TextField isDisabled&gt;&lt;Label&gt;Listener&lt;/Label&gt;&lt;Input aria-label="固定 Listener" value={props.listener.name} /&gt;&lt;/TextField&gt;}
+        name={input.draft.name}
+        pending={props.pending}
+        priority={input.draft.priority}
+        stage={input.draft.stage}
+        stageOptions={stageOptions.map(({ item, reason }) =&gt; ({ stage: item.stage, reason }))}
+<span class="fstat-no" title="function not covered" >        onEnabledChange={(e</span>nabled) =&gt; <span class="cstat-no" title="statement not covered" >updateDraft({ ...input.draft, enabled })}</span>
+<span class="fstat-no" title="function not covered" >        onNameChange={(n</span>ame) =&gt; <span class="cstat-no" title="statement not covered" >updateDraft({ ...input.draft, name })}</span>
+<span class="fstat-no" title="function not covered" >        onPriorityChange={(p</span>riority) =&gt; <span class="cstat-no" title="statement not covered" >updateDraft({ ...input.draft, priority })}</span>
+<span class="fstat-no" title="function not covered" >        onStageChange={(s</span>tage) =&gt; { <span class="cstat-no" title="statement not covered" >if (!ruleStageIncompatibility(input, props.context, stage)) <span class="cstat-no" title="statement not covered" >updateDraft({ ...input.draft, stage }); }</span></span>}
+      /&gt;
+    &lt;/&gt;
+    {currentStageReason &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >&lt;p className="text-sm text-red-600" role="alert"&gt;当前阶段不可保存：{currentStageReason}&lt;/p&gt;}</span>
+    {input.draft.content.type === "http" ? &lt;section className="space-y-4"&gt;&lt;h3 className="font-semibold"&gt;HTTP 规则内容&lt;/h3&gt;&lt;TextField&gt;&lt;Label&gt;说明&lt;/Label&gt;&lt;TextArea className="min-h-20" value={input.draft.content.value.description} <span class="fstat-no" title="function not covered" >onChange={(e</span>vent) =&gt; <span class="cstat-no" title="statement not covered" >updateDescription(event.target.value)} /&gt;</span>&lt;/TextField&gt;&lt;/section&gt; : &lt;h3 className="font-semibold"&gt;Socket Document 规则内容&lt;/h3&gt;}
+    &lt;RuleSinglePairEditor actions={existing ? &lt;&gt;&lt;Button isDisabled={props.pending} variant="outline" onPress={props.onCopy}&gt;复制规则&lt;/Button&gt;&lt;Button isDisabled={props.pending} variant="danger-soft" onPress={props.onDelete}&gt;删除规则&lt;/Button&gt;&lt;/&gt; : undefined} conditionPath={props.context?.document_condition_path} input={input} key={editorKey(input)} localTypes={props.context?.local_document_types ?? <span class="branch-1 cbranch-no" title="branch not covered" >[]} o</span>nSave={props.onSave} pending={props.pending || input.draft.name.trim() === "" || currentStageReason != null} stage={stage} /&gt;
+    {Object.values(props.fieldErrors).flat().length &gt; 0 &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >&lt;p className="text-sm text-red-600" role="alert"&gt;{Object.values(props.fieldErrors).flat().join("；")}&lt;/p&gt;}</span>
+  &lt;/EditorShell&gt;;
+}
+&nbsp;
+function EditorShell({ children }: { children: React.ReactNode }) { return &lt;div className="space-y-5 p-4" data-testid="rule-definition-editor"&gt;{children}&lt;/div&gt;; }
+function editorStage(context: RuleEditorContext | undefined, stage: RuleDefinitionSaveInput["draft"]["stage"]): Stage | undefined { return context?.content.value.stages.find((item) =&gt; item.stage === stage); }
+function editorKey(input: RuleDefinitionSaveInput) { return `${input.rule_id ?? "new"}:${input.draft.listener_id}:${input.draft.stage}`; }
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

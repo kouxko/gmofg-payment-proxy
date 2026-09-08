@@ -1,0 +1,13 @@
+{
+  "command": [
+    "/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/release/deps/intercept_proxy_host-7ad3fcdfabdd823c",
+    "tests::phase2_database_startup::release_startup_preserves_schema100_state_across_two_real_host_starts",
+    "--exact"
+  ],
+  "env": {
+    "CARGO": "replay/capture-cargo.py",
+    "DB100_CAPTURE_DIR": "resources/generated-component"
+  },
+  "reason": "Archive actual compiled file consumed by optimized two-start test before its temporary directory is deleted",
+  "exit": 0
+}

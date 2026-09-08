@@ -1,0 +1,154 @@
+{
+  "baseline_public": {
+    "revision": 1,
+    "selected": false,
+    "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+  },
+  "candidate_id": "7dbfff2f-396e-443c-aad6-75d7d4e15b7d",
+  "errors": [],
+  "preview": {
+    "alias_graph": {
+      "certificate_aliases": [],
+      "secret_aliases": []
+    },
+    "materials_public": {
+      "certificates": [],
+      "secrets": []
+    },
+    "protocol_document_values": [
+      "abc",
+      7.5,
+      true,
+      null,
+      {
+        "nested": "value"
+      },
+      [
+        0.0
+      ]
+    ],
+    "resources": {
+      "android_profile_ids": [],
+      "listeners": [
+        {
+          "alias": "phase21-http",
+          "candidate_local_id": "321e2033-943a-47d2-804d-d37b1f41e2d3"
+        },
+        {
+          "alias": "phase21-socket",
+          "candidate_local_id": "7930d524-e305-449d-809a-bc58335faec3"
+        }
+      ],
+      "rules": [
+        {
+          "candidate_index": 0,
+          "candidate_local_id": "28219305-3b12-4498-bb4c-37a09e02b042",
+          "created_order": 1,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 1,
+          "candidate_local_id": "b7ac51a4-61df-4537-9234-e0b9b3a42e91",
+          "created_order": 2,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 2,
+          "candidate_local_id": "1ce870ba-1a7b-4fb9-844f-97274e8f132f",
+          "created_order": 3,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 3,
+          "candidate_local_id": "cd7364fb-1f12-489e-bdfd-f86e2c11fbe2",
+          "created_order": 4,
+          "listener_alias": "phase21-http"
+        },
+        {
+          "candidate_index": 4,
+          "candidate_local_id": "82961689-383f-4e7a-b0db-53c1f0247850",
+          "created_order": 5,
+          "listener_alias": "phase21-socket"
+        }
+      ]
+    },
+    "target": {
+      "expected_revision": 1,
+      "mode": "existing",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    "terminal_action_fields": {
+      "DisconnectDuringDownstreamWrite": [
+        "after_bytes"
+      ],
+      "DisconnectDuringUpstreamWrite": [
+        "after_bytes"
+      ],
+      "TruncateResponse": [
+        "bytes"
+      ]
+    }
+  },
+  "status": "committed",
+  "target_key": "existing:ae97a522-4242-4264-af56-5b7f9cd338a2",
+  "terminal_result": {
+    "apply_task_id": "b303f7eb-f7c2-4251-a41b-152c12c8ef30",
+    "diagnostics": [],
+    "result": "committed",
+    "revision": 2,
+    "selected_workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2",
+    "status_code": null,
+    "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+  },
+  "validation_layers": [
+    {
+      "code": null,
+      "duration_ms": 6,
+      "layer": "schema",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 5,
+      "layer": "domain",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 2,
+      "layer": "material",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 31,
+      "layer": "package_projection",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 10,
+      "layer": "dns_tcp_port",
+      "reason": null,
+      "status": "passed"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "tls_mtls",
+      "reason": null,
+      "status": "not_applicable"
+    },
+    {
+      "code": null,
+      "duration_ms": 0,
+      "layer": "preview_baseline",
+      "reason": null,
+      "status": "passed"
+    }
+  ]
+}

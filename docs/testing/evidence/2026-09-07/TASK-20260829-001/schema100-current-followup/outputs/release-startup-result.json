@@ -1,0 +1,8 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "test:task-20260829-002:phase17"
+  ],
+  "exit_code": 0
+}

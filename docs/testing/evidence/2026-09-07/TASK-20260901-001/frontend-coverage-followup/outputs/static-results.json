@@ -1,0 +1,30 @@
+{
+  "typecheck": {
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "exit_code": 2
+  },
+  "lint": {
+    "command": [
+      "deno",
+      "run",
+      "-A",
+      "node_modules/eslint/bin/eslint.js",
+      "src/features/listeners/socket-listener-model.test.ts",
+      "src/features/listeners/socket-processing-card.test.tsx",
+      "--max-warnings=0"
+    ],
+    "exit_code": 0
+  },
+  "diff": {
+    "command": [
+      "git",
+      "diff",
+      "--check"
+    ],
+    "exit_code": 0
+  }
+}

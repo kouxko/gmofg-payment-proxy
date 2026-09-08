@@ -1,0 +1,379 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/capture/exchange-observation-list.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/capture</a> exchange-observation-list.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">41.17% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>7/17</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">57.14% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>28/49</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">37.5% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>3/8</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">53.84% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>7/13</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line low'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">5x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">11x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Alert, Button, Chip, Spinner, Table } from "@heroui/react";
+import { TrashBin } from "@gravity-ui/icons";
+import type {
+  ExchangeObservationPage,
+  ExchangeObservationRecord,
+} from "@/generated/rust-types";
+import { formatTimestamp } from "@/lib/format";
+import { connectionStatus, eventCounts, openedAt } from "./exchange-observation-model";
+&nbsp;
+interface Props {
+  page?: ExchangeObservationPage;
+  error?: string;
+  loading: boolean;
+  selectedId?: string;
+  onSelect: (record: ExchangeObservationRecord) =&gt; void;
+  onPage: (page: number) =&gt; void;
+  onRetry: () =&gt; void;
+  onClear: () =&gt; void;
+}
+&nbsp;
+export function ExchangeObservationList(props: Props) {
+  const currentPage = props.page?.page ?? <span class="branch-1 cbranch-no" title="branch not covered" >1;</span>
+  const totalPages = Math.max(
+    1,
+    Math.ceil((props.page?.total ?? <span class="branch-1 cbranch-no" title="branch not covered" >0) / (p</span>rops.page?.page_size ?? <span class="branch-1 cbranch-no" title="branch not covered" >50))</span>,
+  );
+  return (
+    &lt;div id="exchange-observation-list" className="min-w-0 space-y-4 overflow-auto p-5" tabIndex={-1}&gt;
+      &lt;header className="flex items-start gap-4"&gt;
+        &lt;div&gt;
+          &lt;h2 className="text-lg font-semibold"&gt;运行记录&lt;/h2&gt;
+          &lt;p className="mt-1 text-sm text-[var(--telemetry-muted)]"&gt;
+            HTTP 与 Socket 的每个 App 连接都按实际发生顺序保留收到、发送、失败与关闭事件
+          &lt;/p&gt;
+        &lt;/div&gt;
+        &lt;Button id="exchange-observation-clear" className="ml-auto" variant="danger-soft" isDisabled={props.loading} onPress={props.onClear}&gt;
+          &lt;TrashBin className="size-4" /&gt;清空运行记录
+        &lt;/Button&gt;
+      &lt;/header&gt;
+      {Boolean(props.page?.evicted_records || props.page?.dropped_events || props.page?.ignored_events) &amp;&amp; (
+        &lt;Alert status="warning"&gt;
+          &lt;Alert.Indicator /&gt;
+          &lt;Alert.Content&gt;
+            &lt;Alert.Title&gt;观测数据发生淘汰&lt;/Alert.Title&gt;
+            &lt;Alert.Description&gt;
+              当前工作区已淘汰连接 {props.page?.evicted_records ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>条；producer 队列丢弃 {props.page?.dropped_events ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>条；consumer/store 忽略 {props.page?.ignored_events ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>条。交易数据面未受影响。
+            &lt;/Alert.Description&gt;
+          &lt;/Alert.Content&gt;
+        &lt;/Alert&gt;
+      )}
+      {props.error &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >&lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;&lt;Alert.Title&gt;运行记录读取失败&lt;/Alert.Title&gt;&lt;Alert.Description&gt;{props.error}&lt;/Alert.Description&gt;&lt;/Alert.Content&gt;&lt;Button size="sm" variant="outline" onPress={props.onRetry}&gt;重试&lt;/Button&gt;&lt;/Alert&gt;}</span>
+      &lt;Table&gt;
+        &lt;Table.ScrollContainer&gt;
+          &lt;Table.Content
+            aria-label="HTTP 与 Socket 运行记录"
+            className="min-w-[960px]"
+            selectionMode={props.loading ? <span class="branch-0 cbranch-no" title="branch not covered" >"none" : "</span>single"}
+            selectedKeys={props.selectedId ? [props.selectedId] : []}
+<span class="fstat-no" title="function not covered" >            onSelectionChange={(k</span>eys) =&gt; {
+<span class="cstat-no" title="statement not covered" >              if (keys === "all") <span class="cstat-no" title="statement not covered" >return;</span></span>
+              const id = <span class="cstat-no" title="statement not covered" >String(Array.from(keys)[0] ?? "");</span>
+              const record = <span class="cstat-no" title="statement not covered" >props.page?.rows.<span class="fstat-no" title="function not covered" >find((r</span>ow) =&gt; <span class="cstat-no" title="statement not covered" >row.exchange_id === id)</span>;</span>
+<span class="cstat-no" title="statement not covered" >              if (record) <span class="cstat-no" title="statement not covered" >props.onSelect(record);</span></span>
+            }}
+          &gt;
+            &lt;Table.Header&gt;
+              &lt;Table.Column isRowHeader&gt;建立时间（最新优先）&lt;/Table.Column&gt;
+              &lt;Table.Column&gt;协议&lt;/Table.Column&gt;
+              &lt;Table.Column&gt;对端&lt;/Table.Column&gt;
+              &lt;Table.Column&gt;收到 / 发送 / 失败&lt;/Table.Column&gt;
+              &lt;Table.Column&gt;连接状态&lt;/Table.Column&gt;
+              &lt;Table.Column&gt;Exchange ID&lt;/Table.Column&gt;
+            &lt;/Table.Header&gt;
+            &lt;Table.Body <span class="fstat-no" title="function not covered" >renderEmptyState={() =&gt; <span class="cstat-no" title="statement not covered" >&lt;</span>div className="p-10 text-center text-sm text-[var(--telemetry-muted)]"&gt;{props.loading ? "正在查询运行记录…" : "当前工作区还没有运行记录"}&lt;/div&gt;}&gt;</span>
+              {(props.page?.rows ?? <span class="branch-1 cbranch-no" title="branch not covered" >[])</span>.map((record) =&gt; {
+                const counts = eventCounts(record);
+                const status = connectionStatus(record);
+                return &lt;Table.Row key={record.exchange_id} id={record.exchange_id}&gt;
+                  &lt;Table.Cell&gt;&lt;Button id={`exchange-observation-row-${record.exchange_id}`} size="sm" variant="ghost" onPress={() =&gt; props.onSelect(record)}&gt;{openedAt(record) ? formatTimestamp(openedAt(record)!) : <span class="branch-1 cbranch-no" title="branch not covered" >"未知"}&lt;/Button&gt;</span>&lt;/Table.Cell&gt;
+                  &lt;Table.Cell&gt;&lt;Chip size="sm" color="accent" variant="soft"&gt;{record.protocol.toUpperCase()}&lt;/Chip&gt;&lt;/Table.Cell&gt;
+                  &lt;Table.Cell&gt;&lt;code className="text-xs"&gt;{record.peer_address}&lt;/code&gt;&lt;/Table.Cell&gt;
+                  &lt;Table.Cell&gt;{counts.received} / {counts.sent} / {counts.failed}&lt;/Table.Cell&gt;
+                  &lt;Table.Cell&gt;&lt;Chip size="sm" color={status === "异常结束" ? "danger" : status === "保持连接" ? "accent" : "success"} variant="soft"&gt;{status}&lt;/Chip&gt;&lt;/Table.Cell&gt;
+                  &lt;Table.Cell&gt;&lt;code className="text-xs"&gt;{record.exchange_id}&lt;/code&gt;&lt;/Table.Cell&gt;
+                &lt;/Table.Row&gt;;
+              })}
+            &lt;/Table.Body&gt;
+          &lt;/Table.Content&gt;
+        &lt;/Table.ScrollContainer&gt;
+        &lt;Table.Footer className="flex items-center justify-between px-4 py-3 text-sm"&gt;
+          &lt;span&gt;当前 {props.page?.rows.length ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>条，共 {props.page?.total ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>条&lt;/span&gt;
+          &lt;div className="flex items-center gap-2"&gt;&lt;Button size="sm" variant="outline" isDisabled={props.loading || currentPage &lt;= 1} <span class="fstat-no" title="function not covered" >onPress={() =&gt; <span class="cstat-no" title="statement not covered" >p</span>rops.onPage(currentPage - 1)}&gt;上</span>一页&lt;/Button&gt;&lt;span&gt;{Math.min(currentPage, totalPages)} / {totalPages}&lt;/span&gt;&lt;Button size="sm" variant="outline" isDisabled={props.loading || currentPage &gt;= totalPages} <span class="fstat-no" title="function not covered" >onPress={() =&gt; <span class="cstat-no" title="statement not covered" >p</span>rops.onPage(currentPage + 1)}&gt;下</span>一页&lt;/Button&gt;&lt;/div&gt;
+          {props.loading &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >&lt;Spinner size="sm" aria-label="正在刷新运行记录" /&gt;}</span>
+        &lt;/Table.Footer&gt;
+      &lt;/Table&gt;
+    &lt;/div&gt;
+  );
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

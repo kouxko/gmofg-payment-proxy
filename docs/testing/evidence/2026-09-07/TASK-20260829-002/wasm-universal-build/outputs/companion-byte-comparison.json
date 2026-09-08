@@ -1,0 +1,8 @@
+{
+  "status": "PASS",
+  "comparison": "direct bytes equality",
+  "apk_bytes": 23985398,
+  "archive_app_vs_build_input": "PASS",
+  "mounted_dmg_app_vs_build_input": "PASS",
+  "detached": true
+}

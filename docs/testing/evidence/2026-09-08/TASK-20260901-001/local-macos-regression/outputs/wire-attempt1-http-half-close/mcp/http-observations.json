@@ -1,0 +1,220 @@
+{
+  "dropped_events": 0,
+  "evicted_records": 0,
+  "ignored_events": 4,
+  "page": 1,
+  "page_size": 100,
+  "rows": [
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.814873Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.817884Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.818712Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "f1acd1e6e7e448569d7e7049652c7cdf",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56990",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.759589Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.760290Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.760323Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "1380bfaadd9d42ff96e43260e2d99aea",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56989",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.731496Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.731620Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.731659Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9b6a131253d04778b126776e2f89efe2",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56988",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.703070Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.703169Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.703201Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "dd2e511ec8854b759f5861c9a978190b",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56987",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.644451Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.644544Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.644565Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "e51d1b52ca114552841b9f9c208dfd0c",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56986",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.585280Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.615381Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.615732Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9f76168ba4af48c9b9829ec245eba64a",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56985",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    },
+    {
+      "events": [
+        {
+          "event": "opened",
+          "observed_at": "2026-09-08T02:43:08.501035Z"
+        },
+        {
+          "context": null,
+          "direction": "upstream",
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "failed",
+          "external_package_call": null,
+          "observed_at": "2026-09-08T02:43:08.563121Z",
+          "stage": "read"
+        },
+        {
+          "error": "HTTP/1.1 connection failed: connection closed before message completed",
+          "event": "closed",
+          "observed_at": "2026-09-08T02:43:08.563209Z",
+          "outcome": "failed"
+        }
+      ],
+      "evidence_evicted": false,
+      "exchange_id": "9d3e02d16b034fe3ab578b2d44741531",
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "peer_address": "127.0.0.1:56982",
+      "protocol": "http",
+      "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+      "workspace_id": "ae97a522-4242-4264-af56-5b7f9cd338a2"
+    }
+  ],
+  "total": 7
+}

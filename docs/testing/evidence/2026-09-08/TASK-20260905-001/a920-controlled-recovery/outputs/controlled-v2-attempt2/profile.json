@@ -1,0 +1,62 @@
+{
+  "id": "a920-controlled-v2",
+  "name": "A920 controlled v2 recovery gate",
+  "target_applications": [
+    {
+      "package_name": "com.interceptproxy.vpn.targetprobe",
+      "uid": 10086,
+      "display_name": "Intercept Proxy Target Probe"
+    }
+  ],
+  "destination_targets": [
+    {
+      "cidr": "203.0.113.48",
+      "ports": [
+        16127
+      ]
+    }
+  ],
+  "proxy_routes": [
+    {
+      "destination": "203.0.113.48",
+      "ports": [
+        16127
+      ],
+      "listener_id": "1626aa61-8839-4065-94ef-536cd4e8c3b9"
+    },
+    {
+      "destination": "203.0.113.48",
+      "ports": [
+        16627
+      ],
+      "listener_id": "393c2500-a62a-40e4-a29a-35443467f1cb"
+    }
+  ],
+  "confirmed_shared_uids": [],
+  "auto_resume_after_reboot": false,
+  "stop_vpn_on_control_loss": true,
+  "weak_network": {
+    "seed": 48,
+    "fixed_delay_millis": 120,
+    "uniform_jitter_millis": 30,
+    "upload_bytes_per_second": null,
+    "download_bytes_per_second": null,
+    "random_loss_basis_points": 0,
+    "burst_loss": null,
+    "duplicate_basis_points": 0,
+    "reorder_basis_points": 0,
+    "maximum_reorder_hold_millis": 0,
+    "blackout_windows": [],
+    "dns_blackhole": false,
+    "nth_tcp_flag_drops": [],
+    "path_mtu": {
+      "mtu": null,
+      "mss_clamp": null,
+      "mode": "pass"
+    },
+    "corruption": {
+      "probability_basis_points": 0,
+      "bits_per_packet": 0
+    }
+  }
+}

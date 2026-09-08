@@ -1,0 +1,101 @@
+   Compiling intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling intercept-proxy-traffic-observation v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 52.97s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 88 tests
+test sqlite::core::tests::clear_pre_baseline_database_removes_main_wal_and_shm_files ... ok
+test sqlite::executor::tests::cancelling_started_sqlite_open_only_stops_waiting ... ok
+test sqlite::executor::tests::database_errors_keep_their_code_and_panics_map_to_a_stable_code ... ok
+test sqlite::executor::tests::shared_gate_allows_only_one_closure_to_enter_at_a_time ... ok
+test sqlite::executor::tests::cancelling_waiter_does_not_strand_the_sqlite_connection_lock ... ok
+test sqlite::executor::tests::async_runtime_progresses_while_sqlite_connection_is_held_by_blocking_work ... ok
+test sqlite::executor::tests::cancelling_a_queued_future_prevents_its_closure_from_running ... ok
+test sqlite::executor::tests::sqlite_open_bootstrap_does_not_block_runtime_progress ... ok
+test sqlite::sqlite_tests::android_runtime_owner::capacity_allows_eight_and_rejects_ninth_without_changing_snapshot ... ok
+test sqlite::sqlite_tests::android_runtime_owner::capacity_trigger_does_not_reject_same_serial_upsert_when_full ... ok
+test sqlite::sqlite_tests::android_runtime_owner::epoch_is_unique_across_serials ... ok
+test sqlite::sqlite_tests::android_runtime_owner::full_capacity_still_allows_epoch_guarded_update_of_existing_serial ... ok
+test sqlite::sqlite_tests::android_runtime_owner::one_corrupt_row_fails_the_whole_collection_load ... ok
+test sqlite::sqlite_tests::android_runtime_owner::replace_rejects_a_record_for_another_serial_without_mutation ... ok
+test sqlite::sqlite_tests::android_runtime_owner::database_trigger_rejects_direct_ninth_insert ... ok
+test sqlite::sqlite_tests::android_runtime_owner::clear_and_replace_are_scoped_by_serial_and_expected_epoch ... ok
+test sqlite::sqlite_tests::android_runtime_owner::application_data_reset_removes_all_runtime_owners ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::certificate_batch_write_rolls_back_on_failure ... ok
+test sqlite::sqlite_tests::android_runtime_owner::version_twenty_singleton_schema_is_cleared_with_owner_data ... ok
+test sqlite::sqlite_tests::android_runtime_owner::owners_survive_reopen_and_load_in_serial_order ... ok
+test sqlite::core::tests::pre_schema100_startup_clears_legacy_data_and_recreates_schema100 ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::certificate_aggregate_has_cross_connection_cas_and_atomic_snapshot ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::committed_version_99_data_is_cleared_and_recreated_as_schema100 ... ok
+test sqlite::sqlite_tests::environment_configuration_baseline_observer::baseline_observer_hashes_exact_package_and_material_content_not_row_counts ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::certificate_reader_never_observes_a_mixed_writer_generation ... ok
+test sqlite::sqlite_tests::environment_configuration_baseline_observer::baseline_observer_reads_selected_workspace_and_structural_hash_from_sqlite ... ok
+test sqlite::sqlite_tests::android_runtime_owner::concurrent_admission_from_seven_commits_exactly_one_new_serial ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::certificate_inventory_aba_is_rejected_when_revision_is_unchanged ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::commit_fault_leaves_zero_residue ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::view_only_database_is_rejected_without_being_initialized ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::certificate_insert_fault_leaves_zero_residue ... ok
+test sqlite::core::tests::startup_ownership_prevents_waiting_prebaseline_opener_from_deleting_schema100 ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::new_commit_persists_an_application_generated_identity_and_valid_workspace ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::existing_commit_advances_one_revision_and_preserves_other_selection ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::package_lifecycle_aba_is_rejected_when_row_count_is_unchanged ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::commit_failure_returns_no_success_receipt ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::environment_commit_checks_every_persisted_baseline_inside_transaction ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::environment_commit_has_deterministic_fault_points_before_each_write_family ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::environment_commit_rewrites_aliases_and_materials_with_workspace ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::existing_workspace_advances_exactly_one_revision_without_changing_selection ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::selection_write_fault_leaves_zero_residue ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::secret_insert_fault_leaves_zero_residue ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::new_workspace_selection_is_null_guarded ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::new_workspace_starts_at_revision_one ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::prepared_material_adapter_has_explicit_finish_and_drop_cleanup ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::secret_inventory_aba_is_rejected_when_row_count_is_unchanged ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::protected_material_preparation_never_writes_sqlite ... ok
+test sqlite::sqlite_tests::environment_configuration_material_arena::an_unknown_reservation_is_rejected_without_mutating_the_arena ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::sqlite_environment_commit_uses_one_immediate_transaction ... ok
+test sqlite::sqlite_tests::environment_configuration_material_arena::a_reservation_from_another_arena_is_rejected_without_consuming_the_owner_entry ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::workspace_structural_aba_is_rejected_even_when_revision_is_unchanged ... ok
+test sqlite::sqlite_tests::environment_configuration_material_arena::commit_consumes_a_prepared_reservation_exactly_once ... ok
+test sqlite::sqlite_tests::environment_configuration_material_arena::dropping_an_uncommitted_reservation_removes_and_zeroizes_its_arena_entry ... ok
+test sqlite::sqlite_tests::environment_configuration_material_arena::rollback_discards_and_zeroizes_the_whole_prepared_reservation ... ok
+test sqlite::sqlite_tests::environment_configuration_commit::behavior::workspace_write_fault_leaves_zero_residue ... ok
+test sqlite::sqlite_tests::external_packages::corruption::fingerprint_content_mismatch_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::indexed_version_mismatch_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::indexed_identity_mismatch_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::every_supported_safe_error_summary_round_trips ... ok
+test sqlite::sqlite_tests::external_packages::corruption::list_fails_closed_when_any_persisted_registration_is_corrupt ... ok
+test sqlite::sqlite_tests::external_packages::corruption::malformed_connection_timestamp_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::malformed_recent_error_timestamp_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::malformed_registration_json_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::malformed_fingerprint_length_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::registration_serialization_failure_maps_to_redacted_corruption_error ... ok
+test sqlite::sqlite_tests::external_packages::connection_address_and_safe_recent_error_survive_store_reopen ... ok
+test sqlite::sqlite_tests::external_packages::corruption::non_boolean_enabled_value_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::malformed_remote_address_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::partial_recent_error_tuple_fails_closed ... ok
+test sqlite::sqlite_tests::external_packages::corruption::supplied_fingerprint_mismatch_is_rejected_before_insert ... ok
+test sqlite::sqlite_tests::external_packages::exact_identity_with_changed_registration_is_rejected_without_mutation ... ok
+test sqlite::sqlite_tests::external_packages::corruption::unknown_recent_error_code_is_rejected_without_mutation ... ok
+test sqlite::sqlite_tests::external_packages::list_and_delete_use_exact_package_version ... ok
+test sqlite::sqlite_tests::external_packages::first_registration_is_enabled_and_reconnect_preserves_enabled ... ok
+test sqlite::sqlite_tests::external_packages::local_archive_install_is_enabled_reusable_and_strictly_conflict_checked ... ok
+test sqlite::sqlite_tests::external_packages::schema_persists_only_registration_state_and_never_rpc_or_secret_payloads ... ok
+test sqlite::sqlite_tests::phase14_schema100::final_schema100_has_only_the_unified_external_package_registry ... ok
+test sqlite::sqlite_tests::external_packages::recording_a_new_connection_atomically_clears_the_previous_error ... ok
+test sqlite::sqlite_tests::external_packages::recent_error_rejects_dynamic_remote_text_without_mutating_storage ... ok
+test sqlite::sqlite_tests::phase14_schema100::environment_package_inventory_tracks_the_external_registry_lifecycle ... ok
+test sqlite::sqlite_tests::workspace_and_settings::application_data_reset_atomically_removes_persisted_user_data ... ok
+test sqlite::sqlite_tests::workspace_and_settings::schema_keeps_all_runtime_payload_storage_absent ... ok
+test sqlite::sqlite_tests::workspace_and_settings::workspaces_persist_selection_and_use_optimistic_revisions ... ok
+test sqlite::sqlite_tests::workspace_and_settings::full_configuration_replace_rolls_back_all_tables_on_failure ... ok
+test sqlite::sqlite_tests::workspace_and_settings::settings_use_optimistic_revision ... ok
+test sqlite::sqlite_tests::workspace_and_settings::corrupt_settings_revision_json_and_time_use_persistence_error_classification ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::schema_19_is_cleared_and_recreated_as_schema100 ... ok
+test sqlite::sqlite_tests::corruption_and_certificates::malformed_schema_markers_are_rejected_without_clearing_user_data ... ok
+
+test result: ok. 88 passed; 0 failed; 0 ignored; 0 measured; 395 filtered out; finished in 0.21s
+

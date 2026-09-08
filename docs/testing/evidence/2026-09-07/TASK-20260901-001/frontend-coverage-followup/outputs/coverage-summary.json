@@ -1,0 +1,3076 @@
+{
+  "total": {
+    "lines": {
+      "total": 3876,
+      "covered": 3267,
+      "skipped": 0,
+      "pct": 84.28
+    },
+    "statements": {
+      "total": 4572,
+      "covered": 3678,
+      "skipped": 0,
+      "pct": 80.44
+    },
+    "functions": {
+      "total": 1516,
+      "covered": 1166,
+      "skipped": 0,
+      "pct": 76.91
+    },
+    "branches": {
+      "total": 4512,
+      "covered": 3621,
+      "skipped": 0,
+      "pct": 80.25
+    },
+    "branchesTrue": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/advanced-loss-sections.tsx": {
+    "lines": {
+      "total": 13,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 23.07
+    },
+    "functions": {
+      "total": 13,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 23.07
+    },
+    "statements": {
+      "total": 13,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 23.07
+    },
+    "branches": {
+      "total": 7,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 71.42
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/advanced-network-card.tsx": {
+    "lines": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/advanced-transport-sections.tsx": {
+    "lines": {
+      "total": 20,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 40
+    },
+    "functions": {
+      "total": 20,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 40
+    },
+    "statements": {
+      "total": 20,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 40
+    },
+    "branches": {
+      "total": 10,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 60
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-network-fields.tsx": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-network-test-profile.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-network-types.ts": {
+    "lines": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 10,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 80
+    },
+    "branches": {
+      "total": 6,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 66.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-network-view.test-support.ts": {
+    "lines": {
+      "total": 36,
+      "covered": 36,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 39,
+      "covered": 39,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 11,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 81.81
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-network-view.tsx": {
+    "lines": {
+      "total": 102,
+      "covered": 73,
+      "skipped": 0,
+      "pct": 71.56
+    },
+    "functions": {
+      "total": 49,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 75.51
+    },
+    "statements": {
+      "total": 124,
+      "covered": 84,
+      "skipped": 0,
+      "pct": 67.74
+    },
+    "branches": {
+      "total": 88,
+      "covered": 56,
+      "skipped": 0,
+      "pct": 63.63
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/android-runtime-owner-model.ts": {
+    "lines": {
+      "total": 36,
+      "covered": 36,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 54,
+      "covered": 54,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 50,
+      "covered": 50,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/device-control-card.tsx": {
+    "lines": {
+      "total": 22,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 90.9
+    },
+    "functions": {
+      "total": 12,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 91.66
+    },
+    "statements": {
+      "total": 30,
+      "covered": 28,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "branches": {
+      "total": 80,
+      "covered": 73,
+      "skipped": 0,
+      "pct": 91.25
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/network-more-settings.tsx": {
+    "lines": {
+      "total": 11,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 13,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 92.3
+    },
+    "branches": {
+      "total": 25,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 96
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/network-parameter-cards.tsx": {
+    "lines": {
+      "total": 38,
+      "covered": 26,
+      "skipped": 0,
+      "pct": 68.42
+    },
+    "functions": {
+      "total": 31,
+      "covered": 19,
+      "skipped": 0,
+      "pct": 61.29
+    },
+    "statements": {
+      "total": 39,
+      "covered": 27,
+      "skipped": 0,
+      "pct": 69.23
+    },
+    "branches": {
+      "total": 28,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 82.14
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/profile-cards.tsx": {
+    "lines": {
+      "total": 16,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 93.75
+    },
+    "functions": {
+      "total": 11,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 90.9
+    },
+    "statements": {
+      "total": 16,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 93.75
+    },
+    "branches": {
+      "total": 35,
+      "covered": 33,
+      "skipped": 0,
+      "pct": 94.28
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/proxy-routes-card.tsx": {
+    "lines": {
+      "total": 17,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 76.47
+    },
+    "functions": {
+      "total": 16,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 75
+    },
+    "statements": {
+      "total": 17,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 76.47
+    },
+    "branches": {
+      "total": 21,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 76.19
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/runtime-endpoints-card.tsx": {
+    "lines": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 17,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 88.23
+    },
+    "branches": {
+      "total": 34,
+      "covered": 27,
+      "skipped": 0,
+      "pct": 79.41
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/target-applications-card.tsx": {
+    "lines": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 15,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "branches": {
+      "total": 24,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 91.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/use-android-network-controller.ts": {
+    "lines": {
+      "total": 87,
+      "covered": 83,
+      "skipped": 0,
+      "pct": 95.4
+    },
+    "functions": {
+      "total": 26,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 96.15
+    },
+    "statements": {
+      "total": 103,
+      "covered": 95,
+      "skipped": 0,
+      "pct": 92.23
+    },
+    "branches": {
+      "total": 66,
+      "covered": 54,
+      "skipped": 0,
+      "pct": 81.81
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/use-current-workspace-listeners.ts": {
+    "lines": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 8,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 87.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/android-network/weak-network-scenes.ts": {
+    "lines": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/capture-view.tsx": {
+    "lines": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/exchange-observation-detail.tsx": {
+    "lines": {
+      "total": 15,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "statements": {
+      "total": 24,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 91.66
+    },
+    "branches": {
+      "total": 64,
+      "covered": 56,
+      "skipped": 0,
+      "pct": 87.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/exchange-observation-list.tsx": {
+    "lines": {
+      "total": 13,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 53.84
+    },
+    "functions": {
+      "total": 8,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 37.5
+    },
+    "statements": {
+      "total": 17,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 41.17
+    },
+    "branches": {
+      "total": 49,
+      "covered": 28,
+      "skipped": 0,
+      "pct": 57.14
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/exchange-observation-model.ts": {
+    "lines": {
+      "total": 27,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 92.59
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 37,
+      "covered": 34,
+      "skipped": 0,
+      "pct": 91.89
+    },
+    "branches": {
+      "total": 40,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 92.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/exchange-observation-test-fixture.ts": {
+    "lines": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/exchange-observation-view.tsx": {
+    "lines": {
+      "total": 42,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 52.38
+    },
+    "functions": {
+      "total": 19,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 31.57
+    },
+    "statements": {
+      "total": 59,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 40.67
+    },
+    "branches": {
+      "total": 30,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 36.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/capture/socket-byte-viewer.tsx": {
+    "lines": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 14,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/certificates/certificate-overview-section.tsx": {
+    "lines": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 18,
+      "covered": 17,
+      "skipped": 0,
+      "pct": 94.44
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/certificates/certificate-reset-section.tsx": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/certificates/certificate-validation-section.tsx": {
+    "lines": {
+      "total": 12,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 75
+    },
+    "functions": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 12,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 75
+    },
+    "branches": {
+      "total": 16,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 62.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/certificates/certificates-view.tsx": {
+    "lines": {
+      "total": 62,
+      "covered": 55,
+      "skipped": 0,
+      "pct": 88.7
+    },
+    "functions": {
+      "total": 20,
+      "covered": 17,
+      "skipped": 0,
+      "pct": 85
+    },
+    "statements": {
+      "total": 67,
+      "covered": 55,
+      "skipped": 0,
+      "pct": 82.08
+    },
+    "branches": {
+      "total": 26,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 57.69
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/diagnostics/diagnostic-logs-view.tsx": {
+    "lines": {
+      "total": 43,
+      "covered": 30,
+      "skipped": 0,
+      "pct": 69.76
+    },
+    "functions": {
+      "total": 22,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 45.45
+    },
+    "statements": {
+      "total": 47,
+      "covered": 32,
+      "skipped": 0,
+      "pct": 68.08
+    },
+    "branches": {
+      "total": 53,
+      "covered": 27,
+      "skipped": 0,
+      "pct": 50.94
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/faults/fault-configuration-panel.tsx": {
+    "lines": {
+      "total": 18,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 55.55
+    },
+    "functions": {
+      "total": 12,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 41.66
+    },
+    "statements": {
+      "total": 18,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 55.55
+    },
+    "branches": {
+      "total": 46,
+      "covered": 27,
+      "skipped": 0,
+      "pct": 58.69
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/faults/faults-list-panel.tsx": {
+    "lines": {
+      "total": 9,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 33.33
+    },
+    "functions": {
+      "total": 7,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 42.85
+    },
+    "statements": {
+      "total": 11,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 27.27
+    },
+    "branches": {
+      "total": 27,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 18.51
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/faults/faults-view.tsx": {
+    "lines": {
+      "total": 60,
+      "covered": 35,
+      "skipped": 0,
+      "pct": 58.33
+    },
+    "functions": {
+      "total": 18,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 38.88
+    },
+    "statements": {
+      "total": 64,
+      "covered": 36,
+      "skipped": 0,
+      "pct": 56.25
+    },
+    "branches": {
+      "total": 33,
+      "covered": 21,
+      "skipped": 0,
+      "pct": 63.63
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/diagnostic-page-help-guide.ts": {
+    "lines": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/general-page-help-guides.ts": {
+    "lines": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/page-help-content.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/page-help.tsx": {
+    "lines": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 5,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 80
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/protocol-package-help-guide.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/help/system-page-help-guides.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/body-codec-settings.tsx": {
+    "lines": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/downstream-tls-card.tsx": {
+    "lines": {
+      "total": 26,
+      "covered": 18,
+      "skipped": 0,
+      "pct": 69.23
+    },
+    "functions": {
+      "total": 18,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 55.55
+    },
+    "statements": {
+      "total": 29,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 68.96
+    },
+    "branches": {
+      "total": 29,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 68.96
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/fixed-server-tls-fields.tsx": {
+    "lines": {
+      "total": 16,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 17,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 94.11
+    },
+    "branches": {
+      "total": 29,
+      "covered": 26,
+      "skipped": 0,
+      "pct": 89.65
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/fixed-server-tls-import-modals.tsx": {
+    "lines": {
+      "total": 23,
+      "covered": 21,
+      "skipped": 0,
+      "pct": 91.3
+    },
+    "functions": {
+      "total": 12,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 83.33
+    },
+    "statements": {
+      "total": 26,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 88.46
+    },
+    "branches": {
+      "total": 24,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 95.83
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/fixed-server-tls-settings.tsx": {
+    "lines": {
+      "total": 32,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 78.12
+    },
+    "functions": {
+      "total": 11,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 63.63
+    },
+    "statements": {
+      "total": 38,
+      "covered": 26,
+      "skipped": 0,
+      "pct": 68.42
+    },
+    "branches": {
+      "total": 20,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 55
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/http-protocol-processing-card.tsx": {
+    "lines": {
+      "total": 24,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 95.83
+    },
+    "functions": {
+      "total": 7,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 85.71
+    },
+    "statements": {
+      "total": 26,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 92.3
+    },
+    "branches": {
+      "total": 62,
+      "covered": 48,
+      "skipped": 0,
+      "pct": 77.41
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-data-plane.ts": {
+    "lines": {
+      "total": 5,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 60
+    },
+    "functions": {
+      "total": 5,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 60
+    },
+    "statements": {
+      "total": 5,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 60
+    },
+    "branches": {
+      "total": 10,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 80
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-editor.tsx": {
+    "lines": {
+      "total": 36,
+      "covered": 32,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "functions": {
+      "total": 27,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 81.48
+    },
+    "statements": {
+      "total": 39,
+      "covered": 34,
+      "skipped": 0,
+      "pct": 87.17
+    },
+    "branches": {
+      "total": 48,
+      "covered": 45,
+      "skipped": 0,
+      "pct": 93.75
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-feedback.tsx": {
+    "lines": {
+      "total": 5,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 60
+    },
+    "functions": {
+      "total": 4,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 50
+    },
+    "statements": {
+      "total": 5,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 60
+    },
+    "branches": {
+      "total": 20,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 70
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-list-panel.tsx": {
+    "lines": {
+      "total": 15,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "functions": {
+      "total": 8,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 87.5
+    },
+    "statements": {
+      "total": 17,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 94.11
+    },
+    "branches": {
+      "total": 16,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 87.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-runtime-card.tsx": {
+    "lines": {
+      "total": 7,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 85.71
+    },
+    "functions": {
+      "total": 3,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 66.66
+    },
+    "statements": {
+      "total": 7,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 85.71
+    },
+    "branches": {
+      "total": 38,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 97.36
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-view-model.ts": {
+    "lines": {
+      "total": 15,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "functions": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 19,
+      "covered": 18,
+      "skipped": 0,
+      "pct": 94.73
+    },
+    "branches": {
+      "total": 25,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 96
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listener-workspace-draft.ts": {
+    "lines": {
+      "total": 95,
+      "covered": 89,
+      "skipped": 0,
+      "pct": 93.68
+    },
+    "functions": {
+      "total": 31,
+      "covered": 31,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 118,
+      "covered": 109,
+      "skipped": 0,
+      "pct": 92.37
+    },
+    "branches": {
+      "total": 66,
+      "covered": 58,
+      "skipped": 0,
+      "pct": 87.87
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listeners-view.test-support.ts": {
+    "lines": {
+      "total": 58,
+      "covered": 58,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 30,
+      "covered": 28,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "statements": {
+      "total": 67,
+      "covered": 64,
+      "skipped": 0,
+      "pct": 95.52
+    },
+    "branches": {
+      "total": 56,
+      "covered": 53,
+      "skipped": 0,
+      "pct": 94.64
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/listeners-view.tsx": {
+    "lines": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 38,
+      "covered": 36,
+      "skipped": 0,
+      "pct": 94.73
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/request-routing-card.tsx": {
+    "lines": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 20,
+      "covered": 19,
+      "skipped": 0,
+      "pct": 95
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-listener-model.ts": {
+    "lines": {
+      "total": 48,
+      "covered": 47,
+      "skipped": 0,
+      "pct": 97.91
+    },
+    "functions": {
+      "total": 23,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 58,
+      "covered": 55,
+      "skipped": 0,
+      "pct": 94.82
+    },
+    "branches": {
+      "total": 87,
+      "covered": 84,
+      "skipped": 0,
+      "pct": 96.55
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-listener-settings.tsx": {
+    "lines": {
+      "total": 22,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 12,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 91.66
+    },
+    "statements": {
+      "total": 29,
+      "covered": 27,
+      "skipped": 0,
+      "pct": 93.1
+    },
+    "branches": {
+      "total": 26,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 92.3
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-processing-card.tsx": {
+    "lines": {
+      "total": 31,
+      "covered": 31,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 33,
+      "covered": 32,
+      "skipped": 0,
+      "pct": 96.96
+    },
+    "branches": {
+      "total": 100,
+      "covered": 93,
+      "skipped": 0,
+      "pct": 93
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-protocol-package-dialog.tsx": {
+    "lines": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-security-cards.test-support.tsx": {
+    "lines": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 23,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/socket-security-cards.tsx": {
+    "lines": {
+      "total": 61,
+      "covered": 60,
+      "skipped": 0,
+      "pct": 98.36
+    },
+    "functions": {
+      "total": 46,
+      "covered": 45,
+      "skipped": 0,
+      "pct": 97.82
+    },
+    "statements": {
+      "total": 88,
+      "covered": 85,
+      "skipped": 0,
+      "pct": 96.59
+    },
+    "branches": {
+      "total": 83,
+      "covered": 72,
+      "skipped": 0,
+      "pct": 86.74
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/upstream-tls-card.tsx": {
+    "lines": {
+      "total": 24,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 83.33
+    },
+    "functions": {
+      "total": 13,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 69.23
+    },
+    "statements": {
+      "total": 27,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 85.18
+    },
+    "branches": {
+      "total": 18,
+      "covered": 17,
+      "skipped": 0,
+      "pct": 94.44
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/use-draft-certificate-leases.ts": {
+    "lines": {
+      "total": 50,
+      "covered": 45,
+      "skipped": 0,
+      "pct": 90
+    },
+    "functions": {
+      "total": 13,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 92.3
+    },
+    "statements": {
+      "total": 59,
+      "covered": 50,
+      "skipped": 0,
+      "pct": 84.74
+    },
+    "branches": {
+      "total": 25,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 56
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/use-listener-certificates.ts": {
+    "lines": {
+      "total": 99,
+      "covered": 64,
+      "skipped": 0,
+      "pct": 64.64
+    },
+    "functions": {
+      "total": 28,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 82.14
+    },
+    "statements": {
+      "total": 117,
+      "covered": 72,
+      "skipped": 0,
+      "pct": 61.53
+    },
+    "branches": {
+      "total": 57,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 43.85
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/use-listener-controller.tsx": {
+    "lines": {
+      "total": 193,
+      "covered": 188,
+      "skipped": 0,
+      "pct": 97.4
+    },
+    "functions": {
+      "total": 44,
+      "covered": 41,
+      "skipped": 0,
+      "pct": 93.18
+    },
+    "statements": {
+      "total": 211,
+      "covered": 195,
+      "skipped": 0,
+      "pct": 92.41
+    },
+    "branches": {
+      "total": 153,
+      "covered": 132,
+      "skipped": 0,
+      "pct": 86.27
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/use-listener-draft-transition.ts": {
+    "lines": {
+      "total": 66,
+      "covered": 64,
+      "skipped": 0,
+      "pct": 96.96
+    },
+    "functions": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 75,
+      "covered": 70,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "branches": {
+      "total": 47,
+      "covered": 40,
+      "skipped": 0,
+      "pct": 85.1
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/listeners/use-listener-persistence.ts": {
+    "lines": {
+      "total": 48,
+      "covered": 48,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 58,
+      "covered": 50,
+      "skipped": 0,
+      "pct": 86.2
+    },
+    "branches": {
+      "total": 51,
+      "covered": 40,
+      "skipped": 0,
+      "pct": 78.43
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-detail.tsx": {
+    "lines": {
+      "total": 18,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "functions": {
+      "total": 8,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 87.5
+    },
+    "statements": {
+      "total": 18,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "branches": {
+      "total": 101,
+      "covered": 91,
+      "skipped": 0,
+      "pct": 90.09
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-dialog.tsx": {
+    "lines": {
+      "total": 87,
+      "covered": 74,
+      "skipped": 0,
+      "pct": 85.05
+    },
+    "functions": {
+      "total": 16,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 93.75
+    },
+    "statements": {
+      "total": 97,
+      "covered": 78,
+      "skipped": 0,
+      "pct": 80.41
+    },
+    "branches": {
+      "total": 134,
+      "covered": 113,
+      "skipped": 0,
+      "pct": 84.32
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-import-dialog.tsx": {
+    "lines": {
+      "total": 18,
+      "covered": 18,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 20,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 66,
+      "covered": 62,
+      "skipped": 0,
+      "pct": 93.93
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-import-model.ts": {
+    "lines": {
+      "total": 37,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 20,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 42,
+      "covered": 41,
+      "skipped": 0,
+      "pct": 97.61
+    },
+    "branches": {
+      "total": 86,
+      "covered": 82,
+      "skipped": 0,
+      "pct": 95.34
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-model.ts": {
+    "lines": {
+      "total": 51,
+      "covered": 51,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 23,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 56,
+      "covered": 55,
+      "skipped": 0,
+      "pct": 98.21
+    },
+    "branches": {
+      "total": 143,
+      "covered": 142,
+      "skipped": 0,
+      "pct": 99.3
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-row.tsx": {
+    "lines": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 8,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 87.5
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-source.ts": {
+    "lines": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 15,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 21,
+      "covered": 21,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-package-version-list.tsx": {
+    "lines": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 5,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-packages-test-support.ts": {
+    "lines": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 8,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/protocol-packages/protocol-packages-view.tsx": {
+    "lines": {
+      "total": 161,
+      "covered": 155,
+      "skipped": 0,
+      "pct": 96.27
+    },
+    "functions": {
+      "total": 34,
+      "covered": 31,
+      "skipped": 0,
+      "pct": 91.17
+    },
+    "statements": {
+      "total": 185,
+      "covered": 166,
+      "skipped": 0,
+      "pct": 89.72
+    },
+    "branches": {
+      "total": 135,
+      "covered": 105,
+      "skipped": 0,
+      "pct": 77.77
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-creation-editor.tsx": {
+    "lines": {
+      "total": 30,
+      "covered": 29,
+      "skipped": 0,
+      "pct": 96.66
+    },
+    "functions": {
+      "total": 10,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 33,
+      "covered": 31,
+      "skipped": 0,
+      "pct": 93.93
+    },
+    "branches": {
+      "total": 52,
+      "covered": 47,
+      "skipped": 0,
+      "pct": 90.38
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-definition-editor.tsx": {
+    "lines": {
+      "total": 21,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 66.66
+    },
+    "functions": {
+      "total": 14,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 50
+    },
+    "statements": {
+      "total": 28,
+      "covered": 18,
+      "skipped": 0,
+      "pct": 64.28
+    },
+    "branches": {
+      "total": 29,
+      "covered": 21,
+      "skipped": 0,
+      "pct": 72.41
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-definition-list.tsx": {
+    "lines": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 9,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 66.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-definition-model.ts": {
+    "lines": {
+      "total": 101,
+      "covered": 74,
+      "skipped": 0,
+      "pct": 73.26
+    },
+    "functions": {
+      "total": 26,
+      "covered": 24,
+      "skipped": 0,
+      "pct": 92.3
+    },
+    "statements": {
+      "total": 150,
+      "covered": 90,
+      "skipped": 0,
+      "pct": 60
+    },
+    "branches": {
+      "total": 158,
+      "covered": 86,
+      "skipped": 0,
+      "pct": 54.43
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-document-schema.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-http-action-parameters-form.tsx": {
+    "lines": {
+      "total": 42,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 33.33
+    },
+    "functions": {
+      "total": 25,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 32
+    },
+    "statements": {
+      "total": 51,
+      "covered": 16,
+      "skipped": 0,
+      "pct": 31.37
+    },
+    "branches": {
+      "total": 35,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 22.85
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-http-action-parameters.ts": {
+    "lines": {
+      "total": 95,
+      "covered": 87,
+      "skipped": 0,
+      "pct": 91.57
+    },
+    "functions": {
+      "total": 22,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 144,
+      "covered": 112,
+      "skipped": 0,
+      "pct": 77.77
+    },
+    "branches": {
+      "total": 178,
+      "covered": 126,
+      "skipped": 0,
+      "pct": 70.78
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-metadata-fields.tsx": {
+    "lines": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 12,
+      "covered": 10,
+      "skipped": 0,
+      "pct": 83.33
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rule-single-pair-editor.tsx": {
+    "lines": {
+      "total": 136,
+      "covered": 125,
+      "skipped": 0,
+      "pct": 91.91
+    },
+    "functions": {
+      "total": 75,
+      "covered": 71,
+      "skipped": 0,
+      "pct": 94.66
+    },
+    "statements": {
+      "total": 206,
+      "covered": 170,
+      "skipped": 0,
+      "pct": 82.52
+    },
+    "branches": {
+      "total": 298,
+      "covered": 233,
+      "skipped": 0,
+      "pct": 78.18
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rules-view-test-fixtures.ts": {
+    "lines": {
+      "total": 20,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 45
+    },
+    "functions": {
+      "total": 9,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 33.33
+    },
+    "statements": {
+      "total": 24,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 37.5
+    },
+    "branches": {
+      "total": 21,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 23.8
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rules-view.tsx": {
+    "lines": {
+      "total": 121,
+      "covered": 75,
+      "skipped": 0,
+      "pct": 61.98
+    },
+    "functions": {
+      "total": 20,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 55
+    },
+    "statements": {
+      "total": 134,
+      "covered": 80,
+      "skipped": 0,
+      "pct": 59.7
+    },
+    "branches": {
+      "total": 50,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 40
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/rules-workspace-shell.tsx": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/rules/use-rule-definition-source.ts": {
+    "lines": {
+      "total": 14,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 14,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 14,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 85.71
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/application-data-reset-dialog.tsx": {
+    "lines": {
+      "total": 15,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 17,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 82.35
+    },
+    "branches": {
+      "total": 10,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 70
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/external-package-service-settings.tsx": {
+    "lines": {
+      "total": 21,
+      "covered": 20,
+      "skipped": 0,
+      "pct": 95.23
+    },
+    "functions": {
+      "total": 12,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 91.66
+    },
+    "statements": {
+      "total": 23,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 95.65
+    },
+    "branches": {
+      "total": 48,
+      "covered": 48,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/mcp-settings.tsx": {
+    "lines": {
+      "total": 18,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 44.44
+    },
+    "functions": {
+      "total": 7,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 28.57
+    },
+    "statements": {
+      "total": 18,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 44.44
+    },
+    "branches": {
+      "total": 16,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 75
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/settings-content.tsx": {
+    "lines": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    },
+    "statements": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/settings-editor-tabs.tsx": {
+    "lines": {
+      "total": 11,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 72.72
+    },
+    "functions": {
+      "total": 10,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 70
+    },
+    "statements": {
+      "total": 11,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 72.72
+    },
+    "branches": {
+      "total": 6,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 66.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/settings/settings-view.tsx": {
+    "lines": {
+      "total": 62,
+      "covered": 52,
+      "skipped": 0,
+      "pct": 83.87
+    },
+    "functions": {
+      "total": 14,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 78.57
+    },
+    "statements": {
+      "total": 65,
+      "covered": 52,
+      "skipped": 0,
+      "pct": 80
+    },
+    "branches": {
+      "total": 44,
+      "covered": 36,
+      "skipped": 0,
+      "pct": 81.81
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shared/http-inspection.tsx": {
+    "lines": {
+      "total": 81,
+      "covered": 63,
+      "skipped": 0,
+      "pct": 77.77
+    },
+    "functions": {
+      "total": 21,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 71.42
+    },
+    "statements": {
+      "total": 93,
+      "covered": 72,
+      "skipped": 0,
+      "pct": 77.41
+    },
+    "branches": {
+      "total": 87,
+      "covered": 64,
+      "skipped": 0,
+      "pct": 73.56
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shared/http-protocol-body.tsx": {
+    "lines": {
+      "total": 19,
+      "covered": 19,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 19,
+      "covered": 19,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 10,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 80
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shared/protocol-safe-display.tsx": {
+    "lines": {
+      "total": 89,
+      "covered": 89,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 9,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 105,
+      "covered": 102,
+      "skipped": 0,
+      "pct": 97.14
+    },
+    "branches": {
+      "total": 65,
+      "covered": 58,
+      "skipped": 0,
+      "pct": 89.23
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shared/protocol-workspace-tabs.tsx": {
+    "lines": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 2,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 6,
+      "covered": 5,
+      "skipped": 0,
+      "pct": 83.33
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shell/app-shell.tsx": {
+    "lines": {
+      "total": 41,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 90.24
+    },
+    "functions": {
+      "total": 15,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 80
+    },
+    "statements": {
+      "total": 42,
+      "covered": 38,
+      "skipped": 0,
+      "pct": 90.47
+    },
+    "branches": {
+      "total": 31,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 70.96
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shell/bootstrap-context.tsx": {
+    "lines": {
+      "total": 98,
+      "covered": 87,
+      "skipped": 0,
+      "pct": 88.77
+    },
+    "functions": {
+      "total": 24,
+      "covered": 22,
+      "skipped": 0,
+      "pct": 91.66
+    },
+    "statements": {
+      "total": 111,
+      "covered": 97,
+      "skipped": 0,
+      "pct": 87.38
+    },
+    "branches": {
+      "total": 51,
+      "covered": 34,
+      "skipped": 0,
+      "pct": 66.66
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shell/selected-workspace-context.tsx": {
+    "lines": {
+      "total": 12,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 6,
+      "covered": 6,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 15,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 93.33
+    },
+    "branches": {
+      "total": 14,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 92.85
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/shell/workspace-navigation.tsx": {
+    "lines": {
+      "total": 53,
+      "covered": 51,
+      "skipped": 0,
+      "pct": 96.22
+    },
+    "functions": {
+      "total": 14,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 56,
+      "covered": 53,
+      "skipped": 0,
+      "pct": 94.64
+    },
+    "branches": {
+      "total": 18,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 83.33
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/theme/theme-provider.tsx": {
+    "lines": {
+      "total": 44,
+      "covered": 39,
+      "skipped": 0,
+      "pct": 88.63
+    },
+    "functions": {
+      "total": 18,
+      "covered": 14,
+      "skipped": 0,
+      "pct": 77.77
+    },
+    "statements": {
+      "total": 49,
+      "covered": 41,
+      "skipped": 0,
+      "pct": 83.67
+    },
+    "branches": {
+      "total": 15,
+      "covered": 11,
+      "skipped": 0,
+      "pct": 73.33
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/theme/theme-settings.tsx": {
+    "lines": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 3,
+      "covered": 3,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/workspaces/workspaces-view.test-support.ts": {
+    "lines": {
+      "total": 23,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 23,
+      "covered": 23,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/features/workspaces/workspaces-view.tsx": {
+    "lines": {
+      "total": 91,
+      "covered": 87,
+      "skipped": 0,
+      "pct": 95.6
+    },
+    "functions": {
+      "total": 32,
+      "covered": 29,
+      "skipped": 0,
+      "pct": 90.62
+    },
+    "statements": {
+      "total": 105,
+      "covered": 92,
+      "skipped": 0,
+      "pct": 87.61
+    },
+    "branches": {
+      "total": 66,
+      "covered": 51,
+      "skipped": 0,
+      "pct": 77.27
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/generated/rust-types.ts": {
+    "lines": {
+      "total": 121,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 1.65
+    },
+    "functions": {
+      "total": 116,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    },
+    "statements": {
+      "total": 122,
+      "covered": 2,
+      "skipped": 0,
+      "pct": 1.63
+    },
+    "branches": {
+      "total": 2,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 0
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/format.ts": {
+    "lines": {
+      "total": 14,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 85.71
+    },
+    "functions": {
+      "total": 4,
+      "covered": 4,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 19,
+      "covered": 17,
+      "skipped": 0,
+      "pct": 89.47
+    },
+    "branches": {
+      "total": 14,
+      "covered": 12,
+      "skipped": 0,
+      "pct": 85.71
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/message-content.ts": {
+    "lines": {
+      "total": 32,
+      "covered": 29,
+      "skipped": 0,
+      "pct": 90.62
+    },
+    "functions": {
+      "total": 9,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "statements": {
+      "total": 43,
+      "covered": 37,
+      "skipped": 0,
+      "pct": 86.04
+    },
+    "branches": {
+      "total": 49,
+      "covered": 39,
+      "skipped": 0,
+      "pct": 79.59
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/package-contract.ts": {
+    "lines": {
+      "total": 80,
+      "covered": 77,
+      "skipped": 0,
+      "pct": 96.25
+    },
+    "functions": {
+      "total": 19,
+      "covered": 19,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 102,
+      "covered": 91,
+      "skipped": 0,
+      "pct": 89.21
+    },
+    "branches": {
+      "total": 170,
+      "covered": 159,
+      "skipped": 0,
+      "pct": 93.52
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/protocol-package-identity.ts": {
+    "lines": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 1,
+      "covered": 1,
+      "skipped": 0,
+      "pct": 100
+    },
+    "branches": {
+      "total": 0,
+      "covered": 0,
+      "skipped": 0,
+      "pct": 100
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/protocol-package-schema.ts": {
+    "lines": {
+      "total": 29,
+      "covered": 28,
+      "skipped": 0,
+      "pct": 96.55
+    },
+    "functions": {
+      "total": 13,
+      "covered": 13,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 37,
+      "covered": 34,
+      "skipped": 0,
+      "pct": 91.89
+    },
+    "branches": {
+      "total": 57,
+      "covered": 53,
+      "skipped": 0,
+      "pct": 92.98
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/ipc/client.ts": {
+    "lines": {
+      "total": 25,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 9,
+      "covered": 8,
+      "skipped": 0,
+      "pct": 88.88
+    },
+    "statements": {
+      "total": 27,
+      "covered": 25,
+      "skipped": 0,
+      "pct": 92.59
+    },
+    "branches": {
+      "total": 16,
+      "covered": 15,
+      "skipped": 0,
+      "pct": 93.75
+    }
+  },
+  "/Users/codin/Code/gmofg-payment-proxy/src/lib/ipc/use-ipc-query.ts": {
+    "lines": {
+      "total": 60,
+      "covered": 60,
+      "skipped": 0,
+      "pct": 100
+    },
+    "functions": {
+      "total": 7,
+      "covered": 7,
+      "skipped": 0,
+      "pct": 100
+    },
+    "statements": {
+      "total": 67,
+      "covered": 66,
+      "skipped": 0,
+      "pct": 98.5
+    },
+    "branches": {
+      "total": 50,
+      "covered": 45,
+      "skipped": 0,
+      "pct": 90
+    }
+  }
+}

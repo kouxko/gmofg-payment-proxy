@@ -1,0 +1,106 @@
+{
+  "name": "Intercept Proxy 1.0.0",
+  "tag_name": "v1.0.0",
+  "description": "## 安装包下载\n\n请在下方 Assets 中选择 Android APK 或 Windows x64 安装包（MSI / EXE / 便携 ZIP）。Windows 便携包已包含 Android Companion APK。\n\n安装包保存在本项目 Package Registry，不依赖 CI 临时产物的有效期。私有项目下载需要登录并具有项目访问权限。\n\n## 构建与版本\n\n来自 [Android / Windows 构建流水线 #34120](http://172.16.3.60/other/intercept_proxy/-/pipelines/34120)，两个构建作业均已成功。通过 develop → release → master 合并发布，保留开发提交历史。\n\n## 验证范围\n\n已完成 Android 和 Windows 编译、打包及产物检查；Windows 为未签名构建。本次未执行其他 CI 检查，不代表真实设备、VPN 链路或业务验收完成。",
+  "created_at": "2026-09-07T03:52:37.094Z",
+  "released_at": "2026-09-07T03:52:37.094Z",
+  "upcoming_release": false,
+  "author": {
+    "id": 15,
+    "username": "kouqurong",
+    "name": "kouqurong",
+    "state": "active",
+    "locked": false,
+    "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+    "web_url": "http://172.16.3.60/kouqurong"
+  },
+  "commit": {
+    "id": "a146e75ca03cefc52858887a47f832c9b71d8c5e",
+    "short_id": "a146e75c",
+    "created_at": "2026-09-07T03:44:51.000+00:00",
+    "parent_ids": [
+      "d50d0192f6251c8f6950f6fe2e6478f678fad38f",
+      "10b3b576123c6c3f4e44868f7fc4e86e53a67208"
+    ],
+    "title": "Merge release into master for Intercept Proxy 1.0.0",
+    "message": "Merge release into master for Intercept Proxy 1.0.0",
+    "author_name": "kouqurong",
+    "author_email": "kouqurong@paxsz.com",
+    "authored_date": "2026-09-07T03:44:51.000+00:00",
+    "committer_name": "kouqurong",
+    "committer_email": "kouqurong@paxsz.com",
+    "committed_date": "2026-09-07T03:44:51.000+00:00",
+    "trailers": {},
+    "extended_trailers": {},
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/a146e75ca03cefc52858887a47f832c9b71d8c5e"
+  },
+  "commit_path": "/other/intercept_proxy/-/commit/a146e75ca03cefc52858887a47f832c9b71d8c5e",
+  "tag_path": "/other/intercept_proxy/-/tags/v1.0.0",
+  "assets": {
+    "count": 8,
+    "sources": [
+      {
+        "format": "zip",
+        "url": "http://172.16.3.60/other/intercept_proxy/-/archive/v1.0.0/intercept_proxy-v1.0.0.zip"
+      },
+      {
+        "format": "tar.gz",
+        "url": "http://172.16.3.60/other/intercept_proxy/-/archive/v1.0.0/intercept_proxy-v1.0.0.tar.gz"
+      },
+      {
+        "format": "tar.bz2",
+        "url": "http://172.16.3.60/other/intercept_proxy/-/archive/v1.0.0/intercept_proxy-v1.0.0.tar.bz2"
+      },
+      {
+        "format": "tar",
+        "url": "http://172.16.3.60/other/intercept_proxy/-/archive/v1.0.0/intercept_proxy-v1.0.0.tar"
+      }
+    ],
+    "links": [
+      {
+        "id": 4,
+        "name": "Windows x64 便携 ZIP",
+        "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy-portable-x64.zip",
+        "direct_asset_url": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/downloads/packages/Intercept-Proxy-portable-x64.zip",
+        "link_type": "package"
+      },
+      {
+        "id": 3,
+        "name": "Windows x64 EXE 安装包",
+        "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy_1.0.0_x64-setup.exe",
+        "direct_asset_url": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/downloads/packages/Intercept-Proxy_1.0.0_x64-setup.exe",
+        "link_type": "package"
+      },
+      {
+        "id": 2,
+        "name": "Windows x64 MSI 安装包",
+        "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy_1.0.0_x64_en-US.msi",
+        "direct_asset_url": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/downloads/packages/Intercept-Proxy_1.0.0_x64_en-US.msi",
+        "link_type": "package"
+      },
+      {
+        "id": 1,
+        "name": "Android Companion APK",
+        "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/intercept-proxy-android-companion.apk",
+        "direct_asset_url": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/downloads/packages/intercept-proxy-android-companion.apk",
+        "link_type": "package"
+      }
+    ]
+  },
+  "evidences": [
+    {
+      "sha": "1341a4b2f4ea10b3b0ad1c69e02511cad6411074398d",
+      "filepath": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/evidences/43.json",
+      "collected_at": "2026-09-07T03:52:37.227Z"
+    }
+  ],
+  "_links": {
+    "closed_issues_url": "http://172.16.3.60/other/intercept_proxy/-/issues?release_tag=v1.0.0&scope=all&state=closed",
+    "closed_merge_requests_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests?release_tag=v1.0.0&scope=all&state=closed",
+    "edit_url": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0/edit",
+    "merged_merge_requests_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests?release_tag=v1.0.0&scope=all&state=merged",
+    "opened_issues_url": "http://172.16.3.60/other/intercept_proxy/-/issues?release_tag=v1.0.0&scope=all&state=opened",
+    "opened_merge_requests_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests?release_tag=v1.0.0&scope=all&state=opened",
+    "self": "http://172.16.3.60/other/intercept_proxy/-/releases/v1.0.0"
+  }
+}

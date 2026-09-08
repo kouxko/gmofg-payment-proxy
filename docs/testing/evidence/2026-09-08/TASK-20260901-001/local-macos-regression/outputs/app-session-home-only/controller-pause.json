@@ -1,0 +1,9 @@
+{
+  "controller_pid": 155,
+  "app_pid": 18470,
+  "paused_at": "2026-09-08T10:41:06.965736+08:00",
+  "reason": "Keep the already prepared App alive while bounded replay harness finishes; only the test supervisor is paused, not the App. Resume supervisor after stop marker and before controlled App quit for cleanup.",
+  "app_runtime_timeouts_changed": false,
+  "resumed_at": "2026-09-08T10:47:02.987157+08:00",
+  "stop_requested": true
+}

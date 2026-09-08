@@ -1,0 +1,20 @@
+{
+  "status": "PASS",
+  "basis": "Executed Rust assertions in six named socket_read_chunk_cap tests; green.log and frozen source archive are authoritative. This file summarizes assertions, not a pcap capture.",
+  "valid_json_import": "exact round-trip without normalization",
+  "invalid_json_import": "field error for read_chunk_bytes",
+  "candidate_invalid": "ListenerDomainInvalid at Domain; later external layers skipped",
+  "runtime_invalid": "start and probe reject before binding/network allocation; no active status",
+  "maximum_legal_wire": "server received 00736f636b6574; client received 7265706c79ff; asserted byte-for-byte",
+  "metrics": {
+    "client_to_server_bytes": 7,
+    "server_to_client_bytes": 6
+  },
+  "stop": "port can bind again",
+  "regression": {
+    "test_groups": 14,
+    "passed": 1111,
+    "failed": 0,
+    "ignored": 0
+  }
+}

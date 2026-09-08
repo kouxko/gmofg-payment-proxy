@@ -1,0 +1,49 @@
+[
+  {
+    "command": [
+      "lipo",
+      "-archs",
+      "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app/Contents/MacOS/intercept-proxy"
+    ],
+    "exit_code": 0,
+    "stdout": "x86_64 arm64\n",
+    "stderr": ""
+  },
+  {
+    "command": [
+      "codesign",
+      "--verify",
+      "--deep",
+      "--strict",
+      "--verbose=2",
+      "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app: valid on disk\nsrc-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app: satisfies its Designated Requirement\n"
+  },
+  {
+    "command": [
+      "codesign",
+      "-dvv",
+      "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app"
+    ],
+    "exit_code": 0,
+    "stdout": "",
+    "stderr": "Executable=/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app/Contents/MacOS/intercept-proxy\nIdentifier=com.interceptproxy.desktop\nFormat=app bundle with Mach-O universal (x86_64 arm64)\nCodeDirectory v=20400 size=173395 flags=0x2(adhoc) hashes=5412+3 location=embedded\nSignature=adhoc\nInfo.plist entries=14\nTeamIdentifier=not set\nSealed Resources version=2 rules=13 files=2\nInternal requirements count=0 size=12\nTotal signatures=1\nChosen signature=1\n"
+  },
+  {
+    "command": [
+      "plutil",
+      "-extract",
+      "CFBundleIdentifier",
+      "raw",
+      "-o",
+      "-",
+      "src-tauri/target/universal-apple-darwin/release/bundle/macos/Intercept Proxy.app/Contents/Info.plist"
+    ],
+    "exit_code": 0,
+    "stdout": "com.interceptproxy.desktop\n",
+    "stderr": ""
+  }
+]

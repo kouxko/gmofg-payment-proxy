@@ -1,0 +1,18 @@
+{
+  "unit": "bytes",
+  "accepted": [
+    1,
+    16384,
+    1048576
+  ],
+  "rejected": [
+    0,
+    1048577,
+    4294967295
+  ],
+  "default": 16384,
+  "wire_request_hex": "00736f636b6574",
+  "wire_response_hex": "7265706c79ff",
+  "half_close": "client shutdown write; upstream reads to EOF then replies",
+  "start_and_probe": "invalid values rejected on field path while desired bind port occupied; no upstream accept and no runtime status"
+}

@@ -1,0 +1,96 @@
+Activity Resolver Table:
+  Non-Data Actions:
+      android.intent.action.MAIN:
+        318e5f2 com.interceptproxy.vpn/.VpnConsentActivity filter 634bfaa
+          Action: "android.intent.action.MAIN"
+          Category: "android.intent.category.LAUNCHER"
+
+Receiver Resolver Table:
+  Non-Data Actions:
+      android.intent.action.BOOT_COMPLETED:
+        2d5d443 com.interceptproxy.vpn/.BootCompletedReceiver filter e57979b
+          Action: "android.intent.action.BOOT_COMPLETED"
+          Action: "android.intent.action.MY_PACKAGE_REPLACED"
+      android.intent.action.MY_PACKAGE_REPLACED:
+        2d5d443 com.interceptproxy.vpn/.BootCompletedReceiver filter e57979b
+          Action: "android.intent.action.BOOT_COMPLETED"
+          Action: "android.intent.action.MY_PACKAGE_REPLACED"
+
+Service Resolver Table:
+  Non-Data Actions:
+      android.net.VpnService:
+        a89fac0 com.interceptproxy.vpn/.InterceptVpnService filter 85ef738 permission android.permission.BIND_VPN_SERVICE
+          Action: "android.net.VpnService"
+
+Key Set Manager:
+  [com.interceptproxy.vpn]
+      Signing KeySets: 18
+
+Packages:
+  Package [com.interceptproxy.vpn] (7a673f9):
+    userId=10087
+    pkg=Package{4cb6f3e com.interceptproxy.vpn}
+    codePath=/data/app/com.interceptproxy.vpn-i_QvVpvCIO0OJQ89AEYGRA==
+    resourcePath=/data/app/com.interceptproxy.vpn-i_QvVpvCIO0OJQ89AEYGRA==
+    legacyNativeLibraryDir=/data/app/com.interceptproxy.vpn-i_QvVpvCIO0OJQ89AEYGRA==/lib
+    primaryCpuAbi=armeabi-v7a
+    secondaryCpuAbi=null
+    versionCode=1 minSdk=26 targetSdk=36
+    versionName=1.0.0
+    splits=[base]
+    apkSigningVersion=3
+    applicationInfo=ApplicationInfo{e77719f com.interceptproxy.vpn}
+    flags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    privateFlags=[ PRIVATE_FLAG_ACTIVITIES_RESIZE_MODE_RESIZEABLE_VIA_SDK_VERSION ALLOW_AUDIO_PLAYBACK_CAPTURE ]
+    dataDir=/data/user/0/com.interceptproxy.vpn
+    supportsScreens=[small, medium, large, xlarge, resizeable, anyDensity]
+    timeStamp=2026-09-02 18:48:58
+    firstInstallTime=2026-08-03 17:42:55
+    lastUpdateTime=2026-09-02 18:48:59
+    signatures=PackageSignatures{d7402ec version:3, signatures:[8195139d], past signatures:[]}
+    installPermissionsFixed=true
+    pkgFlags=[ HAS_CODE ALLOW_CLEAR_USER_DATA ]
+    requested permissions:
+      android.permission.INTERNET
+      android.permission.ACCESS_NETWORK_STATE
+      android.permission.RECEIVE_BOOT_COMPLETED
+      android.permission.FOREGROUND_SERVICE
+      android.permission.FOREGROUND_SERVICE_SPECIAL_USE
+      android.permission.POST_NOTIFICATIONS
+      android.permission.QUERY_ALL_PACKAGES
+    install permissions:
+      android.permission.FOREGROUND_SERVICE: granted=true
+      android.permission.RECEIVE_BOOT_COMPLETED: granted=true
+      android.permission.INTERNET: granted=true
+      android.permission.ACCESS_NETWORK_STATE: granted=true
+    User 0: ceDataInode=-4294844372 installed=true hidden=false suspended=false stopped=false notLaunched=false enabled=0 instant=false virtual=false
+      gids=[3003]
+      runtime permissions:
+isSystemUserPackagesBlacklistSupported: false
+
+Package Changes:
+  Sequence number=2
+  User 0:
+    seq=1, package=jp.gmofg.app.launcher
+
+
+Dexopt state:
+  [com.interceptproxy.vpn]
+    path: /data/app/com.interceptproxy.vpn-i_QvVpvCIO0OJQ89AEYGRA==/base.apk
+      arm: [status=speed-profile] [reason=install]
+
+
+Compiler stats:
+  [com.interceptproxy.vpn]
+     base.apk - 2053
+
+Active APEX packages:
+
+
+Inactive APEX packages:
+
+
+Factory APEX packages:
+
+
+  APEX session state:

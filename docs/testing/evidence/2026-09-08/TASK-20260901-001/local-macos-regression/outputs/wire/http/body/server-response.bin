@@ -1,0 +1,6 @@
+HTTP/1.1 200 OK
+Content-Type: application/json
+Content-Length: 383
+Connection: close
+
+{"case":"body","remote":"127.0.0.1:58507","method":"GET","target":"/other","headers":{"content-type":["application/json"],"x-wire-case":["body"],"host":["127.0.0.1:28081"],"connection":["close"],"content-length":["42"]},"body_hex":"7b22637573746f6d6572223a7b22616765223a31382e302c226e616d65223a226d617463686564227d7d","body_text":"{\"customer\":{\"age\":18.0,\"name\":\"matched\"}}"}

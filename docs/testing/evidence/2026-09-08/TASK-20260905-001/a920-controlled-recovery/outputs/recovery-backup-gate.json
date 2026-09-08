@@ -1,0 +1,8 @@
+{
+  "package": "com.interceptproxy.vpn",
+  "serial": "2740072778",
+  "backup_complete": true,
+  "restore_supported": true,
+  "backup_file": "../resources/original-runtime-preferences.json",
+  "device_backup_path": "/storage/emulated/0/Android/data/com.interceptproxy.vpn/files/intercept_proxy_vpn_runtime.backup.json"
+}

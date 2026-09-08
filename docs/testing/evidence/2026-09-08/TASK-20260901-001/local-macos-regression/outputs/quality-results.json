@@ -1,0 +1,128 @@
+[
+  {
+    "case": "workflow-contract",
+    "command": [
+      "deno",
+      "test",
+      "-A",
+      "scripts/windows-build-only-workflow.test.mjs"
+    ],
+    "started_at": "2026-09-08T09:54:12.601945+08:00",
+    "completed_at": "2026-09-08T09:54:12.885824+08:00",
+    "exit_code": 0,
+    "log": "outputs/workflow-contract.log"
+  },
+  {
+    "case": "bindings",
+    "command": [
+      "deno",
+      "task",
+      "check:bindings"
+    ],
+    "started_at": "2026-09-08T09:54:12.886435+08:00",
+    "completed_at": "2026-09-08T09:55:59.231528+08:00",
+    "exit_code": 0,
+    "log": "outputs/bindings.log"
+  },
+  {
+    "case": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "started_at": "2026-09-08T09:55:59.232389+08:00",
+    "completed_at": "2026-09-08T09:56:02.381957+08:00",
+    "exit_code": 0,
+    "log": "outputs/architecture.log"
+  },
+  {
+    "case": "source-size",
+    "command": [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    "started_at": "2026-09-08T09:56:02.382569+08:00",
+    "completed_at": "2026-09-08T09:56:02.926850+08:00",
+    "exit_code": 0,
+    "log": "outputs/source-size.log"
+  },
+  {
+    "case": "lint",
+    "command": [
+      "deno",
+      "task",
+      "lint"
+    ],
+    "started_at": "2026-09-08T09:56:02.927333+08:00",
+    "completed_at": "2026-09-08T09:56:15.066883+08:00",
+    "exit_code": 0,
+    "log": "outputs/lint.log"
+  },
+  {
+    "case": "typecheck",
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "started_at": "2026-09-08T09:56:15.067651+08:00",
+    "completed_at": "2026-09-08T09:56:22.106927+08:00",
+    "exit_code": 0,
+    "log": "outputs/typecheck.log"
+  },
+  {
+    "case": "frontend-coverage",
+    "command": [
+      "deno",
+      "task",
+      "check:coverage:frontend",
+      "--maxWorkers=2"
+    ],
+    "started_at": "2026-09-08T09:56:22.108207+08:00",
+    "completed_at": "2026-09-08T09:58:48.277297+08:00",
+    "exit_code": 0,
+    "log": "outputs/frontend-coverage.log"
+  },
+  {
+    "case": "rust-fmt",
+    "command": [
+      "deno",
+      "task",
+      "check:rust:fmt"
+    ],
+    "started_at": "2026-09-08T09:58:48.278169+08:00",
+    "completed_at": "2026-09-08T09:58:49.576167+08:00",
+    "exit_code": 0,
+    "log": "outputs/rust-fmt.log"
+  },
+  {
+    "case": "rust-clippy",
+    "command": [
+      "deno",
+      "task",
+      "check:rust:clippy"
+    ],
+    "started_at": "2026-09-08T09:58:49.576947+08:00",
+    "completed_at": "2026-09-08T09:59:34.490526+08:00",
+    "exit_code": 0,
+    "log": "outputs/rust-clippy.log"
+  },
+  {
+    "case": "rust-workspace",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features"
+    ],
+    "started_at": "2026-09-08T09:59:34.491252+08:00",
+    "completed_at": "2026-09-08T10:03:44.878530+08:00",
+    "exit_code": 0,
+    "log": "outputs/rust-workspace.log"
+  }
+]
