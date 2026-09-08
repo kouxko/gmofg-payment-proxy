@@ -1,0 +1,1 @@
+Task scan:source-size deno run -A scripts/check-source-file-sizes.mjs

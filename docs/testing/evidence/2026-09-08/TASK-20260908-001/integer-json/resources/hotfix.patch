@@ -1,0 +1,734 @@
+diff --git a/docs/architecture/rules-and-protocol-packages.md b/docs/architecture/rules-and-protocol-packages.md
+index fc48a75a..de44ec89 100644
+--- a/docs/architecture/rules-and-protocol-packages.md
++++ b/docs/architecture/rules-and-protocol-packages.md
+@@ -24,6 +24,14 @@ Workspace 只保存一个 `rule_definitions` 集合。HTTP 与 Socket 内容保
+ Pointer 定位具体值；Schema 的 object properties 与 array items 描述能力。array items 只是元素类型
+ 模板，只有用户显式创建 index 后，规则本地路径才出现具体索引。
+ 
++`DocumentNumber` 保持有限 `f64` 与 JavaScript 安全整数校验，数字输出由该类型的 `Serialize`
++统一处理，覆盖 Document JSON、规则配置和 Wasm JSON 边界。重编码时，`2`、`2.0` 输出为 `2`，
++`2.5` 仍为 `2.5`，字符串 `"2.0"` 保持字符串；负零沿用原有的 `-0.0` 表示。
++对象和数组递归遵循同一规则。这是数值表示规范化，
++不保留 `2.00` 等原始数字写法，也不扩展数值精度。Document 未实际变化时，现有 HTTP/Socket
++Document 编码环节仍保留原输入；其他 HTTP 动作和 Finalize 按各自合同运行。修改任一字段后，
++其他字段可能随整个 Document 一起重新编码。
++
+ Schema-free 编辑通过 Rust typed factory 创建第一条规则本地叶子。叶子的 predicate/action 保留
+ `DocumentValueType`，包括只清除值的 Clear；不另建独立 metadata 持久化字段。现有规则本地叶子按
+ value type 重新读取 Rust capability，因此 null、object、array 和未来由 Rust 暴露的类型不会被 UI
+diff --git a/docs/user-operation-guide.md b/docs/user-operation-guide.md
+index 8debbae8..0fb78a07 100644
+--- a/docs/user-operation-guide.md
++++ b/docs/user-operation-guide.md
+@@ -218,6 +218,11 @@ HTTP 与 Socket 规则显示在一个列表中，通过“作用范围”和“
+ 左侧只显示一个规则列表，不再按阶段分区。每张规则卡使用“上行”或“下行”标识实际阶段；上行对应
+ Proxy → Server，下行对应 Proxy → App。
+ 
++Document 数字修改后重新编码时，`2` 和 `2.0` 都输出为数字 `2`，`2.5` 保留小数，数组
++`[0,1,2]` 不会被自动加上 `.0`。字符串 `"2.0"` 仍是字符串。保存规则后重新打开或导出配置时，
++整数数值也采用此表示；原有含 `2.0` 的规则仍可加载。负零沿用原有的 `-0.0` 表示。
++此行为不保证保留 `2.00` 等原始写法。
++
+ ### 6.2 阶段能力
+ 
+ 编辑器选项由 Rust 返回，保存时领域层再次校验：
+diff --git a/src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs b/src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs
+index c11f4584..64f46cd2 100644
+--- a/src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs
++++ b/src-tauri/crates/application/src/requirements_tests/workspace_configuration/application_backup_import/unified_portability.rs
+@@ -42,6 +42,32 @@ async fn unified_flat_wildcard_insert_append_rules_pass_portable_binding_preflig
+     ];
+     workspace.rule_created_order_high_water = 1;
+     workspace.validate().unwrap();
++
++    let mut legacy_wire = serde_json::to_value(&workspace).unwrap();
++    legacy_wire["rule_definitions"][0]["content"]["value"]["condition"]["predicate"]["value"]["value"] =
++        serde_json::from_str("7.0").unwrap();
++    legacy_wire["rule_definitions"][0]["content"]["value"]["action"]["value"]["value"] =
++        serde_json::from_str("1.0").unwrap();
++    let workspace: intercept_proxy_domain::ProxyWorkspace =
++        serde_json::from_value(legacy_wire).expect("legacy floating-point rule values load");
++    let saved_wire = serde_json::to_value(&workspace).expect("workspace configuration saves");
++    assert_eq!(
++        saved_wire.pointer("/rule_definitions/0/content/value/condition/predicate/value/value"),
++        Some(&serde_json::json!(7))
++    );
++    assert_eq!(
++        saved_wire.pointer("/rule_definitions/0/content/value/action/value/value"),
++        Some(&serde_json::json!(1))
++    );
++    assert_eq!(
++        saved_wire.pointer("/rule_definitions/0/content/value/package/version"),
++        Some(&serde_json::json!("1.0.0"))
++    );
++    assert_eq!(
++        serde_json::from_value::<intercept_proxy_domain::ProxyWorkspace>(saved_wire).unwrap(),
++        workspace
++    );
++
+     let prepared = ApplicationBackupImportCandidate {
+         selected_workspace_id: workspace.id,
+         workspaces: vec![workspace],
+diff --git a/src-tauri/crates/application/tests/environment_configuration_document_contract.rs b/src-tauri/crates/application/tests/environment_configuration_document_contract.rs
+index 7c8bc143..b2b1b9a8 100644
+--- a/src-tauri/crates/application/tests/environment_configuration_document_contract.rs
++++ b/src-tauri/crates/application/tests/environment_configuration_document_contract.rs
+@@ -1,7 +1,10 @@
+ use intercept_proxy_application::{
+     EnvironmentTerminalResult, parse_environment_configuration_candidate_v1,
+ };
+-use intercept_proxy_domain::{Condition, DocumentNumber, DocumentValue, UnifiedAction};
++use intercept_proxy_domain::{
++    Condition, Document, DocumentNumber, DocumentValue, RuleContent, UnifiedAction,
++    matches_document_condition,
++};
+ use serde_json::{Value, json};
+ use std::collections::BTreeMap;
+ 
+@@ -14,7 +17,7 @@ where
+ }
+ 
+ #[test]
+-fn document_value_recursive_json_wire_round_trips_without_drift() {
++fn document_value_recursive_json_wire_uses_canonical_integer_numbers() {
+     for (typed, expected) in [
+         (DocumentValue::String("abc".to_owned()), json!("abc")),
+         (
+@@ -34,7 +37,7 @@ fn document_value_recursive_json_wire_round_trips_without_drift() {
+             DocumentValue::Array(vec![DocumentValue::Number(
+                 DocumentNumber::new(0.0).unwrap(),
+             )]),
+-            json!([0.0]),
++            json!([0]),
+         ),
+     ] {
+         assert_eq!(serde_json::to_value(&typed).unwrap(), expected);
+@@ -52,7 +55,7 @@ fn document_condition_and_action_use_authoritative_typed_wire() {
+         "path": "/amount",
+         "predicate": {
+             "type": "number",
+-            "value": { "operator": "equal", "value": 7.0 }
++            "value": { "operator": "equal", "value": 7 }
+         }
+     }));
+     round_trip::<UnifiedAction>(&json!({
+@@ -61,6 +64,42 @@ fn document_condition_and_action_use_authoritative_typed_wire() {
+     }));
+ }
+ 
++#[test]
++fn legacy_document_rule_wire_saves_integer_numbers_and_reloads_without_behavior_drift() {
++    fn execute(rule: &RuleContent) -> Document {
++        let RuleContent::Socket(content) = rule else {
++            panic!("fixture is a socket rule");
++        };
++        let mut document = Document::parse_json(r#"{"amount":7.0,"payload":null}"#).unwrap();
++        assert!(matches_document_condition(&content.condition, &document).unwrap());
++        let UnifiedAction::Document(mutation) = &content.action else {
++            panic!("fixture has a document mutation");
++        };
++        mutation.apply(&mut document).unwrap();
++        document
++    }
++
++    let legacy_wire = r#"{"type":"socket","value":{"package":{"id":"legacy","version":"1.0.0"},"condition":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"equal","value":7.0}}},"action":{"source":"document","value":{"type":"set","path":"/payload","value":[0.0,2.5,"2.0"]}}}}"#;
++    let loaded: RuleContent = serde_json::from_str(legacy_wire).expect("legacy rule wire loads");
++
++    let saved = serde_json::to_string(&loaded).expect("loaded rule saves");
++    assert_eq!(
++        saved,
++        r#"{"type":"socket","value":{"package":{"id":"legacy","version":"1.0.0"},"condition":{"source":"document","path":"/amount","predicate":{"type":"number","value":{"operator":"equal","value":7}}},"action":{"source":"document","value":{"type":"set","path":"/payload","value":[0,2.5,"2.0"]}}}}"#
++    );
++
++    let reloaded: RuleContent = serde_json::from_str(&saved).expect("saved rule reloads");
++    assert_eq!(reloaded, loaded);
++
++    let loaded_result = execute(&loaded);
++    let reloaded_result = execute(&reloaded);
++    assert_eq!(reloaded_result, loaded_result);
++    assert_eq!(
++        reloaded_result.to_json().unwrap(),
++        r#"{"amount":7,"payload":[0,2.5,"2.0"]}"#
++    );
++}
++
+ #[test]
+ fn document_contract_rejects_variant_and_tag_drift() {
+     for invalid in [
+@@ -89,7 +128,7 @@ fn expected_preview_contains_all_document_variants_and_terminal_field_contract()
+         json!(true),
+         Value::Null,
+         json!({"nested":"value"}),
+-        json!([0.0]),
++        json!([0]),
+     ];
+     assert_eq!(actual_values, &expected_values);
+     assert_eq!(
+diff --git a/src-tauri/crates/domain/src/document/model.rs b/src-tauri/crates/domain/src/document/model.rs
+index 285f1703..2c01adbd 100644
+--- a/src-tauri/crates/domain/src/document/model.rs
++++ b/src-tauri/crates/domain/src/document/model.rs
+@@ -1,11 +1,11 @@
+ use super::{DocumentMatchPath, DocumentMatchToken, JsonPointer};
+ use crate::{DomainError, ErrorCode};
+-use serde::{Deserialize, Deserializer, Serialize, de::Visitor};
++use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
+ use specta::Type;
+ use std::{collections::BTreeMap, fmt};
+ 
+ /// JavaScript `Number` compatible finite numeric value.
+-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Type)]
++#[derive(Clone, Copy, Debug, PartialEq, Type)]
+ #[specta(type = specta_typescript::Number)]
+ pub struct DocumentNumber(f64);
+ 
+@@ -48,6 +48,19 @@ impl DocumentNumber {
+     }
+ }
+ 
++impl Serialize for DocumentNumber {
++    #[allow(clippy::cast_possible_truncation)]
++    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
++        // Construction guarantees that integral values fit within the safe i64 range.
++        // Preserve the existing negative-zero representation.
++        if self.0.fract() == 0.0 && !(self.0 == 0.0 && self.0.is_sign_negative()) {
++            serializer.serialize_i64(self.0 as i64)
++        } else {
++            serializer.serialize_f64(self.0)
++        }
++    }
++}
++
+ impl<'de> Deserialize<'de> for DocumentNumber {
+     fn deserialize<D: Deserializer<'de>>(deserializer: D) -> Result<Self, D::Error> {
+         struct NumberVisitor;
+diff --git a/src-tauri/crates/domain/src/document/tests/mod.rs b/src-tauri/crates/domain/src/document/tests/mod.rs
+index 21a23a65..0e38a441 100644
+--- a/src-tauri/crates/domain/src/document/tests/mod.rs
++++ b/src-tauri/crates/domain/src/document/tests/mod.rs
+@@ -1,3 +1,4 @@
++mod number_serialization;
+ mod recursive;
+ 
+ use crate::{Document, DocumentNumber, DocumentSchemaNode, DocumentValue, JsonPointer};
+diff --git a/src-tauri/crates/domain/src/document/tests/recursive.rs b/src-tauri/crates/domain/src/document/tests/recursive.rs
+index c0857579..84c1ee3b 100644
+--- a/src-tauri/crates/domain/src/document/tests/recursive.rs
++++ b/src-tauri/crates/domain/src/document/tests/recursive.rs
+@@ -17,7 +17,7 @@ fn json_value_tree_round_trips_standard_json_and_uses_last_duplicate_key() {
+     .expect("recursive JSON document");
+     assert_eq!(
+         document.to_json().expect("encode recursive JSON"),
+-        r#"{"active":true,"amount":12.5,"missing":null,"name":"merchant","nested":{"items":[1.0,"two",false]}}"#
++        r#"{"active":true,"amount":12.5,"missing":null,"name":"merchant","nested":{"items":[1,"two",false]}}"#
+     );
+ 
+     let duplicate = Document::parse_json(r#"{"value":1,"value":2}"#)
+@@ -124,7 +124,7 @@ fn set_clear_insert_and_append_have_strict_existing_parent_semantics() {
+         .unwrap();
+     assert_eq!(
+         serde_json::to_value(document).unwrap(),
+-        json!({"object": {"new": true}, "array": [2.0, 3.0, null]})
++        json!({"object": {"new": true}, "array": [2, 3, null]})
+     );
+ 
+     let mut document = Document::new(DocumentValue::Object(BTreeMap::new()));
+diff --git a/src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs b/src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs
+index e1251cd3..1929f0ac 100644
+--- a/src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs
++++ b/src-tauri/crates/domain/tests/phase5_unified_rule_domain.rs
+@@ -377,7 +377,7 @@ fn wildcard_insert_and_append_apply_to_every_matched_array() {
+ 
+     assert_eq!(
+         serde_json::to_value(document).unwrap(),
+-        serde_json::json!({"groups": [{"items": [1.0, 2.0, 3.0]}, {"items": [1.0, 3.0]}]})
++        serde_json::json!({"groups": [{"items": [1, 2, 3]}, {"items": [1, 3]}]})
+     );
+ }
+ 
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
+index 10c60046..4faf2b31 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
+@@ -99,6 +99,8 @@ fn workspace_with_http_rules(
+     workspace
+ }
+ 
++#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
++mod cps_checksum_wire;
+ #[path = "phase10_http_pipeline/live_plain_hot_replacement.rs"]
+ mod live_plain_hot_replacement;
+ #[path = "phase10_http_pipeline/local_http_response.rs"]
+@@ -107,8 +109,6 @@ mod local_http_response;
+ mod plain_json_rules;
+ #[path = "phase10_http_pipeline/production_shape.rs"]
+ mod production_shape;
+-#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
+-mod cps_checksum_wire;
+ #[path = "phase10_http_pipeline/real_wasm_finalize_wire.rs"]
+ mod real_wasm_finalize_wire;
+ #[path = "phase10_http_pipeline/request_metadata.rs"]
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs
+index 1e135f51..7e89bc61 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/cps_checksum_wire.rs
+@@ -167,9 +167,15 @@ async fn real_cps_wasm_resigns_modified_pay_response_on_app_wire() {
+     let actual: serde_json::Value = serde_json::from_slice(&app_response.body).unwrap();
+     assert_eq!(actual["data"]["result"]["amount"].as_f64(), Some(250.0));
+     assert_eq!(actual["data"]["sign"], EXPECTED_SIGN);
+-    after["data"]["result"]["amount"] = actual["data"]["result"]["amount"].clone();
+     after["data"]["sign"] = serde_json::json!(EXPECTED_SIGN);
+-    assert_json_semantically_eq(&actual, &after, "Java pay-after document");
++    assert_eq!(actual, after, "Java pay-after document");
++    let app_body = std::str::from_utf8(&app_response.body).unwrap();
++    println!("CPS final application body={app_body}");
++    // Finalize emits compact JSON after replacing the signature.
++    assert!(app_body.contains("\"amount\":250"));
++    assert!(app_body.contains("\"amountRmb\":0"));
++    assert!(!app_body.contains("\"amount\":250.0"));
++    assert!(!app_body.contains("\"amountRmb\":0.0"));
+     assert_only_amount_and_sign_changed(&before, &actual);
+     assert_eq!(rules.commit_attempts.load(Ordering::SeqCst), 1);
+     let committed = rules.snapshot.lock().clone();
+@@ -255,36 +261,9 @@ fn repository_root() -> PathBuf {
+ 
+ fn assert_only_amount_and_sign_changed(before: &serde_json::Value, actual: &serde_json::Value) {
+     let mut expected = before.clone();
+-    expected["data"]["result"]["amount"] = actual["data"]["result"]["amount"].clone();
++    expected["data"]["result"]["amount"] = serde_json::json!(250);
+     expected["data"]["sign"] = serde_json::json!(EXPECTED_SIGN);
+-    assert_json_semantically_eq(actual, &expected, "amount and sign delta");
+-}
+-
+-fn assert_json_semantically_eq(
+-    actual: &serde_json::Value,
+-    expected: &serde_json::Value,
+-    context: &str,
+-) {
+-    let mut actual = actual.clone();
+-    let mut expected = expected.clone();
+-    normalize_numbers(&mut actual);
+-    normalize_numbers(&mut expected);
+-    assert_eq!(actual, expected, "{context}");
+-}
+-
+-fn normalize_numbers(value: &mut serde_json::Value) {
+-    match value {
+-        serde_json::Value::Number(number) => {
+-            *number = serde_json::Number::from_f64(number.as_f64().unwrap()).unwrap();
+-        }
+-        serde_json::Value::Array(values) => {
+-            values.iter_mut().for_each(normalize_numbers);
+-        }
+-        serde_json::Value::Object(values) => {
+-            values.values_mut().for_each(normalize_numbers);
+-        }
+-        serde_json::Value::Null | serde_json::Value::Bool(_) | serde_json::Value::String(_) => {}
+-    }
++    assert_eq!(actual, &expected, "amount and sign delta");
+ }
+ 
+ #[allow(clippy::too_many_arguments)]
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs
+index 7e87943f..ed775f23 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/plain_json_rules.rs
+@@ -86,8 +86,8 @@ async fn plain_http_json_body_matches_manual_pointer_on_request_and_response() {
+         .await
+         .unwrap();
+     assert_eq!(
+-        serde_json::from_slice::<serde_json::Value>(&request_message.body).unwrap(),
+-        json!({"customer":{"age":42.0,"result":"request"}})
++        request_message.body.as_ref(),
++        br#"{"customer":{"age":42,"amount":2.5,"code":"2.0","items":[0,1,2],"result":"request"}}"#
+     );
+ 
+     let response_context = nested_json_context("HTTP/1.1 200 OK");
+@@ -111,9 +111,116 @@ async fn plain_http_json_body_matches_manual_pointer_on_request_and_response() {
+         .await
+         .unwrap();
+     assert_eq!(
+-        serde_json::from_slice::<serde_json::Value>(&response_message.body).unwrap(),
+-        json!({"customer":{"age":42.0,"result":"response"}})
++        response_message.body.as_ref(),
++        br#"{"customer":{"age":42,"amount":2.5,"code":"2.0","items":[0,1,2],"result":"response"}}"#
+     );
++    println!(
++        "{}",
++        json!({
++            "plain_http_number_wire": {
++                "request_input": request_context.body,
++                "request_output": std::str::from_utf8(&request_message.body).unwrap(),
++                "response_input": response_context.body,
++                "response_output": std::str::from_utf8(&response_message.body).unwrap(),
++            }
++        })
++    );
++}
++
++#[tokio::test]
++async fn plain_http_preserves_original_json_without_an_effective_document_change() {
++    let listener = ProxyListener::default();
++    let no_match = http_rule(
++        &listener,
++        "plain no match",
++        1,
++        1,
++        Condition::Document {
++            path: JsonPointer::parse("/customer/age").unwrap(),
++            predicate: DocumentPredicate::Number(intercept_proxy_domain::NumberPredicate {
++                operator: intercept_proxy_domain::NumberOperator::Equal,
++                value: intercept_proxy_domain::DocumentNumber::new(99.0).unwrap(),
++            }),
++        },
++        UnifiedAction::Document(DocumentMutation::Set {
++            path: JsonPointer::parse("/customer/result").unwrap().into(),
++            value: DocumentValue::String("changed".into()),
++        }),
++    );
++    let same_value = http_rule(
++        &listener,
++        "plain same value",
++        1,
++        1,
++        Condition::Document {
++            path: JsonPointer::parse("/customer/age").unwrap(),
++            predicate: DocumentPredicate::Number(intercept_proxy_domain::NumberPredicate {
++                operator: intercept_proxy_domain::NumberOperator::Equal,
++                value: intercept_proxy_domain::DocumentNumber::new(42.0).unwrap(),
++            }),
++        },
++        UnifiedAction::Document(DocumentMutation::Set {
++            path: JsonPointer::parse("/customer/age").unwrap().into(),
++            value: DocumentValue::integer(42).unwrap(),
++        }),
++    );
++
++    for (index, rules) in [Vec::new(), vec![no_match], vec![same_value]]
++        .into_iter()
++        .enumerate()
++    {
++        assert_plain_request_body(&listener, rules, index as u128).await;
++    }
++}
++
++async fn assert_plain_request_body(
++    listener: &ProxyListener,
++    rules: Vec<RuleDefinition>,
++    identity_offset: u128,
++) {
++    let workspace = workspace_with_http_rules(listener, rules);
++    let snapshot = prepared_plain_snapshot(&workspace, listener).await;
++    let repository = Arc::new(Phase10ActorRules {
++        snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity_and_order(
++            Some(workspace.id.as_uuid()),
++            workspace.revision.get(),
++            workspace.rule_definitions.clone(),
++            workspace.runtime_rule_execution_order(),
++        )),
++        commit_attempts: AtomicUsize::new(0),
++    });
++    let pipeline = actor_pipeline(&snapshot, repository);
++    let identity = HttpConnectionIdentity {
++        runtime_epoch: Uuid::from_u128(1_050 + identity_offset),
++        connection_id: Uuid::from_u128(1_060 + identity_offset),
++        peer: "127.0.0.1:1902".into(),
++    };
++    pipeline.runtime_started(identity.runtime_epoch).await;
++    let connection = actor_context(&snapshot, &identity);
++    pipeline.connection_opened(&connection).await;
++    let context = nested_json_context("POST /customer HTTP/1.1");
++    let mut upstream = snapshot.create_upstream(identity).unwrap();
++    let document = upstream.decode.decode(&context).await.unwrap();
++    let mut message = Message::from_raw_http1_head(
++        context.header.as_bytes(),
++        Bytes::copy_from_slice(&context.wire_body),
++    )
++    .unwrap();
++
++    upstream
++        .prepare
++        .prepare(
++            &connection,
++            &http_request_metadata(),
++            &mut message,
++            &context,
++            &document,
++            &pipeline,
++        )
++        .await
++        .unwrap();
++
++    assert_eq!(message.body.as_ref(), context.wire_body.as_slice());
+ }
+ 
+ #[tokio::test]
+@@ -154,7 +261,7 @@ async fn plain_http_document_rule_rejects_invalid_json_without_fallback() {
+ }
+ 
+ fn nested_json_context(start_line: &str) -> HttpContext {
+-    let body = br#"{"customer":{"age":42}}"#;
++    let body = br#"{"customer":{"age":42,"amount":2.5,"code":"2.0","items":[0,1,2]}}"#;
+     HttpContext {
+         header: format!("{start_line}\r\nContent-Type: application/json; charset=utf-8\r\n\r\n"),
+         body: String::from_utf8(body.to_vec()).unwrap(),
+diff --git a/src-tauri/crates/package-runtime/tests/repository_components.rs b/src-tauri/crates/package-runtime/tests/repository_components.rs
+index 8c711dc6..f9d0adf3 100644
+--- a/src-tauri/crates/package-runtime/tests/repository_components.rs
++++ b/src-tauri/crates/package-runtime/tests/repository_components.rs
+@@ -115,6 +115,11 @@ async fn assert_iso8583_deno_replay(runtime: &mut WasmPackageRuntime) {
+         .decode_socket(ProtocolDirection::Upstream, &frame)
+         .await
+         .expect("decode ISO8583 Deno replay vector");
++    let document_json = document
++        .to_json()
++        .expect("serialize ISO8583 Deno Host Document");
++    assert!(document_json.contains("\"amount\":1000"));
++    assert!(!document_json.contains("\"amount\":1000.0"));
+     let html = runtime
+         .display(ProtocolDirection::Upstream, &document)
+         .await
+diff --git a/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json b/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json
+index 86cc1d07..6110f63a 100644
+--- a/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json
++++ b/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json
+@@ -234,7 +234,7 @@
+       "nested": "value"
+     },
+     [
+-      0.0
++      0
+     ]
+   ],
+   "terminal_action_fields": {
+diff --git a/src-tauri/crates/domain/src/document/tests/number_serialization.rs b/src-tauri/crates/domain/src/document/tests/number_serialization.rs
+new file mode 100644
+index 00000000..8e88a05b
+--- /dev/null
++++ b/src-tauri/crates/domain/src/document/tests/number_serialization.rs
+@@ -0,0 +1,127 @@
++use super::*;
++use crate::ErrorCode;
++
++#[test]
++fn document_number_retains_the_existing_negative_zero_representation() {
++    for input in ["-0", "-0.0"] {
++        let document = Document::parse_json(input).unwrap();
++        assert_eq!(document.to_json().unwrap(), "-0.0");
++        let number: DocumentNumber = serde_json::from_str(input).unwrap();
++        assert!(number.get().is_sign_negative());
++        assert_eq!(serde_json::to_string(&number).unwrap(), "-0.0");
++        assert_eq!(
++            serde_json::to_value(number)
++                .unwrap()
++                .as_f64()
++                .unwrap()
++                .to_bits(),
++            (-0.0_f64).to_bits()
++        );
++    }
++}
++
++#[test]
++fn document_integral_numbers_serialize_as_integer_tokens_at_every_json_boundary() {
++    for (input, expected) in [
++        ("0", "0"),
++        ("0.0", "0"),
++        ("1", "1"),
++        ("2.0", "2"),
++        ("-2.0", "-2"),
++        ("100.00", "100"),
++        ("1e2", "100"),
++        ("9007199254740991", "9007199254740991"),
++        ("-9007199254740991", "-9007199254740991"),
++    ] {
++        let parsed = Document::parse_json(input).unwrap();
++        let deserialized: Document = serde_json::from_str(input).unwrap();
++        let number: DocumentNumber = serde_json::from_str(input).unwrap();
++        let constructed = Document::new(DocumentValue::Number(
++            DocumentNumber::new(number.get()).unwrap(),
++        ));
++        for document in [&parsed, &deserialized, &constructed] {
++            assert_eq!(document.to_json().unwrap(), expected, "{input}");
++            assert_eq!(
++                serde_json::to_string(document).unwrap(),
++                expected,
++                "{input}"
++            );
++            let value = serde_json::to_value(document).unwrap();
++            assert!(value.is_i64(), "{input}: {value:?}");
++            assert_eq!(value.to_string(), expected, "{input}");
++            assert_eq!(
++                serde_json::from_value::<Document>(value).unwrap(),
++                *document
++            );
++        }
++        assert_eq!(serde_json::to_string(&number).unwrap(), expected, "{input}");
++    }
++}
++
++#[test]
++fn document_fractional_numbers_keep_their_values_without_rounding() {
++    for value in [
++        2.5,
++        -2.5,
++        0.1,
++        f64::MIN_POSITIVE,
++        f64::from_bits(1),
++        -f64::from_bits(1),
++        f64::from_bits(1.0_f64.to_bits() - 1),
++        f64::from_bits(1.0_f64.to_bits() + 1),
++        4_503_599_627_370_495.5,
++    ] {
++        let number = DocumentNumber::new(value).unwrap();
++        let serialized = serde_json::to_value(number).unwrap();
++        assert!(serialized.is_f64(), "{value}: {serialized:?}");
++        assert_eq!(serialized.as_f64().unwrap().to_bits(), value.to_bits());
++        assert_eq!(
++            serde_json::to_string(&number).unwrap(),
++            serde_json::to_string(&value).unwrap(),
++            "fractional formatting remains unchanged"
++        );
++    }
++}
++
++#[test]
++fn document_nested_numbers_normalize_without_changing_strings_or_other_types() {
++    let document = Document::parse_json(
++        r#"{"array":[0,1,2.0,2.5,"2.0",true,null],"object":{"count":2,"decimal":-2.5}}"#,
++    )
++    .unwrap();
++    let expected = r#"{"array":[0,1,2,2.5,"2.0",true,null],"object":{"count":2,"decimal":-2.5}}"#;
++    assert_eq!(document.to_json().unwrap(), expected);
++    assert_eq!(serde_json::to_string(&document).unwrap(), expected);
++    assert_eq!(
++        serde_json::to_value(&document).unwrap(),
++        serde_json::from_str::<serde_json::Value>(expected).unwrap()
++    );
++
++    let bytes = DocumentValue::byte_array([0, 1, 255]);
++    assert_eq!(serde_json::to_string(&bytes).unwrap(), "[0,1,255]");
++    let integer = DocumentValue::integer(-2).unwrap();
++    assert_eq!(serde_json::to_string(&integer).unwrap(), "-2");
++}
++
++#[test]
++fn document_number_serialization_does_not_relax_invalid_number_rejection() {
++    for value in [f64::NAN, f64::INFINITY, f64::NEG_INFINITY] {
++        assert_eq!(
++            DocumentNumber::new(value).unwrap_err().code,
++            ErrorCode::DocumentNumberInvalid
++        );
++    }
++    for input in [
++        "9007199254740992",
++        "-9007199254740992",
++        "9007199254740992.0",
++        "1e20",
++    ] {
++        assert_eq!(
++            Document::parse_json(input).unwrap_err().code,
++            ErrorCode::DocumentUnsafeInteger
++        );
++        assert!(serde_json::from_str::<DocumentNumber>(input).is_err());
++        assert!(serde_json::from_str::<Document>(input).is_err());
++    }
++}
+diff --git a/src-tauri/crates/package-runtime/tests/http_document_number_wire.rs b/src-tauri/crates/package-runtime/tests/http_document_number_wire.rs
+new file mode 100644
+index 00000000..f6b5493b
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/http_document_number_wire.rs
+@@ -0,0 +1,91 @@
++use std::path::{Path, PathBuf};
++
++use intercept_proxy_domain::{DocumentValue, JsonPointer, ProtocolDirection};
++use intercept_proxy_package_runtime::{WasmPackageRuntime, read_package_component};
++
++const ORIGINAL: &str = " { \"integer\": 2.0, \"fraction\": 2.5, \"text\": \"2.0\", \"values\": [0.0, 1, 2.5], \"result\": \"old\" }\n";
++const CHANGED: &str = r#"{
++  "fraction": 2.5,
++  "integer": 2,
++  "result": "changed",
++  "text": "2.0",
++  "values": [
++    0,
++    1,
++    2.5
++  ]
++}"#;
++
++fn repository_root() -> PathBuf {
++    PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..")
++}
++
++async fn load_runtime(relative_path: &Path) -> WasmPackageRuntime {
++    let bytes = std::fs::read(repository_root().join(relative_path)).unwrap();
++    let package = read_package_component(&bytes).unwrap();
++    WasmPackageRuntime::load(&package).await.unwrap()
++}
++
++#[tokio::test]
++async fn actual_json_pretty_and_cps_hosts_emit_integral_numbers_without_decimal_suffixes() {
++    for package in [
++        Path::new("examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm"),
++        Path::new("examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm"),
++    ] {
++        let mut runtime = load_runtime(package).await;
++        for direction in [ProtocolDirection::Upstream, ProtocolDirection::Downstream] {
++            let unchanged = runtime.decode_http(direction, ORIGINAL).await.unwrap();
++            assert_eq!(
++                runtime
++                    .encode_http(direction, ORIGINAL, &unchanged)
++                    .await
++                    .unwrap(),
++                ORIGINAL,
++                "unchanged input must retain its original bytes for {package:?} {direction:?}"
++            );
++
++            let mut same_value = unchanged.clone();
++            same_value
++                .set(
++                    &JsonPointer::property("integer"),
++                    DocumentValue::integer(2).unwrap(),
++                )
++                .unwrap();
++            assert_eq!(
++                runtime
++                    .encode_http(direction, ORIGINAL, &same_value)
++                    .await
++                    .unwrap(),
++                ORIGINAL,
++                "same-value Set must retain original bytes for {package:?} {direction:?}"
++            );
++
++            let mut changed = unchanged;
++            changed
++                .set(
++                    &JsonPointer::property("result"),
++                    DocumentValue::String("changed".into()),
++                )
++                .unwrap();
++            let encoded = runtime
++                .encode_http(direction, ORIGINAL, &changed)
++                .await
++                .unwrap();
++            println!(
++                "{}",
++                serde_json::json!({
++                    "package": package,
++                    "direction": format!("{direction:?}"),
++                    "original": ORIGINAL,
++                    "document_json": changed.to_json().unwrap(),
++                    "encoded": encoded,
++                    "expected": CHANGED,
++                })
++            );
++            assert_eq!(
++                encoded, CHANGED,
++                "changed body must use canonical integer JSON for {package:?} {direction:?}"
++            );
++        }
++    }
++}

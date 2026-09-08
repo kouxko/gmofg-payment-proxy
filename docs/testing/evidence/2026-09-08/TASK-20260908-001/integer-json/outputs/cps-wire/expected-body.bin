@@ -1,0 +1,1 @@
+{"data":{"errorCode":"","errorInfo":null,"result":{"amount":250,"amountRmb":0,"currencyCode":"JPY","extendedInfo":"paired","orderDetailId":"PAIR-D","orderId":"PAIR-O","payType":"99","transStatus":"PAY_SUCCESS","transTime":"20260907123456"},"sign":"F070F340438D40D0BC07295E241EE519","subErrorCode":""},"meta":{"code":"00","message":"OK"}}

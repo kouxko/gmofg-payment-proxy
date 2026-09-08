@@ -1,0 +1,104 @@
+[
+  {
+    "name": "legacy_http_rules_collection",
+    "pointer": "/workspace/http_rules",
+    "operation": "add",
+    "value": []
+  },
+  {
+    "name": "legacy_protocol_rules_collection",
+    "pointer": "/workspace/protocol_rules",
+    "operation": "add",
+    "value": []
+  },
+  {
+    "name": "http_rule_legacy_request_stage",
+    "pointer": "/workspace/rules/0/stage",
+    "operation": "replace",
+    "value": "request"
+  },
+  {
+    "name": "http_rule_legacy_response_stage",
+    "pointer": "/workspace/rules/1/stage",
+    "operation": "replace",
+    "value": "response"
+  },
+  {
+    "name": "truncate_uses_after_bytes",
+    "pointer": "/workspace/rules/11/content/value/action/value/TruncateResponse",
+    "operation": "replace",
+    "value": {
+      "after_bytes": 1
+    }
+  },
+  {
+    "name": "disconnect_uses_bytes",
+    "pointer": "/workspace/rules/5/content/value/action/value/DisconnectDuringUpstreamWrite",
+    "operation": "replace",
+    "value": {
+      "bytes": 1
+    }
+  },
+  {
+    "name": "terminal_alternate_tag",
+    "pointer": "/workspace/rules/11/content/value/action/value",
+    "operation": "replace",
+    "value": {
+      "truncate_response": {
+        "bytes": 1
+      }
+    }
+  },
+  {
+    "name": "weak_network_scalar",
+    "pointer": "/workspace/android_network_profiles/0/weak_network",
+    "operation": "replace",
+    "value": 1
+  },
+  {
+    "name": "weak_network_zero_upload_rate",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/upload_bytes_per_second",
+    "operation": "replace",
+    "value": 0
+  },
+  {
+    "name": "weak_network_basis_over_10000",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/random_loss_basis_points",
+    "operation": "replace",
+    "value": 10001
+  },
+  {
+    "name": "weak_network_nth_zero",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/nth_tcp_flag_drops/0/nth",
+    "operation": "replace",
+    "value": 0
+  },
+  {
+    "name": "weak_network_mtu_too_small",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/path_mtu/mtu",
+    "operation": "replace",
+    "value": 67
+  },
+  {
+    "name": "weak_network_mss_zero",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/path_mtu/mss_clamp",
+    "operation": "replace",
+    "value": 0
+  },
+  {
+    "name": "weak_network_mss_equal_mtu",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/path_mtu",
+    "operation": "replace",
+    "value": {
+      "mtu": 1280,
+      "mss_clamp": 1280,
+      "mode": "pass"
+    }
+  },
+  {
+    "name": "weak_network_bits_over_64",
+    "pointer": "/workspace/android_network_profiles/0/weak_network/corruption/bits_per_packet",
+    "operation": "replace",
+    "value": 65
+  }
+]

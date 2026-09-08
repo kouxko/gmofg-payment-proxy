@@ -1,11 +1,11 @@
 use super::{DocumentMatchPath, DocumentMatchToken, JsonPointer};
 use crate::{DomainError, ErrorCode};
-use serde::{Deserialize, Deserializer, Serialize, de::Visitor};
+use serde::{Deserialize, Deserializer, Serialize, Serializer, de::Visitor};
 use specta::Type;
 use std::{collections::BTreeMap, fmt};
 
 /// JavaScript `Number` compatible finite numeric value.
-#[derive(Clone, Copy, Debug, PartialEq, Serialize, Type)]
+#[derive(Clone, Copy, Debug, PartialEq, Type)]
 #[specta(type = specta_typescript::Number)]
 pub struct DocumentNumber(f64);
 
@@ -45,6 +45,19 @@ impl DocumentNumber {
     #[allow(clippy::cast_precision_loss)]
     const fn from_safe_u64(value: u64) -> Self {
         Self(value as f64)
+    }
+}
+
+impl Serialize for DocumentNumber {
+    #[allow(clippy::cast_possible_truncation)]
+    fn serialize<S: Serializer>(&self, serializer: S) -> Result<S::Ok, S::Error> {
+        // Construction guarantees that integral values fit within the safe i64 range.
+        // Preserve the existing negative-zero representation.
+        if self.0.fract() == 0.0 && !(self.0 == 0.0 && self.0.is_sign_negative()) {
+            serializer.serialize_i64(self.0 as i64)
+        } else {
+            serializer.serialize_f64(self.0)
+        }
     }
 }
 

@@ -1,0 +1,4 @@
+Task scan:architecture deno test -A scripts/runtime-crate-dependencies.test.mjs && deno task scan:architecture-docs && deno task scan:architecture-boundaries && deno run -A scripts/check-runtime-architecture.mjs --require-zero-debt && deno run -A scripts/check-socket-relay-boundaries.mjs && deno task scan:frontend-boundaries
+Task scan:architecture-docs deno run -A scripts/check-architecture-docs.mjs
+Task scan:architecture-boundaries deno run -A scripts/check-architecture-boundaries.mjs
+Task scan:frontend-boundaries deno run -A scripts/check-frontend-boundaries.mjs

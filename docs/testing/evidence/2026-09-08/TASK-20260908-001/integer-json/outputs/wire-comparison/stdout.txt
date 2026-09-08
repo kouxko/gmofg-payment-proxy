@@ -1,0 +1,1 @@
+{"result": "PASS", "comparison": "exact final application body bytes vs Java pay-after fixture", "amount": 250, "amountRmb": 0, "signature": "F070F340438D40D0BC07295E241EE519", "body_bytes": 337, "body_sha256": "ca04cc545c8fa408c8660e5e85672ec6dcbe64fa6ad8394894a4bb4b4e8f4e90", "content_length_correct": true, "tcp_chunks_reassemble_exactly": true, "listener_cleaned_up": true}
