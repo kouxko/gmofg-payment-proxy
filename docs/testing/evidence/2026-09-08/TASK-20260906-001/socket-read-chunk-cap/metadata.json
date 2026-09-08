@@ -1,0 +1,66 @@
+{
+  "task_id": "TASK-20260906-001",
+  "case_id": "socket-read-chunk-cap",
+  "status": "PASS",
+  "recorded_at": "2026-09-08 11:06:41 +08:00",
+  "purpose": "1 MiB读取上限确认后实现与回归",
+  "source": "current user explicit confirmation",
+  "user_confirmation": "1. 可以\n2. 可以\n3. gitlab\n4. 手动验收合格",
+  "not_applicable": {
+    "ui": "N/A no UI production change; frontend consumer typecheck performed",
+    "business_frame_decode_rules_encode": "N/A limit validation and transparent raw Socket relay do not execute framed protocol rules; no Frame limit change",
+    "tls_certificates": "N/A plain loopback TCP only",
+    "pcap": "N/A no packet sniffer; input/output byte equality and counters are asserted inside executed test and summarized as assertion-based evidence",
+    "external_ci_device": "N/A this cap delta has no remote CI/device scope"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260906-001",
+    "case_id": "socket-resource-limits",
+    "evidence_path": "docs/testing/evidence/2026-09-06/TASK-20260906-001/socket-resource-limits"
+  },
+  "finished_at": "2026-09-08 11:34:27 +08:00",
+  "result": {
+    "targeted_tests": 6,
+    "affected_test_groups": 14,
+    "affected_tests_passed": 1111,
+    "failed": 0,
+    "ignored": 0,
+    "static_checks": [
+      "fmt",
+      "bindings",
+      "architecture",
+      "source-size",
+      "typecheck",
+      "workspace clippy -D warnings"
+    ],
+    "source_files_stable": 1181
+  },
+  "replay": "replay/run.sh",
+  "state_record": "outputs/source-inventory.json + source-stability.json; resources/source-inputs.tar.gz is exact tracked source/fixture snapshot",
+  "environment": "outputs/environment.json",
+  "resources": [
+    {
+      "path": "resources/source-inputs.tar.gz",
+      "source": "current tracked src-tauri/src/scripts/templates",
+      "purpose": "actual source and fixture inputs used by Rust and static checks",
+      "required": true
+    },
+    {
+      "path": "resources/requirements.md",
+      "source": "docs/requirements.md",
+      "purpose": "current 1 MiB contract snapshot verified by architecture/static checks and direct comparison",
+      "required": true
+    }
+  ],
+  "review": {
+    "reviewer": "quick_build_review",
+    "code_findings": {
+      "p0": 0,
+      "p1": 0,
+      "p2": 0
+    },
+    "status": "APPROVE",
+    "reviewed_at": "2026-09-08 11:39:16 +08:00"
+  },
+  "task_closed_at": "2026-09-08 11:39:16 +08:00"
+}

@@ -1,0 +1,10 @@
+{
+  "system": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "architecture": "arm64",
+  "tools": {
+    "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+    "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+    "deno": "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 15.0.245.2-rusty\ntypescript 6.0.3",
+    "macos": "ProductName:\t\tmacOS\nProductVersion:\t\t27.0\nBuildVersion:\t\t26A5425a"
+  }
+}
