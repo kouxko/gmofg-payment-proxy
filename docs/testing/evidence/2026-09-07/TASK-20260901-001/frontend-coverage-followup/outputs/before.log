@@ -1,0 +1,52 @@
+Task check:coverage:frontend vitest run --coverage
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+      Coverage enabled with v8
+
+ ❯ src/features/listeners/listeners-view.certificate-details.test.tsx (9 tests | 1 failed) 68518ms
+     × 导入独立下游身份后只保存受保护引用并显示解析详情 15100ms
+ ❯ src/features/android-network/android-network-view.test.tsx (12 tests | 3 failed) 78836ms
+     × creates a Rust-owned profile and saves selected applications through Rust 15872ms
+     × keeps auto-resume track inside the clickable HeroUI switch hit area 15444ms
+     × sends package-name filters to Rust instead of filtering the inventory in the page 15345ms
+ ❯ src/features/android-network/android-network-view.network-intent.test.tsx (6 tests | 4 failed) 82573ms
+     × starts the complete-outage scene only with the explicit risk confirmation 16022ms
+     × collects multiple transparent proxy routes using current Workspace listeners 20266ms
+     × collects multiple weak-network coverage addresses without treating them as proxy routes 15188ms
+     × collects advanced weak-network intent without validating it in the frontend 12257ms
+ ❯ src/features/rules/rule-definition-editor.test.tsx (12 tests | 5 failed) 99484ms
+     × offers common Method values and hides retired rule capabilities 15909ms
+     × materializes schema-free Body manual path only on Save 15461ms
+     × shows schema root as slash but materializes the empty Rust path 15124ms
+     × hides Document nodes without predicate capability from condition selectors 15322ms
+     × keeps every rule Select value on one clipped line 15175ms
+ ❯ src/features/listeners/listeners-view.test.tsx (21 tests | 2 failed) 129246ms
+     × 使用与 Socket 一致的响应方式下拉切换并保存 HTTP topology 15015ms
+     × 保存 B 时保留新建 A 及其未保存托管证书引用 11365ms
+ ❯ src/features/listeners/listeners-view.transition-races.test.tsx (3 tests | 2 failed) 38927ms
+     × 默认按请求目标转发，并可在同一监听启用固定 Server 15739ms
+     × 叶字段编辑同步取消旧结构转换且迟到响应不能覆盖草稿 21243ms
+ ❯ src/features/listeners/listeners-view.external-refresh.test.tsx (4 tests | 1 failed) 48830ms
+     × resolves only the conflicted listener and preserves another listener draft and certificate 15227ms
+ ❯ src/features/workspaces/workspaces-view.test.tsx (15 tests | 1 failed) 24845ms
+     × creates the named Workspace and refreshes the list 2136ms
+ ❯ src/features/rules/rules-view.test.tsx (13 tests | 2 failed) 55437ms
+     × separates creation metadata, condition, and action into tabs without an enter step 15649ms
+     × uses the same initially-disabled enable switch for Socket creation 9829ms
+ ❯ src/features/rules/rules-view-session-races.test.tsx (2 tests | 2 failed) 20526ms
+     × abandons a materializing creation when New starts another editor session 16031ms
+     × abandons capture draft A when capture draft B has the same rule identity 4493ms
+
+⎯⎯⎯⎯ Unhandled Rejection ⎯⎯⎯⎯⎯
+RangeError: The value of "code" is out of range. It must be an integer. Received NaN
+ ❯ process.set node:process:912:15
+ ❯ process.onExit node_modules/.deno/vitest@4.1.11/node_modules/vitest/dist/chunks/cli-api.CnMVyzaz.js:2057:54
+ ❯ Object.onceWrapper ext:deno_node/_events.mjs:576:12
+ ❯ wrapper node:process:488:19
+ ❯ loop ext:deno_os/40_signals.js:76:7
+
+⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯⎯
+Serialized Error: { code: 'ERR_OUT_OF_RANGE' }
+
+
+

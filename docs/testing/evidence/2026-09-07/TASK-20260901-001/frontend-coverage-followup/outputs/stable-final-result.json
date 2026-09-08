@@ -1,0 +1,10 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "check:coverage:frontend",
+    "--maxWorkers=2"
+  ],
+  "exit_code": 0,
+  "reason_for_repeat": "tsconfig evidence-exclude changed 18 seconds before prior full run ended; repeat on frozen final configuration"
+}

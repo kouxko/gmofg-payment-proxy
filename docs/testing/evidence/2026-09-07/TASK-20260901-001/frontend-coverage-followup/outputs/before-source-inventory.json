@@ -1,0 +1,17 @@
+[
+  "deno.lock",
+  "package.json",
+  "src/features/listeners/socket-listener-model.test.ts",
+  "src/features/listeners/socket-listener-model.ts",
+  "src/features/listeners/socket-listener-settings.test.tsx",
+  "src/features/listeners/socket-listener-settings.tsx",
+  "src/features/listeners/socket-processing-card.test.tsx",
+  "src/features/listeners/socket-processing-card.tsx",
+  "src/features/listeners/socket-protocol-package-dialog.test.tsx",
+  "src/features/listeners/socket-protocol-package-dialog.tsx",
+  "src/features/listeners/socket-security-cards.test-support.tsx",
+  "src/features/listeners/socket-security-cards.test.tsx",
+  "src/features/listeners/socket-security-cards.tsx",
+  "src/features/listeners/socket-working-mode.test.ts",
+  "vitest.config.ts"
+]

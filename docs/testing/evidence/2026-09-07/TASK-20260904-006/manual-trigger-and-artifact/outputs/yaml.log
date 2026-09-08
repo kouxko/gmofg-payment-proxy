@@ -1,0 +1,2 @@
+error: Import "js-yaml" not a dependency
+  hint: If you want to use the npm package, try running `deno add npm:js-yaml`

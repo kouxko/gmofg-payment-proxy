@@ -1,0 +1,12 @@
+{
+  "head": "fa4e154f",
+  "current_base": "caa36022",
+  "paths": [
+    "src/features/listeners",
+    "vitest.config.ts"
+  ],
+  "byte_content_diff": "NONE",
+  "coverage_source": "run 34025792017 / coverage-reports",
+  "local_first_attempt": "Aborted after test timeouts under simultaneous release compile; not a complete coverage result; SIGINT yielded Deno code NaN rejection",
+  "next_step": "Add missing outcome cases without changing source/thresholds, rerun with limited test workers after build"
+}

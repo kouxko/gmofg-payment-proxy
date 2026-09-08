@@ -1,0 +1,23 @@
+{
+  "historical_run": 34025792017,
+  "before": {
+    "covered": 283,
+    "total": 325,
+    "pct": 87.07
+  },
+  "after": {
+    "covered": 302,
+    "total": 325,
+    "pct": 92.92
+  },
+  "threshold": 90,
+  "threshold_unchanged": true,
+  "test_files": 73,
+  "tests_passed": 560,
+  "failed": 0,
+  "typecheck": "PASS",
+  "all_src_typescript_included": 208,
+  "source_archive_file_count": 220,
+  "source_byte_comparison": "PASS",
+  "configuration_frozen_during_final_run": true
+}

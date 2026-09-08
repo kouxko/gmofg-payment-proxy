@@ -1,0 +1,8 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "check:coverage:frontend"
+  ],
+  "exit_code": 1
+}
