@@ -7,6 +7,7 @@
 
 | 任务 | 用例 | 内容 | 结果 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260908-004 | merge-windows-build | 1.0.1顺序合并与Windows实际构建 | RUNNING | TASK-20260908-003 | release-version | [父证据](2026-09-08/TASK-20260908-003/release-version/README.md) | [证据](2026-09-08/TASK-20260908-004/merge-windows-build/README.md) |
 | TASK-20260908-003 | release-version | 1.0.1发布分支与版本一致性 | PASS_MR_MERGEABLE_CI_SKIPPED | TASK-20260908-002 | version-1-0-1 | [父证据](2026-09-08/TASK-20260908-002/version-1-0-1/README.md) | [证据](2026-09-08/TASK-20260908-003/release-version/README.md) |
 | TASK-20260908-002 | version-1-0-1 | 主APK版本101/1.0.1与MR交付验证 | FINAL_VERSION_101_BUILD_PASS | TASK-20260908-002 | local-build | [父证据](2026-09-08/TASK-20260908-002/local-build/README.md) | [证据](2026-09-08/TASK-20260908-002/version-1-0-1/README.md) |
 | TASK-20260908-002 | local-build | allowBypass四ABI构建/45单元/签名与实际DEX | PASS_WITH_5_LINT_WARNINGS | 无 | 无 | 无 | [证据](2026-09-08/TASK-20260908-002/local-build/README.md) |
