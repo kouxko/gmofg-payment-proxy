@@ -35,6 +35,7 @@ pub(super) fn build_capabilities<D: Direction>(
             observed,
             marker: PhantomData,
         }),
+        Box::new(intercept_proxy_runtime::NoopHttpFinalize),
     )
 }
 

@@ -35,8 +35,10 @@ mod socket_bindings {
     });
 }
 
+mod finalize;
 mod host;
 
+use finalize::{HttpFinalizeExports, OptionalHttpFinalizeIndices};
 pub use host::HostWebSocket;
 use host::{HostState, host_state};
 
@@ -54,6 +56,7 @@ enum PackageInstance {
     Http {
         store: Store<HostState>,
         bindings: http_bindings::HttpPackage,
+        finalize: HttpFinalizeExports,
     },
     Socket {
         store: Store<HostState>,
@@ -132,14 +135,27 @@ impl WasmPackageRuntime {
         }
         let mut store = Store::new(&engine, host_state()?);
         let instance = match package.manifest().kind() {
-            PackageKind::Http => PackageInstance::Http {
-                bindings: http_bindings::HttpPackage::instantiate_async(
-                    &mut store, &component, &linker,
-                )
-                .await
-                .map_err(|error| invalid_component(error.to_string()))?,
-                store,
-            },
+            PackageKind::Http => {
+                let instance_pre = linker
+                    .instantiate_pre(&component)
+                    .map_err(|error| invalid_component(error.to_string()))?;
+                let finalize = OptionalHttpFinalizeIndices::new(&component)?;
+                let bindings = http_bindings::HttpPackageIndices::new(&instance_pre)
+                    .map_err(|error| invalid_component(error.to_string()))?;
+                let instance = instance_pre
+                    .instantiate_async(&mut store)
+                    .await
+                    .map_err(|error| invalid_component(error.to_string()))?;
+                let bindings = bindings
+                    .load(&mut store, &instance)
+                    .map_err(|error| invalid_component(error.to_string()))?;
+                let finalize = finalize.load(&mut store, &instance)?;
+                PackageInstance::Http {
+                    store,
+                    bindings,
+                    finalize,
+                }
+            }
             PackageKind::Socket => PackageInstance::Socket {
                 bindings: socket_bindings::SocketPackage::instantiate_async(
                     &mut store, &component, &linker,
@@ -198,7 +214,10 @@ impl WasmPackageRuntime {
         direction: ProtocolDirection,
         input: &str,
     ) -> Result<Document, DomainError> {
-        let PackageInstance::Http { store, bindings } = &mut self.instance else {
+        let PackageInstance::Http {
+            store, bindings, ..
+        } = &mut self.instance
+        else {
             return Err(invalid_component(
                 "Socket protocol packages do not export HTTP decode hooks",
             ));
@@ -240,7 +259,10 @@ impl WasmPackageRuntime {
         document: &Document,
     ) -> Result<String, DomainError> {
         let document_json = document_json(document)?;
-        let PackageInstance::Http { store, bindings } = &mut self.instance else {
+        let PackageInstance::Http {
+            store, bindings, ..
+        } = &mut self.instance
+        else {
             return Err(invalid_component(
                 "Socket protocol packages do not export HTTP encode hooks",
             ));
@@ -298,7 +320,9 @@ impl WasmPackageRuntime {
     ) -> Result<String, DomainError> {
         let document_json = document_json(document)?;
         match &mut self.instance {
-            PackageInstance::Http { store, bindings } => match direction {
+            PackageInstance::Http {
+                store, bindings, ..
+            } => match direction {
                 ProtocolDirection::Upstream => {
                     bindings.call_upstream_display(store, &document_json).await
                 }

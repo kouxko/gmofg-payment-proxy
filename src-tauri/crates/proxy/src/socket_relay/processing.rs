@@ -4,8 +4,7 @@ use std::net::SocketAddr;
 use async_trait::async_trait;
 use intercept_proxy_exchange::{
     Decode, Direction, Display, Downstream, Encode, Error, ExternalPackageCallFailure, Frame,
-    HttpAction, MatchContext, PrepareWrite, Rules, SequentialPrepare, Socket, SocketContext,
-    Upstream,
+    PrepareWrite, Rules, SequentialPrepare, Socket, SocketContext, Upstream,
 };
 use uuid::Uuid;
 
@@ -43,19 +42,6 @@ pub enum JointRuleConditionEvaluation {
 pub trait SocketJointEvaluation: Send + Sync {
     fn gate(&mut self, rule_id: Uuid) -> crate::Result<JointRuleConditionEvaluation>;
     async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
-}
-
-#[async_trait]
-pub trait HttpJointEvaluation: Send + Sync {
-    fn gate(
-        &mut self,
-        rule_id: Uuid,
-        context: &MatchContext<'_>,
-        message: &mut crate::Message,
-        apply_action: &mut dyn FnMut(&mut crate::Message, &HttpAction) -> crate::Result<()>,
-    ) -> crate::Result<JointRuleConditionEvaluation>;
-
-    async fn encode(self: Box<Self>, message: &mut crate::Message) -> Result<(), Error>;
 }
 
 /// Factory 创建连接级 processor 时收到的稳定、无 payload 身份信息。

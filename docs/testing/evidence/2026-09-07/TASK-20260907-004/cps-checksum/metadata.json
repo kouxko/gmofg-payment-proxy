@@ -1,0 +1,26 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260907-004",
+  "case_id": "cps-checksum",
+  "created_at": "2026-09-07 18:06:22 +08:00",
+  "result": "PASS_LOCAL_CPS_JAVA_HOST_HTTP_REVIEW",
+  "runner": {
+    "session_id": "01a07a73-66e1-7a21-9ebb-ce0a5556fd46"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260907-001",
+    "case_id": "http-finalize",
+    "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260907-001/http-finalize"
+  },
+  "environment": "inputs/environment.json",
+  "tested_state": "inputs/tested-source-sha256.json",
+  "runs": "outputs/timed-runs.json",
+  "replay": "python3 replay/run.py <repository-root>",
+  "source_stable": true,
+  "not_applicable": {
+    "TLS_mTLS_real_CPS_device": "NOT_RUN: synthetic loopback HTTP only; no remote service, certificate or terminal used",
+    "native_app_UI": "NOT_RUN: HTML output tested, no desktop app installation or interaction",
+    "CI": "NOT_RUN for CPS; earlier Windows monitoring stopped at user request",
+    "database_migration": "N/A: no persistence or Schema changes"
+  }
+}

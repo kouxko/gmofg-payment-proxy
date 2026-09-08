@@ -182,7 +182,8 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
     state
         .lock()
         .expect("HTTP Exchange state mutex poisoned")
-        .begin(command("server:80", request("request"), completed));
+        .begin(command("server:80", request("request"), completed))
+        .unwrap();
     state
         .lock()
         .expect("HTTP Exchange state mutex poisoned")
@@ -314,7 +315,8 @@ fn prepared_request_state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExc
     state
         .lock()
         .unwrap()
-        .begin(command("server:80", request("prepared-request"), completed));
+        .begin(command("server:80", request("prepared-request"), completed))
+        .unwrap();
     state
         .lock()
         .unwrap()

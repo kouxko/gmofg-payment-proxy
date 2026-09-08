@@ -1,0 +1,21 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.41s
+     Running unittests src/lib.rs (examples/protocol-packages/gmofg_payment_dll/target/debug/deps/intercept_proxy_gmofg_payment_dll_component-af6f379e0745e135)
+
+running 14 tests
+test tests::connection_test_response_preserves_all_downstream_fields ... ok
+test tests::d48_error_response_decodes_displays_and_round_trips_exactly ... ok
+test tests::decode_rejects_ca_key_count_mismatch_and_wrong_outer_table_id ... ok
+test tests::display_escapes_modified_document_values ... ok
+test tests::encode_rejects_invalid_width_and_transaction_table_mismatch ... ok
+test tests::decode_rejects_length_mismatch_unknown_ids_and_unknown_json_fields ... ok
+test tests::manifest_declares_only_the_complete_downstream_schema ... ok
+test tests::upstream_abi_adapter_is_exact_read_only_json_passthrough ... ok
+test tests::union_pay_response_parses_a_table_and_reencodes_modified_fixed_width_field ... ok
+test tests::decode_preserves_blank_risk_threshold_instead_of_dropping_the_record ... ok
+test tests::complete_credit_response_parses_every_record_and_reserved_region ... ok
+test tests::display_preserves_the_complete_json_container_tree_as_disclosures ... ok
+test tests::encode_rebuilds_credit_table_data_and_calculates_length_after_change ... ok
+test tests::encode_rebuilds_every_credit_table_from_document_fields ... ok
+
+test result: ok. 14 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.02s
+

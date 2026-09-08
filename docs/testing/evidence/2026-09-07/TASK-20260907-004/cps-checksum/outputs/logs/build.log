@@ -1,0 +1,17 @@
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 0.48s
+     Running unittests src/lib.rs (target/debug/deps/intercept_proxy_gmofg_cps_component-fd608ce12332b065)
+
+running 8 tests
+test tests::raw_body_and_html_are_safe_and_round_trip ... ok
+test tests::malformed_http_wrapper_is_an_execution_error ... ok
+test tests::finalize_changes_only_data_sign_and_is_idempotent ... ok
+test tests::every_source_route_retains_raw_token_and_decodes_percent_once ... ok
+test tests::signature_respects_java_model_projection_and_raw_token_padding ... ok
+test tests::downstream_decode_display_encode_preserves_or_edits_complete_json ... ok
+test tests::business_inapplicability_returns_the_entire_input_exactly ... ok
+test tests::signatures_match_original_java_oracle ... ok
+
+test result: ok. 8 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+    Finished `release` profile [optimized] target(s) in 0.14s
+dist/gmofg-cps-1.0.0.wasm 284691 bytes sha256 674e879c62dc1707e4714f8bddeb2337150e30c5bfc766d58bc5ebafebea5ca3

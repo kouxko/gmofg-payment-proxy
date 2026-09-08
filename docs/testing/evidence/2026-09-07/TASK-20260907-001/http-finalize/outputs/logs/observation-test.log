@@ -1,0 +1,19 @@
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+   Compiling intercept-proxy-traffic-observation v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+   Compiling intercept-proxy-host v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/host)
+   Compiling intercept-proxy v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `intercept-proxy` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 1m 01s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy-6035345f39cb2d7a)
+
+running 1 test
+test runtime_logs::exchange_ui_layer::tests::finalize::http_finalize_failure_reaches_the_observation_store_with_package_details ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 134 filtered out; finished in 0.01s
+

@@ -107,6 +107,10 @@ mod local_http_response;
 mod plain_json_rules;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
+#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
+mod cps_checksum_wire;
+#[path = "phase10_http_pipeline/real_wasm_finalize_wire.rs"]
+mod real_wasm_finalize_wire;
 #[path = "phase10_http_pipeline/request_metadata.rs"]
 mod request_metadata;
 #[path = "phase10_http_pipeline/unified_working_exchange.rs"]

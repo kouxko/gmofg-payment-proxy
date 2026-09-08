@@ -414,6 +414,7 @@ fn stage_error<D: Direction>(stage: ErrorStage, mut error: Error) -> Error {
             ErrorStage::Display => "DISPLAY_FAILED",
             ErrorStage::Rules => "RULE_FAILED",
             ErrorStage::Encode => "ENCODE_FAILED",
+            ErrorStage::Finalize => "FINALIZE_FAILED",
             ErrorStage::Write | ErrorStage::Flush | ErrorStage::Shutdown => "WRITE_FAILED",
             _ => "PROCESSING_FAILED",
         };

@@ -1,0 +1,4 @@
+    Checking intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Checking intercept-proxy-package-contract v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-contract)
+    Checking intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 7.32s

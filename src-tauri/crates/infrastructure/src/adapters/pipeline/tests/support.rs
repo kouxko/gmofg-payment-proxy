@@ -52,6 +52,7 @@ fn request_metadata() -> &'static HttpRequestMetadata {
     static METADATA: LazyLock<HttpRequestMetadata> = LazyLock::new(|| HttpRequestMetadata {
         method: "POST".into(),
         request_target: "/payment".into(),
+        url: "/payment".into(),
     });
     &METADATA
 }

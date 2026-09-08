@@ -14,7 +14,10 @@ use intercept_proxy_exchange::{
 };
 use uuid::Uuid;
 
-use super::{FaultAction, HttpRequestMetadata, Message, PipelinePorts, ProxyError};
+use super::{
+    FaultAction, Finalize, HttpRequestMetadata, Message, NoopHttpFinalize, PipelinePorts,
+    ProxyError,
+};
 use crate::transport::ConnectionContext;
 
 const HEADER_FIELD: &str = "header";
@@ -63,6 +66,7 @@ pub struct HttpDirectionCapabilities<D: Direction> {
     pub decode: Box<dyn Decode<Http, D>>,
     pub display: Box<dyn Display>,
     pub prepare: Box<dyn HttpMessagePrepare<D>>,
+    pub finalize: Box<dyn Finalize>,
 }
 
 impl<D: Direction> Debug for HttpDirectionCapabilities<D> {
@@ -87,6 +91,7 @@ impl<D: Direction> HttpDirectionCapabilities<D> {
             Box::new(SequentialHttpMessagePrepare::<D> {
                 prepare: SequentialPrepare::new(rules, encode),
             }),
+            Box::new(NoopHttpFinalize),
         )
     }
 
@@ -94,11 +99,13 @@ impl<D: Direction> HttpDirectionCapabilities<D> {
         decode: Box<dyn Decode<Http, D>>,
         display: Box<dyn Display>,
         prepare: Box<dyn HttpMessagePrepare<D>>,
+        finalize: Box<dyn Finalize>,
     ) -> Self {
         Self {
             decode,
             display,
             prepare,
+            finalize,
         }
     }
 }
@@ -463,6 +470,7 @@ mod tests {
                 &crate::HttpRequestMetadata {
                     method: "POST".into(),
                     request_target: "/".into(),
+                    url: "/".into(),
                 },
                 &mut message,
                 &original,

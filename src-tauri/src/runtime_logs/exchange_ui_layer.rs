@@ -390,6 +390,7 @@ fn external_package_call(fields: &Fields) -> Option<ExternalPackageCallDiagnosti
         "decode" => ExternalPackageCallStage::Decode,
         "display" => ExternalPackageCallStage::Display,
         "encode" => ExternalPackageCallStage::Encode,
+        "finalize" => ExternalPackageCallStage::Finalize,
         _ => return None,
     };
     let optional = |name: &str| fields.text(name).filter(|value| !value.is_empty());

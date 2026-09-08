@@ -1,0 +1,4 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on build directory
+    Checking intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 21.23s

@@ -1,0 +1,6 @@
+Task typecheck tsc --noEmit
+docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/outputs/reviews/editor-session/src/features/rules/rules-view.test.tsx(9,38): error TS2307: Cannot find module './rule-single-pair-editor' or its corresponding type declarations.
+docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/outputs/reviews/editor-session/src/features/rules/rules-view.test.tsx(10,27): error TS2307: Cannot find module './rules-view' or its corresponding type declarations.
+docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/outputs/reviews/editor-session/src/features/rules/rules-view.test.tsx(11,71): error TS2307: Cannot find module './rules-view-test-fixtures' or its corresponding type declarations.
+docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/outputs/reviews/same-turn-interleaving/src/features/rules/rules-view-session-races.test.tsx(8,27): error TS2307: Cannot find module './rules-view' or its corresponding type declarations.
+docs/testing/evidence/2026-09-06/TASK-20260906-001/integrated-verification/outputs/reviews/same-turn-interleaving/src/features/rules/rules-view-session-races.test.tsx(9,55): error TS2307: Cannot find module './rules-view-test-fixtures' or its corresponding type declarations.

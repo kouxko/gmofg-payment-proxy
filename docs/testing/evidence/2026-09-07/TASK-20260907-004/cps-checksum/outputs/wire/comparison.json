@@ -1,0 +1,144 @@
+{
+  "result": "PASS",
+  "frames": {
+    "client_input": {
+      "start_line": "POST /gateway/products-pointPay/version=1.0/B01/1/0/MERCHANT%20%20TERMINAL%20%20TOKEN HTTP/1.1",
+      "headers": {
+        "host": "cps.test",
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "21aac82a-5f51-4afe-b12d-f3f5a55c65cf",
+        "content-length": "23",
+        "connection": "close"
+      },
+      "body": {
+        "request": "preserved"
+      },
+      "frame_bytes": 272,
+      "body_bytes": 23,
+      "sha256": "23321800bbd1304ac29dcdd444eb578e9c9e40901bdb2f08b1230e3ffb167428"
+    },
+    "origin_request": {
+      "start_line": "POST /gateway/products-pointPay/version=1.0/B01/1/0/MERCHANT%20%20TERMINAL%20%20TOKEN HTTP/1.1",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "21aac82a-5f51-4afe-b12d-f3f5a55c65cf",
+        "host": "127.0.0.1:50588",
+        "connection": "close",
+        "content-length": "23"
+      },
+      "body": {
+        "request": "preserved"
+      },
+      "frame_bytes": 279,
+      "body_bytes": 23,
+      "sha256": "fe837621f5e579a5e75417d2de52e7eb4ad1fbb1b9a1e5f7808dc73c6978b72b",
+      "read_chunk_sizes": [
+        279
+      ]
+    },
+    "origin_response": {
+      "start_line": "HTTP/1.1 200 OK",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "21aac82a-5f51-4afe-b12d-f3f5a55c65cf",
+        "content-length": "308",
+        "connection": "close"
+      },
+      "body": {
+        "meta": {
+          "code": "00",
+          "message": "OK"
+        },
+        "data": {
+          "errorCode": "",
+          "errorInfo": null,
+          "subErrorCode": "",
+          "sign": "OLD",
+          "result": {
+            "currencyCode": "JPY",
+            "amount": 100,
+            "amountRmb": 0,
+            "payType": "99",
+            "extendedInfo": "paired",
+            "orderDetailId": "PAIR-D",
+            "orderId": "PAIR-O",
+            "transTime": "20260907123456",
+            "transStatus": "PAY_SUCCESS"
+          }
+        }
+      },
+      "frame_bytes": 463,
+      "body_bytes": 308,
+      "sha256": "db409b16fc5e633e8a1c6b56493b3a56118d550cb79d5f3c3cf89577ca5f5135"
+    },
+    "app_response": {
+      "start_line": "HTTP/1.1 200 OK",
+      "headers": {
+        "content-type": "application/json; charset=utf-8",
+        "x-path-id": "21aac82a-5f51-4afe-b12d-f3f5a55c65cf",
+        "content-length": "341",
+        "connection": "close"
+      },
+      "body": {
+        "data": {
+          "errorCode": "",
+          "errorInfo": null,
+          "result": {
+            "amount": 250.0,
+            "amountRmb": 0.0,
+            "currencyCode": "JPY",
+            "extendedInfo": "paired",
+            "orderDetailId": "PAIR-D",
+            "orderId": "PAIR-O",
+            "payType": "99",
+            "transStatus": "PAY_SUCCESS",
+            "transTime": "20260907123456"
+          },
+          "sign": "F070F340438D40D0BC07295E241EE519",
+          "subErrorCode": ""
+        },
+        "meta": {
+          "code": "00",
+          "message": "OK"
+        }
+      },
+      "frame_bytes": 496,
+      "body_bytes": 341,
+      "sha256": "e51bebbd856d6c99c694bd28e5c32d5df651832d38a75f30f8af584fb178b8f4",
+      "read_chunk_sizes": [
+        496
+      ]
+    }
+  },
+  "expected_app_body": {
+    "meta": {
+      "code": "00",
+      "message": "OK"
+    },
+    "data": {
+      "errorCode": "",
+      "errorInfo": null,
+      "subErrorCode": "",
+      "sign": "F070F340438D40D0BC07295E241EE519",
+      "result": {
+        "currencyCode": "JPY",
+        "amount": 250,
+        "amountRmb": 0,
+        "payType": "99",
+        "extendedInfo": "paired",
+        "orderDetailId": "PAIR-D",
+        "orderId": "PAIR-O",
+        "transTime": "20260907123456",
+        "transStatus": "PAY_SUCCESS"
+      }
+    }
+  },
+  "expected_sign_from_java": "F070F340438D40D0BC07295E241EE519",
+  "assertions": [
+    "all four Content-Length match actual body bytes",
+    "actual read chunks reassemble exactly to origin request and App response",
+    "original token path and request body retained",
+    "App body matches independent Java pay-after fields and sign",
+    "path-id consistent across client and final response"
+  ]
+}

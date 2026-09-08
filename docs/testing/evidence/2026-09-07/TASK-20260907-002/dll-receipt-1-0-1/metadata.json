@@ -1,0 +1,133 @@
+{
+  "task_id": "TASK-20260907-002",
+  "case_id": "dll-receipt-1-0-1",
+  "result": "PASS_LOCAL_PACKAGE_AND_HOST",
+  "completed_at": "2026-09-07 15:25:31 +08:00",
+  "environment": "inputs/environment.json",
+  "tested_state": "inputs/tested-files-sha256.json",
+  "tested_files_unchanged": true,
+  "derived_from": {
+    "task_id": "TASK-20260903-005",
+    "case_id": "gmofg-dll-downstream-package",
+    "evidence_path": "docs/testing/evidence/2026-09-03/TASK-20260903-005/gmofg-dll-downstream-package"
+  },
+  "artifact": {
+    "version": "1.0.1",
+    "path": "outputs/gmofg-payment-dll-1.0.1.wasm",
+    "size": 552335,
+    "sha256": "40342f5ffdc12b891b51871ec77b768276637317cb86357c42d3754fb1353224"
+  },
+  "tests": [
+    {
+      "name": "baseline",
+      "log": "outputs/baseline-tests.log",
+      "result": "14/14 PASS",
+      "log_created_at": "2026-09-07T15:12:14.681216+08:00",
+      "log_finished_at": "2026-09-07T15:12:15.239771+08:00"
+    },
+    {
+      "name": "red",
+      "log": "outputs/red-tests.log",
+      "result": "EXPECTED_FAILURE 2; unknown ErrorMessage",
+      "log_created_at": "2026-09-07T15:13:13.272279+08:00",
+      "log_finished_at": "2026-09-07T15:13:18.768489+08:00"
+    },
+    {
+      "name": "package-final-build",
+      "log": "outputs/build.log",
+      "result": "18/18 PASS; Wasm build PASS",
+      "log_created_at": "2026-09-07T15:15:07.162647+08:00",
+      "log_finished_at": "2026-09-07T15:15:14.593166+08:00"
+    },
+    {
+      "name": "host",
+      "log": "outputs/host-tests.log",
+      "result": "1/1 PASS; eight actual vectors",
+      "log_created_at": "2026-09-07T15:16:24.105396+08:00",
+      "log_finished_at": "2026-09-07T15:16:46.599615+08:00"
+    },
+    {
+      "name": "body-codec",
+      "log": "outputs/body-codec-test.log",
+      "result": "1/1 PASS",
+      "log_created_at": "2026-09-07T15:16:48.777991+08:00",
+      "log_finished_at": "2026-09-07T15:17:41.244869+08:00"
+    },
+    {
+      "name": "package-clippy",
+      "log": "outputs/package-clippy.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:14:40.884985+08:00",
+      "log_finished_at": "2026-09-07T15:16:27.016539+08:00"
+    },
+    {
+      "name": "host-clippy",
+      "log": "outputs/host-clippy.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:17:39.017992+08:00",
+      "log_finished_at": "2026-09-07T15:17:46.449478+08:00"
+    },
+    {
+      "name": "deno-check",
+      "log": "outputs/deno-check.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:16:25.699695+08:00",
+      "log_finished_at": "2026-09-07T15:16:25.699695+08:00"
+    },
+    {
+      "name": "package-fmt",
+      "log": "outputs/package-fmt.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:16:25.788737+08:00",
+      "log_finished_at": "2026-09-07T15:16:25.788737+08:00"
+    },
+    {
+      "name": "host-fmt",
+      "log": "outputs/host-fmt.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:19:18.801715+08:00",
+      "log_finished_at": "2026-09-07T15:19:18.801715+08:00"
+    },
+    {
+      "name": "static",
+      "log": "outputs/static-checks.log",
+      "result": "PASS",
+      "log_created_at": "2026-09-07T15:19:18.882941+08:00",
+      "log_finished_at": "2026-09-07T15:19:18.882941+08:00"
+    }
+  ],
+  "replay": "replay/commands.md",
+  "resources": {
+    "user_report": "resources/intercept-proxy-reproduction.md",
+    "package": "resources/package",
+    "payment_contract": "resources/payment",
+    "host_test": "resources/gmofg_payment_dll_component.rs"
+  },
+  "actual_vectors": "outputs/host-vectors",
+  "review": {
+    "result": "APPROVE",
+    "report": "outputs/review.md",
+    "findings": {
+      "P0": 0,
+      "P1": 0,
+      "P2": 0
+    }
+  },
+  "limitations": [
+    "Observed report Japanese is lossy; original server Shift_JIS bytes unavailable",
+    "Synthetic Shift_JIS bin/hex derived from actual Host Unicode input/output, not network captures",
+    "Host Wasm and body codec validated separately; no combined live Listener test"
+  ],
+  "not_applicable": {
+    "ui_screenshots": "No product UI change; HTML tested through Host",
+    "tcp_chunks": "No live networking",
+    "certificates": "No TLS/remote service test",
+    "database": "No persistence changes",
+    "cleanup": "No runtime state created"
+  },
+  "not_run": [
+    "Windows import/live service",
+    "Android business flow",
+    "CI"
+  ]
+}

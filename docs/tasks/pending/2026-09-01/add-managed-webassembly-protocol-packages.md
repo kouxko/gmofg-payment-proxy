@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-08 12:31:47 +08:00`
+- 最后更新时间：`2026-09-08 13:52:49 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -407,3 +407,10 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - 初次完整HTTP上传因413失败，SSH因publickey/password认证失败；随后按原始文件拆分小批次并顺序快进上传。最终Git tree与拆分前已核验档案tree严格相同，984份证据原始字节一致，没有删除资源或改写历史证据来绕过服务器限制。
 - 已跟踪工作区与暂存区干净；两处无关CPS/HTTP Finalize未跟踪目录的完整文件哈希保持不变。
 - 本条交付记录及其附件以独立`[skip ci]`文档提交继续推送，并再次只读核验；制品发布、主分支合并、tag及缺失macOS发布资产没有包含在本次用户授权中，WPC-14仍保持进行中。
+
+## 合并请求准备（2026-09-08 13:52:49 +08:00）
+
+- 用户明确要求创建合并到develop的Merge Request，并以实际提交内容编写提交信息；此前“不触发CI”要求继续有效。标题与说明覆盖Socket读取上限、前端回归、手动构建配置和验收归档。
+- 以源提交`ca61e3b4ad9c9b1f24ea4556f24ab5ebe53fbc51`与当前develop `cebb8b6227f68c69c771792fdd258b76a8f34c27`执行隔离合并。产品代码无冲突，只有docs/README.md、docs/tasks/README.md及docs/testing/evidence/README.md三处索引冲突；保留develop新任务/CPS/Finalize/DLL归档条目，保留本轮五项完成状态、日期顺序及证据入口。
+- 针对合并执行冲突标记、pending入口一一对应、完成条目唯一、日期排序、相对链接及非证据文本diff检查；本次没有重新执行产品测试，也不把此前测试报告为最新develop合并后的完整回归。
+- 合并准备提交继续使用[skip ci]，通过git push -o ci.skip更新当前源分支；只创建MR，不执行接受合并、tag或制品发布。

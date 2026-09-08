@@ -1,0 +1,121 @@
+    }
+
+    private record Case(String id, String operation, String body, String token, boolean expectError) {}
+
+    private static List<Case> cases() {
+        String paddedToken = "MID-01      TERM-01      20260907123456000000000000100";
+        return List.of(
+            new Case("edge-exp-lower", "confirm", "{\"meta\":{\"code\":1e2},\"data\":{\"sign\":\"OLD\",\"result\":{}}}", "TOKEN", false),
+            new Case("edge-exp-upper", "confirm", "{\"meta\":{\"code\":1E+2},\"data\":{\"sign\":\"OLD\",\"result\":{}}}", "TOKEN", false),
+            new Case("edge-negative-zero", "confirm", "{\"meta\":{\"code\":-0},\"data\":{\"sign\":\"OLD\",\"result\":{}}}", "TOKEN", false),
+            new Case("pay-before", "pay", """
+                {"meta":{"code":"00","message":"OK"},"data":{"errorCode":"","errorInfo":null,"subErrorCode":"","sign":"OLD","result":{"currencyCode":"JPY","amount":100,"amountRmb":0,"payType":"99","extendedInfo":"paired","orderDetailId":"PAIR-D","orderId":"PAIR-O","transTime":"20260907123456","transStatus":"PAY_SUCCESS"}}}
+                """.trim(), "MERCHANT  TERMINAL  TOKEN", false),
+            new Case("pay-after", "pay", """
+                {"meta":{"code":"00","message":"OK"},"data":{"errorCode":"","errorInfo":null,"subErrorCode":"","sign":"OLD","result":{"currencyCode":"JPY","amount":250,"amountRmb":0,"payType":"99","extendedInfo":"paired","orderDetailId":"PAIR-D","orderId":"PAIR-O","transTime":"20260907123456","transStatus":"PAY_SUCCESS"}}}
+                """.trim(), "MERCHANT  TERMINAL  TOKEN", false),
+            new Case("pay-normal-inherited-zero", "pay", """
+                {"meta":{"code":"00","message":"OK"},"data":{"errorCode":"","errorInfo":null,"subErrorCode":"S 1","sign":"IGNORED","result":{"currencyCode":"JPY","amount":100,"amountRmb":0,"payType":"99","extendedInfo":"A B","orderDetailId":"D1","orderId":"O1","transTime":"2026-09-07 12:34:56","transStatus":"PAY_SUCCESS"}},"unknownTop":"ignored"}
+                """.trim(), paddedToken, false),
+            new Case("pay-business-error", "pay", """
+                {"meta":{"code":"09","message":"business error"},"data":{"errorCode":"09103","errorInfo":"not found","subErrorCode":"","sign":"OLD","result":null}}
+                """.trim(), paddedToken, false),
+            new Case("confirm-normal-unicode-whitespace-unknown", "confirm", """
+                {"meta":{"code":"00","message":" 日 本\\t行\\n次 "},"data":{"sign":"OLD","result":{"payType":"A B","payCheckDate":"確認 日","orderDetailId":"D 2","orderId":"O2","transTime":"T\\t2","transStatus":"SUCCESS","unknownNested":123}},"unknownData":{"x":1}}
+                """.trim(), paddedToken, false),
+            new Case("confirm-business-error-string-coercion", "confirm", """
+                {"meta":{"code":9,"message":true},"data":{"errorCode":931,"errorInfo":false,"subErrorCode":301,"sign":"OLD","result":{"payType":99,"payCheckDate":20260907,"transStatus":false}}}
+                """.trim(), paddedToken, false),
+            new Case("refund-normal-int-string", "refund", """
+                {"meta":{"code":"00","message":"OK"},"data":{"sign":"OLD","result":{"currencyCode":"JPY","refundAmount":"500","orderDetailId":"RD1","orderId":"RO1","transTime":"RT1","transStatus":"REFUND_SUCCESS"}}}
+                """.trim(), paddedToken, false),
+            new Case("refund-business-error-int-decimal", "refund", """
+                {"meta":{"code":"09","message":"NG"},"data":{"errorCode":"09301","errorInfo":"failed","subErrorCode":"E1","sign":"OLD","result":{"currencyCode":"JPY","refundAmount":1.0,"transStatus":"REFUND_FAILED"}}}
+                """.trim(), paddedToken, false),
+            new Case("reverse-normal-empty-and-zero", "reverse", """
+                {"meta":{"code":"00","message":""},"data":{"errorCode":null,"errorInfo":"","subErrorCode":null,"sign":"OLD","result":{"amount":0,"currencyCode":"","orderDetailId":"D3","orderId":"O3","transTime":"T3","transStatus":"REVERSE_SUCCESS"}}}
+                """.trim(), paddedToken, false),
+            new Case("reverse-business-error", "reverse", """
+                {"meta":{"code":"09","message":"not found"},"data":{"errorCode":"09103","errorInfo":"none","subErrorCode":"","sign":"OLD","result":{"amount":25,"currencyCode":"JPY","transStatus":"REVERSE_FAILED"}}}
+                """.trim(), paddedToken, false),
+            new Case("pay-invalid-int-string", "pay", """
+                {"meta":{"code":"00"},"data":{"sign":"OLD","result":{"amount":"abc"}}}
+                """.trim(), paddedToken, true),
+            new Case("refund-invalid-int-object", "refund", """
+                {"meta":{"code":"00"},"data":{"sign":"OLD","result":{"refundAmount":{}}}}
+                """.trim(), paddedToken, true),
+            new Case("reverse-invalid-fractional-int", "reverse", """
+                {"meta":{"code":"00"},"data":{"sign":"OLD","result":{"amount":1.5}}}
+                """.trim(), paddedToken, true),
+            new Case("confirm-invalid-string-object", "confirm", """
+                {"meta":{"code":{}},"data":{"sign":"OLD","result":{}}}
+                """.trim(), paddedToken, true)
+        );
+    }
+
+    private static Message.Response parse(Case testCase) {
+        return switch (testCase.operation()) {
+            case "pay" -> GSON.fromJson(testCase.body(), PayResponse.class);
+            case "confirm" -> GSON.fromJson(testCase.body(), ConfirmResponse.class);
+            case "refund" -> GSON.fromJson(testCase.body(), RefundResponse.class);
+            case "reverse" -> GSON.fromJson(testCase.body(), ReverseResponse.class);
+            default -> throw new IllegalArgumentException("unknown operation: " + testCase.operation());
+        };
+    }
+
+    private static JsonElement generate() {
+        var output = new com.google.gson.JsonArray();
+        for (Case testCase : cases()) {
+            JsonObject row = new JsonObject();
+            row.addProperty("id", testCase.id());
+            row.addProperty("operation", testCase.operation());
+            row.addProperty("body", testCase.body());
+            row.addProperty("token", testCase.token());
+            try {
+                Message.Response response = parse(testCase);
+                String sign = Message.calcSignWithToken(response, testCase.token());
+                if (testCase.expectError()) {
+                    throw new AssertionError(testCase.id() + " unexpectedly parsed");
+                }
+                row.addProperty("canonical", Message.lastCanonical);
+                row.addProperty("sign", sign);
+            } catch (RuntimeException error) {
+                if (!testCase.expectError()) {
+                    throw error;
+                }
+                row.addProperty("expect_error", true);
+                row.addProperty("error_kind", rootCause(error).getClass().getSimpleName());
+            }
+            output.add(row);
+        }
+        return output;
+    }
+
+    private static Throwable rootCause(Throwable error) {
+        Throwable current = error;
+        while (current.getCause() != null) current = current.getCause();
+        return current;
+    }
+
+    public static void main(String[] args) throws IOException {
+        if (!StandardCharsets.UTF_8.equals(Charset.defaultCharset())) {
+            throw new AssertionError("default charset must be UTF-8, got " + Charset.defaultCharset());
+        }
+        JsonElement actual = generate();
+        if (args.length == 0 || "--generate".equals(args[0])) {
+            System.out.println(GSON.toJson(actual));
+            return;
+        }
+        if (args.length == 2 && "--verify".equals(args[0])) {
+            JsonElement expected = JsonParser.parseString(Files.readString(Path.of(args[1]), StandardCharsets.UTF_8));
+            if (!expected.equals(actual)) {
+                System.err.println("expected:\n" + GSON.toJson(expected));
+                System.err.println("actual:\n" + GSON.toJson(actual));
+                throw new AssertionError("fixture mismatch");
+            }
+            System.out.println("PASS: " + actual.getAsJsonArray().size() + " Java CPS signature vectors verified with " + Charset.defaultCharset());
+            return;
+        }
+        throw new IllegalArgumentException("usage: OracleMain [--generate | --verify <fixture>]");
+    }
+}

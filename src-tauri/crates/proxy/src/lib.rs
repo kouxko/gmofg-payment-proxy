@@ -24,10 +24,11 @@ pub use forward::{
     strip_hop_by_hop_headers,
 };
 pub use http::{
-    ConnectionAdmission, ConnectionService, HttpConnectionIdentity, HttpDirectionCapabilities,
-    HttpMessagePrepare, HttpObservationMetadata, HttpProtocolCapabilityFactory,
-    HttpRequestMetadata, LocalHttpServerConfig, LocalHttpServerService, NoopPipelinePorts,
-    PipelinePorts, PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
+    ConnectionAdmission, ConnectionService, Finalize, HttpConnectionIdentity,
+    HttpDirectionCapabilities, HttpJointEvaluation, HttpMessagePrepare, HttpObservationMetadata,
+    HttpProtocolCapabilityFactory, HttpRequestMetadata, LocalHttpServerConfig,
+    LocalHttpServerService, NoopHttpFinalize, NoopPipelinePorts, PipelinePorts,
+    PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
 };
 pub use message::{Message, MessageLimits, RawHeader};
 pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
@@ -38,18 +39,18 @@ pub use reverse::{
 };
 pub use socket_relay::{
     BoundedSocketConnectionObserver, BoundedSocketJointEvaluation, FrameBoundary,
-    HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
-    NoopSocketConnectionObserver, SocketConnectionEvent, SocketConnectionIdentity,
-    SocketConnectionObserver, SocketConnectionTarget, SocketDirectionCapabilities,
-    SocketDocumentFieldPreview, SocketDocumentPreview, SocketDownstreamSecurity,
-    SocketDownstreamTlsConfig, SocketEndpoint, SocketJointEvaluation, SocketLocalRequestPreview,
-    SocketLocalResponderConfig, SocketObservationMetadata, SocketOpenedEvidence,
-    SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
-    SocketProcessingFailureKind, SocketProtocolCapabilityFactory, SocketRejectionReason,
-    SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
-    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
-    SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity, SocketTransportMode,
-    SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
+    JointConditionEvaluation, JointRuleConditionEvaluation, NoopSocketConnectionObserver,
+    SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
+    SocketConnectionTarget, SocketDirectionCapabilities, SocketDocumentFieldPreview,
+    SocketDocumentPreview, SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint,
+    SocketJointEvaluation, SocketLocalRequestPreview, SocketLocalResponderConfig,
+    SocketObservationMetadata, SocketOpenedEvidence, SocketPayloadDirection, SocketPipelineLimits,
+    SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,
+    SocketRejectionReason, SocketRelayBytes, SocketRelayConfig, SocketRelayDirection,
+    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity,
+    SocketRelayService, SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity,
+    SocketTransportMode, SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig,
+    SocketUpstreamTransport,
 };
 pub use supervisor::{
     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,

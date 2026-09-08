@@ -1,0 +1,13 @@
+{
+  "assertions": "PASS",
+  "client_to_proxy": {
+    "client_local": "127.0.0.1:55625",
+    "proxy_listener": "127.0.0.1:55624"
+  },
+  "listener_cleaned_up": true,
+  "path_id": "ae663730-8ddf-424f-a353-792124e7a76e",
+  "proxy_to_origin": {
+    "origin_listener": "127.0.0.1:55623",
+    "proxy_egress_observed_by_origin": "127.0.0.1:55627"
+  }
+}

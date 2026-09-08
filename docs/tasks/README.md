@@ -16,6 +16,9 @@
 | --- | --- | --- | --- | --- | --- |
 | 19:12:35 +08:00 | [TASK-20260904-006：Android与Windows快速联合验证包](completed/2026-09-07/github-quick-android-windows-package.md) | 恢复仅手动触发，Android先构建并与Windows exe按resources布局交付 | PASS；合同3/3、YAML/格式/lint/重放、历史成功run实物核验、独立APPROVE；本轮无新CI | 高 | workflow_dispatch、Android、Windows、artifact |
 | 19:12:35 +08:00 | [TASK-20260829-001：数据库版本100正式基线](completed/2026-09-07/establish-database-version-100-baseline.md) | 合法旧库清理重建100，100保留，未来/损坏拒绝；补齐Windows等待与归档 | PASS；SQLite88、checker14、exact3、51输入归档及独立复审；Windows Verify成功，整CI coverage失败单列 | 高 | SQLite、Schema100、WAL、并发、持久化 |
+| 18:12:25 +08:00 | [TASK-20260907-004：CPS checksum Wasm 包](completed/2026-09-07/implement-cps-checksum-wasm.md) | 上下行JSON编解码/展示、四模型原token响应重签及完整HTTP规则链 | PASS；Java14向量、包8+1、实际Host/HTTP、严格静态检查与独立审查APPROVE；真实终端业务NOT_RUN | 高 | CPS、MD5、Wasm、Decode、Encode、Finalize |
+| 16:57:33 +08:00 | [TASK-20260907-001：Proxy 本地 Wasm HTTP 上下行 Finalize](completed/2026-09-07/http-post-encode-finalize-cps-response-signing.md) | 独立 Finalize trait、可选 ABI、五字段原子写回、事务/Mock/错误与旧包兼容 | 本地53项通过、真实HTTP wire及独立审查APPROVE；源码typecheck通过，全量受历史证据5项TS2307阻断 | 高 | HTTP、Finalize、Wasm、Schema100、Pipeline |
+| 15:25:31 +08:00 | [TASK-20260907-002：DLL 包支持电子小票并交付 1.0.1](completed/2026-09-07/support-receipt-responses-dll-package-1-0-1.md) | 显式分流U010/U011，五字段小票编解码和安全展示，保留原DLL和旧产物 | PASS；包18/18、Host1/1、codec1/1、静态检查及独立审查APPROVE；真实链路/CI NOT_RUN | 高 | DLL、JsonReceipt、Wasm、1.0.1 |
 
 ## 2026-09-06
 

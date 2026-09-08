@@ -16,6 +16,21 @@ use super::{PackageTransportClient, PackageTransportError};
 
 #[async_trait]
 pub(crate) trait ProtocolPackageRuntime: fmt::Debug + Send + Sync {
+    fn has_http_finalize(
+        &self,
+        _direction: ProtocolDirection,
+    ) -> Result<bool, PackageTransportError> {
+        Ok(false)
+    }
+
+    async fn finalize_http(
+        &self,
+        _direction: ProtocolDirection,
+        _http_json: String,
+    ) -> Result<Option<String>, PackageTransportError> {
+        Ok(None)
+    }
+
     async fn frame(
         &self,
         _direction: ProtocolDirection,

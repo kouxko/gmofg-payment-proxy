@@ -96,6 +96,7 @@ const fn external_stage(stage: crate::ExternalPackageCallStage) -> &'static str 
         crate::ExternalPackageCallStage::Decode => "decode",
         crate::ExternalPackageCallStage::Display => "display",
         crate::ExternalPackageCallStage::Encode => "encode",
+        crate::ExternalPackageCallStage::Finalize => "finalize",
     }
 }
 
