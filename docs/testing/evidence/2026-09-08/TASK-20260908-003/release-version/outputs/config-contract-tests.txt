@@ -1,0 +1,10 @@
+running 4 tests from ./scripts/deno-toolchain-contract.test.mjs
+Deno owns the frontend dependency and task contract ... ok (6ms)
+Tauri development and formal builds invoke Deno ... ok (3ms)
+frontend CI and release workflows do not install or invoke Node and pnpm ... ok (7ms)
+local and CI Rust toolchains are pinned to 1.98.0 ... ok (3ms)
+running 1 test from ./scripts/build-macos-universal.test.mjs
+macOS DMG packaging uses the stable hdiutil srcfolder contract ... ok (2ms)
+
+ok | 5 passed | 0 failed (95ms)
+

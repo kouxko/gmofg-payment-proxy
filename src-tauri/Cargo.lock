@@ -2701,7 +2701,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2741,7 +2741,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-android-control-protocol"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "serde",
  "serde_json",
@@ -2752,7 +2752,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-android-engine"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "intercept-proxy-domain",
  "jni 0.22.4",
@@ -2765,7 +2765,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-application"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2790,7 +2790,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-domain"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "chrono",
@@ -2806,7 +2806,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-exchange"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "intercept-proxy-domain",
@@ -2821,7 +2821,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-host"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2844,7 +2844,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-infrastructure"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "base64 0.22.1",
@@ -2890,7 +2890,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-package-contract"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "base64 0.22.1",
  "intercept-proxy-domain",
@@ -2901,7 +2901,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-package-runtime"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "futures-util",
  "intercept-proxy-domain",
@@ -2919,11 +2919,11 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-product-api"
-version = "1.0.0"
+version = "1.0.1"
 
 [[package]]
 name = "intercept-proxy-runtime"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "async-trait",
  "bytes",
@@ -2953,7 +2953,7 @@ dependencies = [
 
 [[package]]
 name = "intercept-proxy-traffic-observation"
-version = "1.0.0"
+version = "1.0.1"
 dependencies = [
  "bytes",
  "chrono",

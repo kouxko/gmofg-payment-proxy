@@ -1,0 +1,16 @@
+{
+  "task_id": "TASK-20260908-004",
+  "case_id": "merge-windows-build",
+  "status": "RUNNING",
+  "started_at": "2026-09-08 17:50:37 +08:00",
+  "derived_from": {
+    "task_id": "TASK-20260908-003",
+    "case_id": "release-version",
+    "path": "docs/testing/evidence/2026-09-08/TASK-20260908-003/release-version"
+  },
+  "not_applicable": {
+    "business_frames": "No business traffic",
+    "device": "No device interaction",
+    "windows_runtime": "macOS coordinator; build artifact verification only"
+  }
+}

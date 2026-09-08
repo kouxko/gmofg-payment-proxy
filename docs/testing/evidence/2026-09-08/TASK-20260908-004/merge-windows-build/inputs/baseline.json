@@ -1,0 +1,28 @@
+{
+  "mr": {
+    "iid": 9,
+    "title": "1.0.1发布",
+    "state": "opened",
+    "source_branch": "release-1.0.1",
+    "target_branch": "release",
+    "sha": "6f1e3d48d769fe7d4a91eb367e78d76db4c1dd0c",
+    "merge_status": "can_be_merged",
+    "detailed_merge_status": "mergeable",
+    "has_conflicts": false,
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests/9"
+  },
+  "branches": {
+    "develop": "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+    "release": "10b3b576123c6c3f4e44868f7fc4e86e53a67208",
+    "release-1.0.1": "6f1e3d48d769fe7d4a91eb367e78d76db4c1dd0c"
+  },
+  "project": {
+    "id": 1023,
+    "default_branch": "master",
+    "merge_method": "merge",
+    "squash_option": "default_off",
+    "only_allow_merge_if_pipeline_succeeds": false,
+    "only_allow_merge_if_all_discussions_are_resolved": false,
+    "merge_pipelines_enabled": null
+  }
+}
