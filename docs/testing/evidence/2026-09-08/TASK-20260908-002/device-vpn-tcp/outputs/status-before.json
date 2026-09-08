@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "request_id": "vpn-local-tcp-before",
+  "ok": true,
+  "status": {
+    "serial": "",
+    "state": "stopped",
+    "verified": true,
+    "transport": "local_abstract_socket",
+    "active_profile_id": null,
+    "active_profile_fingerprint": null,
+    "active_route_fingerprint": null,
+    "active_route_count": 0,
+    "companion_process_running": true,
+    "message": "桌面控制租约连续 5 秒未续期，已自动关闭 VPN。",
+    "unsupported_fields": [
+      "serial"
+    ],
+    "stats": {
+      "download_ip_checksum_failures": 0,
+      "download_ip_length_mismatches": 0,
+      "download_tcp_syn_ack_packets": 20,
+      "download_transport_checksum_failures": 0,
+      "impairment_delay_millis_total": 0,
+      "impairment_mss_clamps": 0,
+      "impairment_packets_corrupted": 0,
+      "impairment_packets_dropped": 0,
+      "impairment_packets_duplicated": 0,
+      "impairment_packets_reordered": 0,
+      "impairment_pmtu_fragments": 0,
+      "impairment_pmtu_signals": 0,
+      "impairment_unimplemented_pmtu_actions": 0,
+      "last_error": null,
+      "protect_failures": 0,
+      "proxy_download_packets": 310,
+      "proxy_upload_packets": 309,
+      "socks_clients": 20,
+      "socks_connect_attempts": 20,
+      "socks_connect_successes": 18,
+      "tun_download_bytes": 147381,
+      "tun_download_packets": 310,
+      "tun_upload_bytes": 37188,
+      "tun_upload_packets": 309,
+      "upload_tcp_ack_packets": 244,
+      "upload_tcp_syn_packets": 20
+    }
+  },
+  "error_code": null,
+  "error_message": null
+}

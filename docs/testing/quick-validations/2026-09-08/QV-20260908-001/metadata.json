@@ -1,0 +1,96 @@
+{
+  "validation_id": "QV-20260908-001",
+  "lifecycle": "FINAL",
+  "result": "FAILED",
+  "executed_at": "2026-09-08 16:05:34 +08:00",
+  "runner": {
+    "session_id": "01a07fed-750e-7511-8509-fc0762cfbb31/root",
+    "process_id": null,
+    "started_at": "2026-09-08 16:05:34 +08:00",
+    "last_updated_at": "2026-09-08 16:14:28 +08:00"
+  },
+  "environment": {
+    "os_arch": "macOS arm64",
+    "timezone": "Asia/Shanghai",
+    "app_build": "Launcher 3.01.23 / Android 10 API 29 / A920MAX",
+    "proxy_build": "Companion 1.0.0 versionCode 1, targetSdk 36, lastUpdateTime 2026-09-07 18:21:53",
+    "network_context": {
+      "source": "10.0.34.43/en0",
+      "device": "10.0.34.117/wlan0",
+      "vpn": "tun0 includes UID 10116"
+    }
+  },
+  "requested_level": "tcp",
+  "requested_path_id": "path-001",
+  "target": {
+    "host": "10.0.34.117",
+    "port": 7788,
+    "resolved_addresses": [
+      "10.0.34.117"
+    ]
+  },
+  "tls": {
+    "sni": null,
+    "hostname_verification": null,
+    "mtls": null
+  },
+  "application_request_allowed": false,
+  "layer_results": {
+    "path-001": {
+      "dns": "N/A",
+      "tcp": "FAILED",
+      "application_protocol": "NOT_RUN"
+    }
+  },
+  "temporary_state": {
+    "declared_objects": [
+      "one bounded client socket",
+      "optional local packet capture process"
+    ],
+    "baseline": "inputs/baseline.json"
+  },
+  "cleanup": {
+    "required": true,
+    "status": "VERIFIED",
+    "baseline_match": true,
+    "retained_objects": [
+      "read-only diagnostic evidence only"
+    ],
+    "facts": "socket closed; tcpdump exited with permission denied; mode remains TCP=3; listener inode 1049298 and VPN table 1038 unchanged"
+  },
+  "replay": "replay/probe.py",
+  "derived_from": null,
+  "promoted_task_id": null,
+  "not_applicable": [
+    "DNS: numeric IP",
+    "TLS/certificates/application data: TCP-only probe",
+    "Workspace and proxy listener: unchanged, direct LAN socket",
+    "No pcap: capture failed before opening /dev/bpf0",
+    "No formal task promotion: observation only; product behavior change or VPN strategy implementation is outside current request and requires a separately registered task"
+  ],
+  "path_evidence": {
+    "path-001": {
+      "client_connection": "outputs/probe.json",
+      "device_during": "outputs/during.json",
+      "return_path": "INCONCLUSIVE: packet capture denied on local host and no device root",
+      "causal_link_status": "client attempt local endpoint 10.0.34.43:65064 -> 10.0.34.117:7788; device sample has listener but no matching accepted connection"
+    }
+  },
+  "completed_at": "2026-09-08 16:14:28 +08:00",
+  "artifacts": [
+    "inputs/baseline.json",
+    "inputs/probe.json",
+    "outputs/probe.json",
+    "outputs/during.json",
+    "outputs/after.json",
+    "outputs/runtime-observations.json",
+    "outputs/tcpdump.stderr.txt",
+    "outputs/netd-ndk-disassembly.txt",
+    "outputs/netd-ndk-disassembly.stderr.txt",
+    "outputs/netd-ndk-disassembly-command.json",
+    "outputs/analysis.md",
+    "resources/device-netd.o",
+    "resources/README.md",
+    "replay/probe.py"
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "path_id": "path-001",
+  "started_at": "2026-09-08T16:06:35.557708+08:00",
+  "application_bytes_sent": 0,
+  "capture_command": [
+    "tcpdump",
+    "-i",
+    "en0",
+    "-nn",
+    "-U",
+    "-w",
+    "/Users/codin/Code/gmofg-payment-proxy/docs/testing/quick-validations/2026-09-08/QV-20260908-001/outputs/handshake.pcap",
+    "host",
+    "10.0.34.117",
+    "and",
+    "tcp",
+    "port",
+    "7788"
+  ],
+  "local_endpoint": [
+    "10.0.34.43",
+    65064
+  ],
+  "tcp": "FAILED",
+  "error_type": "TimeoutError",
+  "error": "timed out",
+  "errno": null,
+  "connect_seconds": 8.000534749997314,
+  "socket_closed": true,
+  "capture_exit_code": 1,
+  "completed_at": "2026-09-08T16:06:43.562589+08:00"
+}

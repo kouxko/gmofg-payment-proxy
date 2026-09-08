@@ -1,0 +1,9 @@
+{
+  "path_id": "path-001",
+  "host": "10.0.34.117",
+  "port": 7788,
+  "timeout_seconds": 8,
+  "application_bytes_sent": 0,
+  "source_binding": "10.0.34.43",
+  "purpose": "TCP handshake only"
+}
