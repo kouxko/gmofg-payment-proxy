@@ -147,6 +147,31 @@ describe("SocketProcessingCard", () => {
     expect(screen.getByRole("status")).toHaveTextContent("完整的分帧、解析、规则、编码和显示处理链将自动应用");
   });
 
+  it("replaces an existing package with the newly selected exact version", async () => {
+    const current = settings();
+    const onChange = vi.fn();
+    const onTransition = vi.fn();
+    const user = userEvent.setup();
+    render(
+      <SocketProcessingCard
+        settings={current}
+        catalog={catalog([packageOption("1.0.0"), packageOption("2.0.0")])}
+        locked={false}
+        onTransition={onTransition}
+        onChange={onChange}
+      />,
+    );
+
+    await user.click(screen.getByLabelText("Socket 协议处理方案"));
+    await user.click(await screen.findByRole("option", { name: "ISO 8583 2.0.0 · 2.0.0 · 远端调试 · 在线" }));
+
+    expect(onChange).toHaveBeenCalledWith({
+      ...current,
+      processing: { mode: "scripted", settings: { package: { id: "iso-8583", version: "2.0.0" } } },
+    });
+    expect(onTransition).not.toHaveBeenCalled();
+  });
+
   it("removing a relay package returns to exact transparent processing", async () => {
     const current = settings();
     const onChange = vi.fn();
@@ -208,6 +233,45 @@ describe("SocketProcessingCard", () => {
 
     expect(screen.getByText("没有可绑定的 Socket 协议包版本")).toBeVisible();
     expect(screen.getByText(/已安装 4 个版本，其中 4 个当前不可用/)).toBeVisible();
+  });
+
+  it("requires an available package before configuring a local response", () => {
+    const local = settings("local_responder");
+    local.processing = { mode: "direct" };
+    render(
+      <SocketProcessingCard
+        settings={local}
+        catalog={{ loading: false, refresh: vi.fn().mockResolvedValue(undefined) }}
+        locked={false}
+        onTransition={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+
+    expect(screen.getByText("尚未选择处理方案")).toBeVisible();
+    expect(screen.getByText(/已安装 0 个版本，其中 0 个当前不可用/)).toBeVisible();
+    expect(screen.getByLabelText("Socket 协议处理方案")).toBeDisabled();
+    expect(screen.queryByText(/透明转发/)).not.toBeInTheDocument();
+  });
+
+  it.each([
+    [{ type: "managed", online: true }, "本地管理 · 运行中"],
+    [{ type: "managed", online: false }, "本地管理 · 已停止"],
+    [{ type: "external", online: false }, "远端调试 · 离线"],
+  ] as const)("shows the protocol package lifecycle state for %j", async (packageSource, expected) => {
+    const user = userEvent.setup();
+    render(
+      <SocketProcessingCard
+        settings={settings()}
+        catalog={catalog([packageOption("1.0.0", { package_source: packageSource })])}
+        locked={false}
+        onTransition={vi.fn()}
+        onChange={vi.fn()}
+      />,
+    );
+
+    await user.click(screen.getByText("高级技术信息"));
+    expect(screen.getByText(expected)).toBeVisible();
   });
 
   it("lists only authoritative exact versions", async () => {
