@@ -3,14 +3,14 @@
 ## 任务信息
 
 - 任务 ID：`TASK-20260829-001`
-- 状态：`进行中`
+- 状态：`已完成`
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 10:08:47 +08:00`
 - 开始时间：`2026-08-29 10:08:47 +08:00`
-- 最后更新时间：`2026-08-29 10:46:46 +08:00`
-- 完成时间：`N/A`
+- 最后更新时间：`2026-09-07 19:12:35 +08:00`
+- 完成时间：`2026-09-07 19:12:35 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-29/establish-database-version-100-baseline.md`
-- 归档路径：`docs/tasks/completed/2026-08-29/establish-database-version-100-baseline.md`
+- 归档路径：`docs/tasks/completed/2026-09-07/establish-database-version-100-baseline.md`
 - 关键词：`SQLite`、`Schema version 100`、`1.00 baseline`、`pre-release reset`、`compatible migration`、`startup`
 - 任务优先级：`高`
 - 优先级理由：涉及数据库 Schema、启动时破坏性清理、正式版本兼容基线和未来迁移方向；错误实现可能删除正式数据、让应用无法启动或让旧程序破坏未来数据库。
@@ -118,7 +118,7 @@ Schema 和数据并按版本 `100` 重建；不能在 Tauri/UI 层吞掉错误�
 | DB100-02 | 实现版本 100 基线与 pre-1.00 原子重建 | DB100-01 | 已完成 | WAL、并发、外键和失败回滚均通过 |
 | DB100-03 | 更新持久化文档和启动说明 | DB100-02 | 已完成 | 1.00 基线与未来显式迁移合同一致 |
 | DB100-04 | 全量门禁、Release 构建和本机默认目录启动验证 | DB100-03 | 已完成 | 自动化全绿，默认 App 稳定运行且数据库版本为100 |
-| DB100-05 | 独立对抗审查、证据和归档 | DB100-04 | 进行中 | P0/P1/P2 为0；等待 Windows CI 后关闭归档 |
+| DB100-05 | 独立对抗审查、证据和归档 | DB100-04 | 已完成 | 当前SQLite88/checker14/exact3 PASS；同源Windows Verify成功；补齐证据P1后独立复审APPROVE |
 
 ## 测试计划
 
@@ -184,8 +184,24 @@ Schema 和数据并按版本 `100` 重建；不能在 Tauri/UI 层吞掉错误�
 
 ## CI 情况
 
-- `PENDING`：本地验收已完成，下一步按用户既有要求统一推送并等待 Windows CI。
+- `SUCCESS`：Windows Verify job（run34025792017）与quick build（34020524291）已成功，本轮只读复核；完整CI仍因coverage失败，不声称整run成功。
 
 ## 完成总结
 
 - 数据库版本100现为产品1.00正式兼容基线。合法pre-1.00数据库在写锁内重新识别并原子重建；版本100保持；未来版本和异常标记拒绝。并发、外键、WAL和失败回滚边界均有回归保护，默认App已恢复稳定运行。
+
+
+## 新分支续办（2026-09-07 18:43:33 +08:00）
+
+- 用户要求：切换到新分支处理当前6项待办。已从 develop 创建 codex/complete-pending-tasks-20260907，起点 caa36022；保留原有 gmofg_cps 与 http-finalize 未跟踪目录，不纳入本次工作。
+- 执行范围：原任务已确认的本地修复、证据补齐、验证和状态收尾；本轮不从历史记录推导新的 push/CI/tag/Release 授权。
+- 需求就绪复核与步骤：核对后续 Schema100 最终合同和已成功的 Windows Verify/build 原始记录；在当前源码重新执行相关数据库验证，再决定 Windows 门禁及归档是否满足。后续任务替代的实现以当前合同为准，不恢复旧实现。
+- 优先级仍为高，适用受影响验证与独立整体审查；任务级完成门禁未满足则保留未完成状态。
+- 测试证据：新增执行使用 docs/testing/evidence/2026-09-07/TASK-20260829-001/ 下独立用例，原证据不覆盖。
+
+
+## 续办完成与归档（2026-09-07 19:12:35 +08:00）
+
+- 当前SQLite88/88、release checker14/14、Infrastructure旧库清理/Host旧库清理/optimized双Host启动各exact1/1通过；为保存临时Component再执行捕获repeat1/1通过。51项源码/配置/fixture归档逐字稳定。Windows Verify（34025792017）成功，相关源/Cargo与当前逐字一致；quick34020524291成功，原Windows等待项已补齐。原App/UI验收保留为历史已验证，本轮无产品代码变更，不操作正式数据库。独立初审发现8项checker输入缺失P1，补齐第三份归档/replay后最终APPROVE，残留发现0。
+- 证据与复测：[README](../../../testing/evidence/2026-09-07/TASK-20260829-001/schema100-current-followup/README.md)、[metadata](../../../testing/evidence/2026-09-07/TASK-20260829-001/schema100-current-followup/metadata.json)、[独立审查](../../../testing/evidence/2026-09-07/TASK-20260829-001/schema100-current-followup/independent-review.md)。
+- 原任务/用例资源保持不变；本次用例与复测脚本随档案保存。任务范围全部验收满足，归档至实际完成日期2026-09-07。

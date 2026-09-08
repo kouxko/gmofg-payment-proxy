@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-03 11:07:41 +08:00`
+- 最后更新时间：`2026-09-08 12:25:40 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -165,7 +165,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 | WPC-09 | 执行真实 HTTP/Socket 流水线、macOS App 与 Windows 单 executable 验收 | WPC-07、WPC-08 | 否 | 已完成 | macOS Release App 与真实 HTTP/Socket 回放通过；Windows executable-only CI run 33525227567 成功并完成产物校验 |
 | WPC-10 | 更新作者指南、ADR、架构、MCP、操作和发布文档并整体对抗审查 | WPC-09 | 否 | 已完成 | 活动文档已同步当前规则和 Wasm-only 合同；独立 code reviewer 与 architect 无提交阻断 |
 | WPC-11 | 将本地、workspace MSRV、活动文档与全部 CI Rust 工具链统一到 `1.98.0` | WPC-10 | 否 | 已完成 | `rustc`/`cargo` 实际版本为 1.98.0，活动配置无 1.97，受影响检查和 CI 合同通过 |
-| WPC-12 | 在 `10.0.28.77` Windows App 重放历史 HTTP、ISO8583 Wasm 与 AU EFTEX Wasm 部署 | WPC-08、WPC-09、WPC-13 | 否 | 进行中 | 5 个 Socket Wasm 的真实加载、Display、规则命中/miss/fail-closed、客户端/受控上游原始字节、Exchange/diagnostics 和最终运行态已 VERIFIED；历史 HTTP 本轮 NOT_RUN，因此小任务不记为全部完成 |
+| WPC-12 | 按本轮要求在本机补齐历史 HTTP 回归，并保留已完成的 Windows Wasm 部署证据 | WPC-08、WPC-09、WPC-13 | 否 | 已完成 | 2026-09-08 用户将本轮回放环境改为本机macOS；HTTP7/Socket3、字节/阶段/规则、重启与清理PASS，独立审查APPROVE；先前5个Socket Wasm Windows实测证据保留为历史已验证，本轮不声称Windows或其他5包重跑 |
 | WPC-13 | 构建内置公开测试 BDK 的 AU EFTEX 测试 Wasm，并锁定旧向量数据面 | WPC-08 | 否 | 已完成 | Component 不再依赖运行时 BDK 环境变量；组件单测、统一构建、正式 Host Frame/Decode/Display/Encode 和远端 71 字节请求/63 字节响应逐字节断言全部通过，产物 SHA-256 可复核 |
 | WPC-14 | 修复 macOS DMG 发布阻断并完成主分支/Release 收口 | WPC-10、WPC-11、WPC-13 | 否 | 进行中 | DMG 使用 runner 支持的命令并有回归测试；当前分支验证通过并推送；PR 合并到用户确认的主分支；tag Release 工作流在无签名配置时明确产出 unsigned 制品并校验全部制品；仅删除用户确认且无独立/未提交工作的分支 |
 | WPC-15 | 在 examples 中交付无 Schema 的 JSON Pretty HTTP Wasm 包，并修复导入与安全 Display 样式合同 | WPC-03、WPC-08 | 否 | 已完成 | HTTP null Schema 已在导入、详情和 Listener 目录中通过且 `frame: false`；Socket Schema 严格性不变；Display 保留安全内联视觉样式并继续拒绝主动内容；JSON Pretty 编辑器式分色经用户本地验收 |
@@ -242,7 +242,7 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `2026-09-02 17:58:52 +08:00`：PR CI run `33615348276` 暴露协议包前端聚合分支覆盖率只差 1 个分支；532 项前端测试本身全部通过。选择给详情视图既有的空安装时间占位符补回归测试，保持 90% 门禁和生产源码不变。
 - `2026-09-02 15:57:27 +08:00`：开始 WPC-12 远端 Windows 重放。MCP `tools/list`、`mcp_environment_capabilities` 与 `workspace_list` 已实时成功；远端当前只有默认 Workspace revision 1、一个 disabled HTTP Listener、无运行 Listener。内置 `iso8583-ascii-standard@1.0.0` 为 managed Wasm、enabled/online/valid，Frame/Decode/Encode/Display 与双向 Schema 可读；`au-eftex@1.1.0` 未安装。远端日志路径确认 Windows 用户数据目录，RDP 3389、SMB 445、MCP 17653 与外部包 8765 可达。以上只读盘点不算部署或重放完成。
 - `2026-09-02 16:43:08 +08:00`：修复 ISO Deno Host 整数规范化兼容并发布 `1.0.1`；Nuvei Rhai `1.0.1` 将 object/array 递归渲染为 nested table。远端五包逐字节重放通过后，用户截图证明另一个 `nuvei-tango-json@1.0.0` 仍在输出原始 JSON；随后只修改其 Display renderer、升级到 `1.0.1` 并增加正式 Host 回归，重新统一构建 5 个 Wasm。
-- `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
+- `2026-09-02 17:02:32 +08:00`：导入最终 Wasm 后通过 MCP 候选预览/提交创建 `Remote Wasm Rules Replay 20260902`。5 条 Listener 全部 running 且无 fault；5 条规则各命中 1 次，ISO 两条规则把 MTI `0200` 改为 `0100`，AU 与两套 Nuvei 使用同值动作并以持久化命中计数证明执行。4 条 miss 原字节保持且不增加计数；4 条非法 Frame 在上游前按预期 `DECODE_FAILED`/`PROCESSING_FAILED` fail-closed。13 条 Exchange 中 9 completed、4 expected failed；两套 Nuvei 的命中/miss、上下行 Display 均为递归 nested table 且无 `<pre>`。证据见 [`remote-device-replay-10-0-28-77`](../../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)。
 - `2026-09-03 10:46:55 +08:00`：新增独立 `examples/protocol-packages/json_pretty/` HTTP Component、包级锁文件、构建器、编辑器式 JSON 分色和单文件产物。修复后端 HTTP `frame: false` 投影，以及前端导入预览/结果、详情和 Listener 目录的 HTTP nullable Schema 合同；Socket 仍要求双向合法 Schema。Display 沙箱保留安全内联视觉样式并删除主动内容和越界 CSS。包级 4/4、相关前端 69/69、typecheck、Rust 导入测试和开发构建通过；最终产物 `161042` bytes，SHA-256 `5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3`。用户在重新启动的本地 App 中确认导入、目录与使用“可以了”。证据见 [`json-pretty-wasm-example`](../../../testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example/README.md)。
 - `2026-09-03 11:07:41 +08:00`：按用户确认删除 AU EFTEX Python、ISO8583 Deno/TypeScript、Nuvei Tango JSON Python 和 Nuvei Tango Rhai/ZIP 四组重复实现；保留五个 Rust Component，并把 Nuvei 合成 JSON fixture 移入其 Component 测试目录。同步删除 AU Python trace verifier、失效命令和 TypeScript 排除项，四个 README 改为 Component-only。统一包测试与构建 `20/20`、正式 Host 集成 `2/2`、typecheck、lint、source-size、rustfmt、diff-check 和非 Wasm 活动文件零匹配扫描全部 PASS；通用 `/packages` 代码及历史证据未改。证据见 [`wasm-only-package-source-cleanup`](../../../testing/evidence/2026-09-03/TASK-20260901-001/wasm-only-package-source-cleanup/README.md)。
 
@@ -296,10 +296,10 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `PASS`：Host 两次启动 Component 恢复测试 1/1；备份归档测试 24+7+8。
 - `PASS`：`pnpm test:protocol-packages`，五个 Component 的逻辑测试、release 构建和汇总校验全部通过。
 - `PASS`：相关前端 Vitest 97/97；typecheck、lint、bindings、architecture、严格 Clippy 全部通过。
-- `PASS`：当前 macOS Release App HTTP 与 Socket 真实数据面回放，证据见 [`release-app-replay`](../../testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay/README.md)。
-- `PASS`：五个仓库 Component 的正式 Host runtime/集成证据见 [`wasm-integrated-runtime`](../../testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md)。
-- `PASS`：托管 Component 详情隔离回归见 [`managed-component-detail-regression`](../../testing/evidence/2026-09-01/TASK-20260901-001/managed-component-detail-regression/README.md)。
-- `PASS`：远端 5 个 Wasm 与规则完整重放见 [`remote-device-replay-10-0-28-77`](../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)；规则 hit 5/5、miss 4/4、非法 Frame fail-closed 4/4，远端 Listener 5/5 保持 running。
+- `PASS`：当前 macOS Release App HTTP 与 Socket 真实数据面回放，证据见 [`release-app-replay`](../../../testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay/README.md)。
+- `PASS`：五个仓库 Component 的正式 Host runtime/集成证据见 [`wasm-integrated-runtime`](../../../testing/evidence/2026-09-01/TASK-20260901-001/wasm-integrated-runtime/README.md)。
+- `PASS`：托管 Component 详情隔离回归见 [`managed-component-detail-regression`](../../../testing/evidence/2026-09-01/TASK-20260901-001/managed-component-detail-regression/README.md)。
+- `PASS`：远端 5 个 Wasm 与规则完整重放见 [`remote-device-replay-10-0-28-77`](../../../testing/evidence/2026-09-02/TASK-20260901-001/remote-device-replay-10-0-28-77/README.md)；规则 hit 5/5、miss 4/4、非法 Frame fail-closed 4/4，远端 Listener 5/5 保持 running。
 - `PASS`：Workspace all-target/all-feature check 与 strict Clippy、Rust fmt、bindings、typecheck、协议包 UI 77 项、Next production build、source-size、diff-check。
 - `PASS`：Windows executable-only CI run 33525227567；Cargo Release、OpenSSL DLL 依赖拒绝门和 artifact upload 均通过，本地下载产物类型、大小与 SHA-256 已核验。
 - `NOT_RUN`：真实 wss、跨平台文件系统和出站 HTTP按本轮用户范围排除。
@@ -318,3 +318,84 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - `当前 Wasm/规则交付完成`：AU EFTEX 已内置公开测试 BDK，5 个最终 Wasm、两项 Display 修复和远端规则数据面均通过。远端 5 条 Listener 与受控上游保持运行供检查。历史 HTTP 未按本轮范围重跑，完整 CI 的 Windows 冷缓存超时复跑也尚未完成，因此总任务继续保持进行中，不归档。
 - `JSON Pretty 示例包完成`：无 Schema 单文件 HTTP Component、导入/详情/入口目录合同、安全自定义 Display 样式和编辑器式分色已通过定向自动化与本地 App 用户验收。总任务因 WPC-12/WPC-14 仍在进行中而继续保持进行中，不归档。
 - `重复实现清理完成`：AU EFTEX、ISO8583 Deno ASCII、Nuvei Tango JSON、Nuvei Tango JSON Rhai 和 ISO8583 ASCII Standard 在活动仓库中只保留 Rust WebAssembly Component；旧 Python/Deno/Rhai 实现已删除，通用远端 `/packages` 接口与历史证据保持不变。总任务仍因 WPC-12/WPC-14 进行中而不归档。
+
+
+## 新分支续办（2026-09-07 18:43:33 +08:00）
+
+- 用户要求：切换到新分支处理当前6项待办。已从 develop 创建 codex/complete-pending-tasks-20260907，起点 caa36022；保留原有 gmofg_cps 与 http-finalize 未跟踪目录，不纳入本次工作。
+- 执行范围：原任务已确认的本地修复、证据补齐、验证和状态收尾；本轮不从历史记录推导新的 push/CI/tag/Release 授权。
+- 需求就绪复核与步骤：先修复5处证据链接由 ../../testing/ 改为 ../../../testing/ 并检查目标实际存在，复核 WPC-12/14 与后续交付记录。历史运行记录仅为历史已验证；远端 HTTP、Release 等未补齐前不标完成。
+- 优先级仍为高，适用受影响验证与独立整体审查；任务级完成门禁未满足则保留未完成状态。
+- 测试证据：新增执行使用 docs/testing/evidence/2026-09-07/TASK-20260901-001/ 下独立用例，原证据不覆盖。
+
+
+### WPC-14 本地覆盖率门禁修复（2026-09-07 18:54:04 +08:00）
+
+- 实际现象：历史CI 34025792017 的 Coverage gates 失败；当前回读的artifact显示 socket-* 分支283/325=87.07%，门槛90%。
+- 当前已验证：当前 src/features/listeners 与 vitest.config.ts 相对该run的fa4e154f逐字无差异；原始coverage-reports已下载归档。不是新的产品默认值或错误处理需求。
+- 首次本地复现：与Release编译并行的默认多worker覆盖测试出现多个15秒超时，主Agent中止；Deno的SIGINT处理另报NaN退出码错误。该不完整执行不能作为coverage结论，完整原始输出保留。
+- 根因范围：历史报告明确缺失现有Socket UI/model分支用例；本轮只补有实际结果断言的测试，不降低90%门槛、不调整生产分支、超时或错误行为。局部性能现象先通过减少运行worker与避免编译并行排除资源竞争，不把它宣称产品缺陷。
+- 最小/最优：复用现有组件与model测试文件、fixtures及mock，补遗漏的用户交互/状态输出；不引入依赖或新抽象。测试变更由coverage_followup负责 src/features/listeners/socket-*.test.ts(x)，主Agent负责证据、集成与元数据，其他源文件只读。
+- 就绪PASS：目标=当前完整前端测试通过且socket分支>=90%；输入/错误语义=现有源码与既有合同；示例=现有空值/禁用/结构切换等未覆盖路径按当前结果断言。发现未知产品合同则停止该分支。
+- 受影响验证：定向测试、typecheck、ESLint、完整前端coverage（降低worker数但不改门槛或断言）；最后独立审查。证据：[frontend-coverage-followup](../../../testing/evidence/2026-09-07/TASK-20260901-001/frontend-coverage-followup/README.md)。
+
+
+### 当前类型检查的证据归档边界（2026-09-07 19:05:24 +08:00）
+
+- 当前已验证现象：`deno task typecheck` 报5处TS2307，均来自TASK-20260906-001历史 `outputs/reviews/` 下的展开测试源码；原始输出保存为本轮frontend-coverage-followup/outputs/typecheck.log。
+- 预期依据：项目治理第10.1节把活动fixture与历史证据快照分开，且现有tsconfig已排除 `docs/testing/evidence/**/resources/**`，明确意图是不把归档资源当应用源码。实际归档也会在outputs/reviews中含源文件，当前排除范围遗漏了这一路径。
+- 根因与影响：顶层 `**/*.ts(x)` + 只排除resources子目录，使历史审查测试被TypeScript当作活跃测试并解析其不存在的相对导入。并非生产源码依赖缺失。最初对本轮快照做了压缩整理，完整复测仍明确指向历史outputs；本轮不修改历史文件。
+- 最小/最优方案一致：把已有排除从evidence内resources扩大为完整 `docs/testing/evidence/**`，覆盖同一不可变历史证据边界；不排除src、活动fixture或其他应用配置，不改严格选项、不加ignore。
+- 就绪PASS：这是现有构建合同边界修复，不新增产品行为。主Agent独占tsconfig.json；coverage子Agent文件已冻结。
+- 验收：原类型检查真实失败后，修改一项exclude，重跑完整typecheck；以tsc --listFilesOnly证明所有src TypeScript文件仍被检查、证据文件均不在编译输入。规则/UI/schema等语义无变化；本轮独立审查覆盖此变更。
+
+
+## 本轮局部完成结果（2026-09-07 19:21:32 +08:00）
+
+- 5处证据相对链接已修复，目标均存在。
+- WPC-14本地覆盖率门禁修复完成：10个新增测试覆盖19个原遗漏分支，Socket分支283/325=87.07%提升至302/325=92.92%，90%门槛未改；最终冻结配置下73文件560测试通过。
+- 历史outputs/reviews测试误入类型编译问题已通过最小exclude边界修复：typecheck PASS，208个src TypeScript完整纳入，evidence输入0。生产源码/严格检查不变；ESLint、diff及220输入归档字节检查通过。
+- 独立局部审查APPROVE，残留P0/P1/P2=0；证据：[frontend-coverage-followup](../../../testing/evidence/2026-09-07/TASK-20260901-001/frontend-coverage-followup/README.md)。首次环境超时/中止、TS2307及非最终配置测试均保留，不当成成功；最终使用stable-final。
+- 总任务仍进行中：WPC-12在原Windows主机的历史HTTP重放未补验；WPC-14主分支/tag Release和全部制品最终交付未完成。当前CI34025792017仍是历史失败，本地修复不改写远端结论；本轮未push/触发新CI/发布。
+
+## 本机回归需求变更与就绪（2026-09-08 09:52:38 +08:00）
+
+- 用户最新要求：“用本机进行测试验证回归”。原WPC-12远端Windows回放的本轮执行环境改为本机macOS；HTTP/Socket输入、规则语义、各阶段与预期字节保持。原远端环境作为本轮前置门禁失效，Windows平台结论仍未验证，不把本机结果标为Windows PASS。
+- 范围：本地静态/前端coverage/Rust回归，以及当前真实Release App受控HTTP/Socket/Wasm数据面；App使用独立数据目录。WPC-14发布、Android真机与正式签名仍属独立未完成项；read_chunk_bytes 1MiB仅为建议，本次不实现。
+- 就绪PASS：目标与范围清楚；输入输出沿用归档父用例；错误仍fail-closed，未确认产品合同不变。验收以源码状态稳定、实际测试计数/断言、原始Server/Client字节、规则/Exchange回读、清理结果判定。进入验证时间为本记录时间。
+- 最小与最优方案一致：复用既有本地App隔离启动与MCP候选合同，创建派生回放脚本适配当前合同，保留旧向量；无需产品改动或新增依赖。原始脚本/配置/Fixture/App产物可复用父归档，新增资源来源逐项记录。
+- 小任务：LOCAL-01当前静态和完整测试；LOCAL-02隔离Release App HTTP/Socket回放；LOCAL-03状态与证据独立复核。LOCAL-01先于占用固定MCP端口的LOCAL-02；子Agent仅只读定位，主Agent执行并持锁维护元数据。高优先级不变，选择独立审查回归结果与环境替换边界。
+- 证据：[local-macos-regression](../../../testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/README.md)。
+
+## 本机回归结果（2026-09-08 10:52:14 +08:00）
+
+- LOCAL-01 PASS：10个gate、前端560、Rust1647；1418输入测试结束逐字节稳定。
+- LOCAL-02 PASS：真实Universal DMG App在独立HOME运行，HTTP7/Socket3、上游6请求/2帧、规则2/2/2/2/1、两Decode失败无sent；2监听5规则与所选Workspace重启持久化相等。App正常退出、DMG卸载、端口关闭。
+- 原始失败尝试、当前合同适配、完整字节/MCP/配置/数据库归档、复测入口均见[本机回归证据](../../../testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/README.md)。独立整体审查待回收。
+- 质量验证无需生产代码修改；初次HTTP半关闭/错误文本断言属于派生脚本偏离历史或当前合同，全部保留后纠正，未把失败改写为成功。启动/自动化间歇异常未完成根因定位，不宣称性能或全部平台验收。
+- 总任务仍进行中，WPC-14主分支/tag Release交付未完成；Windows/Android和正式签名/公证不由本轮替代。
+
+### 本机回归审查与子项收口（2026-09-08 10:53:56 +08:00）
+
+- LOCAL-03独立整体审查APPROVE，P0/P1/P2=0；34组bin/hex一致，8条成功完整阶段链与2条Decode失败均有直接证据。
+- WPC-12按用户本轮环境变更完成：缺失的HTTP回放以本机结果补齐，历史Windows五包证据不改写为本轮已验证。此前“待远端HTTP”只保留为历史记录，不再作为本轮未完成原因。
+- 总任务仅就本轮已处理范围收口，仍因WPC-14主分支/tag Release交付保持进行中；本轮无push/CI/发布。
+
+## GitLab交付平台确认（2026-09-08 11:06:41 +08:00）
+
+- 用户第3项明确选择GitLab；WPC-14此前GitHub目的地要求由该选择替代，旧记录保持历史。GitLab远端为http://172.16.3.60/other/intercept_proxy.git，当前默认分支master；目标分支和版本tag正在询问。先准备已授权本地变更、检查现有CI与交付状态，具体代码发送/发布动作待内容可审查及授权明确后执行。
+
+## GitLab已有发布发现（2026-09-08 11:27:34 +08:00）
+
+- 实时GET确认项目1023，master及v1.0.0指向a146e75c，祖先包含本工作分支起点caa36022。已有Release包含Android APK和Windows portable/EXE/MSI四个链接，尚无macOS链接。当前任务源码在gitlab/master与caa36022之间一致；新本地cap和coverage等修改尚未发送。
+- [gitlab-release-audit](../../../testing/evidence/2026-09-08/TASK-20260901-001/gitlab-release-audit/README.md)继续核验已有制品和CI终态。此前“尚无tag/Release”仅为旧平台/旧时间事实，不能作为本次结论。
+
+- 2026-09-08 11:44:08 +08:00只读核验完成：4资产下载/结构PASS，portable内APK与单独APK一致，APK签名/四ABI和Windows AMD64/MSI格式通过；34120 build-only终态SUCCESS。GitLab Release缺macOS资产，当前新改动未push、完整CI未执行；WPC-14仍进行中。需要决定这轮变更的发送/版本/发布范围，不能重写既有v1.0.0 tag或暗中替换已发布Windows资产。
+
+## 本轮GitLab源码交付确认（2026-09-08 12:25:40 +08:00）
+
+- 用户明确要求“提交到gitlab 不触发CI”。本轮授权提交并推送已验收代码、任务归档及完整测试证据；沿用当前隔离分支`codex/complete-pending-tasks-20260907`发送至同名GitLab分支。
+- 每个提交附加`[skip ci]`，推送使用`git push -o ci.skip`；推送后核验远端分支SHA及pipeline/jobs，确保没有CI作业执行。GitLab可产生status=skipped且无jobs的记录。
+- 本轮不创建MR、不合并主分支、不打tag、不发布制品；WPC-14制品发布剩余范围维持进行中。
+- 提交范围为本轮Socket上限、前端测试/证据类型检查隔离、手动快速构建配置、5项已完成任务归档及关联证据；无关CPS包/HTTP Finalize未跟踪目录不纳入。测试资源及日志按原始字节暂存，排除Python运行缓存。
+- 已有本地/真机验收及独立审查结论保持有效，本轮只修改交付记录并执行Git范围、字节和远端一致性检查；不重复业务测试。

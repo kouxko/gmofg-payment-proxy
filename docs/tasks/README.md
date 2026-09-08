@@ -2,6 +2,21 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-08
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 12:03:49 +08:00 | [TASK-20260905-001：整体审查问题修复与A920验收](completed/2026-09-08/fix-reviewed-architecture-contracts.md) | 活动归属、手动恢复、严格路由、草稿与错误合同 | PASS；原本地回归、真机准入2/2、四条真实wire、失联/新epoch恢复及设备还原；独立APPROVE | 高 | Android、TUN、租约、恢复、架构 |
+| 11:39:16 +08:00 | [TASK-20260906-001：六项架构与逻辑修复](completed/2026-09-08/fix-six-architecture-review-findings.md) | 活动归属、异步保存、错误观测及Socket资源约束；1MiB读取上限 | PASS；新增6专项、受影响1111测试、严格静态门禁及独立APPROVE；默认16KiB保持 | 高 | Socket、资源、并发、错误、Android |
+| 11:24:03 +08:00 | [TASK-20260829-002：递归Document与统一扁平规则](completed/2026-09-08/nested-document-rules-javascript-websocket-packages.md) | 递归Document、统一规则、Schema100；旧Sidecar已由Wasm替代 | 自动化PASS；本机HTTP7/Socket3与持久化PASS；跨平台/签名USER_REPORTED_PASS；独立审计通过 | 高 | Document、规则、Wasm、Schema100、人工验收 |
+
+## 2026-09-07
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 19:12:35 +08:00 | [TASK-20260904-006：Android与Windows快速联合验证包](completed/2026-09-07/github-quick-android-windows-package.md) | 恢复仅手动触发，Android先构建并与Windows exe按resources布局交付 | PASS；合同3/3、YAML/格式/lint/重放、历史成功run实物核验、独立APPROVE；本轮无新CI | 高 | workflow_dispatch、Android、Windows、artifact |
+| 19:12:35 +08:00 | [TASK-20260829-001：数据库版本100正式基线](completed/2026-09-07/establish-database-version-100-baseline.md) | 合法旧库清理重建100，100保留，未来/损坏拒绝；补齐Windows等待与归档 | PASS；SQLite88、checker14、exact3、51输入归档及独立复审；Windows Verify成功，整CI coverage失败单列 | 高 | SQLite、Schema100、WAL、并发、持久化 |
+
 ## 2026-09-06
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

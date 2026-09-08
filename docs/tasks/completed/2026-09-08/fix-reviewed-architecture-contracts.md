@@ -1,14 +1,14 @@
 # TASK-20260905-001：按已确认合同修复整体审查问题
 
 - 任务 ID：`TASK-20260905-001`
-- 状态：`已阻塞`
+- 状态：已完成
 - 任务日期：`2026-09-05`
 - 创建时间：`2026-09-05 14:00:06 +08:00`
 - 开始时间：`2026-09-05 14:00:06 +08:00`
-- 最后更新时间：`2026-09-05 21:04:09 +08:00`
-- 完成时间：未完成
+- 最后更新时间：2026-09-08 12:03:49 +08:00
+- 完成时间：2026-09-08 12:03:49 +08:00
 - 创建路径：`docs/tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md`
-- 归档路径：`docs/tasks/completed/<完成日期>/fix-reviewed-architecture-contracts.md`
+- 归档路径：docs/tasks/completed/2026-09-08/fix-reviewed-architecture-contracts.md
 - 关键词：架构审查、Android、路由、控制租约、generation、Bootstrap、HTTP Header、Listener 草稿、合同回归
 - 任务优先级：高
 - 优先级理由：涉及协议、跨模块并发、生命周期和 UI 状态一致性，执行完整流程。
@@ -53,11 +53,11 @@
 
 ## 原任务、证据与复用
 
-- [TASK-20260828-004](../../completed/2026-08-28/android-vpn-stop-on-adb-device-missing.md)：复用默认 5 秒、关闭开关、generation/多设备隔离与错误路径；父证据待按原任务实际路径补齐。
-- [TASK-20260827-001](../../completed/2026-08-27/android-multi-device-vpn-management.md)：复用 per-serial/CAS/锁顺序，不重写原档案。
-- [TASK-20260904-005](../../completed/2026-09-04/fix-http-chunked-response-forwarding.md) / HTTP-CHUNKED-RESPONSE-001：复用请求/响应 wire、404、chunked、故障注入合同。
-- [TASK-20260904-003](../../completed/2026-09-04/http-action-parameter-forms.md)：保留前端强类型表单/序列化与 Rust 最终校验；尺寸 7 项是已知债务。
-- [TASK-20260904-004](../../completed/2026-09-04/fix-certificate-revision-semantics.md)：集合 revision 与记录 revision 不要求相等，材料校验保持。
+- [TASK-20260828-004](../2026-08-28/android-vpn-stop-on-adb-device-missing.md)：复用默认 5 秒、关闭开关、generation/多设备隔离与错误路径；父证据待按原任务实际路径补齐。
+- [TASK-20260827-001](../2026-08-27/android-multi-device-vpn-management.md)：复用 per-serial/CAS/锁顺序，不重写原档案。
+- [TASK-20260904-005](../2026-09-04/fix-http-chunked-response-forwarding.md) / HTTP-CHUNKED-RESPONSE-001：复用请求/响应 wire、404、chunked、故障注入合同。
+- [TASK-20260904-003](../2026-09-04/http-action-parameter-forms.md)：保留前端强类型表单/序列化与 Rust 最终校验；尺寸 7 项是已知债务。
+- [TASK-20260904-004](../2026-09-04/fix-certificate-revision-semantics.md)：集合 revision 与记录 revision 不要求相等，材料校验保持。
 - 前序只读复现 `/private/tmp/proxy-architecture-review-20260905/` 仅作为线索，本任务需要归档实际用例资源和新测试结果。
 
 ## 测试与文档计划
@@ -121,11 +121,11 @@ Android、后端、前端用例metadata及README分别记录父任务/父用例/
 ## 独立审查结果与后续设计
 
 - 2026-09-05 15:09:07 +08:00：独立architect审查已实现范围APPROVE，新P0/P1/in-scope P2为0；见[报告](../../../testing/evidence/2026-09-05/TASK-20260905-001/integrated-verification/independent-review.md)。
-- #9独立登记为 [TASK-20260905-002：Listener草稿DTO设计](../../completed/2026-09-05/listener-draft-dto-design.md)，先形成可评审方案；父任务不声称该点已修复。#3恢复产品选择和真机验证仍待补齐。
+- #9独立登记为 [TASK-20260905-002：Listener草稿DTO设计](../2026-09-05/listener-draft-dto-design.md)，先形成可评审方案；父任务不声称该点已修复。#3恢复产品选择和真机验证仍待补齐。
 
 - 2026-09-05 16:23:52 +08:00：#9已在TASK-20260905-002完成源码方案与独立审查，确认属于保持已知行为的工程修复，进入实现。B1 Rust/绑定完成并冻结，F1前端迁移进行中；原“仅设计”的结论为前阶段历史，目前尚未宣称#9完成。#3产品选择继续等待，未将“继续”当作选择答案。
 
-- 2026-09-05 16:59:02 +08:00：#9已由[TASK-20260905-002](../../completed/2026-09-05/listener-draft-dto-design.md)完成实现、验证与独立复审并归档。新增3个Application Draft命令，保持原保存事务与既有合同；唯一审查P2已RED/GREEN修复。原“仅设计/进行中”描述为阶段历史。当前可确定修复#1/#2/#4/#5/#6/#7/#8/#9/#12已完成本地验证；本父任务状态转待确认，#3仍等待桌面重连自动恢复或明确start/apply的产品选择，真机验证未完成，整任务不归档为已完成。源码尺寸经相关测试拆分现剩6项原有超限；Display 1 MiB保持。未提交/推送/CI。
+- 2026-09-05 16:59:02 +08:00：#9已由[TASK-20260905-002](../2026-09-05/listener-draft-dto-design.md)完成实现、验证与独立复审并归档。新增3个Application Draft命令，保持原保存事务与既有合同；唯一审查P2已RED/GREEN修复。原“仅设计/进行中”描述为阶段历史。当前可确定修复#1/#2/#4/#5/#6/#7/#8/#9/#12已完成本地验证；本父任务状态转待确认，#3仍等待桌面重连自动恢复或明确start/apply的产品选择，真机验证未完成，整任务不归档为已完成。源码尺寸经相关测试拆分现剩6项原有超限；Display 1 MiB保持。未提交/推送/CI。
 
 
 ## #3 用户确认与实施就绪
@@ -171,3 +171,45 @@ Android、后端、前端用例metadata及README分别记录父任务/父用例/
 - 2026-09-05 21:07:54 +08:00：用户追加“不要有hash证据啥的”。提交范围相应收窄为源码、测试代码和当前项目说明；自动证据、日志、APK、包含其引用的本地任务档案及配套任务/证据索引不纳入提交，原文件保留本地。上一条“提交包含完整证据”的计划由本条替代；不新增换行属性文件，不清洗或删除原始材料，不推送。
 
 - 2026-09-05 21:08:56 +08:00：本地提交已完成并复核，包含95份源码/测试/当前文档；生成档案、日志和APK未纳入，暂存区已清空，相关本地材料保留。未推送、未触发CI。
+
+
+## 新分支续办（2026-09-07 18:43:33 +08:00）
+
+- 用户要求：切换到新分支处理当前6项待办。已从 develop 创建 codex/complete-pending-tasks-20260907，起点 caa36022；保留原有 gmofg_cps 与 http-finalize 未跟踪目录，不纳入本次工作。
+- 执行范围：原任务已确认的本地修复、证据补齐、验证和状态收尾；本轮不从历史记录推导新的 push/CI/tag/Release 授权。
+- 需求就绪复核与步骤：原无设备条件已变化：只读 adb 检测到 A920MAX 2740072778 和 IM28 3330000478。先核对当前运行状态及归档真机入口，再执行可隔离的验收；不能因在线就判定验收通过。
+- 优先级仍为高，适用受影响验证与独立整体审查；任务级完成门禁未满足则保留未完成状态。
+- 测试证据：新增执行使用 docs/testing/evidence/2026-09-07/TASK-20260905-001/ 下独立用例，原证据不覆盖。
+
+
+## 真机门禁当前状态（2026-09-07 19:21:32 +08:00）
+
+- 原“adb无设备”条件已变化：A920MAX 2740072778（API29）与IM28 3330000478（API31）在线，均为armeabi-v7a且符合Companion平台要求。当前只读输出：[physical-device-readiness](../../../testing/evidence/2026-09-07/TASK-20260905-001/physical-device-readiness/README.md)。
+- A920安装Companion，IM28未安装；两台均运行业务Launcher。SavedRecoveryAdmission仪器用例本身不建真实TUN，不能替代LocalSocket/TUN/失联/业务验收；其运行入口仍涉及APK安装/替换/卸载。现有完整门禁带模拟器约束，不直接用于物理机。
+- 已向用户请求专用设备及允许短暂断网的维护窗口，尚未获得选择。未安装/卸载、启停VPN、改端口映射、关闭业务App或发送交易；父任务仍已阻塞。后续还需按原验收合同明确Profile/Listener/目标应用与受控请求响应，补齐前不归档。
+
+## 真机操作授权更新（2026-09-08 11:06:41 +08:00）
+
+- 用户第2项“可以”确认使用A920并允许安装测试APK、启停VPN和短暂断网。此前维护授权阻塞解除，不重复询问。主Agent先复用既有受控测试应用/服务/fixture；若没有权威目标配置，仅对缺失的目标应用/服务参数提问。业务交易不由设备测试授权推导。
+- 用户第4项“手动验收合格”记录为人工验收声明；不能改写此前自动化NOT_RUN或伪造工具/签名证据。当前专门Android自动回归按第2项继续准备。
+
+## A920受控验收就绪（2026-09-08 11:19:42 +08:00）
+
+- 原目标203.0.113.48:16127/16627、D48模拟响应与target/isolation probe沿用现有emulator-proxy-gate fixture；仅将模拟器transport替换为物理A920 ADB reverse，v2帧/UUID/lease遵循当前已确认生产合同。旧v1 helper不直接使用。
+- 本轮验证系统已有VPN授权、同签名仪器测试（目标包不卸载）、真实LocalSocket/TUN/JNI双端口映射、非目标UID隔离、停止heartbeat超过5秒退出、过期apply_active拒绝、轮询不重启、显式apply新epoch恢复、最终stop与自有端口映射清理。实际业务链路未包含，不能用模拟D48替代真实GMO服务。
+- 就绪PASS；高优先级保持。主Agent拥有设备安装/运行和元数据，子Agent仅编写独立证据replay脚本，既有测试/生产代码不改变。最终测试结束后统一独立审查。
+- [A920证据](../../../testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/README.md)。
+
+## A920最终受控运行结果（2026-09-08 11:54:50 +08:00）
+
+- 准入instrumentation2/2 PASS；真实LocalSocket v2/TUN/JNI双端口两轮4条收发逐字节PASS，非目标UID隔离PASS，5秒失联停止/旧apply_active拒绝/轮询不复起/明确apply新epoch恢复/最终stop PASS。原APK与4项原配置已恢复并读回，测试包/映射/TUN清理通过。
+- 初次备份位置及两次ADB harness失败均保留；最终attempt3脚本使用targetContext备份、无-W显式wake、shell -T读取真实exit/stderr，不修改产品绕过失败。完整资源/日志/帧/复测见新增用例。
+- 未发送真实GMO业务，未声称桌面UI或LAN热协调端到端；这些与既有本地合同边界分开。等待独立任务级完成审查后归档。
+
+## 最终验收与归档（2026-09-08 12:03:49 +08:00）
+
+- 状态已完成：既有本地实现/审查及原父任务唯一剩余的真实Android设备验收均已闭合。此前“已阻塞/真机NOT_RUN”仅为历史阶段，不改写旧证据。
+- A920当前受控验收：准入2/2 PASS；双端口两轮4条request/response逐字节PASS；目标UID隔离、真实LocalSocket/TUN/JNI、5.765秒失联停止、旧apply_active拒绝、status不重启、明确apply新epoch恢复及最终stop PASS。22对控制Frame完整解析一致，88份当前输入逐字节稳定。
+- 原APK完整字节与4项原配置已恢复验证，新装测试包、备份文件、forward/reverse、TUN与Service清理通过。没有将受控D48响应声明为真实GMO交易；外部业务和桌面UI/LAN实机仍N/A，原任务未将其设为本次补验门禁。
+- 独立任务级审查frontend_followup_review：APPROVE，P0/P1/P2=0；任务/证据链接、资源、帧/字节、恢复及清理、复测脚本均通过。所有确认实现小项及文档/归档项已完成；旧表中的待确认/未执行是历史记录，以本节为准。
+- 本轮Android生产代码未修改；仅使用与9/5父用例相同的已验证release补真机证据。未Git提交、push、触发新CI或发布。

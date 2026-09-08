@@ -15,16 +15,7 @@
 
 ## 待实现任务
 
-- [TASK-20260906-001：修复六项架构与逻辑审查发现](tasks/pending/2026-09-06/fix-six-architecture-review-findings.md)（高，待确认；已实现部分验证与复审通过，Socket 读取上限待确认）
-
-
-
-
-- [TASK-20260905-001：按已确认合同修复整体审查问题](tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md)（高，已阻塞；已确认修复本地验证及整体审查通过，待Android真机验收）
-- [TASK-20260904-006：GitHub 快速构建 Android 与 Windows 联合验证包](tasks/pending/2026-09-04/github-quick-android-windows-package.md)
-- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)
-- [TASK-20260829-002：嵌套 Document、扁平规则条件与统一 JavaScript WebSocket 协议包](tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md)
-- [TASK-20260829-001：建立数据库版本 100 的 1.00 正式兼容基线](tasks/pending/2026-08-29/establish-database-version-100-baseline.md)
+- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)（高，进行中；GitLab已有v1.0.0四资产已验证，缺macOS资产及本轮变更交付收尾）
 
 ## 架构
 

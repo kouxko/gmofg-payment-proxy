@@ -3,14 +3,14 @@
 ## 任务信息
 
 - 任务 ID：`TASK-20260829-002`
-- 状态：`进行中`
+- 状态：`已完成`
 - 任务日期：`2026-08-29`
 - 创建时间：`2026-08-29 20:28:30 +08:00`
 - 开始时间：`2026-08-29 22:55:17 +08:00`
-- 最后更新时间：`2026-09-01 18:40:12 +08:00`
-- 完成时间：`N/A`
+- 最后更新时间：`2026-09-08 11:24:03 +08:00`
+- 完成时间：`2026-09-08 11:24:03 +08:00`
 - 创建路径：`docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
-- 归档路径：`docs/tasks/completed/2026-08-29/nested-document-rules-javascript-websocket-packages.md`
+- 归档路径：`docs/tasks/completed/2026-09-08/nested-document-rules-javascript-websocket-packages.md`
 - 关键词：`recursive Document`、`RFC 6901`、`unified rules`、`JavaScript`、`Boa`、`Sidecar`、`WebSocket JSON-RPC`、`manifest.json`、`HTTP Body`、`Socket`
 - 任务优先级：`高`
 - 优先级理由：涉及数据库 100 最终基线、Document 与规则公共领域模型、HTTP/Socket 编排、协议包 Manifest/RPC 公共合同、Sidecar 进程生命周期、持久化、UI 和跨平台打包；失败可能造成错误报文、错误业务结果、端口或进程泄漏及不可恢复状态。
@@ -257,16 +257,16 @@ result: "<HTML string>"
 | --- | --- | --- | --- | --- | --- |
 | NDR-JS-01 | 映射当前源码，锁定旧行为与新合同 RED 测试；加入开发期 DB100 每启动重建及正式发布移除门禁 | TASK-20260829-001 | 否 | 已完成 | Phase1/2合同、RED基线和发布阻断门均已验证；Phase17已删除开发重建路径并证明Release持久化 |
 | NDR-JS-02 | 实现递归 Document、Number、RFC6901、Schema 和规则本地元数据 | NDR-JS-01 | 否 | 已完成 | Domain101/101及Schema/no-Schema、root `""`/empty-name `"/"`、wildcard与UI回归通过 |
-| NDR-JS-03 | 实现统一 HTTP/Document/Socket 单条件单动作规则、两写出阶段、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 进行中 | 物理删除 NthHit 与条件/动作分离编辑；string 原始文本及 HTTP/Socket Schema/无Schema运行均通过 |
+| NDR-JS-03 | 实现统一 HTTP/Document/Socket 单条件单动作规则、两写出阶段、终止动作和方向级原子提交 | NDR-JS-02 | 否 | 已完成 | 物理删除 NthHit 与条件/动作分离编辑；string 原始文本及 HTTP/Socket Schema/无Schema运行均通过 |
 | NDR-JS-04 | 定义严格 Manifest、稳定错误和唯一 JSON-RPC wire | NDR-JS-01 | 否 | 已完成 | 本地/远程共享Manifest、注册、Hook、stable code和固定JSON-RPC API1合同已验证 |
 | NDR-JS-05 | 实现通用 Boa Sidecar、固定 exports、ESM 加载和内部字节适配 | NDR-JS-04 | 否 | 已完成 | G049 / Phase 8 已 `VERIFIED / APPROVED / CHECKPOINT READY`；P0/P1/P2=0，`blockers=[]` |
 | NDR-JS-06 | 实现 ZIP 安装、包注册表和 enabled/online/failed/disabled 生命周期 | NDR-JS-05 | 否 | 已完成 | 10秒注册、冲突、启停、断连、删除、process ownership及无孤儿进程自动化通过 |
 | NDR-JS-07 | 将 HTTP/Socket Pipeline 切换到统一规则和唯一 WebSocket 包端口，删除旧执行路径 | NDR-JS-03、NDR-JS-06 | 否 | 已完成 | 两方向Pipeline、codec、原始字节、Encode、生命周期/CAS及旧执行路径物理删除已验证 |
 | NDR-JS-08 | 将内置 JSON、ISO8583 和第三方本地包迁移为同一 ZIP/Sidecar；保留远程同协议接入 | NDR-JS-07 | 可按包并行 | 已完成 | 内置/本地/远程统一ZIP、注册、RPC和capability链已验证，无Rhai/TOML兼容路径 |
-| NDR-JS-09 | 实现统一规则右侧内联新建/编辑、单条件单动作卡片、精简协议包列表、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 进行中 | 物理删除创建 dialog 与 NthHit；新建元数据、条件和动作均在右侧固定编辑区完成；协议包列表只显示在线/离线 |
-| NDR-JS-10 | 固化正式 Schema100，并按最终发布合同在有效版本 `<100` 时整库清除重建；删除所有旧 Rhai/TOML/flat/four-stage/API1 路径 | NDR-JS-07、NDR-JS-09 | 否 | 进行中 | TDD证明Schema100保留、有效`<100`删除数据库/WAL/SHM并重建100、其他无效/未来版本fail-closed；随后重新执行Release启动与审查 |
-| NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 进行中 | 删除 current 文档中的 modal/递归条件树合同，改为内联扁平 AND 条件行；历史证据保持不可变 |
-| NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 进行中 | 旧递归树/modal checkpoint 已被用户需求变更失效；完成扁平内联规则重构后重新执行自动化、GUI、本地数据面和安装包验收 |
+| NDR-JS-09 | 实现统一规则右侧内联新建/编辑、单条件单动作卡片、精简协议包列表、Capture/Session 状态与 stable error 展示 | NDR-JS-02、NDR-JS-03、NDR-JS-06 | 否，共享合同稳定后 | 已完成 | 物理删除创建 dialog 与 NthHit；新建元数据、条件和动作均在右侧固定编辑区完成；协议包列表只显示在线/离线 |
+| NDR-JS-10 | 固化正式 Schema100，并按最终发布合同在有效版本 `<100` 时整库清除重建；删除所有旧 Rhai/TOML/flat/four-stage/API1 路径 | NDR-JS-07、NDR-JS-09 | 否 | 已完成 | TDD证明Schema100保留、有效`<100`删除数据库/WAL/SHM并重建100、其他无效/未来版本fail-closed；随后重新执行Release启动与审查 |
+| NDR-JS-11 | 同步架构、ADR、用户、协议包、MCP、测试矩阵和模板文档 | NDR-JS-08、NDR-JS-09 | 合同冻结后可并行 | 已完成 | 删除 current 文档中的 modal/递归条件树合同，改为内联扁平 AND 条件行；历史证据保持不可变 |
+| NDR-JS-12 | 全层验收、macOS Universal App/DMG、真实 HTTP/Socket E2E、对抗审查和本地提交 | 前述全部 | 否 | 已完成 | 旧递归树/modal checkpoint 已被用户需求变更失效；完成扁平内联规则重构后重新执行自动化、GUI、本地数据面和安装包验收 |
 
 共享 Document、规则、Manifest、RPC、包身份、生命周期和持久化合同稳定前不得并行修改。主 Agent 在实施批次开始前确定文件所有权和集成顺序。
 
@@ -628,3 +628,49 @@ result: "<HTML string>"
 - 阶段总结：G057 / Phase16 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY`；授权范围包含`docs/README.md`精确ADR hunk，session80057 targeted/static全绿，P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。full checkpoint属于NDR-JS-12而为N/A；TASK总体仍为进行中。
 - 阶段总结：G058 / Phase17 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / APPLICATION FULL BLOCKED-PARTIAL`；真实Release optimized exact1/1、P0/P1/P2=`0/0/0`，`code_checkpoint_ready=true`。Application full session1189 exit130/raw unavailable，后续completion NOT_RUN；Phase17 full属于NDR-JS-12而为N/A，TASK总体仍为进行中。
 - 阶段总结：G059 / Phase18 为 `VERIFIED / APPROVED / CODE CHECKPOINT READY / MANUAL ACCEPTANCE PENDING`；自动化代码、全层门禁、架构审查和Universal App/DMG均PASS，P0/P1/P2=`0/0/0`。人工GUI/权限/Windows/Android/Developer ID及外部CI/push/release仍`NOT_RUN`，TASK总体保持`进行中`。
+
+
+## 新分支续办（2026-09-07 18:43:33 +08:00）
+
+- 用户要求：切换到新分支处理当前6项待办。已从 develop 创建 codex/complete-pending-tasks-20260907，起点 caa36022；保留原有 gmofg_cps 与 http-finalize 未跟踪目录，不纳入本次工作。
+- 执行范围：原任务已确认的本地修复、证据补齐、验证和状态收尾；本轮不从历史记录推导新的 push/CI/tag/Release 授权。
+- 需求就绪复核与步骤：核对后续单进程 Wasm 替代合同、Schema100 与已归档统一运行合同；保留历史阶段记录，区分已被替代与仍需实际验收事项。不得恢复已删除 Sidecar，不把后续局部 PASS 扩大为原完整人工/发布验收。
+- 优先级仍为高，适用受影响验证与独立整体审查；任务级完成门禁未满足则保留未完成状态。
+- 测试证据：新增执行使用 docs/testing/evidence/2026-09-07/TASK-20260829-002/ 下独立用例，原证据不覆盖。
+
+
+## 当前剩余门禁与Universal本地续验（2026-09-07 19:15:52 +08:00）
+
+- 只读交叉审查：规则GUI已有Phase19实际交互/截图；当前Wasm HTTP/Socket E2E已有WPC release-app-replay。旧Boa/Sidecar已由ADR-010与TASK-20260901-001替代，不恢复旧实现。
+- 仍不能归档：原任务第448行明确网络/系统权限、Windows、Android、Developer ID/公证等人为环境项完成前保留进行中；后续局部用例的NOT_RUN不能撤销原门禁。当前Wasm Universal App/DMG、Windows安装运行、Android、网络/系统权限、Developer ID/公证仍需补证据。正式tag/GitHub Release明确不在本任务范围，属于WPC-14。
+- 本轮独立执行已确认且可逆的本地Universal构建：使用既有 `deno task build:macos:universal`，保持当前源码/配置与Wasm合同，不改App产品行为、不安装到/Applications、不触发新CI/发布。脚本只对本地bundle做ad-hoc签名、生成DMG并只读挂载验证两架构/签名/标识后卸载。
+- 环境只读结果：本机macOS，磁盘当前可用约42GiB；arm64和wasm target已安装，x86_64-apple-darwin未安装，按已确认Universal构建需要补齐工具链目标。codesigning有效身份为0，Developer ID身份为0，因此本轮不声称正式签名/公证/Gatekeeper分发通过。
+- 就绪PASS（仅本地Universal构建子项）：输入=当前受测源码、固定Companion APK与已有脚本；输出=arm64+x86_64单App和UDZO DMG；任一步失败如实保留；不降级为单架构成功。最小与最优均复用现有构建/验证入口，无需产品改动。
+- 证据路径：docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/。保存当前构建输入、环境、完整输出、App/DMG实物、两架构/签名/挂载结果和复测入口；复用原Phase18要求，但新用例标记Wasm替代Sidecar。
+
+## 当前Universal子项完成（2026-09-07 19:47:55 +08:00）
+
+- 本地当前Wasm Universal构建PASS：arm64与x86_64 Release全部完成，App主程序184503968 bytes；归档App ZIP 66582148 bytes、DMG 75259890 bytes。App及只读挂载DMG内App的双架构、com.interceptproxy.desktop、strict ad-hoc签名全部PASS并已卸载。
+- 1247构建输入完成后逐字节一致；归档DMG与实际输出一致；两处App的Companion APK与实际输入直接逐字节一致。归档产物独立重放exit 0。
+- 选择执行该子项独立审查，因为涉及跨架构产物和分发边界；quick_build_review结论APPROVE，P0/P1/P2=0。产物、源码输入、环境、重放入口、原始日志和审查见[本轮证据](../../../testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/README.md)。
+- 父任务继续进行中：Windows安装运行、Android、网络/系统权限、Developer ID/公证等人工环境门禁仍未满足。当前构建不替代这些验收；本轮无安装/push/CI/tag/Release。正式tag/Release属于WPC-14。
+
+## 当前Wasm Universal App本机回归（2026-09-08 10:53:56 +08:00）
+
+- 用户要求用本机测试验证回归。使用本任务9月7日归档DMG中的真实App，只读挂载、独立HOME，2监听/5规则重启持久化相等，HTTP7/Socket3实际请求/响应与失败路径PASS；8条完整阶段/字节链、34组bin/hex通过离线比较。
+- 1418当前测试输入稳定，1247构建输入与App来源对应；独立审查APPROVE，P0/P1/P2=0。App正常退出、DMG卸载、端口关闭、隔离库application_schema=100/integrity=ok。
+- 跨任务证据：[TASK-20260901-001 / local-macos-regression](../../../testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/README.md)，metadata.derived_from包含本任务wasm-universal-build。
+- 父任务仍进行中：Windows安装运行、Android、系统/网络权限、Developer ID/公证未由本机loopback回归替代；初次空白与自动化间歇错误未确认根因，不把本次功能PASS扩大为性能/长期稳定性验收。
+
+## 用户手动验收结论（2026-09-08 11:06:41 +08:00）
+
+- 用户明确答复第4组跨平台与签名验收：“手动验收合格”。该结论作为用户人工验收来源接受并记录，不重复要求操作或签名授权，不改写历史NOT_RUN为Agent实测。具体Windows/签名执行环境和原始报告未随本条提供，来源级别为用户确认。
+- 证据：[manual-acceptance-confirmation](../../../testing/evidence/2026-09-08/TASK-20260829-002/manual-acceptance-confirmation/README.md)。任务最终收尾同时核对其余已完成项与Android关联范围。
+
+## 最终完成与归档（2026-09-08 11:24:03 +08:00）
+
+- 状态：已完成。此前Phase20 IN PROGRESS / MANUAL ACCEPTANCE PENDING及旧checkpoint仅代表当时观察；最终自动化以Phase18/19/20、2026-09-07 Universal构建和2026-09-08本机质量及App回归为准，人工跨平台/系统权限/签名验收以用户明确“手动验收合格”为准。原始NOT_RUN记录不改写。
+- 本机最新自动化：前端560、Rust1647、完整质量门禁PASS；真实HTTP7例、Socket/Wasm3例及持久化/退出清理PASS。Universal App/DMG构建与结构/签名完整性验证PASS；正式Developer ID/公证等只记USER_REPORTED_PASS，未提供新原始报告，不声称Agent实测。
+- NDR-JS-04/05/06/07/08的WebSocket/Boa/Sidecar是历史实现；当前运行合同已经ADR-010及TASK-20260901-001替代为单进程Wasm，不保留旧路径。独立的Wasm任务仍负责其GitLab发布收尾，本任务不以发布平台tag为门禁。
+- 独立完成审计：frontend_followup_review只读复核，P0/P1/P2=0，结论可关闭，无实质未验收项。相关自动化证据及用户声明共同支持关闭。
+- CI/提交：本轮不新增远程CI、发布或Git提交；历史Windows构建成功与历史本地提交记录保持。已按完成日期归档，完成索引/待办/证据链接检查一致。

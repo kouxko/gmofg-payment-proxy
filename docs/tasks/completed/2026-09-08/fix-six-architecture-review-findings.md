@@ -3,14 +3,14 @@
 ## 任务信息
 
 - 任务 ID：TASK-20260906-001
-- 状态：待确认
+- 状态：已完成
 - 任务日期：2026-09-06
 - 创建时间：2026-09-06 10:48:57 +08:00
 - 开始时间：2026-09-06 10:48:57 +08:00
-- 最后更新时间：2026-09-06 15:55:13 +08:00
-- 完成时间：未完成
+- 最后更新时间：`2026-09-08 11:39:16 +08:00`
+- 完成时间：2026-09-08 11:39:16 +08:00
 - 创建路径：docs/tasks/pending/2026-09-06/fix-six-architecture-review-findings.md
-- 归档路径：docs/tasks/completed/<实际完成日期>/fix-six-architecture-review-findings.md
+- 归档路径：docs/tasks/completed/2026-09-08/fix-six-architecture-review-findings.md
 - 优先级：高；涉及运行中 Android 配置、并发提交、Socket 内存与错误合同。
 - 关键词：Android、LAN、apply、Rules、竞态、Socket、资源预算、EOF、外部包观测
 
@@ -58,8 +58,8 @@
 | S1 | Android LAN：infrastructure/adapters/android_adb 与必要 application Android 文件 | 可并行；不碰 UI、Socket | 已实现并验证 | 保存 Profile 漂移不发 apply；纯 LAN 端点变化仍正确热协调；显式 Apply 保持 |
 | S2 | 规则 UI：src/features/rules 的编辑、保存与回归 | 可并行；不碰后端 | 已实现并验证 | 快速重复点击只保存一次；迟到完成不覆盖新选择；错误后可继续编辑 |
 | S3 | Exchange：crates/exchange 与对应 proxy EOF 映射测试 | 可并行；主 Agent | 已实现并验证 | 真实 EOF 保留 Read/Downstream 与现有分类；Socket 外部字段完整 |
-| S4 | Socket 资源：proxy/socket_relay observer/io/config、domain/application 验证与必要绑定 | 诊断部分可并行；上限依赖确认；不得与 S3 共改文件 | 待确认 | 极值不触发初始巨额分配；预算/错误/取消及边界测试通过 |
-| S5 | 集成、文档、证据、独立整体审查与归档 | 当前独立实现批次已集成；主 Agent 独占索引 | 已实现子集通过；整任务待 S4 | 全部回归、静态检查与独立 APPROVE；未验证层明确记录 |
+| S4 | Socket 资源：proxy/socket_relay observer/io/config、domain/application 验证与必要绑定 | 诊断部分可并行；上限依赖确认；不得与 S3 共改文件 | 已完成 | 极值不触发初始巨额分配；预算/错误/取消及边界测试通过 |
+| S5 | 集成、文档、证据、独立整体审查与归档 | 当前独立实现批次已集成；主 Agent 独占索引 | 已完成 | 全部回归、静态检查与独立 APPROVE；未验证层明确记录 |
 
 所有 Agent 共享工作区，不得撤销他人修改；子 Agent 仅修改分配范围，不登记编号、不操作任务索引、不提交。共享文件/合同冲突先报告主 Agent。整批全部结束并完成集成验证后才开始整体对抗审查。
 
@@ -225,3 +225,31 @@ CI、提交、推送、安装/发布：NOT_RUN；当前工作区保留全部原�
 - 提交前：暂存区为空；仅本次清单进入暂存，cached diff检查通过。提交后：暂存区为空，提交路径集合恰好21项，无源码遗留修改；原任务/证据和索引修改仍保留。
 - 验证沿用稳定源码上的Rust1647/前端550与严格静态/构建门禁；本轮快照再核对及staged内容检查通过，未重复未变化源码的全量测试。
 - 推送、CI、发布：NOT_RUN。读取块绝对上限后续确认，当前任务状态继续为待确认。
+
+
+## 新分支续办（2026-09-07 18:43:33 +08:00）
+
+- 用户要求：切换到新分支处理当前6项待办。已从 develop 创建 codex/complete-pending-tasks-20260907，起点 caa36022；保留原有 gmofg_cps 与 http-finalize 未跟踪目录，不纳入本次工作。
+- 执行范围：原任务已确认的本地修复、证据补齐、验证和状态收尾；本轮不从历史记录推导新的 push/CI/tag/Release 授权。
+- 需求就绪复核与步骤：状态继续待确认。读取块上限数值仍等待用户回答；已实现范围只复核证据，不自行新增上限或超限行为。
+- 优先级仍为高，适用受影响验证与独立整体审查；任务级完成门禁未满足则保留未完成状态。
+- 测试证据：新增执行使用 docs/testing/evidence/2026-09-07/TASK-20260906-001/ 下独立用例，原证据不覆盖。
+
+## Socket读取上限确认与实施就绪（2026-09-08 11:06:41 +08:00）
+
+- 用户本轮逐项确认：“1. 可以；2. 可以；3. gitlab；4. 手动验收合格”。第1项对应已提出方案：单次read_chunk_bytes上限1 MiB，保留当前默认值，超限明确报错，不自动截断或调整。此前待确认记录保留为历史，当前未确认产品合同为0。
+- 当前已验证根因：Domain Socket校验与environment candidate Domain层均仅拒绝0，u32::MAX可继续进入实际读取分配；运行时start和upstream probe都先调用workspace.validate，正确修复边界是同一领域上限及候选预检复用，不能额外增加运行时兜底或只在UI限制。
+- 最小/最优方案：领域定义MAX_SOCKET_READ_CHUNK_BYTES=1 MiB；现有Domain和candidate验证使用同一常量检查1..=max；默认16 KiB不变。现有start/probe/save/import校验链复用；不改Schema版本、Frame大小、Socket诊断预算或恢复策略。
+- 就绪PASS，进入实现时间2026-09-08 11:06:41 +08:00。样例：1/16384/1048576接受；0/1048577/u32::MAX拒绝且保留原值。回归先RED再GREEN；所有危险极值只做校验，不执行其内存分配。
+- S4主Agent独占领域常量/验证、candidate验证及测试；S5主Agent负责证据和索引。Android调查子Agent只读，不共改接口。高优先级不变，测试结束统一独立审查。
+- 验证：领域边界与JSON反序列化；candidate Domain错误且后续层不运行；实际Listener start/probe超限在端口绑定/网络/分配之前失败；合法上限实际loopback收发与stop释放；受影响Rust回归、fmt/clippy、bindings/架构/源尺寸、当前文档链接。前端未改，仅必要调用方/类型检查，不机械重跑未受影响UI全量。
+- 新证据：[socket-read-chunk-cap](../../../testing/evidence/2026-09-08/TASK-20260906-001/socket-read-chunk-cap/README.md)，derived_from为本任务2026-09-06/socket-resource-limits；原用例不覆盖。
+
+## 最终完成与归档（2026-09-08 11:39:16 +08:00）
+
+- 所有六项确认修复已完成；S4最后待定的read_chunk_bytes现已按用户确认采用1MiB上限，默认16KiB不变。此前“上限待确认/整任务BLOCK/资源安全P1开放”等为历史阶段状态，由本节最终结论取代。
+- 本轮修改6个Rust文件：领域常量与校验、candidate校验、对应domain/application/infrastructure测试；需求4.1同步资源范围。复用既有保存/导入/start/probe领域门禁，未增加UI默认、裁剪、Frame大小限制或兜底。
+- 当前验证：6专项GREEN；14组1111项受影响Rust测试通过，0失败/忽略；workspace Clippy -D warnings、fmt、bindings、架构、源尺寸、typecheck和diff检查全部PASS。1181份输入测试期间逐字节稳定。历史其他五项已验证实现及此前完整1647Rust/560前端本机质量证据保持。
+- 独立整体收尾审查quick_build_review：APPROVE，P0/P1/P2=0，确认源码及证据均可归档；额外真实设备/业务/CI不在本任务本地修复范围，本轮不将其记为实测。关联Android设备门禁继续由TASK-20260905-001独立处理。
+- [最终Socket上限证据](../../../testing/evidence/2026-09-08/TASK-20260906-001/socket-read-chunk-cap/README.md)含命令、输入、实际断言输出、环境、资源快照、RED/GREEN、复测及N/A。原2026-09-06不可变证据不改写。
+- 本轮无Git提交/push/CI/发布。任务已完成日期归档，待办/完成/证据索引以及全部相对链接一致。

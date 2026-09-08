@@ -3,6 +3,26 @@
 本文按执行日期倒序记录可复用测试证据及其派生关系。原证据目录保持不可变；新需求通过父任务 ID、
 父用例 ID 和父证据稳定路径建立关系。
 
+## 2026-09-08
+
+| 任务 | 用例 | 内容 | 结果 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260901-001 | gitlab-release-audit | GitLab已有v1.0.0与资产只读核对 | PARTIAL_EXISTING_RELEASE_VERIFIED | 无 | 无 | 当前远端状态 | [证据](2026-09-08/TASK-20260901-001/gitlab-release-audit/README.md) |
+| TASK-20260905-001 | a920-controlled-recovery | 物理A920受控恢复回归 | PASS | TASK-20260905-001 | MANUAL-RECOVERY-001 | 物理设备传输及v2实测 | [证据](2026-09-08/TASK-20260905-001/a920-controlled-recovery/README.md) |
+| TASK-20260906-001 | socket-read-chunk-cap | 1 MiB读取上限与分配前拒绝 | PASS | TASK-20260906-001 | socket-resource-limits | 2026-09-06父用例 | [证据](2026-09-08/TASK-20260906-001/socket-read-chunk-cap/README.md) |
+| TASK-20260829-002 | manual-acceptance-confirmation | 用户跨平台与签名人工验收确认 | USER_REPORTED_PASS | 无 | 无 | 无 | [证据](2026-09-08/TASK-20260829-002/manual-acceptance-confirmation/README.md) |
+| TASK-20260901-001 | local-macos-regression | 本机静态/测试与真实Release App HTTP/Socket/Wasm回归 | LOCAL_REGRESSION_PASS_REVIEW_APPROVED | TASK-20260901-001 / TASK-20260829-002 | release-app-replay / frontend-coverage-followup / wasm-universal-build | 见metadata derived_from | [证据](2026-09-08/TASK-20260901-001/local-macos-regression/README.md) |
+
+## 2026-09-07
+
+| 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260901-001 | frontend-coverage-followup | Socket分支92.92%、560测试、历史证据编译边界、独立审查 | LOCAL_FIXES_PASS_REVIEW_APPROVED_EXTERNAL_GATES_PENDING | 无（引用历史CI34025792017） | 无 | 无 | [证据](2026-09-07/TASK-20260901-001/frontend-coverage-followup/README.md) |
+| TASK-20260905-001 | physical-device-readiness | 两台物理设备只读就绪清点 | READ_ONLY_INVENTORY_COMPLETE_DEVICE_ACCEPTANCE_NOT_RUN | TASK-20260905-001 | MANUAL-RECOVERY-001 | [父证据](2026-09-05/TASK-20260905-001/manual-recovery/README.md) | [证据](2026-09-07/TASK-20260905-001/physical-device-readiness/README.md) |
+| TASK-20260829-002 | wasm-universal-build | 当前Wasm Universal App/DMG、双架构签名/挂载、归档重放及独立审查 | LOCAL_BUILD_PASS_REVIEW_APPROVED_MANUAL_GATES_PENDING | TASK-20260829-002 | phase18-final-unified-release-automation | [父证据](2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation/README.md) | [证据](2026-09-07/TASK-20260829-002/wasm-universal-build/README.md) |
+| TASK-20260904-006 | manual-trigger-and-artifact | 手动入口RED/GREEN、成功run及exe/APK实物/重放 | PASS_REVIEW_APPROVED | 无 | 无 | 无 | [证据](2026-09-07/TASK-20260904-006/manual-trigger-and-artifact/README.md) |
+| TASK-20260829-001 | schema100-current-followup | 当前SQLite/Release双启动及Windows验证收尾 | PASS_REVIEW_APPROVED | TASK-20260829-001 | DB-SCHEMA-100-001 | [父证据](2026-08-29/TASK-20260829-001/DB-SCHEMA-100-001/README.md) | [证据](2026-09-07/TASK-20260829-001/schema100-current-followup/README.md) |
+
 ## 2026-09-06
 
 | 任务 ID | 用例 ID | 用途 | 状态 | 父任务 | 父用例 | 父证据 | 证据 |
