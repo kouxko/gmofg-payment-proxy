@@ -7,6 +7,7 @@
 
 | 任务 | 用例 | 内容 | 结果 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
+| TASK-20260908-001 | integer-json | 整数JSON统一序列化、旧配置兼容、HTTP/Wasm/CPS实际字节 | PASS | TASK-20260907-004 | cps-checksum | [父证据](2026-09-07/TASK-20260907-004/cps-checksum/README.md) | [证据](2026-09-08/TASK-20260908-001/integer-json/README.md) |
 | TASK-20260901-001 | gitlab-release-audit | GitLab已有v1.0.0与资产只读核对 | PARTIAL_EXISTING_RELEASE_VERIFIED | 无 | 无 | 当前远端状态 | [证据](2026-09-08/TASK-20260901-001/gitlab-release-audit/README.md) |
 | TASK-20260905-001 | a920-controlled-recovery | 物理A920受控恢复回归 | PASS | TASK-20260905-001 | MANUAL-RECOVERY-001 | 物理设备传输及v2实测 | [证据](2026-09-08/TASK-20260905-001/a920-controlled-recovery/README.md) |
 | TASK-20260906-001 | socket-read-chunk-cap | 1 MiB读取上限与分配前拒绝 | PASS | TASK-20260906-001 | socket-resource-limits | 2026-09-06父用例 | [证据](2026-09-08/TASK-20260906-001/socket-read-chunk-cap/README.md) |

@@ -1,0 +1,17 @@
+running 3 tests from ./scripts/runtime-crate-dependencies.test.mjs
+Android wire crate cannot acquire application or transport dependencies ... ok (27ms)
+traffic projections can consume DTOs but cannot own persistence ... ok (23ms)
+application and runtime cannot depend on outer traffic projections ... ok (18ms)
+
+ok | 3 passed | 0 failed (90ms)
+
+Architecture documentation gate passed (10 current documents, 11 ADRs, 5 MCP documents).
+Architecture boundary fixtures passed (80 behavior, 8 role cases).
+Architecture production boundary gate passed.
+Runtime architecture fixtures passed (43 cases).
+Runtime architecture gate passed (10 owned production task sites).
+Infrastructure owned-task gate passed (10 owned task sites).
+Phase-1 spawn debt is zero.
+Socket Relay boundary fixtures passed (24 cases).
+Socket Relay production boundary gate passed.
+Frontend Rust-only boundary scan passed.

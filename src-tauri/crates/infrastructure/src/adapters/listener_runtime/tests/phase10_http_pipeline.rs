@@ -99,6 +99,8 @@ fn workspace_with_http_rules(
     workspace
 }
 
+#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
+mod cps_checksum_wire;
 #[path = "phase10_http_pipeline/live_plain_hot_replacement.rs"]
 mod live_plain_hot_replacement;
 #[path = "phase10_http_pipeline/local_http_response.rs"]
@@ -107,8 +109,6 @@ mod local_http_response;
 mod plain_json_rules;
 #[path = "phase10_http_pipeline/production_shape.rs"]
 mod production_shape;
-#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
-mod cps_checksum_wire;
 #[path = "phase10_http_pipeline/real_wasm_finalize_wire.rs"]
 mod real_wasm_finalize_wire;
 #[path = "phase10_http_pipeline/request_metadata.rs"]

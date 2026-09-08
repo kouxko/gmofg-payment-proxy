@@ -377,7 +377,7 @@ fn wildcard_insert_and_append_apply_to_every_matched_array() {
 
     assert_eq!(
         serde_json::to_value(document).unwrap(),
-        serde_json::json!({"groups": [{"items": [1.0, 2.0, 3.0]}, {"items": [1.0, 3.0]}]})
+        serde_json::json!({"groups": [{"items": [1, 2, 3]}, {"items": [1, 3]}]})
     );
 }
 

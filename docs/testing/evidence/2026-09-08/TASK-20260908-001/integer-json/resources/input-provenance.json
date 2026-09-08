@@ -1,0 +1,138 @@
+[
+  {
+    "source": "dist/protocol-package-components/index.json",
+    "archive": "resources/test-inputs/dist/protocol-package-components/index.json",
+    "original_filename": "index.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "fe057a1c13bdd5a12e45bfe50bfa54247945b5827a660039408dc3d185f48e89"
+  },
+  {
+    "source": "dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm",
+    "archive": "resources/test-inputs/dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm",
+    "original_filename": "intercept-proxy-au-eftex-component.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "d6b4cf4c7130fe82449bb6d53152e4c1c260d557aad74b6676ecf3d6f74a35ee"
+  },
+  {
+    "source": "dist/protocol-package-components/intercept-proxy-iso8583-ascii-standard-component.wasm",
+    "archive": "resources/test-inputs/dist/protocol-package-components/intercept-proxy-iso8583-ascii-standard-component.wasm",
+    "original_filename": "intercept-proxy-iso8583-ascii-standard-component.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "ba4a81a3610ed3bcb1358600fcae9cc7975e7823ade962311cc71907d64dfa0d"
+  },
+  {
+    "source": "dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm",
+    "archive": "resources/test-inputs/dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm",
+    "original_filename": "intercept-proxy-iso8583-deno-ascii-component.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "9fe8a7aecb35c373e8ad80e10cdd6990926c689beeaac8a1eed80bca33d028ec"
+  },
+  {
+    "source": "dist/protocol-package-components/intercept-proxy-nuvei-tango-json-component.wasm",
+    "archive": "resources/test-inputs/dist/protocol-package-components/intercept-proxy-nuvei-tango-json-component.wasm",
+    "original_filename": "intercept-proxy-nuvei-tango-json-component.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "a3b24711583d1c250b90eb4ee06560b8dd505e235c65314a4150d6ae649f853b"
+  },
+  {
+    "source": "dist/protocol-package-components/intercept-proxy-nuvei-tango-json-rhai-component.wasm",
+    "archive": "resources/test-inputs/dist/protocol-package-components/intercept-proxy-nuvei-tango-json-rhai-component.wasm",
+    "original_filename": "intercept-proxy-nuvei-tango-json-rhai-component.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "6b2f203295bcd40dadcf1f509227b9b387d21f40516e6d047d74e81b7c1a76a0"
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm",
+    "archive": "resources/test-inputs/examples/protocol-packages/gmofg_cps/dist/gmofg-cps-1.0.0.wasm",
+    "original_filename": "gmofg-cps-1.0.0.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "674e879c62dc1707e4714f8bddeb2337150e30c5bfc766d58bc5ebafebea5ca3"
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_cps/tests/fixtures/java-signatures.json",
+    "archive": "resources/test-inputs/examples/protocol-packages/gmofg_cps/tests/fixtures/java-signatures.json",
+    "original_filename": "java-signatures.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "987ec720235153d436c0518d506e842b720046253872fcff79b4f20ac8cdfa17"
+  },
+  {
+    "source": "examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm",
+    "archive": "resources/test-inputs/examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm",
+    "original_filename": "gmofg-payment-dll-1.0.0.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "98f8a15009f52dda74a05c40b802dbe0f1ff0027294da76d67d1511e57df6074"
+  },
+  {
+    "source": "examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm",
+    "archive": "resources/test-inputs/examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm",
+    "original_filename": "json-pretty-1.0.0.wasm",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "5b7ebda09f3c71c79837e4df6447bafd04a92a57e5421ef283d25f152b897ee3"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/existing-target-retained-selector.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/existing-target-retained-selector.json",
+    "original_filename": "existing-target-retained-selector.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "1fb29b0fdc14e92c9e4e6cf8257aca11bad5bbf00d9a471f2a6d8c72f215f4bb"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/expected-preview.json",
+    "original_filename": "expected-preview.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "53d5e83bd63940ec2959e3278141e1e7a42c1fd6016f73f5090d48536a200002"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/full-shape.json",
+    "original_filename": "full-shape.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "b4a867f52f17dd04ea1e6a3d1b94ea4bf13fbaa1ee902d901cad74b906c3ff8b"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/literal-coverage.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/literal-coverage.json",
+    "original_filename": "literal-coverage.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "b2cba76bca49462a49c52e45f2793272ba9b0c3b3a741b55b0be033ff96c8833"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/negative-cases.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/negative-cases.json",
+    "original_filename": "negative-cases.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "b9f5a7f44225dc9c2c8447afe4a77e0722bf3ba927ac58cc697df184bf542183"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/schema.snapshot.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/schema.snapshot.json",
+    "original_filename": "schema.snapshot.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "e42498cab1bbc427defc3757581391c77c81edf0a2fa54679209f758b14902ae"
+  },
+  {
+    "source": "src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/weak-network-null.json",
+    "archive": "resources/test-inputs/src-tauri/src/mcp/tests/fixtures/environment_configuration_candidate_v1/weak-network-null.json",
+    "original_filename": "weak-network-null.json",
+    "required": true,
+    "purpose": "Actual fixture or Wasm Component consumed by application/package runtime validation",
+    "sha256": "c66dd07b51d522f33e37ee4bf44c28a914065929f16c8b95cc4de6d0542b9f43"
+  }
+]

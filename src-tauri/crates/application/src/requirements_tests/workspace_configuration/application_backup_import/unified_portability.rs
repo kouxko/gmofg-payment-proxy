@@ -42,6 +42,32 @@ async fn unified_flat_wildcard_insert_append_rules_pass_portable_binding_preflig
     ];
     workspace.rule_created_order_high_water = 1;
     workspace.validate().unwrap();
+
+    let mut legacy_wire = serde_json::to_value(&workspace).unwrap();
+    legacy_wire["rule_definitions"][0]["content"]["value"]["condition"]["predicate"]["value"]["value"] =
+        serde_json::from_str("7.0").unwrap();
+    legacy_wire["rule_definitions"][0]["content"]["value"]["action"]["value"]["value"] =
+        serde_json::from_str("1.0").unwrap();
+    let workspace: intercept_proxy_domain::ProxyWorkspace =
+        serde_json::from_value(legacy_wire).expect("legacy floating-point rule values load");
+    let saved_wire = serde_json::to_value(&workspace).expect("workspace configuration saves");
+    assert_eq!(
+        saved_wire.pointer("/rule_definitions/0/content/value/condition/predicate/value/value"),
+        Some(&serde_json::json!(7))
+    );
+    assert_eq!(
+        saved_wire.pointer("/rule_definitions/0/content/value/action/value/value"),
+        Some(&serde_json::json!(1))
+    );
+    assert_eq!(
+        saved_wire.pointer("/rule_definitions/0/content/value/package/version"),
+        Some(&serde_json::json!("1.0.0"))
+    );
+    assert_eq!(
+        serde_json::from_value::<intercept_proxy_domain::ProxyWorkspace>(saved_wire).unwrap(),
+        workspace
+    );
+
     let prepared = ApplicationBackupImportCandidate {
         selected_workspace_id: workspace.id,
         workspaces: vec![workspace],

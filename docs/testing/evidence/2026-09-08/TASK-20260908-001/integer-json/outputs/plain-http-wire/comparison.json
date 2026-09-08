@@ -1,0 +1,9 @@
+{
+  "result": "PASS",
+  "source_log": "../http-pipeline-verified/stdout.txt",
+  "comparison": "Rust exact body assertions, copied from actual logged input/output",
+  "directions": [
+    "upstream",
+    "downstream"
+  ]
+}

@@ -1,0 +1,9 @@
+
+ RUN  v4.1.11 /Users/codin/Code/gmofg-payment-proxy
+
+
+ Test Files  3 passed (3)
+      Tests  27 passed (27)
+   Start at  15:18:29
+   Duration  27.28s (transform 5.01s, setup 1.10s, import 8.06s, tests 24.74s, environment 2.81s)
+

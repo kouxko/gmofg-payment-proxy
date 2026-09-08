@@ -1,0 +1,32 @@
+   Compiling tokio-util v0.7.19
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+   Compiling wiggle v48.0.1
+   Compiling wasmtime-wasi-io v48.0.1
+   Compiling tokio-rustls v0.26.4
+   Compiling tungstenite v0.30.0
+   Compiling intercept-proxy-android-control-protocol v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/android-control-protocol)
+   Compiling tokio-tungstenite v0.30.0
+   Compiling h2 v0.4.19
+   Compiling wasmtime-wasi v48.0.1
+   Compiling hyper v1.11.0
+   Compiling intercept-proxy-package-contract v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-contract)
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling wasmtime-wasi-http v48.0.1
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 2m 04s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-fb54544f7fd09562)
+     Running tests/environment_configuration_contract.rs (src-tauri/target/debug/deps/environment_configuration_contract-5e0365adcf2f8d67)
+     Running tests/environment_configuration_document_contract.rs (src-tauri/target/debug/deps/environment_configuration_document_contract-3e4d8de99980347a)
+     Running tests/environment_configuration_negative_contract.rs (src-tauri/target/debug/deps/environment_configuration_negative_contract-2d3312f6114eff3f)
+     Running tests/r07a_application_backup_wire.rs (src-tauri/target/debug/deps/r07a_application_backup_wire-de94d3daf0770fc7)
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_package_runtime-8043f30aa415e708)
+     Running tests/gmofg_cps_component.rs (src-tauri/target/debug/deps/gmofg_cps_component-221873bc57e336ae)
+     Running tests/gmofg_payment_dll_component.rs (src-tauri/target/debug/deps/gmofg_payment_dll_component-df17f5cf4335efb0)
+     Running tests/http_document_number_wire.rs (src-tauri/target/debug/deps/http_document_number_wire-ec1c8c146b2b4d3e)
+     Running tests/repository_components.rs (src-tauri/target/debug/deps/repository_components-3237091c91cda1c8)
+     Running tests/wasm_component_contract.rs (src-tauri/target/debug/deps/wasm_component_contract-07b6068182564d1b)
+     Running tests/wasm_http_finalize.rs (src-tauri/target/debug/deps/wasm_http_finalize-345458d6e00062a4)
+
+thread '<unnamed>' (1) panicked at src/lib.rs:105:9:
+downstream finalize trap
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace

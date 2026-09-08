@@ -1,0 +1,35 @@
+{
+  "target": "wasm32-wasip2",
+  "components": [
+    {
+      "package": "intercept-proxy-au-eftex-component",
+      "source": "examples/external-packages/au_eftex/component/Cargo.toml",
+      "artifact": "dist/protocol-package-components/intercept-proxy-au-eftex-component.wasm",
+      "bytes": 278782
+    },
+    {
+      "package": "intercept-proxy-iso8583-deno-ascii-component",
+      "source": "examples/external-packages/iso8583-deno/component/Cargo.toml",
+      "artifact": "dist/protocol-package-components/intercept-proxy-iso8583-deno-ascii-component.wasm",
+      "bytes": 221692
+    },
+    {
+      "package": "intercept-proxy-nuvei-tango-json-component",
+      "source": "examples/external-packages/nuvei_tango_json/component/Cargo.toml",
+      "artifact": "dist/protocol-package-components/intercept-proxy-nuvei-tango-json-component.wasm",
+      "bytes": 302985
+    },
+    {
+      "package": "intercept-proxy-nuvei-tango-json-rhai-component",
+      "source": "examples/protocol-packages/nuvei_tango_rhai/component/Cargo.toml",
+      "artifact": "dist/protocol-package-components/intercept-proxy-nuvei-tango-json-rhai-component.wasm",
+      "bytes": 254139
+    },
+    {
+      "package": "intercept-proxy-iso8583-ascii-standard-component",
+      "source": "templates/socket-protocol/iso8583-standard/Cargo.toml",
+      "artifact": "dist/protocol-package-components/intercept-proxy-iso8583-ascii-standard-component.wasm",
+      "bytes": 188741
+    }
+  ]
+}

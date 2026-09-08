@@ -1,0 +1,6 @@
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.51s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_domain-b93b9d01f7f5d30d)
+     Running tests/phase5_unified_rule_domain.rs (src-tauri/target/debug/deps/phase5_unified_rule_domain-451b5f62d104c448)
+     Running tests/phase6_rule_lifecycle.rs (src-tauri/target/debug/deps/phase6_rule_lifecycle-a6a94e9b7863da94)
+     Running tests/unified_rule_contract.rs (src-tauri/target/debug/deps/unified_rule_contract-f02a3ab37b6f29fd)

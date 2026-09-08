@@ -1,0 +1,128 @@
+
+running 76 tests
+test document::tests::number_serialization::document_fractional_numbers_keep_their_values_without_rounding ... ok
+test certificate::tests::certificate_metadata_exposes_no_secret_and_warns_sixty_days_before_expiry ... ok
+test android_network_tests::distinct_ports_may_route_to_distinct_listeners ... ok
+test android_network_tests::proxy_route_uniqueness_is_normalized_per_destination_and_port ... ok
+test certificate::tests::startup_validation_fails_closed_for_missing_material_and_san ... ok
+test document::tests::number_serialization::document_integral_numbers_serialize_as_integer_tokens_at_every_json_boundary ... ok
+test android_network_tests::equivalent_ipv6_cidr_and_hostname_routes_are_rejected ... ok
+test document::tests::number_serialization::document_nested_numbers_normalize_without_changing_strings_or_other_types ... ok
+test document::tests::recursive::json_null_is_real_null_and_the_string_null_variant_name_remains_a_string ... ok
+test document::tests::recursive::document_number_enforces_the_javascript_number_contract ... ok
+test document::tests::recursive::rfc6901_supports_root_escaping_empty_unicode_and_array_indices ... ok
+test document::tests::recursive::json_value_tree_round_trips_standard_json_and_uses_last_duplicate_key ... ok
+test document::tests::number_serialization::document_number_serialization_does_not_relax_invalid_number_rejection ... ok
+test document::tests::recursive::set_clear_insert_and_append_have_strict_existing_parent_semantics ... ok
+test id::tests::strongly_typed_ids_are_generated_by_rust_and_do_not_alias ... ok
+test android_network_tests::missing_control_loss_policy_defaults_to_safe_stop ... ok
+test json_path::tests::invalid_paths_are_rejected_consistently ... ok
+test error::tests::error_codes_have_stable_wire_values ... ok
+test document::tests::recursive::recursive_schema_is_incomplete_metadata_and_validates_its_own_definition ... ok
+test json_path::tests::one_parser_drives_resolve_and_set ... ok
+test message::tests::channel_id_rejects_invalid_deserialized_values ... ok
+test message::tests::original_bytes_remain_immutable_and_versions_form_lineage ... ok
+test protocol_package::tests::identity::package_id_accepts_contract_and_boundaries ... ok
+test protocol_package::tests::identity::package_id_rejects_every_invalid_character_class ... ok
+test protocol_package::tests::identity::package_version_accepts_complete_semver_and_boundaries ... ok
+test protocol_package::tests::identity::package_id_deserialization_cannot_bypass_validation ... ok
+test protocol_package::tests::identity::package_reference_clone_eq_and_serde_round_trip ... ok
+test revision::tests::optimistic_revision_rejects_stale_writes_and_advances ... ok
+test settings::tests::rejects_https_urls_without_a_valid_authority ... ok
+test settings::tests::rejects_plain_http_upstream_urls ... ok
+test protocol_package::tests::identity::package_version_exposes_semver_numeric_order_for_grouped_views ... ok
+test protocol_package::tests::identity::package_version_rejects_invalid_truncated_unicode_and_too_long_values ... ok
+test settings::tests::defaults_are_frozen_and_safe ... ok
+test session::tests::request_and_response_belong_to_one_session_and_connection ... ok
+test settings::tests::settings_apply_uses_optimistic_revision_without_changing_effective_snapshot ... ok
+test settings::tests::rejects_ui_event_capacity_that_could_preallocate_an_unbounded_channel ... ok
+test settings::tests::upstream_url_is_an_origin_and_cannot_discard_a_configured_request_target ... ok
+test settings::tests::settings_save_rejects_non_origin_upstream_urls_without_mutating_stored_values ... ok
+test unified_matching_contract_tests::method_rejects_non_equal_operator_and_header_name_requires_one_pointer_segment ... ok
+test state::tests::runtime_states_allow_only_lifecycle_transitions ... ok
+test settings::tests::validates_channels_ports_urls_and_certificate_san ... ok
+test state::tests::session_interruptions_are_terminal_from_any_active_phase ... ok
+test unified_matching_contract_tests::http_method_header_and_request_target_use_typed_contracts ... ok
+test unified_matching_contract_tests::document_wildcard_path_matches_any_single_level_only ... ok
+test unified_matching_contract_tests::unified_program_rejects_unknown_rule_id_instead_of_matching_it ... ok
+test workspace::tests::downstream_tls_rejects_ip_literal_dynamic_sni ... ok
+test workspace::tests::fixed_http_server_rejects_tls_certificate_configuration ... ok
+test workspace::tests::fixed_server_stores_body_encoding_on_the_listener ... ok
+test workspace::tests::apply_is_atomic_and_preserves_workspace_identity ... ok
+test workspace::tests::android_proxy_routes_must_reference_a_listener_in_the_same_workspace ... ok
+test workspace::tests::downstream_tls_rejects_invalid_dynamic_sni_pattern ... ok
+test workspace::tests::downstream_tls_can_use_installation_root_for_dynamic_sni ... ok
+test workspace::tests::fixed_server_accepts_generic_http_and_https_origins ... ok
+test workspace::tests::default_workspace_is_empty_safe_and_serializable ... ok
+test workspace::tests::listener_tls_rejects_certificate_references_used_in_the_wrong_role ... ok
+test workspace::tests::listener_topology::local_responder_accepts_direct_or_protocol_processing ... ok
+test workspace::tests::listener_topology::local_responder_tls_references_are_validated_at_exact_wire_paths ... ok
+test workspace::tests::listener_body_codec_values_are_deserializable ... ok
+test workspace::tests::listener_v3::cloned_socket_workspace_edits_only_the_selected_package_binding ... ok
+test workspace::tests::listener_v3::scripted_processing_round_trips_only_the_exact_package_binding ... ok
+test workspace::tests::listener_topology::topology_wire_rejects_unknown_or_cross_mode_fields ... ok
+test workspace::tests::listener_v3::socket_processing_default_is_direct_and_current_wire_is_strict ... ok
+test workspace::tests::listener_topology::http_topology_round_trips_local_and_reads_legacy_remote_settings ... ok
+test workspace::tests::listener_topology::local_responder_tcp_and_tls_round_trip_without_processing_switches ... ok
+test workspace::tests::listener_v3::socket_processing_rejects_incomplete_invalid_or_ambiguous_wire_data ... ok
+test workspace::tests::listener_v3::current_listener_rejects_unknown_fields ... ok
+test workspace::tests::listener_v3::socket_runtime_limits_reject_zero_without_normalization ... ok
+test workspace::tests::mitm_is_fail_closed_without_allowlist_but_can_use_installation_root ... ok
+test workspace::tests::non_loopback_fixed_server_allows_all_clients ... ok
+test workspace::tests::listener_v3::socket_target_and_capacity_are_validated_without_http_state ... ok
+test workspace::tests::non_loopback_forward_listener_requires_authentication ... ok
+test workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization ... ok
+test workspace::tests::listener_v3::socket_read_chunk_cap_accepts_boundaries_and_preserves_serialized_values ... ok
+test workspace::tests::listener_v3::socket_tls_roles_are_exhaustive_and_round_trip ... ok
+test workspace::tests::standard_http_rules_require_one_existing_http_listener ... ok
+test workspace::tests::workspace_accepts_multiple_fixed_server_listener_mappings ... ok
+
+test result: ok. 76 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.01s
+
+
+running 15 tests
+test schema_rejects_clear_value_type_that_disagrees_with_declared_path ... ok
+test cloned_rule_configuration_is_deeply_independent ... ok
+test schema_rejects_document_pattern_predicate_type_at_array_item_wildcard ... ok
+test schema_enforces_insert_append_array_target_and_nested_item_type ... ok
+test runtime_order_is_priority_then_rule_id_and_later_rules_see_working_mutation ... ok
+test schema_declared_paths_validate_and_undeclared_paths_keep_rule_local_type ... ok
+test clear_document_value_type_survives_strict_serde_round_trip ... ok
+test number_equal_uses_javascript_numeric_equality_for_signed_zero ... ok
+test schema_validates_every_node_selected_by_a_wildcard_action ... ok
+test wildcard_clear_uses_snapshot_paths_so_array_indices_do_not_shift ... ok
+test wildcard_insert_and_append_apply_to_every_matched_array ... ok
+test typed_predicate_operator_matrix_is_strict_and_missing_or_mismatch_is_false ... ok
+test terminal_action_stops_later_rules ... ok
+test wildcard_set_mutates_every_existing_leaf_and_zero_matches_are_a_noop ... ok
+test wildcard_mutation_failure_does_not_leave_partial_changes ... ok
+
+test result: ok. 15 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 6 tests
+test update_preserves_runtime_statistics_and_copy_resets_them ... ok
+test successful_match_never_disables_the_rule ... ok
+test lifecycle_delta_is_tentative_until_explicitly_applied ... ok
+test save_draft_cannot_supply_runtime_statistics_and_create_initializes_them ... ok
+test draft_rejects_forged_runtime_statistics ... ok
+test draft_rejects_removed_configuration_fields ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+
+
+running 11 tests
+test document_conditions_keep_valid_http_action_combinations ... ok
+test proxy_http_stages_accept_joint_http_and_document_work ... ok
+test document_conditions_do_not_bypass_http_action_validation ... ok
+test http_document_conditions_and_actions_do_not_require_a_duplicate_package_binding ... ok
+test socket_save_rejects_every_terminal_variant_until_socket_capabilities_define_one ... ok
+test rule_save_requires_exactly_one_condition_and_one_action ... ok
+test listener_and_content_kind_are_immutable_after_creation ... ok
+test unified_rule_serializes_one_tagged_content_variant ... ok
+test mock_response_is_textual_and_supported_on_both_http_directions ... ok
+test workspace_persists_exactly_one_unified_rule_collection ... ok
+test workspace_rejects_legacy_split_rule_collections ... ok
+
+test result: ok. 11 passed; 0 failed; 0 ignored; 0 measured; 0 filtered out; finished in 0.00s
+

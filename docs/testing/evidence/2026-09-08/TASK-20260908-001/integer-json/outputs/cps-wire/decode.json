@@ -1,0 +1,51 @@
+{
+  "final_document": {
+    "data": {
+      "errorCode": "",
+      "errorInfo": null,
+      "result": {
+        "amount": 250,
+        "amountRmb": 0,
+        "currencyCode": "JPY",
+        "extendedInfo": "paired",
+        "orderDetailId": "PAIR-D",
+        "orderId": "PAIR-O",
+        "payType": "99",
+        "transStatus": "PAY_SUCCESS",
+        "transTime": "20260907123456"
+      },
+      "sign": "F070F340438D40D0BC07295E241EE519",
+      "subErrorCode": ""
+    },
+    "meta": {
+      "code": "00",
+      "message": "OK"
+    }
+  },
+  "observation": "JSON parsed from the exact origin fixture; actual Wasm decode is exercised by the matching Document rule and separately by Host integration",
+  "operation": "pay",
+  "parsed_origin_response_json": {
+    "data": {
+      "errorCode": "",
+      "errorInfo": null,
+      "result": {
+        "amount": 100,
+        "amountRmb": 0,
+        "currencyCode": "JPY",
+        "extendedInfo": "paired",
+        "orderDetailId": "PAIR-D",
+        "orderId": "PAIR-O",
+        "payType": "99",
+        "transStatus": "PAY_SUCCESS",
+        "transTime": "20260907123456"
+      },
+      "sign": "OLD",
+      "subErrorCode": ""
+    },
+    "meta": {
+      "code": "00",
+      "message": "OK"
+    }
+  },
+  "request_target": "/gateway/products-pointPay/version=1.0/B01/1/0/MERCHANT%20%20TERMINAL%20%20TOKEN"
+}
