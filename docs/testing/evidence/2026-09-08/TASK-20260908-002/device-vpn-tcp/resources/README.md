@@ -6,3 +6,5 @@
 - netd BPF 原文件与反汇编直接复用不可变 [QV 资源](../../../../../quick-validations/2026-09-08/QV-20260908-001/resources/device-netd.o)，避免重复活动副本。
 
 旧 APK 备份不表示已经执行回滚。新 APK 安装、拉回哈希及签名输出在本用例 outputs 中记录。
+
+- `src-tauri/crates/android-engine/src/socks5/mod.rs` 与 `data_plane/stats.rs`：本次实际读取的计数语义源码快照。成功计数在 connect_protected 返回成功之后记录，并受运行 epoch 约束；可证明建立了出站连接，但不能区分代理命中或默认直连，也不能证明完整业务结果。

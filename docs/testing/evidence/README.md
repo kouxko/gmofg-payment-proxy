@@ -8,7 +8,7 @@
 | 任务 | 用例 | 内容 | 结果 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TASK-20260908-002 | local-build | allowBypass四ABI构建/45单元/签名与实际DEX | PASS_WITH_5_LINT_WARNINGS | 无 | 无 | 无 | [证据](2026-09-08/TASK-20260908-002/local-build/README.md) |
-| TASK-20260908-002 | device-vpn-tcp | 远程覆盖安装与VPN停止TCP对照 | INSTALL_PASS_ACTIVE_VPN_NOT_RUN | 原QV-20260908-001 | TCP | [原QV](../quick-validations/2026-09-08/QV-20260908-001/README.md) | [证据](2026-09-08/TASK-20260908-002/device-vpn-tcp/README.md) |
+| TASK-20260908-002 | device-vpn-tcp | 远程覆盖安装、活动VPN三次TCP与默认出站观测 | VPN_LAN_TCP_PASS_PROXY_E2E_PENDING | 原QV-20260908-001 | TCP | [原QV](../quick-validations/2026-09-08/QV-20260908-001/README.md) | [证据](2026-09-08/TASK-20260908-002/device-vpn-tcp/README.md) |
 | TASK-20260901-001 | gitlab-release-audit | GitLab已有v1.0.0与资产只读核对 | PARTIAL_EXISTING_RELEASE_VERIFIED | 无 | 无 | 当前远端状态 | [证据](2026-09-08/TASK-20260901-001/gitlab-release-audit/README.md) |
 | TASK-20260905-001 | a920-controlled-recovery | 物理A920受控恢复回归 | PASS | TASK-20260905-001 | MANUAL-RECOVERY-001 | 物理设备传输及v2实测 | [证据](2026-09-08/TASK-20260905-001/a920-controlled-recovery/README.md) |
 | TASK-20260906-001 | socket-read-chunk-cap | 1 MiB读取上限与分配前拒绝 | PASS | TASK-20260906-001 | socket-resource-limits | 2026-09-06父用例 | [证据](2026-09-08/TASK-20260906-001/socket-read-chunk-cap/README.md) |

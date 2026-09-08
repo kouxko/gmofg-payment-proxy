@@ -1,8 +1,8 @@
 {
   "task_id": "TASK-20260908-002",
   "case_id": "device-vpn-tcp",
-  "updated_at": "2026-09-08 16:45:20 +08:00",
-  "result": "INSTALL_PASS_ACTIVE_VPN_NOT_RUN",
+  "updated_at": "2026-09-08 17:02:29 +08:00",
+  "result": "VPN_LAN_TCP_PASS_OUTBOUND_CONNECTIONS_OBSERVED_PROXY_E2E_PENDING",
   "base_commit": "6764210eb057bb482b86a05cd1df23d7cdea5c5c",
   "state_record": "resources snapshots and outputs/source-sha256.json for build; packages/status/routes before and after for device",
   "replay": "README.md",
@@ -16,8 +16,10 @@
     "ci": "Not authorized, not triggered"
   },
   "pending": [
-    "active VPN IIF/routing and TCP7788",
-    "safe outbound capture",
-    "overall final adversarial review"
-  ]
+    "specific desktop Listener request/response correlation and business E2E",
+    "final task-level review after complete E2E evidence"
+  ],
+  "live_case": "outputs/after-install-vpn-running",
+  "observed_outbound_successful_connections": 14,
+  "cleanup": "temporary sockets and adb forwards removed; keep user-restarted VPN running"
 }

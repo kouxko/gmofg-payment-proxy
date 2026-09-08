@@ -1,0 +1,59 @@
+{
+  "at": "2026-09-08T09:00:07.460880+00:00",
+  "request": {
+    "version": 2,
+    "request_id": "outbound-observation",
+    "operation": "status",
+    "payload": {}
+  },
+  "response": {
+    "version": 2,
+    "request_id": "outbound-observation",
+    "ok": true,
+    "status": {
+      "serial": "",
+      "state": "running",
+      "verified": true,
+      "transport": "local_abstract_socket",
+      "active_profile_id": "6e2bf0eb-a3cf-4649-9e72-da8d919e02e0",
+      "active_profile_fingerprint": "9adf0a7bd31a6dbb8e7cd287a49e6dbf9506be13b707cfe8483d8fce75c6a1bc",
+      "active_route_fingerprint": "e6e4bb9bf851f403b945804049f9483f9ff37ab959f5ad53a3397e4a915a547d",
+      "active_route_count": 3,
+      "companion_process_running": true,
+      "message": "目标应用 VPN 与 Rust 数据面正在运行。",
+      "unsupported_fields": [
+        "serial"
+      ],
+      "stats": {
+        "download_ip_checksum_failures": 0,
+        "download_ip_length_mismatches": 0,
+        "download_tcp_syn_ack_packets": 15,
+        "download_transport_checksum_failures": 0,
+        "impairment_delay_millis_total": 0,
+        "impairment_mss_clamps": 0,
+        "impairment_packets_corrupted": 0,
+        "impairment_packets_dropped": 0,
+        "impairment_packets_duplicated": 0,
+        "impairment_packets_reordered": 0,
+        "impairment_pmtu_fragments": 0,
+        "impairment_pmtu_signals": 0,
+        "impairment_unimplemented_pmtu_actions": 0,
+        "last_error": null,
+        "protect_failures": 0,
+        "proxy_download_packets": 220,
+        "proxy_upload_packets": 205,
+        "socks_clients": 15,
+        "socks_connect_attempts": 15,
+        "socks_connect_successes": 14,
+        "tun_download_bytes": 120143,
+        "tun_download_packets": 220,
+        "tun_upload_bytes": 26214,
+        "tun_upload_packets": 205,
+        "upload_tcp_ack_packets": 157,
+        "upload_tcp_syn_packets": 15
+      }
+    },
+    "error_code": null,
+    "error_message": null
+  }
+}
