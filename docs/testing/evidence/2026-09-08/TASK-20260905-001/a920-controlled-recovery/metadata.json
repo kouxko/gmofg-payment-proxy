@@ -1,0 +1,67 @@
+{
+  "task_id": "TASK-20260905-001",
+  "case_id": "a920-controlled-recovery",
+  "status": "PASS",
+  "started_at": "2026-09-08 11:19:42 +08:00",
+  "serial": "2740072778",
+  "scope": "Physical A920 controlled test apps, LocalSocket v2/TUN/JNI/control-loss/manual recovery; no business transaction or desktop LAN end-to-end claim",
+  "derived_from": {
+    "task_id": "TASK-20260905-001",
+    "case_id": "MANUAL-RECOVERY-001",
+    "evidence_path": "docs/testing/evidence/2026-09-05/TASK-20260905-001/manual-recovery"
+  },
+  "finished_at": "2026-09-08 11:54:50 +08:00",
+  "device": {
+    "model": "A920MAX",
+    "serial": "2740072778",
+    "android_api": 29,
+    "abi": "armeabi-v7a",
+    "vpn_permission": "already allowed before test; unchanged after"
+  },
+  "result": {
+    "admission_instrumentation_tests_passed": 2,
+    "controlled_wire_cases_passed": 4,
+    "isolation_negative_case_passed": 1,
+    "v2_control_request_frames": 22,
+    "control_loss_stop": "PASS",
+    "stale_apply_active": "ANDROID_CONTROL_LEASE_STALE",
+    "explicit_new_epoch_recovery": "PASS",
+    "cleanup": "PASS original APK bytes and four preferences restored; all new packages/forward/reverse/TUN removed"
+  },
+  "authoritative_run": "outputs/controlled-v2-attempt3/report.json",
+  "replay": "replay/controlled-v2-v3.py",
+  "resource_provenance": "resources/current-companion.apk exactly matches 2026-09-05 MANUAL-RECOVERY-001/android-atomic-hot-apply/resources/apk/android-companion-release.apk; current source snapshot 88 files unchanged",
+  "implementation_changes": "No production changes. Evidence-only helper and physical transport replay adapt existing confirmed v2 and fixture contract.",
+  "prior_attempts": [
+    {
+      "output": "outputs/recovery-backup-instrumentation.txt",
+      "result": "test helper failure: testContext externalFilesDir unavailable; no prefs mutation; v2 targetContext fixes location only"
+    },
+    {
+      "output": "outputs/controlled-v2/report.json",
+      "result": "harness failure: am start -W waited for self-finishing wake activity; no start request sent"
+    },
+    {
+      "output": "outputs/controlled-v2-attempt2/report.json",
+      "result": "harness failure: exec-out returned 0 for cat missing file text; stopped VPN and removed mappings; shell -T restores separate stderr/exit handling"
+    }
+  ],
+  "not_applicable": {
+    "real_business": "N/A controlled TEST-NET targets and fixture D48 only; no GMO payment transaction",
+    "desktop_ui_and_lan_reconciliation": "N/A this device slice uses v2 control directly; prior desktop owner/LAN tests retained as parent local evidence",
+    "pcap": "N/A exact TCP socket reads/chunks and v2 length-prefixed frames are captured in-process",
+    "protocol_decode_rules_encode": "N/A transparent Android IP/TCP forwarding; no business package or rule edits",
+    "new_ci_release": "N/A no remote mutation"
+  },
+  "cleanup_evidence": "outputs/cleanup-comparison.json + restore instrumentation and restored APK full byte comparison",
+  "source_stability": "outputs/evidence-consistency.json",
+  "review": {
+    "reviewer": "frontend_followup_review",
+    "status": "APPROVE",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "reviewed_at": "2026-09-08 12:03:49 +08:00"
+  },
+  "task_closed_at": "2026-09-08 12:03:49 +08:00"
+}

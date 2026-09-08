@@ -1,0 +1,5 @@
+{
+  "result": "HARNESS_OBSERVATION_FORMAT_MISMATCH",
+  "confirmed": "All HTTP success paths, six server records and Socket bytes passed before the added historical string check. Current Exchange failed.error contains the domain message Invalid Document JSON: ..., without the old JSON_INVALID prefix. Domain document/model.rs:184 constructs this message; ErrorCode still identifies JsonInvalid separately.",
+  "correction": "Assert current JSON decode message plus decode stage, failed close and no sent event; keep exact request/server/client expectations. No product change."
+}

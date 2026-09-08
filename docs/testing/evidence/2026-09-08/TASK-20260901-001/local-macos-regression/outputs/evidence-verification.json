@@ -1,0 +1,16 @@
+{
+  "result": "PASS",
+  "binary_hex_pairs": 34,
+  "linked_successful_wire_chains": [
+    "http:method",
+    "http:header",
+    "http:path",
+    "http:body",
+    "http:all",
+    "http:miss",
+    "socket:match",
+    "socket:miss"
+  ],
+  "persistence": "PASS",
+  "cleanup": "PASS"
+}

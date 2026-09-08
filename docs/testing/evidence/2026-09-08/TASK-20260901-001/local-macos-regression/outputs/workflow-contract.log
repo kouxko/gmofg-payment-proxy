@@ -1,0 +1,7 @@
+running 3 tests from ./scripts/windows-build-only-workflow.test.mjs
+Windows quick workflow builds Android then one unsigned Windows executable ... ok (5ms)
+full desktop release never exposes the quick-build bypass ... ok (1ms)
+tagged desktop releases distinguish complete signing from explicit unsigned mode ... ok (1ms)
+
+ok | 3 passed | 0 failed (12ms)
+

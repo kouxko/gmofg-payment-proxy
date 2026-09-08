@@ -1,0 +1,8 @@
+POST /other HTTP/1.1
+Host: 127.0.0.1:28080
+Content-Type: application/json
+Content-Length: 1
+Connection: close
+X-Wire-Case: invalid
+
+{

@@ -1,0 +1,59 @@
+{
+  "installed_version_count": 1,
+  "options": [
+    {
+      "capabilities": {
+        "display": true,
+        "downstream": {
+          "decode": true,
+          "encode": true,
+          "frame": true
+        },
+        "upstream": {
+          "decode": true,
+          "encode": true,
+          "frame": true
+        }
+      },
+      "downstream_schema": {
+        "root": {
+          "properties": {
+            "message_type": {
+              "title": "MTI",
+              "type": "string"
+            }
+          },
+          "title": "ISO 8583 message",
+          "type": "object"
+        }
+      },
+      "kind": "socket",
+      "name": "ISO 8583:1987 ASCII Profile",
+      "package": {
+        "id": "iso8583-ascii-standard",
+        "version": "1.0.0"
+      },
+      "package_source": {
+        "online": true,
+        "type": "managed"
+      },
+      "upstream_schema": {
+        "root": {
+          "properties": {
+            "message_type": {
+              "title": "MTI",
+              "type": "string"
+            }
+          },
+          "title": "ISO 8583 message",
+          "type": "object"
+        }
+      }
+    }
+  ],
+  "recommended_package": {
+    "id": "iso8583-ascii-standard",
+    "version": "1.0.0"
+  },
+  "unavailable_version_count": 0
+}

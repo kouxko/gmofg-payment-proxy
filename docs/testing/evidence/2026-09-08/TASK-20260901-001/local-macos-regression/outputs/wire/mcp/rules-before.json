@@ -1,0 +1,193 @@
+[
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Method-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": "Method",
+          "operator": {
+            "Equals": "POST"
+          },
+          "source": "http"
+        },
+        "description": "Method POST"
+      }
+    },
+    "created_order": 1,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-08T02:44:24.704168Z"
+    },
+    "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+    "name": "Method POST",
+    "priority": 10,
+    "revision": 1,
+    "rule_id": "28219305-3b12-4498-bb4c-37a09e02b042",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Header-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": {
+            "Header": "/x-probe"
+          },
+          "operator": {
+            "Equals": "alpha"
+          },
+          "source": "http"
+        },
+        "description": "Header X-Probe alpha"
+      }
+    },
+    "created_order": 2,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-08T02:44:24.704171Z"
+    },
+    "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+    "name": "Header X-Probe alpha",
+    "priority": 11,
+    "revision": 1,
+    "rule_id": "b7ac51a4-61df-4537-9234-e0b9b3a42e91",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "http",
+          "value": {
+            "SetHeader": {
+              "name": "X-Path-Hit",
+              "value": "yes"
+            }
+          }
+        },
+        "condition": {
+          "field": "RequestTarget",
+          "operator": {
+            "Wildcard": "/orders/*?mode=test"
+          },
+          "source": "http"
+        },
+        "description": "Path and query wildcard"
+      }
+    },
+    "created_order": 3,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-08T02:44:24.704173Z"
+    },
+    "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+    "name": "Path and query wildcard",
+    "priority": 12,
+    "revision": 1,
+    "rule_id": "1ce870ba-1a7b-4fb9-844f-97274e8f132f",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "http",
+      "value": {
+        "action": {
+          "source": "document",
+          "value": {
+            "path": "/customer/name",
+            "type": "set",
+            "value": "matched"
+          }
+        },
+        "condition": {
+          "path": "/customer/age",
+          "predicate": {
+            "type": "number",
+            "value": {
+              "operator": "equal",
+              "value": 18.0
+            }
+          },
+          "source": "document"
+        },
+        "description": "Body age 18"
+      }
+    },
+    "created_order": 4,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-08T02:44:24.704178Z"
+    },
+    "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+    "name": "Body age 18",
+    "priority": 13,
+    "revision": 1,
+    "rule_id": "cd7364fb-1f12-489e-bdfd-f86e2c11fbe2",
+    "stage": "proxy_to_upstream"
+  },
+  {
+    "content": {
+      "type": "socket",
+      "value": {
+        "action": {
+          "source": "document",
+          "value": {
+            "path": "/message_type",
+            "type": "set",
+            "value": "0100"
+          }
+        },
+        "condition": {
+          "path": "/message_type",
+          "predicate": {
+            "type": "string",
+            "value": {
+              "operator": "equal",
+              "value": "0200"
+            }
+          },
+          "source": "document"
+        },
+        "package": {
+          "id": "iso8583-ascii-standard",
+          "version": "1.0.0"
+        }
+      }
+    },
+    "created_order": 5,
+    "enabled": true,
+    "lifecycle": {
+      "hit_count": 2,
+      "last_hit_at": "2026-09-08T02:44:25.888227Z"
+    },
+    "listener_id": "7930d524-e305-449d-809a-bc58335faec3",
+    "name": "MTI 0200 to 0100",
+    "priority": 10,
+    "revision": 1,
+    "rule_id": "82961689-383f-4e7a-b0db-53c1f0247850",
+    "stage": "proxy_to_upstream"
+  }
+]

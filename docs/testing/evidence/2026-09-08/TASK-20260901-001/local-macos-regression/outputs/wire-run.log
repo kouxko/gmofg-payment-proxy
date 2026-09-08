@@ -1,0 +1,2 @@
+{"state": "READY", "start_marker": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/outputs/wire/start-clients"}
+{"result": "PASS", "http_cases": 7, "http_upstream_records": 6, "socket_cases": 3, "socket_upstream_frames": 2, "rule_hit_deltas": {"Method POST": 2, "Header X-Probe alpha": 2, "Path and query wildcard": 2, "Body age 18": 2, "MTI 0200 to 0100": 1}, "invalid_decode_failures": 2}

@@ -1,0 +1,8 @@
+{
+  "result": "PASS",
+  "workspace_byte_structure_equal": true,
+  "workspace_list_selection_equal": true,
+  "listeners": 2,
+  "rules": 5,
+  "runtime_entries_recorded_separately": true
+}

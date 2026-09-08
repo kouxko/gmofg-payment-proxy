@@ -1,0 +1,2 @@
+Task scan:source-size deno run -A scripts/check-source-file-sizes.mjs
+手写源码文件行数门禁通过（上限 500 行）。

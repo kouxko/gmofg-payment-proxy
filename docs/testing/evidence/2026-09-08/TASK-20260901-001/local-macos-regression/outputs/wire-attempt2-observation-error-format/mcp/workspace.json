@@ -1,0 +1,295 @@
+{
+  "android_network_profiles": [],
+  "certificate_references": [],
+  "id": "ae97a522-4242-4264-af56-5b7f9cd338a2",
+  "listeners": [
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "http",
+        "settings": {
+          "authentication": {
+            "mode": "none"
+          },
+          "body_processing": {
+            "mode": "plain"
+          },
+          "downstream_tls": {
+            "client_authentication": {
+              "mode": "disabled"
+            },
+            "dynamic_sni_allowlist": [],
+            "enabled": false,
+            "server_identity": null
+          },
+          "mitm": {
+            "authority_allowlist": [],
+            "enabled": false,
+            "maximum_cached_leaf_certificates": 256,
+            "root_ca": null
+          },
+          "request_body_codec": "auto",
+          "response_body_codec": "auto",
+          "topology": {
+            "mode": "remote_server",
+            "settings": {
+              "fixed_server": {
+                "upstream_tls": {
+                  "client_identity": null,
+                  "server_trust": null,
+                  "verify_hostname": true
+                },
+                "upstream_url": "http://127.0.0.1:28081"
+              }
+            }
+          }
+        }
+      },
+      "enabled": true,
+      "id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "name": "Phase21 HTTP rule matrix",
+      "port": 28080,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    },
+    {
+      "bind_address": "127.0.0.1",
+      "connect_timeout_ms": 5000,
+      "data_plane": {
+        "kind": "socket",
+        "settings": {
+          "maximum_connections": 8,
+          "processing": {
+            "mode": "scripted",
+            "settings": {
+              "package": {
+                "id": "iso8583-ascii-standard",
+                "version": "1.0.0"
+              }
+            }
+          },
+          "runtime_limits": {
+            "diagnostic_event_capacity": 256,
+            "diagnostic_memory_bytes": 1048576,
+            "read_chunk_bytes": 16384
+          },
+          "topology": {
+            "mode": "relay",
+            "settings": {
+              "security": {
+                "mode": "transparent"
+              },
+              "upstream": {
+                "host": "127.0.0.1",
+                "port": 28083
+              }
+            }
+          }
+        }
+      },
+      "enabled": true,
+      "id": "7930d524-e305-449d-809a-bc58335faec3",
+      "name": "Phase21 Socket schema matrix",
+      "port": 28082,
+      "read_timeout_ms": 10000,
+      "write_timeout_ms": 10000
+    }
+  ],
+  "name": "默认 Workspace",
+  "revision": 7,
+  "rule_created_order_high_water": 5,
+  "rule_definitions": [
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Method-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": "Method",
+            "operator": {
+              "Equals": "POST"
+            },
+            "source": "http"
+          },
+          "description": "Method POST"
+        }
+      },
+      "created_order": 1,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "name": "Method POST",
+      "priority": 10,
+      "revision": 1,
+      "rule_id": "28219305-3b12-4498-bb4c-37a09e02b042",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Header-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": {
+              "Header": "/x-probe"
+            },
+            "operator": {
+              "Equals": "alpha"
+            },
+            "source": "http"
+          },
+          "description": "Header X-Probe alpha"
+        }
+      },
+      "created_order": 2,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "name": "Header X-Probe alpha",
+      "priority": 11,
+      "revision": 1,
+      "rule_id": "b7ac51a4-61df-4537-9234-e0b9b3a42e91",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "http",
+            "value": {
+              "SetHeader": {
+                "name": "X-Path-Hit",
+                "value": "yes"
+              }
+            }
+          },
+          "condition": {
+            "field": "RequestTarget",
+            "operator": {
+              "Wildcard": "/orders/*?mode=test"
+            },
+            "source": "http"
+          },
+          "description": "Path and query wildcard"
+        }
+      },
+      "created_order": 3,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "name": "Path and query wildcard",
+      "priority": 12,
+      "revision": 1,
+      "rule_id": "1ce870ba-1a7b-4fb9-844f-97274e8f132f",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "http",
+        "value": {
+          "action": {
+            "source": "document",
+            "value": {
+              "path": "/customer/name",
+              "type": "set",
+              "value": "matched"
+            }
+          },
+          "condition": {
+            "path": "/customer/age",
+            "predicate": {
+              "type": "number",
+              "value": {
+                "operator": "equal",
+                "value": 18.0
+              }
+            },
+            "source": "document"
+          },
+          "description": "Body age 18"
+        }
+      },
+      "created_order": 4,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 0,
+        "last_hit_at": null
+      },
+      "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+      "name": "Body age 18",
+      "priority": 13,
+      "revision": 1,
+      "rule_id": "cd7364fb-1f12-489e-bdfd-f86e2c11fbe2",
+      "stage": "proxy_to_upstream"
+    },
+    {
+      "content": {
+        "type": "socket",
+        "value": {
+          "action": {
+            "source": "document",
+            "value": {
+              "path": "/message_type",
+              "type": "set",
+              "value": "0100"
+            }
+          },
+          "condition": {
+            "path": "/message_type",
+            "predicate": {
+              "type": "string",
+              "value": {
+                "operator": "equal",
+                "value": "0200"
+              }
+            },
+            "source": "document"
+          },
+          "package": {
+            "id": "iso8583-ascii-standard",
+            "version": "1.0.0"
+          }
+        }
+      },
+      "created_order": 5,
+      "enabled": true,
+      "lifecycle": {
+        "hit_count": 1,
+        "last_hit_at": "2026-09-08T02:43:09.402616Z"
+      },
+      "listener_id": "7930d524-e305-449d-809a-bc58335faec3",
+      "name": "MTI 0200 to 0100",
+      "priority": 10,
+      "revision": 1,
+      "rule_id": "82961689-383f-4e7a-b0db-53c1f0247850",
+      "stage": "proxy_to_upstream"
+    }
+  ]
+}

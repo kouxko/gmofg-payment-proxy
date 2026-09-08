@@ -1,0 +1,7 @@
+{
+  "package": "com.interceptproxy.vpn.targetprobe",
+  "channel": "dll",
+  "phase": "phase1",
+  "success": true,
+  "text_utf8": "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 32\r\nConnection: close\r\n\r\n{\"channel\":\"dll\",\"result\":\"D48\"}"
+}

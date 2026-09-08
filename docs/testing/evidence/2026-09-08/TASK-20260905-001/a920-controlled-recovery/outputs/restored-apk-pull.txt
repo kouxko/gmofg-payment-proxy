@@ -1,0 +1,1 @@
+/data/app/com.interceptproxy.vpn-A-ahVLmx9lIi_BG7lLXEzg==/base.apk: 1 file pulled, 0 skipped. 31.5 MB/s (23984685 bytes in 0.726s)

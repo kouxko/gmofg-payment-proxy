@@ -1,0 +1,7 @@
+POST /controlled/phase1/dll HTTP/1.1
+Host: 203.0.113.48:16127
+Content-Type: application/json; charset=UTF-8
+Content-Length: 21
+Connection: close
+
+{"operation":"probe"}

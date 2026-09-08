@@ -1,0 +1,3 @@
+READY validation-only TCP endpoints; no business data
+preflight connection ('127.0.0.1', 65320)
+preflight connection ('127.0.0.1', 65321)

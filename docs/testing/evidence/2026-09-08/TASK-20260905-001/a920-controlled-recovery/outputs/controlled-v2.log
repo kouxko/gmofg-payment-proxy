@@ -1,0 +1,79 @@
+STEP {"at":"2026-09-08T11:46:32.416+08:00","name":"fixtures_ready","value":{"dll":58337,"transaction":58338}}
+{
+  "scope": "device LocalSocket/TUN/JNI recovery gate only",
+  "serial": "2740072778",
+  "started_at": "2026-09-08T11:46:32.370+08:00",
+  "result": "FAIL",
+  "steps": [
+    {
+      "at": "2026-09-08T11:46:32.416+08:00",
+      "name": "fixtures_ready",
+      "value": {
+        "dll": 58337,
+        "transaction": 58338
+      }
+    }
+  ],
+  "saved_activation_restore": {
+    "possible_via_public_v2": false,
+    "reason": "accepted start/apply with proxy routes clears prior recovery; v2 has no get/export operation",
+    "external_backup_required": true,
+    "external_restore_owner": "caller/root harness"
+  },
+  "recovery_backup_gate": {
+    "metadata_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/outputs/recovery-backup-gate.json",
+    "backup_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/resources/original-runtime-preferences.json",
+    "metadata": {
+      "package": "com.interceptproxy.vpn",
+      "serial": "2740072778",
+      "backup_complete": true,
+      "restore_supported": true,
+      "backup_file": "../resources/original-runtime-preferences.json",
+      "device_backup_path": "/storage/emulated/0/Android/data/com.interceptproxy.vpn/files/intercept_proxy_vpn_runtime.backup.json"
+    }
+  },
+  "adb_commands": [
+    {
+      "at": "2026-09-08T11:46:32.415+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "get-state"
+      ],
+      "exit": 0,
+      "elapsed_millis": 45,
+      "stdout": "device\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:47:02.427+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am",
+        "start",
+        "-W",
+        "-n",
+        "com.interceptproxy.vpn/.AdbControlActivity",
+        "--es",
+        "command",
+        "wake_control_server"
+      ],
+      "exit": "TIMEOUT",
+      "elapsed_millis": 30010,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn/.AdbControlActivity (has extras) }\n",
+      "stderr": ""
+    }
+  ],
+  "error": "RuntimeError: adb failed (TIMEOUT): adb -s 2740072778 shell am start -W -n com.interceptproxy.vpn/.AdbControlActivity --es command wake_control_server\n",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/replay/controlled-v2.py\", line 534, in main\n    control.open()\n    ~~~~~~~~~~~~^^\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/replay/controlled-v2.py\", line 172, in open\n    self.adb.run(\"shell\", \"am\", \"start\", \"-W\", \"-n\", f\"{COMPANION}/.AdbControlActivity\",\n    ~~~~~~~~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n                 \"--es\", \"command\", \"wake_control_server\")\n                 ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/replay/controlled-v2.py\", line 91, in run\n    raise RuntimeError(f\"adb failed ({return_code}): {' '.join(command)}\\n{entry['stderr']}\")\nRuntimeError: adb failed (TIMEOUT): adb -s 2740072778 shell am start -W -n com.interceptproxy.vpn/.AdbControlActivity --es command wake_control_server\n\n",
+  "fixture_request_counts": {
+    "dll": 0,
+    "transaction": 0
+  },
+  "heartbeat_errors": [],
+  "finished_at": "2026-09-08T11:47:02.542+08:00"
+}

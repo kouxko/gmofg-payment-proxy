@@ -1,0 +1,15 @@
+{
+  "profile": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/intercept-local-regression-3ei6brzn",
+  "dmg": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/outputs/artifacts/Intercept Proxy_1.0.0_universal.dmg",
+  "starts": [
+    {
+      "pid": 95488,
+      "at": "2026-09-08T10:06:12.906104+08:00",
+      "database": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/intercept-local-regression-3ei6brzn/Library/Application Support/com.interceptproxy.desktop/intercept-proxy.sqlite3"
+    }
+  ],
+  "cleanup": "APP_STOPPED_DMG_DETACHED_PROFILE_RETAINED",
+  "mount": "/Volumes/Intercept Proxy",
+  "executable": "/Volumes/Intercept Proxy/Intercept Proxy.app/Contents/MacOS/intercept-proxy",
+  "completed_at": "2026-09-08T10:12:47.408883+08:00"
+}

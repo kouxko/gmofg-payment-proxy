@@ -1,0 +1,10 @@
+{
+  "channel": "dll",
+  "peer": [
+    "127.0.0.1",
+    58831
+  ],
+  "size": 173,
+  "header_latin1": "POST /controlled/phase2/dll HTTP/1.1\r\nHost: 203.0.113.48:16127\r\nContent-Type: application/json; charset=UTF-8\r\nContent-Length: 21\r\nConnection: close",
+  "body_utf8": "{\"operation\":\"probe\"}"
+}

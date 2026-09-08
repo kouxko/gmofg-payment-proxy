@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "request_id": "c3ffd059-93cb-4c35-99c6-54c341e90d59",
+  "ok": true,
+  "status": {
+    "serial": "",
+    "state": "stopped",
+    "verified": true,
+    "transport": "local_abstract_socket",
+    "active_profile_id": null,
+    "active_profile_fingerprint": null,
+    "active_route_fingerprint": null,
+    "active_route_count": 0,
+    "companion_process_running": true,
+    "message": "VPN 已停止。",
+    "unsupported_fields": [
+      "serial"
+    ],
+    "stats": {
+      "download_ip_checksum_failures": 0,
+      "download_ip_length_mismatches": 0,
+      "download_tcp_syn_ack_packets": 3,
+      "download_transport_checksum_failures": 0,
+      "impairment_delay_millis_total": 1786,
+      "impairment_mss_clamps": 0,
+      "impairment_packets_corrupted": 0,
+      "impairment_packets_dropped": 0,
+      "impairment_packets_duplicated": 0,
+      "impairment_packets_reordered": 0,
+      "impairment_pmtu_fragments": 0,
+      "impairment_pmtu_signals": 0,
+      "impairment_unimplemented_pmtu_actions": 0,
+      "last_error": null,
+      "protect_failures": 0,
+      "proxy_download_packets": 14,
+      "proxy_upload_packets": 23,
+      "socks_clients": 3,
+      "socks_connect_attempts": 3,
+      "socks_connect_successes": 2,
+      "tun_download_bytes": 842,
+      "tun_download_packets": 14,
+      "tun_upload_bytes": 1675,
+      "tun_upload_packets": 23,
+      "upload_tcp_ack_packets": 15,
+      "upload_tcp_syn_packets": 3
+    }
+  },
+  "error_code": null,
+  "error_message": null
+}

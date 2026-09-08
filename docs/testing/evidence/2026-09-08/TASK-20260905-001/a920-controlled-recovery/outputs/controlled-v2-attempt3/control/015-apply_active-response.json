@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "request_id": "6fbe6282-16c3-458f-a8b8-4047ffb4eef4",
+  "ok": false,
+  "status": null,
+  "error_code": "ANDROID_CONTROL_LEASE_STALE",
+  "error_message": "控制租约不存在、已到期或不属于当前运行实例。"
+}

@@ -1,0 +1,16 @@
+[
+  {
+    "attempt": 1,
+    "result": "MCP_TOOL_ARGUMENTS_INVALID",
+    "reason": "Historical HTTP listener uses settings.fixed_server, while current schema requires settings.topology.remote_server.settings.fixed_server",
+    "candidate_mutation_committed": false
+  },
+  {
+    "attempt": 2,
+    "result": "validation_failed",
+    "layer": "dns_tcp_port",
+    "reason": "Controlled upstream services were not running yet",
+    "candidate_mutation_committed": false,
+    "raw_preview": "configuration-attempt2-upstream-not-started/preview.json"
+  }
+]

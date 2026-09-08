@@ -1,0 +1,32 @@
+[
+  {
+    "active_connections": 0,
+    "can_start": false,
+    "can_stop": true,
+    "client_to_server_bytes": 0,
+    "fault_reason": null,
+    "listen_address": "127.0.0.1:28080",
+    "listener_id": "321e2033-943a-47d2-804d-d37b1f41e2d3",
+    "retained_diagnostic_evictions": 0,
+    "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+    "server_to_client_bytes": 0,
+    "state": "running",
+    "state_text": "运行中",
+    "ui_tone": "positive"
+  },
+  {
+    "active_connections": 0,
+    "can_start": false,
+    "can_stop": true,
+    "client_to_server_bytes": 354,
+    "fault_reason": null,
+    "listen_address": "127.0.0.1:28082",
+    "listener_id": "7930d524-e305-449d-809a-bc58335faec3",
+    "retained_diagnostic_evictions": 0,
+    "runtime_epoch": "e499ea30-5df7-4a3a-916c-1f97ccfd7e0e",
+    "server_to_client_bytes": 354,
+    "state": "running",
+    "state_text": "运行中",
+    "ui_tone": "positive"
+  }
+]

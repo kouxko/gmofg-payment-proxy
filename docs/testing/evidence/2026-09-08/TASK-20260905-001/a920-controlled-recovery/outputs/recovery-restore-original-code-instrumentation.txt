@@ -1,0 +1,30 @@
+INSTRUMENTATION_STATUS: class=com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest:
+INSTRUMENTATION_STATUS: test=backupOrRestoreRuntimePreferences
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: backup_path=/storage/emulated/0/Android/data/com.interceptproxy.vpn/files/intercept_proxy_vpn_runtime.backup.json
+INSTRUMENTATION_STATUS: entry_count=4
+INSTRUMENTATION_STATUS: file_existed=true
+INSTRUMENTATION_STATUS: preferences_name=intercept_proxy_vpn_runtime
+INSTRUMENTATION_STATUS: readback_verified=true
+INSTRUMENTATION_STATUS: result=restore_complete
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_STATUS: class=com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=.
+INSTRUMENTATION_STATUS: test=backupOrRestoreRuntimePreferences
+INSTRUMENTATION_STATUS_CODE: 0
+INSTRUMENTATION_RESULT: stream=
+
+Time: 0.308
+
+OK (1 test)
+
+
+INSTRUMENTATION_CODE: -1
