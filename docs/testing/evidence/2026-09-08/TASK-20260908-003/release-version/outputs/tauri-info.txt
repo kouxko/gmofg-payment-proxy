@@ -1,0 +1,38 @@
+
+[✔] Environment
+    - OS: Mac OS 27.0.0 arm64 (X64)
+    ✔ Xcode Command Line Tools: installed
+    ✔ Xcode: 26.6
+    ✔ rustc: 1.98.0 (88d9e12ae 2026-08-18)
+    ✔ cargo: 1.98.0 (797e8a9bc 2026-08-05)
+    ✔ rustup: 1.29.1 (d95a37b6a 2026-08-13)
+    ✔ Rust toolchain: 1.98.0-aarch64-apple-darwin (overridden by '/Users/codin/Code/gmofg-payment-proxy-release-1.0.1/rust-toolchain.toml')
+    - node: 26.8.1
+    - pnpm: 11.13.1
+    - npm: 11.19.0
+    - deno: deno 2.9.6
+
+[-] Packages
+    - tauri 🦀: 2.11.5
+    - tauri-build 🦀: 2.6.3
+    - wry 🦀: 0.55.1, (outdated, latest: 0.57.0)
+    - tao 🦀: 0.35.3, (outdated, latest: 0.37.0)
+    - tauri-cli 🦀: 2.11.4
+    - @tauri-apps/api  ⱼₛ: not installed!
+    - @tauri-apps/cli  ⱼₛ: 2.11.4
+
+[-] Plugins
+    - tauri-plugin-log 🦀: 2.9.0, (outdated, latest: 2.9.1)
+    - @tauri-apps/plugin-log  ⱼₛ: not installed!
+    - tauri-plugin-dialog 🦀: 2.7.2, (outdated, latest: 2.7.3)
+    - @tauri-apps/plugin-dialog  ⱼₛ: not installed!
+    - tauri-plugin-fs 🦀: 2.5.1, (outdated, latest: 2.5.2)
+    - @tauri-apps/plugin-fs  ⱼₛ: not installed!
+
+[-] App
+    - build-type: bundle
+    - CSP: default-src 'self'; connect-src ipc: http://ipc.localhost; font-src 'self' data:; img-src 'self' asset: http://asset.localhost data: blob:; object-src 'none'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'; style-src 'self' 'unsafe-inline'
+    - frontendDist: ../out
+    - devUrl: http://localhost:3000/
+    - framework: React (Next.js)
+    - bundler: Webpack

@@ -1,0 +1,47 @@
+{
+  "result": "PASS",
+  "app_version": "1.0.1",
+  "android_version_code": 101,
+  "proxy_version": "1.0.1",
+  "workspace_packages": {
+    "intercept-proxy": "1.0.1",
+    "intercept-proxy-application": "1.0.1",
+    "intercept-proxy-android-control-protocol": "1.0.1",
+    "intercept-proxy-domain": "1.0.1",
+    "intercept-proxy-product-api": "1.0.1",
+    "intercept-proxy-host": "1.0.1",
+    "intercept-proxy-infrastructure": "1.0.1",
+    "intercept-proxy-exchange": "1.0.1",
+    "intercept-proxy-package-contract": "1.0.1",
+    "intercept-proxy-package-runtime": "1.0.1",
+    "intercept-proxy-runtime": "1.0.1",
+    "intercept-proxy-traffic-observation": "1.0.1",
+    "intercept-proxy-android-engine": "1.0.1"
+  },
+  "lockfile_changed_packages": [
+    "intercept-proxy",
+    "intercept-proxy-android-control-protocol",
+    "intercept-proxy-android-engine",
+    "intercept-proxy-application",
+    "intercept-proxy-domain",
+    "intercept-proxy-exchange",
+    "intercept-proxy-host",
+    "intercept-proxy-infrastructure",
+    "intercept-proxy-package-contract",
+    "intercept-proxy-package-runtime",
+    "intercept-proxy-product-api",
+    "intercept-proxy-runtime",
+    "intercept-proxy-traffic-observation"
+  ],
+  "external_dependencies_unchanged": true,
+  "release_merge_parent": "10b3b576123c6c3f4e44868f7fc4e86e53a67208",
+  "unresolved_conflicts": [],
+  "source_sha256": {
+    "package.json": "9b54ffc99f922c5251c2f11bad9b2308b4467cf11901fd1e2be622bb3c7b48e0",
+    "src-tauri/tauri.conf.json": "14a29747fe0cd0f60cb5e02a375efc5e1400b0fde7ada27a0fe52bf95037e878",
+    "src-tauri/Cargo.toml": "5b77945044509e592c498c62b7b7fb8574ae916f8763bd0f5da1167758d2fa4d",
+    "src-tauri/Cargo.lock": "ebcf65e0aab747809084ac5f952f1825ca3287fb204edb4a5e5051e99fa2b35a",
+    "android-companion/app/build.gradle.kts": "502ebd80a0316ed55194ce784bd83648f6b7029505377fc6773a3342abd48806"
+  },
+  "checked_at": "2026-09-08T09:27:45.900590+00:00"
+}

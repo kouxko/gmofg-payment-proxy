@@ -1,0 +1,21 @@
+{
+  "task_id": "TASK-20260908-003",
+  "case_id": "release-version",
+  "status": "LOCAL_VERSION_CHECKS_PASS_MR_PENDING",
+  "executed_at": "2026-09-08 17:31:35 +08:00",
+  "base_develop": "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+  "merged_release": "10b3b576123c6c3f4e44868f7fc4e86e53a67208",
+  "replay": "replay/check_versions.py --repo <repository>",
+  "result_detail": "Android101/1.0.1, Proxy1.0.1, 13 internal lock entries, external unchanged, 5 contracts pass, lint/format pass",
+  "not_applicable": {
+    "full_builds": "Not requested for version-only MR preparation",
+    "device": "No behavior change or device-install request in this task",
+    "business_frames": "No protocol change",
+    "ci": "Not authorized; skip markers used"
+  },
+  "derived_from": {
+    "task_id": "TASK-20260908-002",
+    "case_id": "version-1-0-1",
+    "path": "docs/testing/evidence/2026-09-08/TASK-20260908-002/version-1-0-1"
+  }
+}
