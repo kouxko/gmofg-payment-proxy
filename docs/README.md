@@ -15,7 +15,7 @@
 
 ## 待实现任务
 
-- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)（高，进行中；GitLab已有v1.0.0四资产已验证，缺macOS资产及本轮变更交付收尾）
+- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)（高，进行中；本轮源码与验收档案已推送GitLab且CI跳过；v1.0.0四资产已验证，macOS制品发布待完成）
 
 ## 架构
 

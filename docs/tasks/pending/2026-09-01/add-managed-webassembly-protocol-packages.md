@@ -7,7 +7,7 @@
 - 任务日期：`2026-09-01`
 - 创建时间：`2026-09-01 10:20:26 +08:00`
 - 开始时间：`2026-09-01 17:51:23 +08:00`
-- 最后更新时间：`2026-09-08 12:25:40 +08:00`
+- 最后更新时间：`2026-09-08 12:31:47 +08:00`
 - 完成时间：`N/A`
 - 创建路径：`docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md`
 - 归档路径：`docs/tasks/completed/<完成日期>/add-managed-webassembly-protocol-packages.md`
@@ -399,3 +399,11 @@ JSON Pretty 导入属于本任务新增包暴露出的缺陷：Rust 包合同已
 - 本轮不创建MR、不合并主分支、不打tag、不发布制品；WPC-14制品发布剩余范围维持进行中。
 - 提交范围为本轮Socket上限、前端测试/证据类型检查隔离、手动快速构建配置、5项已完成任务归档及关联证据；无关CPS包/HTTP Finalize未跟踪目录不纳入。测试资源及日志按原始字节暂存，排除Python运行缓存。
 - 已有本地/真机验收及独立审查结论保持有效，本轮只修改交付记录并执行Git范围、字节和远端一致性检查；不重复业务测试。
+
+## GitLab源码交付完成（2026-09-08 12:31:47 +08:00）
+
+- 用户本轮授权已完成：16个提交已推送至GitLab `codex/complete-pending-tasks-20260907`，源码与完整档案提交终点`cb28e81700749f605096e04fe8d53a493eddb6b4`；git ls-remote及GitLab Branch API均与本地HEAD一致。
+- 3个源码/测试/配置提交及13个档案批次均包含`[skip ci]`，每次push使用`-o ci.skip`。本次GET核验14条pipeline全部skipped、jobs全部为空，执行CI作业数0；[原始交付核验结果](add-managed-webassembly-protocol-packages.gitlab-delivery.json)记录提交清单、pipeline ID、时间和远端分支链接。
+- 初次完整HTTP上传因413失败，SSH因publickey/password认证失败；随后按原始文件拆分小批次并顺序快进上传。最终Git tree与拆分前已核验档案tree严格相同，984份证据原始字节一致，没有删除资源或改写历史证据来绕过服务器限制。
+- 已跟踪工作区与暂存区干净；两处无关CPS/HTTP Finalize未跟踪目录的完整文件哈希保持不变。
+- 本条交付记录及其附件以独立`[skip ci]`文档提交继续推送，并再次只读核验；制品发布、主分支合并、tag及缺失macOS发布资产没有包含在本次用户授权中，WPC-14仍保持进行中。
