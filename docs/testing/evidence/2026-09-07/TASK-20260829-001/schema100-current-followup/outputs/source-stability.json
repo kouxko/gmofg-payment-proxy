@@ -1,0 +1,11 @@
+{
+  "source_archives": {
+    "current-source.tar.gz": 31,
+    "runtime-fixture-source.tar.gz": 12,
+    "checker-source.tar.gz": 8
+  },
+  "byte_comparison": "PASS",
+  "affected_source_changed_during_tests": false,
+  "late_archived_checker_inputs_vs_test_base": "git diff caa36022 -- 8 paths is empty",
+  "review_fix": "Initial archive missed 8 directly-read checker inputs; supplemented without changing source"
+}

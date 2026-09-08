@@ -1,0 +1,17 @@
+{
+  "historical_head": "fa4e154f",
+  "historical_run": 34025792017,
+  "historical_job": "Verify (windows-latest)",
+  "job_result": "success",
+  "run_result": "failure (coverage)",
+  "current_affected_paths": [
+    "src-tauri/crates/infrastructure/src/sqlite",
+    "src-tauri/crates/infrastructure/src/sqlite.rs",
+    "src-tauri/crates/host/src/tests.rs",
+    "src-tauri/crates/host/src/tests",
+    "src-tauri/Cargo.toml",
+    "src-tauri/Cargo.lock"
+  ],
+  "git_diff_exit": 0,
+  "diff": ""
+}

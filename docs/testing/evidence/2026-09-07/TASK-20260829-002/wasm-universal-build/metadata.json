@@ -1,0 +1,60 @@
+{
+  "task_id": "TASK-20260829-002",
+  "case_id": "wasm-universal-build",
+  "executed_at": "2026-09-07T19:19:08.171064+08:00",
+  "status": "LOCAL_BUILD_PASS_REVIEW_APPROVED_MANUAL_GATES_PENDING",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "branch": "codex/complete-pending-tasks-20260907",
+  "base_commit": "caa36022",
+  "derived_from": {
+    "task_id": "TASK-20260829-002",
+    "case_id": "phase18-final-unified-release-automation",
+    "evidence_path": "docs/testing/evidence/2026-09-01/TASK-20260829-002/phase18-final-unified-release-automation"
+  },
+  "contract_change": "Current local Wasm runtime supersedes historical Boa/Sidecar under ADR-010 and TASK-20260901-001; keep universal architecture, bundle, DMG, read-only mount and signature validation requirements",
+  "resources": [
+    {
+      "path": "resources/build-inputs.tar.gz",
+      "source": "Actual tracked build input files plus staged Companion APK",
+      "required": true,
+      "original_names": "Repository paths preserved; inventory outputs/build-inputs.json",
+      "use": "Frontend/Rust/build-script/Component/Tauri/resource inputs; does not include original unrelated untracked gmofg_cps/http-finalize files"
+    }
+  ],
+  "commands": [
+    [
+      "rustup",
+      "target",
+      "add",
+      "x86_64-apple-darwin"
+    ],
+    [
+      "deno",
+      "task",
+      "build:macos:universal"
+    ]
+  ],
+  "env": {
+    "CARGO_BUILD_JOBS": "2"
+  },
+  "signing": {
+    "mode": "ad-hoc per existing local build script",
+    "valid_codesigning_identities": 0,
+    "developer_id_identities": 0,
+    "notarization": "NOT_RUN"
+  },
+  "not_applicable": {
+    "installation": "NOT_RUN; no /Applications replacement",
+    "business_requests": "N/A; packaging only",
+    "developer_id_distribution": "NOT_RUN; no Developer ID identity",
+    "remote_ci_push_release": "NOT_RUN"
+  },
+  "replay": "python3 docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/replay/verify.py; full rebuild: CARGO_BUILD_JOBS=2 deno task build:macos:universal from matching checkout",
+  "completed_at": "2026-09-07T19:39:01.773994+08:00",
+  "artifact_inventory": "outputs/artifact-inventory.json",
+  "source_stability": "outputs/source-stability.json",
+  "artifact_checks": "outputs/artifact-checks.json",
+  "review": "outputs/independent-review.md",
+  "archived_replay": "outputs/archived-replay.log",
+  "companion_comparison": "outputs/companion-byte-comparison.json"
+}

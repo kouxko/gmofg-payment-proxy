@@ -1,0 +1,11 @@
+ M .github/workflows/windows-quick-build.yml
+ M docs/tasks/pending/2026-08-29/establish-database-version-100-baseline.md
+ M docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md
+ M docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md
+ M docs/tasks/pending/2026-09-04/github-quick-android-windows-package.md
+ M docs/tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md
+ M docs/tasks/pending/2026-09-06/fix-six-architecture-review-findings.md
+ M scripts/windows-build-only-workflow.test.mjs
+?? docs/testing/evidence/2026-09-07/
+?? examples/protocol-packages/gmofg_cps/
+?? src-tauri/crates/package-runtime/tests/fixtures/http-finalize/
