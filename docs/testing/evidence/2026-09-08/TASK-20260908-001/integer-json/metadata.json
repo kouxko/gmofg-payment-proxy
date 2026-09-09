@@ -1,0 +1,110 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260908-001",
+  "case_id": "integer-json",
+  "updated_at": "2026-09-08 16:03:20 +08:00",
+  "result": "PASS",
+  "base_commit": "6764210eb057bb482b86a05cd1df23d7cdea5c5c",
+  "branch": "hotfix/fix-document-integer-json-serialization",
+  "derived_from": {
+    "task_id": "TASK-20260907-004",
+    "case_id": "cps-checksum",
+    "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260907-004/cps-checksum"
+  },
+  "resources": [
+    "resources/input-provenance.json",
+    "resources/source-provenance.json"
+  ],
+  "environment": "inputs/environment.json",
+  "replay": "replay/run.py <new-label> -- <command from outputs/<label>/run.json>; replay/verify_wire.py checks archived wire",
+  "not_applicable": {
+    "native_UI_real_device": "NOT_RUN; existing jsdom interaction suite only",
+    "production_TLS_payment": "NOT_RUN; local loopback only",
+    "CI_push_release": "NOT_RUN; not authorized",
+    "database_schema_migration": "N/A; schema unchanged, legacy numeric JSON loading/saving tested"
+  },
+  "signed_zero": "Existing -0.0 representation retained; no new behavior selected from an unanswered question",
+  "completed_at": "2026-09-08 16:03:20 +08:00",
+  "review": {
+    "result": "APPROVE",
+    "artifact": "outputs/review.md"
+  },
+  "accepted_runs": [
+    {
+      "label": "domain-final",
+      "result": "PASS",
+      "record": "outputs/domain-final/run.json"
+    },
+    {
+      "label": "application-package",
+      "result": "PASS",
+      "record": "outputs/application-package/run.json"
+    },
+    {
+      "label": "application-contract-final",
+      "result": "PASS",
+      "record": "outputs/application-contract-final/run.json"
+    },
+    {
+      "label": "http-pipeline-verified",
+      "result": "PASS",
+      "record": "outputs/http-pipeline-verified/run.json"
+    },
+    {
+      "label": "wasm-json-wire",
+      "result": "PASS",
+      "record": "outputs/wasm-json-wire/run.json"
+    },
+    {
+      "label": "wire-comparison-final",
+      "result": "PASS",
+      "record": "outputs/wire-comparison-final/run.json"
+    },
+    {
+      "label": "java-oracle",
+      "result": "PASS",
+      "record": "outputs/java-oracle/run.json"
+    },
+    {
+      "label": "frontend-rules",
+      "result": "PASS",
+      "record": "outputs/frontend-rules/run.json"
+    },
+    {
+      "label": "frontend-typecheck",
+      "result": "PASS",
+      "record": "outputs/frontend-typecheck/run.json"
+    },
+    {
+      "label": "frontend-lint",
+      "result": "PASS",
+      "record": "outputs/frontend-lint/run.json"
+    },
+    {
+      "label": "architecture",
+      "result": "PASS",
+      "record": "outputs/architecture/run.json"
+    },
+    {
+      "label": "source-size-final",
+      "result": "PASS",
+      "record": "outputs/source-size-final/run.json"
+    },
+    {
+      "label": "rust-fmt-completion",
+      "result": "PASS",
+      "record": "outputs/rust-fmt-completion/run.json"
+    },
+    {
+      "label": "rust-clippy-final",
+      "result": "PASS",
+      "record": "outputs/rust-clippy-final/run.json"
+    },
+    {
+      "label": "generated-bindings",
+      "result": "PASS",
+      "record": "outputs/generated-bindings/run.json"
+    }
+  ],
+  "archive_integrity": "checksums.json"
+}

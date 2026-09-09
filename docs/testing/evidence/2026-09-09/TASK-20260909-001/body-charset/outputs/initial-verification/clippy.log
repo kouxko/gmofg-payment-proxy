@@ -1,0 +1,43 @@
+    Checking intercept-proxy-domain v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/domain)
+    Checking intercept-proxy-android-control-protocol v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/android-control-protocol)
+    Checking intercept-proxy-product-api v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/product-api)
+   Compiling tauri v2.11.5
+   Compiling intercept-proxy v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri)
+   Compiling tauri-plugin-fs v2.5.1
+   Compiling tauri-plugin-log v2.9.0
+   Compiling tauri-plugin-dialog v2.7.2
+    Checking intercept-proxy-application v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/application)
+    Checking intercept-proxy-exchange v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/exchange)
+    Checking intercept-proxy-package-contract v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/package-contract)
+    Checking intercept-proxy-package-runtime v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/package-runtime)
+    Checking intercept-proxy-runtime v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/proxy)
+    Checking tauri-specta v2.0.0-rc.25
+    Checking intercept-proxy-traffic-observation v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/traffic-observation)
+    Checking intercept-proxy-infrastructure v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/infrastructure)
+    Checking intercept-proxy-host v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/host)
+error: use of `format!` to build up a string from an iterator
+  --> src/runtime_logs/exchange_ui_layer/tests/http_body.rs:12:15
+   |
+12 |       let hex = bytes
+   |  _______________^
+13 | |         .iter()
+14 | |         .map(|byte| format!("{byte:02x}"))
+15 | |         .collect::<String>();
+   | |____________________________^
+   |
+help: call `fold` instead
+  --> src/runtime_logs/exchange_ui_layer/tests/http_body.rs:14:10
+   |
+14 |         .map(|byte| format!("{byte:02x}"))
+   |          ^^^
+help: ... and use the `write!` macro here
+  --> src/runtime_logs/exchange_ui_layer/tests/http_body.rs:14:21
+   |
+14 |         .map(|byte| format!("{byte:02x}"))
+   |                     ^^^^^^^^^^^^^^^^^^^^^
+   = note: this can be written more efficiently by appending to a `String` directly
+   = help: for further information visit https://rust-lang.github.io/rust-clippy/rust-1.98.0/index.html#format_collect
+   = note: `-D clippy::format-collect` implied by `-D warnings`
+   = help: to override `-D warnings` add `#[allow(clippy::format_collect)]`
+
+error: could not compile `intercept-proxy` (lib test) due to 1 previous error

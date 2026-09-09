@@ -1,0 +1,93 @@
+{
+  "task_id": "TASK-20260829-001",
+  "case_id": "schema100-current-followup",
+  "executed_at": "2026-09-07T18:57:13.034660+08:00",
+  "status": "PASS_REVIEW_APPROVED",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "base_commit": "caa36022",
+  "branch": "codex/complete-pending-tasks-20260907",
+  "derived_from": {
+    "task_id": "TASK-20260829-001",
+    "case_id": "DB-SCHEMA-100-001",
+    "evidence_path": "docs/testing/evidence/2026-08-29/TASK-20260829-001/DB-SCHEMA-100-001"
+  },
+  "purpose": "Current Schema100 boundaries and optimized double-start persistence; close historical Windows wait using successful verified job",
+  "resources": [
+    {
+      "path": "resources/current-source.tar.gz",
+      "original_names": "repository paths preserved within archive",
+      "source": "current checkout before tests",
+      "required": true,
+      "use": "Actual SQLite/Host test input, Cargo lock/manifest and release checker source snapshot"
+    },
+    {
+      "path": "resources/runtime-fixture-source.tar.gz",
+      "source": "Current ISO8583 Component template including Cargo.lock/Manifest, WIT and environment material adapter",
+      "original_names": "Repository paths preserved",
+      "required": true,
+      "use": "Actual two-start runtime package fixture and SQLite source-contract dependency"
+    },
+    {
+      "path": "resources/generated-component/intercept_proxy_iso8583_ascii_standard_component.wasm",
+      "source": "Actual optimized two-start test guest cargo build, copied before temporary target deletion",
+      "required": true,
+      "use": "Raw Component read by test before in-memory manifest custom section append; complete assembly instructions are archived Host test source"
+    },
+    {
+      "path": "resources/checker-source.tar.gz",
+      "source": "8 current directly-read checker inputs, clean relative to caa36022 test base",
+      "required": true,
+      "original_names": "Repository paths preserved",
+      "use": "Tauri/Host/Infrastructure composition and current architecture input to phase17 checker"
+    }
+  ],
+  "results": {
+    "sqlite_tests": {
+      "passed": 88,
+      "failed": 0
+    },
+    "release_checker": {
+      "passed": 14,
+      "failed": 0
+    },
+    "exact_tests": {
+      "infrastructure_prebaseline": 1,
+      "host_prebaseline": 1,
+      "optimized_two_host_starts": 1
+    },
+    "source_stable": "Byte-for-byte comparison PASS",
+    "windows_verify": {
+      "run": 34025792017,
+      "job": "Verify (windows-latest)",
+      "result": "success",
+      "whole_run": "failure (coverage)",
+      "affected_sources_equal_current": true
+    },
+    "fixture_capture_repeat": "optimized two-start exact 1/1 PASS; raw Component preserved"
+  },
+  "not_applicable": {
+    "production_database": "NOT_TOUCHED; tests use isolated temporary databases",
+    "current_app_ui": "NOT_RUN; reuse original actual UI acceptance as historical evidence, no product code changed",
+    "protocol_frames": "N/A for database-only boundaries",
+    "new_ci": "NOT_RUN; read-only queries of existing completed run"
+  },
+  "replay": "python3 replay/run.py from the case directory (uses current checkout and rejects archived source mismatch)",
+  "fixture_capture_repeat_reason": "Initial successful invocation deleted temporary compiled Component; repeat captured actual resource without modifying production/test source",
+  "source_archive_counts": {
+    "current-source.tar.gz": 31,
+    "runtime-fixture-source.tar.gz": 12,
+    "checker-source.tar.gz": 8
+  },
+  "review_fix": {
+    "initial": "REQUEST CHANGES P1 missing 8 checker input files",
+    "repair": "Supplemented third source archive and replay guard; all inputs clean relative to tested base; no business source changed"
+  },
+  "independent_review": {
+    "verdict": "APPROVE",
+    "initial_p1": 1,
+    "remaining_p0": 0,
+    "remaining_p1": 0,
+    "remaining_p2": 0,
+    "path": "independent-review.md"
+  }
+}

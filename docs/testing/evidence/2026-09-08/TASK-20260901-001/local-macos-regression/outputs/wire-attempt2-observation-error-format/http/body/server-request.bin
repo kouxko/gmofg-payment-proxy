@@ -1,0 +1,8 @@
+GET /other HTTP/1.1
+Content-Type: application/json
+X-Wire-Case: body
+Host: 127.0.0.1:28081
+Connection: close
+Content-Length: 42
+
+{"customer":{"age":18.0,"name":"matched"}}

@@ -10,6 +10,9 @@ use tracing_subscriber::prelude::*;
 use super::{ExchangeUiConsumer, ExchangeUiLayer};
 use crate::runtime_logs::nonblocking_queue::QueueByteBudget;
 
+#[path = "tests/http_body.rs"]
+mod http_body;
+
 #[path = "tests/finalize.rs"]
 mod finalize;
 #[path = "tests/process.rs"]

@@ -1,0 +1,68 @@
+{
+  "task_id": "TASK-20260904-006",
+  "case_id": "manual-trigger-and-artifact",
+  "executed_at": "2026-09-07T18:51:13.826023+08:00",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "branch": "codex/complete-pending-tasks-20260907",
+  "base_commit": "caa36022",
+  "status": "PASS_REVIEW_APPROVED",
+  "historical_run": 34020524291,
+  "historical_head": "fa4e154f1861ce3ac032f5f87475b6fcd88c497e",
+  "current_workflow_difference": "Only one-time push trigger removed; jobs and steps identical",
+  "fresh_remote_run": "NOT_RUN",
+  "ci_full_run": {
+    "id": 34025792017,
+    "result": "FAILED",
+    "windows_verify": "SUCCESS",
+    "coverage": "FAILED"
+  },
+  "sources": [
+    ".github/workflows/windows-quick-build.yml",
+    "scripts/windows-build-only-workflow.test.mjs",
+    ".github/workflows/windows-release.yml"
+  ],
+  "resources": [
+    {
+      "original_name": "Intercept-Proxy-quick-validation-x64",
+      "source": "GitHub run 34020524291",
+      "path": "resources/artifact",
+      "required": true,
+      "use": "PE header, APK ZIP CRC and companion layout checks"
+    },
+    {
+      "path": "resources/red",
+      "use": "Actual RED test and original workflow"
+    },
+    {
+      "path": "resources/green",
+      "use": "Actual GREEN test and workflow; dependency declarations"
+    },
+    {
+      "path": "resources/successful-run-workflow.yml",
+      "use": "Historical successful job comparison"
+    }
+  ],
+  "results": {
+    "red": "2 passed / 1 failed as expected",
+    "green": "3 passed / 0 failed",
+    "yaml": "PASS",
+    "fmt": "PASS",
+    "lint": "PASS",
+    "artifact": "PASS"
+  },
+  "not_applicable": {
+    "traffic_frames": "No protocol runtime change",
+    "screenshots": "No UI change",
+    "windows_launch": "NOT_RUN; original artifact contract does not require launch",
+    "new_ci": "NOT_RUN; existing jobs unchanged"
+  },
+  "replay": "python3 replay/run.py",
+  "setup_failure": "Initial YAML bare import js-yaml unavailable in Deno eval; explicit existing local module resolved it, no dependency added",
+  "independent_review": {
+    "verdict": "APPROVE",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "path": "independent-review.md"
+  }
+}

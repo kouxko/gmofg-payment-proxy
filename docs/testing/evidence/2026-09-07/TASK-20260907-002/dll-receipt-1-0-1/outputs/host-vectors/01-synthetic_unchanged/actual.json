@@ -1,0 +1,13 @@
+{
+  "display": "<section style=\"font-family:ui-monospace,SFMono-Regular,Menlo,monospace;white-space:pre-wrap;overflow-wrap:anywhere\"><h3>GMO-FG Payment DLL downstream</h3><details open><summary><strong>基本信息</strong><span>Object · 5 fields</span></summary><table style=\"background-color:hsl(18 45% 46% / 0.10);border-color:hsl(18 65% 50%)\"><thead><tr><th>ResponseID</th><th>TransactionType</th><th>ResponseDateTime</th><th>ErrorCode</th><th>ErrorMessage</th></tr></thead><tbody><tr><td>A</td><td>U010</td><td>20260907155726</td><td>   </td><td>電子レシート送信完了</td></tr></tbody></table></details></section>",
+  "document": {
+    "ErrorCode": "   ",
+    "ErrorMessage": "電子レシート送信完了",
+    "ResponseDateTime": "20260907155726",
+    "ResponseID": "A",
+    "TransactionType": "U010"
+  },
+  "encoded": "{\"ResponseID\":\"A\",\"TransactionType\":\"U010\",\"ResponseDateTime\":\"20260907155726\",\"ErrorCode\":\"   \",\"ErrorMessage\":\"電子レシート送信完了\"}",
+  "input": "{\"ResponseID\":\"A\",\"TransactionType\":\"U010\",\"ResponseDateTime\":\"20260907155726\",\"ErrorCode\":\"   \",\"ErrorMessage\":\"電子レシート送信完了\"}",
+  "kind": "synthetic_unchanged"
+}

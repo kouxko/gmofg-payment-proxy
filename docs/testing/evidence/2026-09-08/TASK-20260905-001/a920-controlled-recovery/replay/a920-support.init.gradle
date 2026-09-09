@@ -1,0 +1,15 @@
+gradle.beforeProject { project ->
+    if (project.path == ":app") {
+        project.pluginManager.withPlugin("com.android.application") {
+            def androidExtension = project.extensions.getByName("android")
+            androidExtension.sourceSets.getByName("androidTest").kotlin.srcDir(
+                "/tmp/a920-instrumentation-support/src/androidTest/java"
+            )
+            def androidComponents = project.extensions.getByName("androidComponents")
+            androidComponents.finalizeDsl { androidDsl ->
+                androidDsl.buildTypes.getByName("debug").signingConfig =
+                    androidDsl.signingConfigs.getByName("stableCompanion")
+            }
+        }
+    }
+}

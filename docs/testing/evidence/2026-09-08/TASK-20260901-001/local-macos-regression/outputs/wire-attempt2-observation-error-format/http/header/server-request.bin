@@ -1,0 +1,10 @@
+GET /other HTTP/1.1
+Content-Type: application/json
+X-Wire-Case: header
+X-Probe: alpha
+X-Header-Hit: yes
+Host: 127.0.0.1:28081
+Connection: close
+Content-Length: 45
+
+{"customer": {"age": 17, "name": "original"}}

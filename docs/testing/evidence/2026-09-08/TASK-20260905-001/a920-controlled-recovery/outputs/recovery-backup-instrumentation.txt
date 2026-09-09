@@ -1,0 +1,38 @@
+INSTRUMENTATION_STATUS: class=com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stream=
+com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest:
+INSTRUMENTATION_STATUS: test=backupOrRestoreRuntimePreferences
+INSTRUMENTATION_STATUS_CODE: 1
+INSTRUMENTATION_STATUS: class=com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest
+INSTRUMENTATION_STATUS: current=1
+INSTRUMENTATION_STATUS: id=AndroidJUnitRunner
+INSTRUMENTATION_STATUS: numtests=1
+INSTRUMENTATION_STATUS: stack=java.lang.IllegalArgumentException: Instrumentation testContext externalFilesDir is unavailable
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.resolveBackupFile(RuntimePreferencesBackupInstrumentedTest.kt:246)
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.backupOrRestoreRuntimePreferences(RuntimePreferencesBackupInstrumentedTest.kt:26)
+
+INSTRUMENTATION_STATUS: stream=
+Error in backupOrRestoreRuntimePreferences(com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest):
+java.lang.IllegalArgumentException: Instrumentation testContext externalFilesDir is unavailable
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.resolveBackupFile(RuntimePreferencesBackupInstrumentedTest.kt:246)
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.backupOrRestoreRuntimePreferences(RuntimePreferencesBackupInstrumentedTest.kt:26)
+
+INSTRUMENTATION_STATUS: test=backupOrRestoreRuntimePreferences
+INSTRUMENTATION_STATUS_CODE: -2
+INSTRUMENTATION_RESULT: stream=
+
+Time: 0.045
+There was 1 failure:
+1) backupOrRestoreRuntimePreferences(com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest)
+java.lang.IllegalArgumentException: Instrumentation testContext externalFilesDir is unavailable
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.resolveBackupFile(RuntimePreferencesBackupInstrumentedTest.kt:246)
+	at com.interceptproxy.vpn.RuntimePreferencesBackupInstrumentedTest.backupOrRestoreRuntimePreferences(RuntimePreferencesBackupInstrumentedTest.kt:26)
+
+FAILURES!!!
+Tests run: 1,  Failures: 1
+
+
+INSTRUMENTATION_CODE: -1

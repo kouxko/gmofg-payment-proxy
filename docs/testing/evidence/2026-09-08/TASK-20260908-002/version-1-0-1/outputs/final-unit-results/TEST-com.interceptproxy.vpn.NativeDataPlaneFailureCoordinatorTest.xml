@@ -1,0 +1,9 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.NativeDataPlaneFailureCoordinatorTest" tests="3" skipped="0" failures="0" errors="0" timestamp="2026-09-08T09:14:07.901Z" hostname="KQR.local" time="0.116">
+  <properties/>
+  <testcase name="currentGenerationFailureFaultsAndTearsDownImmediately" classname="com.interceptproxy.vpn.NativeDataPlaneFailureCoordinatorTest" time="0.001"/>
+  <testcase name="delayedOldGenerationFailureCannotFaultOrTearDownReplacement" classname="com.interceptproxy.vpn.NativeDataPlaneFailureCoordinatorTest" time="0.001"/>
+  <testcase name="replacementStartCannotEnterBetweenCurrentFailureCheckAndTeardown" classname="com.interceptproxy.vpn.NativeDataPlaneFailureCoordinatorTest" time="0.114"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

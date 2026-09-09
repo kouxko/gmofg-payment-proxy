@@ -1,0 +1,36 @@
+[
+  {
+    "check": "affected-rust",
+    "command": [
+      "cargo",
+      "test",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "-p",
+      "intercept-proxy-domain",
+      "-p",
+      "intercept-proxy-application",
+      "-p",
+      "intercept-proxy-infrastructure",
+      "--all-targets",
+      "--all-features"
+    ],
+    "exit_code": 0
+  },
+  {
+    "check": "clippy",
+    "command": [
+      "cargo",
+      "clippy",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--workspace",
+      "--all-targets",
+      "--all-features",
+      "--",
+      "-D",
+      "warnings"
+    ],
+    "exit_code": 0
+  }
+]

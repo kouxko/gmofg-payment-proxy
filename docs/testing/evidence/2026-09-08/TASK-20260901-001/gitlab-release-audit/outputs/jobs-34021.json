@@ -1,0 +1,361 @@
+[
+  {
+    "id": 104114,
+    "status": "failed",
+    "stage": "package",
+    "name": "windows_build_only",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T01:38:56.580Z",
+    "started_at": "2026-09-04T01:52:27.563Z",
+    "finished_at": "2026-09-04T02:34:08.456Z",
+    "erased_at": null,
+    "duration": 2500.893027,
+    "queued_duration": 0.153534,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "short_id": "afe3dce9",
+      "created_at": "2026-09-04T09:38:44.000+08:00",
+      "parent_ids": [
+        "f2667d7df5b9abd778ee0a047df29840dcad4295"
+      ],
+      "title": "ci: install Windows C++ build tools",
+      "message": "ci: install Windows C++ build tools\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T09:38:44.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T09:38:44.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b"
+    },
+    "pipeline": {
+      "id": 34021,
+      "iid": 18,
+      "project_id": 1023,
+      "sha": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T01:38:56.549Z",
+      "updated_at": "2026-09-04T02:34:08.565Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34021"
+    },
+    "failure_reason": "script_failure",
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104114",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 139562,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104113,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_companion",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T01:38:56.565Z",
+    "started_at": "2026-09-04T01:45:04.749Z",
+    "finished_at": "2026-09-04T01:52:27.259Z",
+    "erased_at": null,
+    "duration": 442.510805,
+    "queued_duration": 2.69931,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "short_id": "afe3dce9",
+      "created_at": "2026-09-04T09:38:44.000+08:00",
+      "parent_ids": [
+        "f2667d7df5b9abd778ee0a047df29840dcad4295"
+      ],
+      "title": "ci: install Windows C++ build tools",
+      "message": "ci: install Windows C++ build tools\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T09:38:44.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T09:38:44.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b"
+    },
+    "pipeline": {
+      "id": 34021,
+      "iid": 18,
+      "project_id": 1023,
+      "sha": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T01:38:56.549Z",
+      "updated_at": "2026-09-04T02:34:08.565Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34021"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104113",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "intercept-proxy-android-companion-afe3dce9.zip",
+      "size": 12476172
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 12476172,
+        "filename": "intercept-proxy-android-companion-afe3dce9.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 215,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 92265,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-18T01:52:26.396Z",
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  },
+  {
+    "id": 104112,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_environment",
+    "ref": "codex/intercept-proxy-generalization",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-04T01:38:56.557Z",
+    "started_at": "2026-09-04T01:38:58.540Z",
+    "finished_at": "2026-09-04T01:45:01.940Z",
+    "erased_at": null,
+    "duration": 363.400475,
+    "queued_duration": 1.444841,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "short_id": "afe3dce9",
+      "created_at": "2026-09-04T09:38:44.000+08:00",
+      "parent_ids": [
+        "f2667d7df5b9abd778ee0a047df29840dcad4295"
+      ],
+      "title": "ci: install Windows C++ build tools",
+      "message": "ci: install Windows C++ build tools\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-04T09:38:44.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-04T09:38:44.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b"
+    },
+    "pipeline": {
+      "id": 34021,
+      "iid": 18,
+      "project_id": 1023,
+      "sha": "afe3dce9aa56e2c10fc5f9936e3ea827bba7ec9b",
+      "ref": "codex/intercept-proxy-generalization",
+      "status": "failed",
+      "source": "api",
+      "created_at": "2026-09-04T01:38:56.549Z",
+      "updated_at": "2026-09-04T02:34:08.565Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34021"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104112",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 59227,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  }
+]

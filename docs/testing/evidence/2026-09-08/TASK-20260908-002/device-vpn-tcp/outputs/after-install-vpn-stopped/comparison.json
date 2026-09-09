@@ -1,0 +1,67 @@
+{
+  "expected_vpn_state": "stopped",
+  "trials": [
+    {
+      "attempt": 1,
+      "started_at": "2026-09-08T08:43:06.223776+00:00",
+      "destination": [
+        "10.0.34.117",
+        7788
+      ],
+      "application_bytes_sent": 0,
+      "connected": true,
+      "local": [
+        "10.0.34.43",
+        57153
+      ],
+      "peer": [
+        "10.0.34.117",
+        7788
+      ],
+      "elapsed_seconds": 0.054913667030632496
+    },
+    {
+      "attempt": 2,
+      "started_at": "2026-09-08T08:43:06.279586+00:00",
+      "destination": [
+        "10.0.34.117",
+        7788
+      ],
+      "application_bytes_sent": 0,
+      "connected": true,
+      "local": [
+        "10.0.34.43",
+        57154
+      ],
+      "peer": [
+        "10.0.34.117",
+        7788
+      ],
+      "elapsed_seconds": 0.010858708003070205
+    },
+    {
+      "attempt": 3,
+      "started_at": "2026-09-08T08:43:06.290475+00:00",
+      "destination": [
+        "10.0.34.117",
+        7788
+      ],
+      "application_bytes_sent": 0,
+      "connected": true,
+      "local": [
+        "10.0.34.43",
+        57156
+      ],
+      "peer": [
+        "10.0.34.117",
+        7788
+      ],
+      "elapsed_seconds": 0.02234612498432398
+    }
+  ],
+  "vpn_state_matches": true,
+  "profile_unchanged": true,
+  "application_protocol": "NOT_RUN",
+  "cleanup": "sockets closed and temporary adb forward removed",
+  "pass": true
+}

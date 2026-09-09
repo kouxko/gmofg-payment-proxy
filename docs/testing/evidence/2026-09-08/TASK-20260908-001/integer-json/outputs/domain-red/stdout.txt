@@ -1,0 +1,15 @@
+
+running 4 tests
+test document::tests::number_serialization::document_fractional_numbers_keep_their_values_without_rounding ... ok
+test document::tests::number_serialization::document_number_serialization_does_not_relax_invalid_number_rejection ... ok
+test document::tests::number_serialization::document_integral_numbers_serialize_as_integer_tokens_at_every_json_boundary ... FAILED
+test document::tests::number_serialization::document_nested_numbers_normalize_without_changing_strings_or_other_types ... FAILED
+
+failures:
+
+failures:
+    document::tests::number_serialization::document_integral_numbers_serialize_as_integer_tokens_at_every_json_boundary
+    document::tests::number_serialization::document_nested_numbers_normalize_without_changing_strings_or_other_types
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 72 filtered out; finished in 0.00s
+

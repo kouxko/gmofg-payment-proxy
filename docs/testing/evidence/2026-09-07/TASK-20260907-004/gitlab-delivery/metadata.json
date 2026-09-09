@@ -1,0 +1,32 @@
+{
+  "schema_version": 1,
+  "task_id": "TASK-20260907-004",
+  "case_id": "gitlab-delivery",
+  "executed_at": "2026-09-07 18:12:16 +08:00",
+  "result": "PASS_MR_CREATED_VERIFIED",
+  "local_commit": "f92e6674e3375adfb6f0c6427b8d077f1cd62b56",
+  "delivery_commit": "bb0f795b19773e643c6b024a4d93e6d9e3362234",
+  "base": "58d1d33f0709ec830a4dfcec3d852238bf4c5937",
+  "source_branch": "feature/0907-004-cps-checksum",
+  "target_branch": "develop",
+  "mr_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests/4",
+  "commits": 1,
+  "files": 22,
+  "title_description_match_commit": true,
+  "ci_control": {
+    "commit_marker": "[skip ci]",
+    "push_option": "ci.skip",
+    "new_workflow_requested": false,
+    "monitoring": false
+  },
+  "derived_from": {
+    "task_id": "TASK-20260907-004",
+    "case_id": "cps-checksum",
+    "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260907-004/cps-checksum"
+  },
+  "not_applicable": {
+    "merge": "NOT_RUN: user asked to create MR",
+    "pipeline_monitoring": "NOT_RUN: user requested no build monitoring",
+    "protocol_frames": "See parent cps-checksum evidence; delivery changes no runtime behavior"
+  }
+}

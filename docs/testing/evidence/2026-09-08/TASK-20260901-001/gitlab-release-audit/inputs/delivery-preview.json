@@ -1,0 +1,53 @@
+{
+  "status": "LOCAL_REVIEW_READY_REMOTE_SCOPE_UNCONFIRMED",
+  "source_branch": "codex/complete-pending-tasks-20260907",
+  "base_commit": "caa36022f1070caad58085870a4c33c1e6246bbd",
+  "current_tracked_changed_paths": [
+    ".github/workflows/windows-quick-build.yml",
+    "docs/README.md",
+    "docs/requirements.md",
+    "docs/tasks/README.md",
+    "docs/tasks/pending/2026-08-29/establish-database-version-100-baseline.md",
+    "docs/tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md",
+    "docs/tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md",
+    "docs/tasks/pending/2026-09-04/github-quick-android-windows-package.md",
+    "docs/tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md",
+    "docs/tasks/pending/2026-09-06/fix-six-architecture-review-findings.md",
+    "docs/testing/evidence/README.md",
+    "scripts/windows-build-only-workflow.test.mjs",
+    "src-tauri/crates/application/src/environment_configuration/listener.rs",
+    "src-tauri/crates/application/src/requirements_tests/environment_configuration_validation/limits_red.rs",
+    "src-tauri/crates/domain/src/workspace/socket_topology.rs",
+    "src-tauri/crates/domain/src/workspace/tests/listener_v3.rs",
+    "src-tauri/crates/domain/src/workspace/validation/listener/socket.rs",
+    "src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/validation.rs",
+    "src/features/listeners/socket-listener-model.test.ts",
+    "src/features/listeners/socket-processing-card.test.tsx",
+    "tsconfig.json"
+  ],
+  "excluded_unrelated_untracked": [
+    "examples/protocol-packages/gmofg_cps/",
+    "src-tauri/crates/package-runtime/tests/fixtures/http-finalize/"
+  ],
+  "existing_release": {
+    "tag": "v1.0.0",
+    "commit": "a146e75ca03cefc52858887a47f832c9b71d8c5e",
+    "verified_assets": [
+      "Windows portable ZIP",
+      "Windows NSIS EXE",
+      "Windows MSI",
+      "Android APK"
+    ]
+  },
+  "prepared_local_macos_artifacts": [
+    "docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/outputs/artifacts/Intercept Proxy.app.zip",
+    "docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/outputs/artifacts/Intercept Proxy_1.0.0_universal.dmg"
+  ],
+  "macos_artifact_scope": "Previously verified 1.0.0 Universal build; ad-hoc signature, contains no new Sep8 Socket cap; do not label it as a build of current modified source",
+  "decisions_missing": [
+    "Target branch for this round source changes",
+    "Version/tag for this round release",
+    "Authorization scope for push, CI and publishing artifacts"
+  ],
+  "remote_mutations_performed": []
+}

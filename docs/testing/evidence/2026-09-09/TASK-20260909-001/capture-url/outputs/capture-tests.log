@@ -1,0 +1,8 @@
+Task test vitest run src/features/capture
+RUN v4.1.11 /Users/codin/Code/gmofg-payment-proxy-feature-capture-http-url
+Test Files 6 passed (6)
+Tests 30 passed (30)
+Start at 11:48:31
+Duration 7.79s (transform 8.92s, setup 2.34s, import 15.37s, tests 1.72s, environment 8.72s)
+Exit code: 0
+Source: captured terminal result, unchanged capture source since this run.

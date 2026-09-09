@@ -21,7 +21,7 @@ mod windows_process;
 pub use adapters::{
     EnvironmentApplyLeaseAdapter, EnvironmentConfigurationMaterialPreparer,
     ExchangeObservationCounters, ExchangeObservationStore, ExternalPackageServer, FileSelection,
-    InfrastructureServiceBundle, NativeFileDialog,
+    InfrastructureServiceBundle, NativeFileDialog, decode_http_observation_body,
 };
 pub use application_backup::{
     ApplicationBackupArchive, ApplicationBackupArchiveError, ApplicationBackupArchiveErrorCode,

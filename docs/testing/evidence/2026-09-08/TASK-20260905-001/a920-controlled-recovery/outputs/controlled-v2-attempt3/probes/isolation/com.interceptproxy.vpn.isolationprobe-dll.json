@@ -1,0 +1,7 @@
+{
+  "package": "com.interceptproxy.vpn.isolationprobe",
+  "channel": "dll",
+  "phase": "isolation",
+  "success": false,
+  "text_utf8": "ERROR:java.net.SocketTimeoutException: failed to connect to /203.0.113.48 (port 16127) from /10.0.34.156 (port 39496) after 7000ms"
+}

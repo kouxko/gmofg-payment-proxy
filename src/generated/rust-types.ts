@@ -882,7 +882,7 @@ export type ErrorCode = "PROXY_ALREADY_RUNNING" | "PROXY_NOT_RUNNING" | "OPERATI
 
 /**  Reader/Writer 的强类型网络上下文；HTTP 保留文本 Header/Body，Socket 保留字节。 */
 export type ExchangeContext = { protocol: "http"; header: string; body: string;
-/**  `false` means the text is only a lossy display projection and cannot seed a rule. */
+/**  `false` means wire bytes are not UTF-8; a charset-decoded or lossy preview cannot seed a rule. */
 body_is_utf8: boolean } | { protocol: "socket"; bytes: number[] };
 
 export type ExchangeObservationEvent = { event: "opened"; observed_at: string } | { event: "received"; observed_at: string; direction: ProtocolDirection; context: ExchangeContext;

@@ -1,0 +1,13 @@
+{
+  "status": "PASS",
+  "byte_comparisons": [
+    "outputs/controlled-v2-attempt3/fixtures/transaction/request-02/byte-comparison.json",
+    "outputs/controlled-v2-attempt3/fixtures/transaction/request-01/byte-comparison.json",
+    "outputs/controlled-v2-attempt3/fixtures/dll/request-02/byte-comparison.json",
+    "outputs/controlled-v2-attempt3/fixtures/dll/request-01/byte-comparison.json"
+  ],
+  "request_control_frames": 22,
+  "all_length_prefixes_json_hex_valid": true,
+  "android_source_files_checked": 88,
+  "changed_during_test": []
+}

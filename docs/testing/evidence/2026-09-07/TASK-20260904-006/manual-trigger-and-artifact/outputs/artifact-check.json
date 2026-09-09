@@ -1,0 +1,18 @@
+{
+  "result": "PASS",
+  "source_run": 34020524291,
+  "files": [
+    {
+      "path": "intercept-proxy.exe",
+      "bytes": 81017344
+    },
+    {
+      "path": "resources/android-companion.apk",
+      "bytes": 23985398
+    }
+  ],
+  "pe_machine": "0x8664",
+  "pe_magic": "0x20b",
+  "apk_crc": "PASS",
+  "windows_runtime_launch": "NOT_RUN"
+}

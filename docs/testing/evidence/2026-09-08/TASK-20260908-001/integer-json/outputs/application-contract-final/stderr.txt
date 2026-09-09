@@ -1,0 +1,6 @@
+    Blocking waiting for file lock on package cache
+    Blocking waiting for file lock on package cache
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 09s
+     Running tests/environment_configuration_document_contract.rs (src-tauri/target/debug/deps/environment_configuration_document_contract-5d32c0b808861a55)

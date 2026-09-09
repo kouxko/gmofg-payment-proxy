@@ -1,0 +1,91 @@
+
+running 22 tests
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::changed_external_document_uses_encode_rpc_and_encode_failure_fails_closed ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::cps_checksum_wire::real_cps_wasm_resigns_modified_pay_response_on_app_wire ... CPS final application body={"data":{"errorCode":"","errorInfo":null,"result":{"amount":250,"amountRmb":0,"currencyCode":"JPY","extendedInfo":"paired","orderDetailId":"PAIR-D","orderId":"PAIR-O","payType":"99","transStatus":"PAY_SUCCESS","transTime":"20260907123456"},"sign":"F070F340438D40D0BC07295E241EE519","subErrorCode":""},"meta":{"code":"00","message":"OK"}}
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::http_package_codec_rejects_unknown_charset_and_non_identity_content_encoding ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::live_plain_hot_replacement::live_plain_keep_alive_connection_observes_document_rule_add_and_remove ... origin exchange 0: received=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101]
+client exchange 0: sent=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101] received=[112, 108, 97, 105, 110, 45, 98, 101, 102, 111, 114, 101]
+origin exchange 1: received=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 99, 114, 101, 97, 116, 101, 100, 34, 125]
+client exchange 1: sent=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 111, 108, 100, 34, 125] received=[123, 34, 118, 97, 108, 117, 101, 34, 58, 34, 99, 114, 101, 97, 116, 101, 100, 34, 125]
+origin exchange 2: received=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114]
+client exchange 2: sent=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114] received=[112, 108, 97, 105, 110, 45, 97, 102, 116, 101, 114]
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::local_http_response::local_http_default_response_allows_real_upstream_and_downstream_rules ... Local client sent=[80, 79, 83, 84, 32, 47, 101, 99, 104, 111, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10, 72, 111, 115, 116, 58, 32, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 55, 56, 53, 54, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 65, 117, 116, 104, 111, 114, 105, 122, 97, 116, 105, 111, 110, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 67, 111, 111, 107, 105, 101, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 88, 45, 82, 101, 113, 117, 101, 115, 116, 58, 32, 100, 111, 45, 110, 111, 116, 45, 101, 99, 104, 111, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 49, 53, 13, 10, 13, 10, 99, 108, 105, 101, 110, 116, 45, 111, 114, 105, 103, 105, 110, 97, 108]
+Local client received=[72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 49, 56, 13, 10, 13, 10, 117, 112, 115, 116, 114, 101, 97, 109, 45, 101, 102, 102, 101, 99, 116, 105, 118, 101]
+Local client sent=[80, 79, 83, 84, 32, 47, 109, 111, 100, 105, 102, 105, 101, 100, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10, 72, 111, 115, 116, 58, 32, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 55, 56, 53, 54, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 65, 117, 116, 104, 111, 114, 105, 122, 97, 116, 105, 111, 110, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 67, 111, 111, 107, 105, 101, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 88, 45, 82, 101, 113, 117, 101, 115, 116, 58, 32, 100, 111, 45, 110, 111, 116, 45, 101, 99, 104, 111, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 49, 53, 13, 10, 13, 10, 99, 108, 105, 101, 110, 116, 45, 111, 114, 105, 103, 105, 110, 97, 108]
+Local client received=[72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 55, 32, 77, 117, 108, 116, 105, 45, 83, 116, 97, 116, 117, 115, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 120, 45, 108, 111, 99, 97, 108, 45, 114, 117, 108, 101, 58, 32, 97, 112, 112, 108, 105, 101, 100, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 50, 48, 13, 10, 13, 10, 100, 111, 119, 110, 115, 116, 114, 101, 97, 109, 45, 101, 102, 102, 101, 99, 116, 105, 118, 101]
+Local real rule hit counts=[2, 1, 1, 1]
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::local_http_response::local_http_default_response_preserves_empty_and_binary_bodies_over_keep_alive ... Local client sent=[80, 79, 83, 84, 32, 47, 100, 101, 102, 97, 117, 108, 116, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10, 72, 111, 115, 116, 58, 32, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 55, 56, 54, 48, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 65, 117, 116, 104, 111, 114, 105, 122, 97, 116, 105, 111, 110, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 67, 111, 111, 107, 105, 101, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 88, 45, 82, 101, 113, 117, 101, 115, 116, 58, 32, 100, 111, 45, 110, 111, 116, 45, 101, 99, 104, 111, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 48, 13, 10, 13, 10]
+Local client received=[72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 48, 13, 10, 13, 10]
+Local client sent=[80, 79, 83, 84, 32, 47, 100, 101, 102, 97, 117, 108, 116, 32, 72, 84, 84, 80, 47, 49, 46, 49, 13, 10, 72, 111, 115, 116, 58, 32, 49, 50, 55, 46, 48, 46, 48, 46, 49, 58, 53, 55, 56, 54, 48, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 65, 117, 116, 104, 111, 114, 105, 122, 97, 116, 105, 111, 110, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 67, 111, 111, 107, 105, 101, 58, 32, 116, 101, 115, 116, 45, 111, 110, 108, 121, 13, 10, 88, 45, 82, 101, 113, 117, 101, 115, 116, 58, 32, 100, 111, 45, 110, 111, 116, 45, 101, 99, 104, 111, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 51, 13, 10, 13, 10, 0, 255, 129]
+Local client received=[72, 84, 84, 80, 47, 49, 46, 49, 32, 50, 48, 48, 32, 79, 75, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 84, 121, 112, 101, 58, 32, 97, 112, 112, 108, 105, 99, 97, 116, 105, 111, 110, 47, 111, 99, 116, 101, 116, 45, 115, 116, 114, 101, 97, 109, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 69, 110, 99, 111, 100, 105, 110, 103, 58, 32, 105, 100, 101, 110, 116, 105, 116, 121, 13, 10, 67, 111, 110, 116, 101, 110, 116, 45, 76, 101, 110, 103, 116, 104, 58, 32, 51, 13, 10, 13, 10, 0, 255, 129]
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::plain_json_rules::plain_http_document_rule_rejects_invalid_json_without_fallback ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::plain_json_rules::plain_http_json_body_matches_manual_pointer_on_request_and_response ... {"plain_http_number_wire":{"request_input":"{\"customer\":{\"age\":42,\"amount\":2.5,\"code\":\"2.0\",\"items\":[0,1,2]}}","request_output":"{\"customer\":{\"age\":42,\"amount\":2.5,\"code\":\"2.0\",\"items\":[0,1,2],\"result\":\"request\"}}","response_input":"{\"customer\":{\"age\":42,\"amount\":2.5,\"code\":\"2.0\",\"items\":[0,1,2]}}","response_output":"{\"customer\":{\"age\":42,\"amount\":2.5,\"code\":\"2.0\",\"items\":[0,1,2],\"result\":\"response\"}}"}}
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::plain_json_rules::plain_http_preserves_original_json_without_an_effective_document_change ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::production_shape::production_http_actor_keeps_rules_enabled_after_commit ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::production_shape::production_snapshot_compiles_flat_conditions_with_insert_and_append ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::production_shape::production_snapshot_uses_shared_provider_for_both_directions_and_joint_encode ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::real_wasm_finalize_wire::real_wasm_finalize_reaches_fixed_server_and_app_wire ... origin_observed_head=POST /upstream?value=upstream HTTP/1.1
+Content-Type: application/json; charset=utf-8
+X-Path-Id: bdcd6621-972c-40ca-b26c-cff4cd7b9415
+X-Value: upstream
+Host: 127.0.0.1:57866
+Connection: close
+Content-Length: 10
+
+origin_observed_body=[34, 117, 112, 115, 116, 114, 101, 97, 109, 34]
+path_id=bdcd6621-972c-40ca-b26c-cff4cd7b9415
+connection client_local=127.0.0.1:57868 proxy=127.0.0.1:57867 origin_peer=127.0.0.1:57869 origin=127.0.0.1:57866
+client_input=POST /before?value=before HTTP/1.1
+Host: wire.test
+Content-Type: application/json; charset=utf-8
+X-Value: before
+X-Path-Id: bdcd6621-972c-40ca-b26c-cff4cd7b9415
+Content-Length: 8
+Connection: close
+
+"before"
+origin_request_head=POST /upstream?value=upstream HTTP/1.1
+Content-Type: application/json; charset=utf-8
+X-Path-Id: bdcd6621-972c-40ca-b26c-cff4cd7b9415
+X-Value: upstream
+Host: 127.0.0.1:57866
+Connection: close
+Content-Length: 10
+
+origin_request_body=[34, 117, 112, 115, 116, 114, 101, 97, 109, 34]
+origin_response=HTTP/1.1 200 OK
+Content-Type: application/json; charset=utf-8
+X-Value: before
+X-Path-Id: bdcd6621-972c-40ca-b26c-cff4cd7b9415
+Content-Length: 8
+Connection: close
+
+"before"
+app_final_head=HTTP/1.1 202 Accepted
+Content-Type: application/json; charset=utf-8
+X-Path-Id: bdcd6621-972c-40ca-b26c-cff4cd7b9415
+X-Value: downstream
+Content-Length: 12
+Connection: close
+
+app_final_body=[34, 100, 111, 119, 110, 115, 116, 114, 101, 97, 109, 34]
+cleanup=PASS listener_stopped=true
+assertions=PASS path_query header body status content_length exact_wire_causality
+ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::remote_decode_and_display_failures_keep_typed_json_rpc_identity ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::request_metadata::production_response_rule_matches_flat_condition_against_associated_request_metadata ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::strict_http_package_codec_reads_original_utf8_and_shift_jis_wire_bytes ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unchanged_external_document_forwards_original_wire_bytes_without_encode_rpc ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::document_encode_is_the_only_final_body_write_after_ordered_actions ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::existing_http_connection_observes_rule_created_after_capabilities ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::existing_plain_http_connection_switches_document_capability_after_hot_replacement ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::prior_header_action_is_visible_to_the_next_rule_condition ... ok
+test adapters::listener_runtime::tests::phase10_http_pipeline_tests::unified_working_exchange::schema_free_http_hot_replace_keeps_root_rule_program ... ok
+
+test result: ok. 22 passed; 0 failed; 0 ignored; 0 measured; 478 filtered out; finished in 1.99s
+

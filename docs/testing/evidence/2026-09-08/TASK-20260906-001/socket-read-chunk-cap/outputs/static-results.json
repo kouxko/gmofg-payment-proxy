@@ -1,0 +1,51 @@
+[
+  {
+    "check": "fmt",
+    "command": [
+      "cargo",
+      "fmt",
+      "--manifest-path",
+      "src-tauri/Cargo.toml",
+      "--all",
+      "--",
+      "--check"
+    ],
+    "exit_code": 0
+  },
+  {
+    "check": "bindings",
+    "command": [
+      "deno",
+      "task",
+      "check:bindings"
+    ],
+    "exit_code": 0
+  },
+  {
+    "check": "architecture",
+    "command": [
+      "deno",
+      "task",
+      "scan:architecture"
+    ],
+    "exit_code": 0
+  },
+  {
+    "check": "source-size",
+    "command": [
+      "deno",
+      "task",
+      "scan:source-size"
+    ],
+    "exit_code": 0
+  },
+  {
+    "check": "typecheck",
+    "command": [
+      "deno",
+      "task",
+      "typecheck"
+    ],
+    "exit_code": 0
+  }
+]

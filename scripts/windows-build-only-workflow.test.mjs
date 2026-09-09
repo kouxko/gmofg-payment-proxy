@@ -18,7 +18,7 @@ test("Windows quick workflow builds Android then one unsigned Windows executable
   assert.match(source, /^name: Windows quick executable$/mu);
   assert.match(
     source,
-    /^on:\n  workflow_dispatch:\n(?:  #.*\n)?  push:\n    branches:\n      - codex\/http-chunked-quick-validation-20260904$/mu,
+    /^on:\n  workflow_dispatch:\n\nconcurrency:/mu,
   );
   assert.match(
     source,

@@ -1,0 +1,15 @@
+{
+  "iid": 9,
+  "title": "1.0.1发布",
+  "description": "从最新 develop bb47b0eb 创建 release-1.0.1，并合入现有 release 10b3b576，保留两边历史且无文件冲突。\n\n将 Proxy 前端、Tauri、Rust 工作区和 macOS Universal DMG 文件名统一为 1.0.1；Android App 保持 versionName 1.0.1、versionCode 101。Cargo.lock 只更新 13 个内部工作区包版本，外部依赖不变。\n\n包含已合入 develop 的 HTTP Finalize/CPS checksum、Document 整数 JSON 序列化与 Android VPN 下 LAN TCP 修复及其证据。\n\n验证：版本一致性、Cargo locked/offline 元数据、5 项配置与打包合同测试、脚本静态检查、Lint、格式及独立审查通过。本次完成发布分支与 MR 准备，不执行新全平台构建、设备覆盖、业务验收、标签、部署或实际合并。\n\n[skip ci]",
+  "state": "opened",
+  "source_branch": "release-1.0.1",
+  "target_branch": "release",
+  "sha": "2a7c2745109adc5e5f938bd57f85a312e8296c13",
+  "web_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests/9",
+  "merge_status": "checking",
+  "detailed_merge_status": "preparing",
+  "has_conflicts": false,
+  "created_at": "2026-09-08T09:40:04.143Z",
+  "observed_at": "2026-09-08T09:40:04.300474+00:00"
+}

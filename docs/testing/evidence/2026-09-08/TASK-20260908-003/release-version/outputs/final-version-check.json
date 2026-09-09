@@ -1,0 +1,31 @@
+{
+  "result": "PASS",
+  "app_version": "1.0.1",
+  "android_version_code": 101,
+  "proxy_version": "1.0.1",
+  "workspace_packages": {
+    "intercept-proxy": "1.0.1",
+    "intercept-proxy-application": "1.0.1",
+    "intercept-proxy-android-control-protocol": "1.0.1",
+    "intercept-proxy-domain": "1.0.1",
+    "intercept-proxy-product-api": "1.0.1",
+    "intercept-proxy-host": "1.0.1",
+    "intercept-proxy-infrastructure": "1.0.1",
+    "intercept-proxy-exchange": "1.0.1",
+    "intercept-proxy-package-contract": "1.0.1",
+    "intercept-proxy-package-runtime": "1.0.1",
+    "intercept-proxy-runtime": "1.0.1",
+    "intercept-proxy-traffic-observation": "1.0.1",
+    "intercept-proxy-android-engine": "1.0.1"
+  },
+  "external_dependencies_unchanged": true,
+  "dmg_filename": "Intercept Proxy_1.0.1_universal.dmg",
+  "source_sha256": {
+    "package.json": "9b54ffc99f922c5251c2f11bad9b2308b4467cf11901fd1e2be622bb3c7b48e0",
+    "src-tauri/tauri.conf.json": "14a29747fe0cd0f60cb5e02a375efc5e1400b0fde7ada27a0fe52bf95037e878",
+    "src-tauri/Cargo.toml": "5b77945044509e592c498c62b7b7fb8574ae916f8763bd0f5da1167758d2fa4d",
+    "src-tauri/Cargo.lock": "ebcf65e0aab747809084ac5f952f1825ca3287fb204edb4a5e5051e99fa2b35a",
+    "android-companion/app/build.gradle.kts": "502ebd80a0316ed55194ce784bd83648f6b7029505377fc6773a3342abd48806",
+    "scripts/build-macos-universal.mjs": "5e109ab8feb8b09daae7c98ac348b394f9a89d17f9a61d898d3353c4af036606"
+  }
+}

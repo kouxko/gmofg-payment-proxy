@@ -1,0 +1,80 @@
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/src/main/java/com/interceptproxy/vpn/RuntimeStateStore.kt:44: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+                    .commit()
+                     ~~~~~~~~
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/src/main/java/com/interceptproxy/vpn/RuntimeStateStore.kt:51: Warning: Consider using apply() instead; commit writes its data to persistent storage immediately, whereas apply will handle it in the background [ApplySharedPref]
+                editor.remove(KEY_ACTIVATION).commit()
+                                              ~~~~~~~~
+
+   Explanation for issues of type "ApplySharedPref":
+   Consider using apply() instead of commit on shared preferences. Whereas
+   commit blocks and writes its data to persistent storage immediately, apply
+   will handle it in the background.
+
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build.gradle.kts:29: Warning: Not targeting the latest versions of Android; compatibility modes apply. Consider testing and updating this version. Consult the android.os.Build.VERSION_CODES javadoc for details. [OldTargetApi]
+        targetSdk = 36
+        ~~~~~~~~~~~~~~
+
+   Explanation for issues of type "OldTargetApi":
+   When your application or sdk runs on a version of Android that is more
+   recent than your targetSdk specifies that it has been tested with, various
+   compatibility modes kick in. This ensures that your application continues
+   to work, but it may look out of place. For example, if the targetSdk is
+   less than 14, your app may get an option button in the UI.
+
+   To fix this issue, set the targetSdk to the highest available value. Then
+   test your app to make sure everything works correctly. You may want to
+   consult the compatibility notes to see what changes apply to each version
+   you are adding support for:
+   https://developer.android.com/reference/android/os/Build.VERSION_CODES.html
+   as well as follow this guide:
+   https://developer.android.com/distribute/best-practices/develop/target-sdk.
+   html
+
+   https://developer.android.com/distribute/best-practices/develop/target-sdk.html
+
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/src/main/java/com/interceptproxy/vpn/ControlLeaseManager.kt:72: Warning: Use of scheduleAtFixedRate is strongly discouraged because it can lead to unexpected behavior when Android processes become cached (tasks may unexpectedly execute hundreds or thousands of times in quick succession when a process changes from cached to uncached); prefer using scheduleWithFixedDelay [DiscouragedApi]
+            executor.scheduleAtFixedRate(
+            ^
+
+   Explanation for issues of type "DiscouragedApi":
+   Discouraged APIs are allowed and are not deprecated, but they may be unfit
+   for common use (e.g. due to slow performance or subtle behavior).
+
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/src/main/res/values/strings.xml:8: Warning: The resource R.string.vpn_permission_denied appears to be unused [UnusedResources]
+    <string name="vpn_permission_denied">未取得 VPN 授权，未接管任何流量</string>
+            ~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+
+   Explanation for issues of type "UnusedResources":
+   Unused resources make applications larger and slow down builds.
+
+
+   The unused resource check can ignore tests. If you want to include
+   resources that are only referenced from tests, consider packaging them in a
+   test source set instead.
+
+   You can include test sources in the unused resource check by setting the
+   system property lint.unused-resources.include-tests =true, and to exclude
+   them (usually for performance reasons), use
+   lint.unused-resources.exclude-tests =true.
+   ,
+
+   Available options:
+
+   **skip-libraries** (default is true):
+   Whether the unused resource check should skip reporting unused resources in libraries.
+
+   Many libraries will declare resources that are part of the library surface; other modules depending on the library will also reference the resources. To avoid reporting all these resources as unused (in the context of a library), the unused resource check normally skips reporting unused resources in libraries. Instead, run the unused resource check on the consuming app module (along with `checkDependencies=true`).
+
+   However, there are cases where you want to check that all the resources declared in a library are used; in that case, you can disable the skip option.
+
+   To configure this option, use a `lint.xml` file with an <option> like this:
+
+   ```xml
+   <lint>
+       <issue id="UnusedResources">
+           <option name="skip-libraries" value="true" />
+       </issue>
+   </lint>
+   ```
+
+0 errors, 5 warnings

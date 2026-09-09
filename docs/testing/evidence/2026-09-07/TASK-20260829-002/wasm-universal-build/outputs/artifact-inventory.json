@@ -1,0 +1,20 @@
+{
+  "artifacts": [
+    {
+      "path": "outputs/artifacts/Intercept Proxy.app.zip",
+      "bytes": 66582148
+    },
+    {
+      "path": "outputs/artifacts/Intercept Proxy_1.0.0_universal.dmg",
+      "bytes": 75259890
+    }
+  ],
+  "main_binary_bytes": 184503968,
+  "dmg_copy_byte_comparison": "PASS",
+  "source_inputs": {
+    "checked_at": "2026-09-07T19:39:27.121728+08:00",
+    "files": 1247,
+    "changed": [],
+    "status": "PASS"
+  }
+}

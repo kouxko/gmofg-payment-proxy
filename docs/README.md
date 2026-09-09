@@ -15,16 +15,14 @@
 
 ## 待实现任务
 
-- [TASK-20260906-001：修复六项架构与逻辑审查发现](tasks/pending/2026-09-06/fix-six-architecture-review-findings.md)（高，待确认；已实现部分验证与复审通过，Socket 读取上限待确认）
+- [TASK-20260909-002：Body字符集修复合并与Windows构建](tasks/pending/2026-09-09/merge-body-charset-develop-windows.md)（高，进行中）
 
+- [TASK-20260908-004：1.0.1顺序合并与Windows构建](tasks/pending/2026-09-08/merge-1-0-1-develop-release-windows.md)（高，进行中）
 
+- [TASK-20260908-002：修复 Android VPN 本地 TCP](tasks/pending/2026-09-08/fix-android-vpn-local-tcp.md)（高，进行中）
 
-
-- [TASK-20260905-001：按已确认合同修复整体审查问题](tasks/pending/2026-09-05/fix-reviewed-architecture-contracts.md)（高，已阻塞；已确认修复本地验证及整体审查通过，待Android真机验收）
-- [TASK-20260904-006：GitHub 快速构建 Android 与 Windows 联合验证包](tasks/pending/2026-09-04/github-quick-android-windows-package.md)
-- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)
-- [TASK-20260829-002：嵌套 Document、扁平规则条件与统一 JavaScript WebSocket 协议包](tasks/pending/2026-08-29/nested-document-rules-javascript-websocket-packages.md)
-- [TASK-20260829-001：建立数据库版本 100 的 1.00 正式兼容基线](tasks/pending/2026-08-29/establish-database-version-100-baseline.md)
+- [TASK-20260907-003：构建 HTTP Finalize Windows 候选包](tasks/pending/2026-09-07/build-http-finalize-windows.md)（高，进行中）
+- [TASK-20260901-001：改为单进程 WebAssembly Component 协议包运行时](tasks/pending/2026-09-01/add-managed-webassembly-protocol-packages.md)（高，进行中；本轮源码与验收档案已推送GitLab且CI跳过；v1.0.0四资产已验证，macOS制品发布待完成）
 
 ## 架构
 
@@ -50,7 +48,6 @@
 - [ADR-008：MCP 环境配置合同与分阶段启用](architecture/decisions/ADR-008-mcp-environment-configuration.md)
 - [ADR-009：递归 Document、统一规则与 JavaScript 协议包运行时（本地运行时已被 ADR-010 替代）](architecture/decisions/ADR-009-nested-document-javascript-package-runtime.md)
 - [ADR-010：进程内 WebAssembly Component 协议包](architecture/decisions/ADR-010-in-process-webassembly-protocol-packages.md)
-- [ADR-011：HTTP 写准备中的独立 Finalize 能力](architecture/decisions/ADR-011-http-finalize-capability.md)
 
 ADR-002、ADR-006 和 ADR-007 仅作为决策历史保留；统一规则以 ADR-009 为准，本地协议包运行时以
 ADR-010 为准，当前源码是最终事实来源。

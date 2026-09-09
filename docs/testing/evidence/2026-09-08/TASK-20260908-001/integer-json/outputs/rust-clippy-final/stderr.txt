@@ -1,0 +1,3 @@
+    Checking intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+    Checking intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 5.58s

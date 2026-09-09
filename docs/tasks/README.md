@@ -2,6 +2,33 @@
 
 本文按任务最终完成日期记录已经实现并验收的功能。最新日期排在最前面；同一天按完成时间倒序排列。
 
+## 2026-09-09
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 12:33:05 +08:00 | [TASK-20260909-001：HTTP Body 字符集预览](completed/2026-09-09/fix-http-body-charset-preview.md) | 非UTF8正文按Header正确预览、四阶段原字节与预算、Mock门禁保持 | PASS；69测试、严格静态检查、独立APPROVE；真实链路/安装未执行 | 高 | HTTP、Shift_JIS、charset、Exchange、Body |
+| 11:57:43 +08:00 | [TASK-20260909-001：抓包显示最新 App 原始请求路径](completed/2026-09-09/show-http-url-in-capture-list.md) | 完整原始路径与参数、单行省略、悬停查看 | PASS；抓包30/30、类型/lint/边界、Edge布局与Webpack构建；Turbopack符号链接限制 | 低 | HTTP、抓包、原始请求、URL、省略 |
+
+## 2026-09-08
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 17:44:34 +08:00 | [TASK-20260908-003：1.0.1发布分支与MR准备](completed/2026-09-08/prepare-release-1-0-1.md) | release历史整合、App101/1.0.1与Proxy1.0.1、MR!9到release | PASS；5合同测试、版本/静态/独立APPROVE、无冲突、CI skipped且零作业 | 高 | release、GitLab、1.0.1、101 |
+| 16:03:20 +08:00 | [TASK-20260908-001：Document整数JSON序列化](completed/2026-09-08/fix-document-integer-json-serialization.md) | 统一整数输出、保留小数/字符串/负零，旧配置兼容 | PASS；领域109、应用477、包23、HTTP22、前端27、Java14及严格静态/绑定/独立APPROVE；真实设备NOT_RUN | 高 | DocumentNumber、JSON、整数、Wasm、CPS |
+| 12:03:49 +08:00 | [TASK-20260905-001：整体审查问题修复与A920验收](completed/2026-09-08/fix-reviewed-architecture-contracts.md) | 活动归属、手动恢复、严格路由、草稿与错误合同 | PASS；原本地回归、真机准入2/2、四条真实wire、失联/新epoch恢复及设备还原；独立APPROVE | 高 | Android、TUN、租约、恢复、架构 |
+| 11:39:16 +08:00 | [TASK-20260906-001：六项架构与逻辑修复](completed/2026-09-08/fix-six-architecture-review-findings.md) | 活动归属、异步保存、错误观测及Socket资源约束；1MiB读取上限 | PASS；新增6专项、受影响1111测试、严格静态门禁及独立APPROVE；默认16KiB保持 | 高 | Socket、资源、并发、错误、Android |
+| 11:24:03 +08:00 | [TASK-20260829-002：递归Document与统一扁平规则](completed/2026-09-08/nested-document-rules-javascript-websocket-packages.md) | 递归Document、统一规则、Schema100；旧Sidecar已由Wasm替代 | 自动化PASS；本机HTTP7/Socket3与持久化PASS；跨平台/签名USER_REPORTED_PASS；独立审计通过 | 高 | Document、规则、Wasm、Schema100、人工验收 |
+
+## 2026-09-07
+
+| 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
+| --- | --- | --- | --- | --- | --- |
+| 19:12:35 +08:00 | [TASK-20260904-006：Android与Windows快速联合验证包](completed/2026-09-07/github-quick-android-windows-package.md) | 恢复仅手动触发，Android先构建并与Windows exe按resources布局交付 | PASS；合同3/3、YAML/格式/lint/重放、历史成功run实物核验、独立APPROVE；本轮无新CI | 高 | workflow_dispatch、Android、Windows、artifact |
+| 19:12:35 +08:00 | [TASK-20260829-001：数据库版本100正式基线](completed/2026-09-07/establish-database-version-100-baseline.md) | 合法旧库清理重建100，100保留，未来/损坏拒绝；补齐Windows等待与归档 | PASS；SQLite88、checker14、exact3、51输入归档及独立复审；Windows Verify成功，整CI coverage失败单列 | 高 | SQLite、Schema100、WAL、并发、持久化 |
+| 18:12:25 +08:00 | [TASK-20260907-004：CPS checksum Wasm 包](completed/2026-09-07/implement-cps-checksum-wasm.md) | 上下行JSON编解码/展示、四模型原token响应重签及完整HTTP规则链 | PASS；Java14向量、包8+1、实际Host/HTTP、严格静态检查与独立审查APPROVE；真实终端业务NOT_RUN | 高 | CPS、MD5、Wasm、Decode、Encode、Finalize |
+| 16:57:33 +08:00 | [TASK-20260907-001：Proxy 本地 Wasm HTTP 上下行 Finalize](completed/2026-09-07/http-post-encode-finalize-cps-response-signing.md) | 独立 Finalize trait、可选 ABI、五字段原子写回、事务/Mock/错误与旧包兼容 | 本地53项通过、真实HTTP wire及独立审查APPROVE；源码typecheck通过，全量受历史证据5项TS2307阻断 | 高 | HTTP、Finalize、Wasm、Schema100、Pipeline |
+| 15:25:31 +08:00 | [TASK-20260907-002：DLL 包支持电子小票并交付 1.0.1](completed/2026-09-07/support-receipt-responses-dll-package-1-0-1.md) | 显式分流U010/U011，五字段小票编解码和安全展示，保留原DLL和旧产物 | PASS；包18/18、Host1/1、codec1/1、静态检查及独立审查APPROVE；真实链路/CI NOT_RUN | 高 | DLL、JsonReceipt、Wasm、1.0.1 |
+
 ## 2026-09-06
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |

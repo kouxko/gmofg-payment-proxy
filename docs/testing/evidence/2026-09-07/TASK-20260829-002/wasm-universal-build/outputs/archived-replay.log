@@ -1,0 +1,14 @@
+{
+  "dmg": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/universal-evidence-replay-seuic1rs/dmg/Intercept Proxy_1.0.0_universal.dmg",
+  "built": {
+    "app": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/universal-evidence-replay-seuic1rs/macos/Intercept Proxy.app",
+    "mainBinary": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/universal-evidence-replay-seuic1rs/macos/Intercept Proxy.app/Contents/MacOS/intercept-proxy",
+    "identifier": "com.interceptproxy.desktop"
+  },
+  "mounted": {
+    "app": "/Volumes/Intercept Proxy/Intercept Proxy.app",
+    "mainBinary": "/Volumes/Intercept Proxy/Intercept Proxy.app/Contents/MacOS/intercept-proxy",
+    "identifier": "com.interceptproxy.desktop"
+  }
+}
+PASS: archived App and mounted DMG architecture, identifier, strict signature; detached and temporary files removed

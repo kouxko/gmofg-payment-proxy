@@ -1,0 +1,11 @@
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 14.94s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_runtime-93ced5bbef62446d)
+
+running 3 tests
+test http::exchange_runtime::tests::finalized_upstream_uri_rejects_method_and_origin_changes ... ok
+test http::exchange_runtime::tests::finalized_upstream_uri_changes_only_path_and_query ... ok
+test http::exchange_runtime::tests::legacy_mock_finalize_failure_is_finalize_stage_and_writes_nothing ... ok
+
+test result: ok. 3 passed; 0 failed; 0 ignored; 0 measured; 204 filtered out; finished in 0.01s
+

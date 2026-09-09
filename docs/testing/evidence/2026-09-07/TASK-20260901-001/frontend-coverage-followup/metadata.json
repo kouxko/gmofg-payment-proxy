@@ -1,0 +1,134 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "frontend-coverage-followup",
+  "executed_at": "2026-09-07T19:10:29.604562+08:00",
+  "status": "LOCAL_FIXES_PASS_REVIEW_APPROVED_EXTERNAL_GATES_PENDING",
+  "purpose": "Close WPC-14 local frontend coverage gate and keep historical evidence outside application TypeScript compilation",
+  "environment": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "branch": "codex/complete-pending-tasks-20260907",
+  "base_commit": "caa36022",
+  "historical_ci": {
+    "id": 34025792017,
+    "head": "fa4e154f",
+    "artifact": "coverage-reports",
+    "socket_branches": {
+      "covered": 283,
+      "total": 325,
+      "pct": 87.07
+    },
+    "same_listener_and_vitest_sources": true
+  },
+  "changes": [
+    "src/features/listeners/socket-listener-model.test.ts",
+    "src/features/listeners/socket-processing-card.test.tsx",
+    "tsconfig.json"
+  ],
+  "test_cases": [
+    "Invalid catalog counts/recommendations/capabilities/schema",
+    "Installed built-in recommendation must be Socket",
+    "Unavailable catalog choices",
+    "One-sided TLS edits keep transport mode",
+    "No implicit TLS enabling",
+    "Exact package version replacement",
+    "Local responder without available package",
+    "Managed/external package lifecycle labels"
+  ],
+  "resources": [
+    {
+      "path": "resources/ci-coverage",
+      "original_name": "coverage-reports",
+      "source": "GitHub run34025792017, downloaded read-only",
+      "required": true,
+      "use": "Original CI missing branch evidence"
+    },
+    {
+      "path": "resources/before-source.tar.gz",
+      "source": "Current checkout before test changes",
+      "required": true,
+      "use": "Original listener tests and production files plus coverage config and dependency declarations"
+    },
+    {
+      "path": "resources/final-source.tar.gz",
+      "source": "Final Socket source/tests and coverage config",
+      "required": true,
+      "use": "Changed scope snapshot"
+    },
+    {
+      "path": "resources/frontend-source.tar.gz",
+      "source": "Actual stable full frontend test input",
+      "required": true,
+      "use": "All current src files and frontend build/test/TS config; no expanded TypeScript under evidence"
+    },
+    {
+      "path": "resources/tsconfig-before.json",
+      "source": "Current branch HEAD",
+      "required": true,
+      "use": "Prior incomplete resources-only archive exclusion"
+    },
+    {
+      "path": "resources/tsconfig-final.json",
+      "source": "Final tsconfig",
+      "required": true,
+      "use": "Only complete historical evidence directory excluded"
+    }
+  ],
+  "known_attempts": [
+    {
+      "log": "outputs/before.log",
+      "result": "INCOMPLETE_ABORTED",
+      "reason": "Default workers during Release compilation produced timeouts, stopped; Deno SIGINT rejection preserved"
+    },
+    {
+      "log": "outputs/typecheck.log",
+      "result": "FAIL",
+      "reason": "Historical outputs/reviews TypeScript imported absent sibling source"
+    },
+    {
+      "log": "outputs/full-final.log",
+      "result": "PASS_NONFINAL_CONFIGURATION",
+      "reason": "73 files560tests/socket302of325 passed; tsconfig changed late, repeat on frozen config used for final acceptance"
+    },
+    {
+      "log": "outputs/typecheck-after-exclude.log",
+      "result": "PASS",
+      "reason": "208 src TypeScript files included, no evidence inputs"
+    }
+  ],
+  "not_applicable": {
+    "protocol_frames": "No runtime/protocol changes",
+    "screenshots": "Existing UI behavior tested with actual component interactions",
+    "remote_ci": "NOT_RUN; historical failed run remains failed",
+    "release": "NOT_RUN; original WPC12/14 external gates remain pending"
+  },
+  "replay": "python3 replay/run.py",
+  "results": {
+    "historical_run": 34025792017,
+    "before": {
+      "covered": 283,
+      "total": 325,
+      "pct": 87.07
+    },
+    "after": {
+      "covered": 302,
+      "total": 325,
+      "pct": 92.92
+    },
+    "threshold": 90,
+    "threshold_unchanged": true,
+    "test_files": 73,
+    "tests_passed": 560,
+    "failed": 0,
+    "typecheck": "PASS",
+    "all_src_typescript_included": 208,
+    "source_archive_file_count": 220,
+    "source_byte_comparison": "PASS",
+    "configuration_frozen_during_final_run": true
+  },
+  "independent_review": {
+    "verdict": "APPROVE_IMPLEMENTED_SCOPE",
+    "p0": 0,
+    "p1": 0,
+    "p2": 0,
+    "path": "independent-review.md"
+  }
+}

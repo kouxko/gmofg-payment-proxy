@@ -194,6 +194,50 @@ async fn rejects_zero_socket_read_chunk_bytes() {
 }
 
 #[tokio::test]
+async fn socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation() {
+    for bytes in [0, 1_048_577, u32::MAX] {
+        let candidate = candidate_json_with(|candidate| {
+            candidate["workspace"]["listeners"][1]["data_plane"]["settings"]["runtime_limits"]["read_chunk_bytes"] =
+                serde_json::json!(bytes);
+        });
+        let port = Arc::new(RecordingValidationPort::new(Behavior::Pass));
+        let report = validator(port.clone())
+            .validate(&candidate, CancellationToken::new())
+            .await;
+        assert_eq!(
+            report.status_code(),
+            Some(EnvironmentStatusCode::ListenerDomainInvalid)
+        );
+        assert_eq!(port.calls(), vec![EnvironmentValidationLayer::Schema]);
+        for layer in &report.layers()[2..] {
+            assert_eq!(
+                layer.status(),
+                EnvironmentValidationStatus::SkippedDependency
+            );
+        }
+    }
+}
+
+#[tokio::test]
+async fn socket_read_chunk_cap_accepts_legal_candidate_boundaries() {
+    for bytes in [1, 16_384, 1_048_576] {
+        let candidate = candidate_json_with(|candidate| {
+            candidate["workspace"]["listeners"][1]["data_plane"]["settings"]["runtime_limits"]["read_chunk_bytes"] =
+                serde_json::json!(bytes);
+        });
+        let port = Arc::new(RecordingValidationPort::new(Behavior::Pass));
+        let report = validator(port.clone())
+            .validate(&candidate, CancellationToken::new())
+            .await;
+        assert_eq!(
+            report.layers()[1].status(),
+            EnvironmentValidationStatus::Passed
+        );
+        assert_eq!(port.calls(), ORDER);
+    }
+}
+
+#[tokio::test]
 async fn rejects_zero_socket_diagnostic_event_capacity() {
     assert_socket_listener_invalid(|candidate| {
         candidate["workspace"]["listeners"][1]["data_plane"]["settings"]["runtime_limits"]

@@ -1,0 +1,26 @@
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 44.99s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-86ea55d95fa19877)
+
+running 2 tests
+test requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation ... FAILED
+test requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_accepts_legal_candidate_boundaries ... ok
+
+failures:
+
+---- requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation stdout ----
+
+thread 'requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation' (11556894) panicked at crates/application/src/requirements_tests/environment_configuration_validation/limits_red.rs:207:9:
+assertion `left == right` failed
+  left: None
+ right: Some(ListenerDomainInvalid)
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 435 filtered out; finished in 0.02s
+
+error: test failed, to rerun pass `-p intercept-proxy-application --lib`

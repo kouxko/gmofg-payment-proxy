@@ -1,0 +1,10 @@
+{
+  "fix_commit": "f96f597573704967af1660aa7c2206a271de66e2",
+  "integrated_develop": "2c784fbb84a57f45dcd5802079310a8de9e00460",
+  "version": "1.0.1",
+  "pipeline_mode": "android-windows-build",
+  "expected_jobs": [
+    "android_companion",
+    "windows_build_only"
+  ]
+}

@@ -1,0 +1,9 @@
+{
+  "result": "WRONG_CHECK_CORRECTED",
+  "observed_integrity": "ok",
+  "observed_pragma_user_version": 0,
+  "incorrect_assertion": "PRAGMA user_version == 100",
+  "authoritative_check": "SELECT version FROM application_schema WHERE singleton_id=1",
+  "actual_application_schema_version": 100,
+  "product_or_database_changes": false
+}

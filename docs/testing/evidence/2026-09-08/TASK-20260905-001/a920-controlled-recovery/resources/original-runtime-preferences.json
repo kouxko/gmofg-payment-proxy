@@ -1,0 +1,28 @@
+{
+  "schema_version": 1,
+  "target_package": "com.interceptproxy.vpn",
+  "preferences_name": "intercept_proxy_vpn_runtime",
+  "file_existed": true,
+  "entries": [
+    {
+      "key": "auto_resume",
+      "type": "Boolean",
+      "value": false
+    },
+    {
+      "key": "failure_timestamps",
+      "type": "String",
+      "value": "1788408220463"
+    },
+    {
+      "key": "profile_json",
+      "type": "String",
+      "value": "{\"id\":\"review-a920-smoke\",\"name\":\"Review A920 smoke\",\"target_applications\":[{\"package_name\":\"jp.gmofg.app\",\"uid\":10144}],\"proxy_routes\":[],\"destination_targets\":[],\"confirmed_shared_uids\":[],\"auto_resume_after_reboot\":false,\"weak_network\":{\"seed\":20260805,\"fixed_delay_millis\":0,\"uniform_jitter_millis\":0,\"upload_bytes_per_second\":null,\"download_bytes_per_second\":null,\"random_loss_basis_points\":0,\"burst_loss\":null,\"duplicate_basis_points\":0,\"reorder_basis_points\":0,\"maximum_reorder_hold_millis\":0,\"blackout_windows\":[],\"dns_blackhole\":false,\"nth_tcp_flag_drops\":[],\"path_mtu\":{\"mtu\":null,\"mss_clamp\":null,\"mode\":\"pass\"},\"corruption\":{\"probability_basis_points\":0,\"bits_per_packet\":0}}}"
+    },
+    {
+      "key": "proxy_runtime_json",
+      "type": "String",
+      "value": "{\"profile_fingerprint\":\"review-a920-smoke-profile-v1\",\"route_fingerprint\":\"review-a920-smoke-empty-routes-v1\",\"route_count\":0,\"routes\":[]}"
+    }
+  ]
+}

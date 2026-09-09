@@ -1,0 +1,1 @@
+Task typecheck tsc --noEmit '--project' '/tmp/task0907-finalize-tsconfig.json'

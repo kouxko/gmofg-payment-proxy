@@ -1,0 +1,262 @@
+[
+  {
+    "id": 104426,
+    "status": "success",
+    "stage": "package",
+    "name": "windows_build_only",
+    "ref": "feature/0907-001-http-finalize",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T09:11:45.950Z",
+    "started_at": "2026-09-07T09:32:29.465Z",
+    "finished_at": "2026-09-07T10:02:14.950Z",
+    "erased_at": null,
+    "duration": 1785.484503,
+    "queued_duration": 0.747437,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "183bccfb43c6a4903c315767e4b761fc57ceb08d",
+      "short_id": "183bccfb",
+      "created_at": "2026-09-07T17:04:05.000+08:00",
+      "parent_ids": [
+        "caa36022f1070caad58085870a4c33c1e6246bbd"
+      ],
+      "title": "feat: 支持本地 Wasm HTTP 上下行 Finalize [skip ci]",
+      "message": "feat: 支持本地 Wasm HTTP 上下行 Finalize [skip ci]\n\n本地 Wasm HTTP 协议包可在 Encode 和正文规则动作完成后，对最终 HTTP 信息执行可选变换。新增独立 Finalize trait，上下行方法分别可选，旧包无需重新打包。\n\n- 输入输出使用 url、method、code、header、body 五字段 JSON；Header 同名项最后值生效，返回值校验通过后原子写回。\n- 复用现有 HTTP Pipeline、codec 和 framing；普通及 Mock 路径每次调用一次，成功后提交当前方向生命周期，失败不写出并保留包调用诊断。\n- 保持请求 method 和目标 origin，允许上行修改 path/query；下行保留原请求关联，支持修改响应状态码、Header 和 Body。\n- 保持 Schema100 与既有包存储格式，补充旧包/旧库兼容、取消与运行时代切换、真实 Wasm HTTP 收发及观察链回归测试。\n- 更新详细架构说明、ADR-011 和架构文档门禁。\n\n验证：相关 Rust 测试 53 项通过；strict Clippy、fmt、lint、架构与源码尺寸门禁、绑定生成及源码类型检查通过；独立整体审查 APPROVE。\n已知限制：全量 TypeScript 检查受历史证据副本中 5 个 TS2307 阻断；pre-100 迁移、真实设备及跨平台未验收。本次按仓库规则跳过远程 CI。\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-07T17:03:36.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-07T17:04:05.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/183bccfb43c6a4903c315767e4b761fc57ceb08d"
+    },
+    "pipeline": {
+      "id": 34143,
+      "iid": 36,
+      "project_id": 1023,
+      "sha": "183bccfb43c6a4903c315767e4b761fc57ceb08d",
+      "ref": "feature/0907-001-http-finalize",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T09:11:45.930Z",
+      "updated_at": "2026-09-07T10:02:15.049Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34143"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104426",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "Intercept-Proxy-android-windows-build.zip",
+      "size": 103435563
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 103435563,
+        "filename": "Intercept-Proxy-android-windows-build.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 364,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 917391,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-10-07T10:02:14.707Z",
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  },
+  {
+    "id": 104425,
+    "status": "success",
+    "stage": "prepare",
+    "name": "android_companion",
+    "ref": "feature/0907-001-http-finalize",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T09:11:45.938Z",
+    "started_at": "2026-09-07T09:11:46.780Z",
+    "finished_at": "2026-09-07T09:32:28.588Z",
+    "erased_at": null,
+    "duration": 1241.807432,
+    "queued_duration": 0.537254,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "183bccfb43c6a4903c315767e4b761fc57ceb08d",
+      "short_id": "183bccfb",
+      "created_at": "2026-09-07T17:04:05.000+08:00",
+      "parent_ids": [
+        "caa36022f1070caad58085870a4c33c1e6246bbd"
+      ],
+      "title": "feat: 支持本地 Wasm HTTP 上下行 Finalize [skip ci]",
+      "message": "feat: 支持本地 Wasm HTTP 上下行 Finalize [skip ci]\n\n本地 Wasm HTTP 协议包可在 Encode 和正文规则动作完成后，对最终 HTTP 信息执行可选变换。新增独立 Finalize trait，上下行方法分别可选，旧包无需重新打包。\n\n- 输入输出使用 url、method、code、header、body 五字段 JSON；Header 同名项最后值生效，返回值校验通过后原子写回。\n- 复用现有 HTTP Pipeline、codec 和 framing；普通及 Mock 路径每次调用一次，成功后提交当前方向生命周期，失败不写出并保留包调用诊断。\n- 保持请求 method 和目标 origin，允许上行修改 path/query；下行保留原请求关联，支持修改响应状态码、Header 和 Body。\n- 保持 Schema100 与既有包存储格式，补充旧包/旧库兼容、取消与运行时代切换、真实 Wasm HTTP 收发及观察链回归测试。\n- 更新详细架构说明、ADR-011 和架构文档门禁。\n\n验证：相关 Rust 测试 53 项通过；strict Clippy、fmt、lint、架构与源码尺寸门禁、绑定生成及源码类型检查通过；独立整体审查 APPROVE。\n已知限制：全量 TypeScript 检查受历史证据副本中 5 个 TS2307 阻断；pre-100 迁移、真实设备及跨平台未验收。本次按仓库规则跳过远程 CI。\n",
+      "author_name": "kouqurong",
+      "author_email": "koqurong@outlook.com",
+      "authored_date": "2026-09-07T17:03:36.000+08:00",
+      "committer_name": "kouqurong",
+      "committer_email": "koqurong@outlook.com",
+      "committed_date": "2026-09-07T17:04:05.000+08:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/183bccfb43c6a4903c315767e4b761fc57ceb08d"
+    },
+    "pipeline": {
+      "id": 34143,
+      "iid": 36,
+      "project_id": 1023,
+      "sha": "183bccfb43c6a4903c315767e4b761fc57ceb08d",
+      "ref": "feature/0907-001-http-finalize",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T09:11:45.930Z",
+      "updated_at": "2026-09-07T10:02:15.049Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34143"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104425",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts_file": {
+      "filename": "intercept-proxy-android-companion.zip",
+      "size": 12486423
+    },
+    "artifacts": [
+      {
+        "file_type": "archive",
+        "size": 12486423,
+        "filename": "intercept-proxy-android-companion.zip",
+        "file_format": "zip"
+      },
+      {
+        "file_type": "metadata",
+        "size": 213,
+        "filename": "metadata.gz",
+        "file_format": "gzip"
+      },
+      {
+        "file_type": "trace",
+        "size": 129338,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 17,
+      "description": "",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": null,
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 23,
+      "system_id": "r_ABl6cl29Nqsv",
+      "version": "16.8.0",
+      "revision": "c72a09b6",
+      "platform": "linux",
+      "architecture": "amd64",
+      "created_at": "2025-12-22T13:36:25.597Z",
+      "contacted_at": "2026-09-08T03:27:29.103Z",
+      "ip_address": "172.27.0.1",
+      "status": "online"
+    },
+    "artifacts_expire_at": "2026-09-21T09:32:27.849Z",
+    "archived": false,
+    "tag_list": [
+      "docker test"
+    ]
+  }
+]

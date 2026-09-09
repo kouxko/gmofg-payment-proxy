@@ -1,0 +1,15 @@
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 17.54s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_domain-b93b9d01f7f5d30d)
+
+thread 'document::tests::number_serialization::document_integral_numbers_serialize_as_integer_tokens_at_every_json_boundary' (12224655) panicked at crates/domain/src/document/tests/number_serialization.rs:24:13:
+assertion `left == right` failed: 0
+  left: "0.0"
+ right: "0"
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'document::tests::number_serialization::document_nested_numbers_normalize_without_changing_strings_or_other_types' (12224656) panicked at crates/domain/src/document/tests/number_serialization.rs:67:5:
+assertion `left == right` failed
+  left: "{\"array\":[0.0,1.0,2.0,2.5,\"2.0\",true,null],\"object\":{\"count\":2.0,\"decimal\":-2.5}}"
+ right: "{\"array\":[0,1,2,2.5,\"2.0\",true,null],\"object\":{\"count\":2,\"decimal\":-2.5}}"
+error: test failed, to rerun pass `-p intercept-proxy-domain --lib`

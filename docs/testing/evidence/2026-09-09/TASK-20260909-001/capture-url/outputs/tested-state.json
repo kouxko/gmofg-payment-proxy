@@ -1,0 +1,19 @@
+{
+  "head": "1c88aeb8a0aad54a5ffc178e6db8f64b23d075a5",
+  "branch": "feature/capture-http-url",
+  "platform": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "deno": "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 15.0.245.2-rusty\ntypescript 6.0.3\n",
+  "hashes": {
+    "src/features/capture/exchange-observation-model.ts": "6bc7e748506b2dd892a26a11adef76da5f6d66c02fb359a72934bf9c666f194e",
+    "src/features/capture/exchange-observation-list.tsx": "a996650a4a37c2e9ccaf051ee8e37e1445e8ab4d7d98c1f5b9463983eb7eae7b",
+    "src/features/capture/exchange-observation-model.test.ts": "05e7bca3c23ccee12b6d6060f9dc2f435cce1b2fee7203938fca0a55f3432e98",
+    "src/features/capture/exchange-observation-list.test.tsx": "595cc031764884c8c2ba2862b825c2d9382af0359b8a55d25758ea449cdd4468",
+    "src/features/capture/exchange-observation-test-fixture.ts": "e5ee60ee8448f47f7d5d2aa41ca967d61fd9feff36d2d3c8da6c7d88eb2408ba",
+    "src/app/globals.css": "a9416e2ba67924ea311647f834fdfe5136f9d8b2e8d528faf5ea56c4bd67480b",
+    "package.json": "9b54ffc99f922c5251c2f11bad9b2308b4467cf11901fd1e2be622bb3c7b48e0",
+    "deno.lock": "d196e1b88846dfb8e3d82fc03171a4f0b420f5f40400ad44ebebf556fe95a77a",
+    "deno.json": "129c4a7a7d2cb6223a396506130718f9e68a5dc0c24f31e57e7847d06f6e7b4e",
+    "vitest.config.ts": "ffac1cff69e58a8cd7771c3fc4116e29e6360b3bc01f372ad627dead2d8bcaaf",
+    "tsconfig.json": "3321b0b99c9b3f9b4f4f530a0d02db108218bca0b4d1421cbcf0872caf9937a1"
+  }
+}

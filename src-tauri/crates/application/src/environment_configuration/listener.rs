@@ -1,3 +1,4 @@
+use intercept_proxy_domain::MAX_SOCKET_READ_CHUNK_BYTES;
 use serde::{Deserialize, Serialize};
 use uuid::Uuid;
 
@@ -381,7 +382,8 @@ impl ListenerTemplate {
         }
         if let ListenerDataPlaneTemplate::Socket(socket) = &self.data_plane
             && (!(1..=5_000).contains(&socket.maximum_connections)
-                || socket.runtime_limits.read_chunk_bytes == 0
+                || !(1..=MAX_SOCKET_READ_CHUNK_BYTES)
+                    .contains(&socket.runtime_limits.read_chunk_bytes)
                 || socket.runtime_limits.diagnostic_event_capacity == 0
                 || socket.runtime_limits.diagnostic_memory_bytes == 0)
         {

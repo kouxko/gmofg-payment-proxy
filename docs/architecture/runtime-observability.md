@@ -61,8 +61,15 @@ Display。协议模式的 Received 展示 Reader 时的事实，Sent 展示 Rule
 upstream Sent；下游只有 Body 完成且底层 flush 成功才提交。错误通过类型化 code/stage/direction
 传递，真实 Encode/Flush 失败位置不会被外层 Rules/Write 标签覆盖。
 
-HTTP Context 额外记录 `body_is_utf8`。当它为 `false` 时，Body 文本只是 lossy 观测投影，Application
-不得用它生成会写回网络的 Mock 规则草稿。
+HTTP Context 额外记录 `body_is_utf8`，表示原始 Body 字节是否为 UTF-8。当它为 `false` 时，
+tracing 在 `context_bytes_hex` 附带原始正文，四个带 Context 的阶段（received、encoded、sent、failed）
+均把 hex 纳入观测总预算。桌面 consumer 按 HTTP Header 的 Content-Type 复用既有 UTF-8/Shift-JIS
+解码器修正 Body 预览；纯文本缺失字符集、不支持字符集、Raw 或压缩正文保留原有有损投影，不猜测编码。
+JSON/XML 未声明字符集时沿用既有 Auto 选择 UTF-8 的规则。
+支持的编码遇到非法字节时，Body 显示明确的预览解码失败和原有有损文本，不改变业务事件结果。
+此路径不使用 Listener 的强制 codec，不改变业务 Context、协议包 Decode 或网络字节。
+即使转码后预览正常，`body_is_utf8` 仍为 `false`，Application 不得用它生成会写回网络的 Mock 规则草稿。
+已有 UTF-8 正文的观测保持原状；历史内存记录不会重新生成，需要新请求才能看到修正后的预览。
 
 ## 3. tracing 到结构化事件
 

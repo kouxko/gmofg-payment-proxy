@@ -1,0 +1,105 @@
+{
+  "task_id": "TASK-20260901-001",
+  "case_id": "local-macos-regression",
+  "status": "LOCAL_REGRESSION_PASS_REVIEW_APPROVED",
+  "executed_at": "2026-09-08 09:52:38 +08:00",
+  "branch": "codex/complete-pending-tasks-20260907",
+  "base_commit": "caa36022",
+  "purpose": "User requested current local macOS regression instead of remote-host regression for this run",
+  "derived_from": [
+    {
+      "task_id": "TASK-20260901-001",
+      "case_id": "release-app-replay",
+      "evidence_path": "docs/testing/evidence/2026-09-01/TASK-20260901-001/release-app-replay"
+    },
+    {
+      "task_id": "TASK-20260901-001",
+      "case_id": "frontend-coverage-followup",
+      "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260901-001/frontend-coverage-followup"
+    },
+    {
+      "task_id": "TASK-20260829-002",
+      "case_id": "wasm-universal-build",
+      "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build"
+    }
+  ],
+  "scope": [
+    "current frontend coverage and static checks",
+    "Rust workspace regression and static checks",
+    "actual local Release App HTTP rule and Socket Wasm request/response matrices",
+    "isolated data profile and lifecycle cleanup"
+  ],
+  "contract_change": "Execution host changed to local macOS per user; requests, rule meanings, protocol stages and expected bytes remain authoritative. No product behavior or read_chunk_bytes cap change.",
+  "not_applicable": {
+    "windows": "NOT_RUN; local regression cannot establish Windows runtime acceptance",
+    "android_device": "NOT_RUN in this host regression; A920MAX selection retained for separate device acceptance",
+    "developer_id_notarization": "NOT_RUN; no signing identities",
+    "push_ci_release": "NOT_RUN; current request is local regression"
+  },
+  "replay": "replay/verify_evidence.py for offline archive validation; README contains fresh-run setup and commands",
+  "completed_at": "2026-09-08 10:53:56 +08:00",
+  "quality": {
+    "gates": 10,
+    "frontend_files": 73,
+    "frontend_tests": 560,
+    "rust_suites": 45,
+    "rust_tests": 1647,
+    "failed": 0,
+    "ignored": 0
+  },
+  "wire": {
+    "result": "PASS",
+    "http_cases": 7,
+    "http_upstream_records": 6,
+    "socket_cases": 3,
+    "socket_upstream_frames": 2,
+    "rule_hit_deltas": {
+      "Method POST": 2,
+      "Header X-Probe alpha": 2,
+      "Path and query wildcard": 2,
+      "Body age 18": 2,
+      "MTI 0200 to 0100": 1
+    },
+    "invalid_decode_failures": 2
+  },
+  "source_stability": {
+    "files": 1418,
+    "changed": [],
+    "at": "2026-09-08T10:46:20.665942+08:00"
+  },
+  "persistence": "PASS: selected workspace, 2 listeners and 5 rule definitions unchanged across real App restart",
+  "cleanup": {
+    "result": "PASS",
+    "checked_at": "2026-09-08T10:48:14.253367+08:00",
+    "app_controller_exit_code": 0,
+    "local_ports_closed": {
+      "17653": true,
+      "8765": true,
+      "28080": true,
+      "28081": true,
+      "28082": true,
+      "28083": true
+    },
+    "dmg_mount_absent": true,
+    "profile_retained": "/var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/intercept-local-regression-5cgcr6lq",
+    "archive": "resources/isolated-app-data-after.tar.gz",
+    "database_integrity": "ok",
+    "application_schema_version": 100,
+    "normal_user_profile_modified": false
+  },
+  "review": {
+    "verdict": "APPROVE",
+    "reviewer": "frontend_followup_review",
+    "P0": 0,
+    "P1": 0,
+    "P2": 0,
+    "evidence": "outputs/independent-review.md"
+  },
+  "actual_profile_environment": "HOME isolated; CFFIXED_USER_HOME unset on accepted App session",
+  "app_artifact": "docs/testing/evidence/2026-09-07/TASK-20260829-002/wasm-universal-build/outputs/artifacts/Intercept Proxy_1.0.0_universal.dmg",
+  "limitations": [
+    "Initial blank window and intermittent CUA capture/read errors; no exact startup benchmark or confirmed product root cause",
+    "One read-only MCP query timeout during UI reactivation; later wire matrix and observations passed",
+    "Windows, Android VPN, Developer ID/notarization and remote CI/release not run"
+  ]
+}

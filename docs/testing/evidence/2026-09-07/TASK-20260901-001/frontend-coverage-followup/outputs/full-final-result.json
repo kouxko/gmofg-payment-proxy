@@ -1,0 +1,9 @@
+{
+  "command": [
+    "deno",
+    "task",
+    "check:coverage:frontend",
+    "--maxWorkers=2"
+  ],
+  "exit_code": 0
+}

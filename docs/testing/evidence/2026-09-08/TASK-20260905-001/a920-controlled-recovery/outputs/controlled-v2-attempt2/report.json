@@ -1,0 +1,525 @@
+{
+  "scope": "device LocalSocket/TUN/JNI recovery gate only",
+  "serial": "2740072778",
+  "started_at": "2026-09-08T11:48:11.292+08:00",
+  "result": "FAIL",
+  "steps": [
+    {
+      "at": "2026-09-08T11:48:11.314+08:00",
+      "name": "fixtures_ready",
+      "value": {
+        "dll": 58467,
+        "transaction": 58466
+      }
+    },
+    {
+      "at": "2026-09-08T11:48:11.648+08:00",
+      "name": "initial_stopped",
+      "value": {
+        "serial": "",
+        "state": "stopped",
+        "verified": true,
+        "transport": "local_abstract_socket",
+        "active_profile_id": null,
+        "active_profile_fingerprint": null,
+        "active_route_fingerprint": null,
+        "active_route_count": 0,
+        "companion_process_running": true,
+        "message": "VPN 当前未运行。",
+        "unsupported_fields": [
+          "serial"
+        ],
+        "stats": {
+          "download_ip_checksum_failures": 0,
+          "download_ip_length_mismatches": 0,
+          "download_tcp_syn_ack_packets": 0,
+          "download_transport_checksum_failures": 0,
+          "impairment_delay_millis_total": 0,
+          "impairment_mss_clamps": 0,
+          "impairment_packets_corrupted": 0,
+          "impairment_packets_dropped": 0,
+          "impairment_packets_duplicated": 0,
+          "impairment_packets_reordered": 0,
+          "impairment_pmtu_fragments": 0,
+          "impairment_pmtu_signals": 0,
+          "impairment_unimplemented_pmtu_actions": 0,
+          "last_error": null,
+          "protect_failures": 0,
+          "proxy_download_packets": 0,
+          "proxy_upload_packets": 0,
+          "socks_clients": 0,
+          "socks_connect_attempts": 0,
+          "socks_connect_successes": 0,
+          "tun_download_bytes": 0,
+          "tun_download_packets": 0,
+          "tun_upload_bytes": 0,
+          "tun_upload_packets": 0,
+          "upload_tcp_ack_packets": 0,
+          "upload_tcp_syn_packets": 0
+        }
+      }
+    },
+    {
+      "at": "2026-09-08T11:48:11.725+08:00",
+      "name": "reverse_created",
+      "value": {
+        "dll": 6555,
+        "transaction": 6556
+      }
+    },
+    {
+      "at": "2026-09-08T11:48:12.312+08:00",
+      "name": "phase1_running",
+      "value": {
+        "status": {
+          "serial": "",
+          "state": "running",
+          "verified": true,
+          "transport": "local_abstract_socket",
+          "active_profile_id": "a920-controlled-v2",
+          "active_profile_fingerprint": "baf5da5790e5a76bf49e13b9c0c9e7591c42dd99bfb66751da6c3372b9d44760",
+          "active_route_fingerprint": "9a5231817034556e84a8ee45af0016e9e871a8be78186a5d42b8d9077d90d5d3",
+          "active_route_count": 2,
+          "companion_process_running": true,
+          "message": "目标应用 VPN 与 Rust 数据面正在运行。",
+          "unsupported_fields": [
+            "serial"
+          ],
+          "stats": {
+            "download_ip_checksum_failures": 0,
+            "download_ip_length_mismatches": 0,
+            "download_tcp_syn_ack_packets": 0,
+            "download_transport_checksum_failures": 0,
+            "impairment_delay_millis_total": 0,
+            "impairment_mss_clamps": 0,
+            "impairment_packets_corrupted": 0,
+            "impairment_packets_dropped": 0,
+            "impairment_packets_duplicated": 0,
+            "impairment_packets_reordered": 0,
+            "impairment_pmtu_fragments": 0,
+            "impairment_pmtu_signals": 0,
+            "impairment_unimplemented_pmtu_actions": 0,
+            "last_error": null,
+            "protect_failures": 0,
+            "proxy_download_packets": 0,
+            "proxy_upload_packets": 3,
+            "socks_clients": 0,
+            "socks_connect_attempts": 0,
+            "socks_connect_successes": 0,
+            "tun_download_bytes": 0,
+            "tun_download_packets": 0,
+            "tun_upload_bytes": 220,
+            "tun_upload_packets": 3,
+            "upload_tcp_ack_packets": 0,
+            "upload_tcp_syn_packets": 0
+          }
+        },
+        "owner_epoch": "15ac217b-5e83-464a-a877-1d3eb976bf31",
+        "identity_fields": {},
+        "tun_before": [],
+        "tun_running": [
+          "tun0"
+        ]
+      }
+    }
+  ],
+  "saved_activation_restore": {
+    "possible_via_public_v2": false,
+    "reason": "accepted start/apply with proxy routes clears prior recovery; v2 has no get/export operation",
+    "external_backup_required": true,
+    "external_restore_owner": "caller/root harness"
+  },
+  "recovery_backup_gate": {
+    "metadata_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/outputs/recovery-backup-gate.json",
+    "backup_file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/resources/original-runtime-preferences.json",
+    "metadata": {
+      "package": "com.interceptproxy.vpn",
+      "serial": "2740072778",
+      "backup_complete": true,
+      "restore_supported": true,
+      "backup_file": "../resources/original-runtime-preferences.json",
+      "device_backup_path": "/storage/emulated/0/Android/data/com.interceptproxy.vpn/files/intercept_proxy_vpn_runtime.backup.json"
+    }
+  },
+  "adb_commands": [
+    {
+      "at": "2026-09-08T11:48:11.314+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "get-state"
+      ],
+      "exit": 0,
+      "elapsed_millis": 21,
+      "stdout": "device\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.425+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am",
+        "start",
+        "-n",
+        "com.interceptproxy.vpn/.AdbControlActivity",
+        "--es",
+        "command",
+        "wake_control_server"
+      ],
+      "exit": 0,
+      "elapsed_millis": 110,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn/.AdbControlActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.453+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "forward",
+        "tcp:0",
+        "localabstract:intercept_proxy_vpn"
+      ],
+      "exit": 0,
+      "elapsed_millis": 28,
+      "stdout": "58474\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.648+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 85,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.672+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--list"
+      ],
+      "exit": 0,
+      "elapsed_millis": 23,
+      "stdout": "\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.695+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--no-rebind",
+        "tcp:6555",
+        "tcp:58467"
+      ],
+      "exit": 0,
+      "elapsed_millis": 24,
+      "stdout": "6555\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.725+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--no-rebind",
+        "tcp:6556",
+        "tcp:58466"
+      ],
+      "exit": 0,
+      "elapsed_millis": 29,
+      "stdout": "6556\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.805+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "cmd",
+        "package",
+        "list",
+        "packages",
+        "-U",
+        "com.interceptproxy.vpn.targetprobe"
+      ],
+      "exit": 0,
+      "elapsed_millis": 79,
+      "stdout": "package:com.interceptproxy.vpn.targetprobe uid:10086\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:11.880+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "cmd",
+        "package",
+        "list",
+        "packages",
+        "-U",
+        "com.interceptproxy.vpn.isolationprobe"
+      ],
+      "exit": 0,
+      "elapsed_millis": 75,
+      "stdout": "package:com.interceptproxy.vpn.isolationprobe uid:10089\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.312+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 71,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n28: tun0: <POINTOPOINT,UP,LOWER_UP> mtu 1280 qdisc pfifo_fast state UNKNOWN group default qlen 500\n    link/none \n    inet 10.254.0.2/32 scope global tun0\n       valid_lft forever preferred_lft forever\n    inet6 fd00:6970:7670::2/128 scope global \n       valid_lft forever preferred_lft forever\n    inet6 fe80::bb7a:9bd6:58a4:fdc7/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.420+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "rm",
+        "-f",
+        "files/probe-phase1-dll-fcc22d8395.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 107,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.550+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "am start -n com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity --es host 203.0.113.48 --ei port 16127 --ei timeout 7000 --es token phase1-dll-fcc22d8395 --es path /controlled/phase1/dll --es method POST --es body '{\"operation\":\"probe\"}'"
+      ],
+      "exit": 0,
+      "elapsed_millis": 130,
+      "stdout": "Starting: Intent { cmp=com.interceptproxy.vpn.targetprobe/com.interceptproxy.vpn.isolationprobe.ProbeActivity (has extras) }\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.640+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "exec-out",
+        "run-as",
+        "com.interceptproxy.vpn.targetprobe",
+        "cat",
+        "files/probe-phase1-dll-fcc22d8395.txt"
+      ],
+      "exit": 0,
+      "elapsed_millis": 90,
+      "stdout": "cat: files/probe-phase1-dll-fcc22d8395.txt: No such file or directory\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.958+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "shell",
+        "ip",
+        "addr",
+        "show"
+      ],
+      "exit": 0,
+      "elapsed_millis": 97,
+      "stdout": "1: lo: <LOOPBACK,UP,LOWER_UP> mtu 65536 qdisc noqueue state UNKNOWN group default qlen 1\n    link/loopback 00:00:00:00:00:00 brd 00:00:00:00:00:00\n    inet 127.0.0.1/8 scope host lo\n       valid_lft forever preferred_lft forever\n    inet6 ::1/128 scope host \n       valid_lft forever preferred_lft forever\n2: dummy0: <BROADCAST,NOARP,UP,LOWER_UP> mtu 1500 qdisc noqueue state UNKNOWN group default qlen 1000\n    link/ether f6:82:bf:4f:5f:4a brd ff:ff:ff:ff:ff:ff\n    inet6 fe80::f482:bfff:fe4f:5f4a/64 scope link \n       valid_lft forever preferred_lft forever\n3: ip_vti0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/ipip 0.0.0.0 brd 0.0.0.0\n4: ip6_vti0@NONE: <NOARP> mtu 1500 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n5: sit0@NONE: <NOARP> mtu 1480 qdisc noop state DOWN group default qlen 1\n    link/sit 0.0.0.0 brd 0.0.0.0\n6: ip6tnl0@NONE: <NOARP> mtu 1452 qdisc noop state DOWN group default qlen 1\n    link/tunnel6 :: brd ::\n8: rmnet0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n9: rmnet_data0: <UP,LOWER_UP> mtu 2000 qdisc pfifo_fast state UNKNOWN group default qlen 1000\n    link/[530] \n    inet6 fe80::3a4a:48fb:5d36:9dec/64 scope link \n       valid_lft forever preferred_lft forever\n10: rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n11: rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n12: rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n13: rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n14: rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n15: rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n16: rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n17: r_rmnet_data0: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n18: r_rmnet_data1: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n19: r_rmnet_data2: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n20: r_rmnet_data3: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n21: r_rmnet_data4: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n22: r_rmnet_data5: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n23: r_rmnet_data6: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n24: r_rmnet_data7: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n25: r_rmnet_data8: <> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/[530] \n26: wlan0: <BROADCAST,MULTICAST,UP,LOWER_UP> mtu 1500 qdisc mq state UP group default qlen 1000\n    link/ether a0:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n    inet 10.0.34.156/23 brd 10.0.35.255 scope global wlan0\n       valid_lft forever preferred_lft forever\n    inet6 fe80::a31e:f887:26f0:54dd/64 scope link stable-privacy \n       valid_lft forever preferred_lft forever\n27: p2p0: <BROADCAST,MULTICAST> mtu 1500 qdisc noop state DOWN group default qlen 1000\n    link/ether a2:44:b7:f3:c1:5f brd ff:ff:ff:ff:ff:ff\n",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:12.979+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "forward",
+        "--remove",
+        "tcp:58474"
+      ],
+      "exit": 0,
+      "elapsed_millis": 21,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:13.002+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--remove",
+        "tcp:6556"
+      ],
+      "exit": 0,
+      "elapsed_millis": 23,
+      "stdout": "",
+      "stderr": ""
+    },
+    {
+      "at": "2026-09-08T11:48:13.038+08:00",
+      "command": [
+        "adb",
+        "-s",
+        "2740072778",
+        "reverse",
+        "--remove",
+        "tcp:6555"
+      ],
+      "exit": 0,
+      "elapsed_millis": 36,
+      "stdout": "",
+      "stderr": ""
+    }
+  ],
+  "error": "AssertionError: probe response differs from fixture bytes: com.interceptproxy.vpn.targetprobe phase1 dll",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/replay/controlled-v2-v2.py\", line 575, in main\n    phase1 = [probe(adb, TARGET, name, \"phase1\", True, output, fixtures[name])\n              ~~~~~^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260905-001/a920-controlled-recovery/replay/controlled-v2-v2.py\", line 341, in probe\n    raise AssertionError(f\"probe response differs from fixture bytes: {package} {phase} {channel}\")\nAssertionError: probe response differs from fixture bytes: com.interceptproxy.vpn.targetprobe phase1 dll\n",
+  "cleanup_stop": {
+    "version": 2,
+    "request_id": "0ae18f3e-c737-4fa7-8c2b-31737f7b43cb",
+    "ok": true,
+    "status": {
+      "serial": "",
+      "state": "stopped",
+      "verified": true,
+      "transport": "local_abstract_socket",
+      "active_profile_id": null,
+      "active_profile_fingerprint": null,
+      "active_route_fingerprint": null,
+      "active_route_count": 0,
+      "companion_process_running": true,
+      "message": "VPN 已停止。",
+      "unsupported_fields": [
+        "serial"
+      ],
+      "stats": {
+        "download_ip_checksum_failures": 0,
+        "download_ip_length_mismatches": 0,
+        "download_tcp_syn_ack_packets": 0,
+        "download_transport_checksum_failures": 0,
+        "impairment_delay_millis_total": 0,
+        "impairment_mss_clamps": 0,
+        "impairment_packets_corrupted": 0,
+        "impairment_packets_dropped": 0,
+        "impairment_packets_duplicated": 0,
+        "impairment_packets_reordered": 0,
+        "impairment_pmtu_fragments": 0,
+        "impairment_pmtu_signals": 0,
+        "impairment_unimplemented_pmtu_actions": 0,
+        "last_error": null,
+        "protect_failures": 0,
+        "proxy_download_packets": 0,
+        "proxy_upload_packets": 4,
+        "socks_clients": 0,
+        "socks_connect_attempts": 0,
+        "socks_connect_successes": 0,
+        "tun_download_bytes": 0,
+        "tun_download_packets": 0,
+        "tun_upload_bytes": 316,
+        "tun_upload_packets": 4,
+        "upload_tcp_ack_packets": 0,
+        "upload_tcp_syn_packets": 0
+      }
+    },
+    "error_code": null,
+    "error_message": null
+  },
+  "cleanup_status": {
+    "serial": "",
+    "state": "stopped",
+    "verified": true,
+    "transport": "local_abstract_socket",
+    "active_profile_id": null,
+    "active_profile_fingerprint": null,
+    "active_route_fingerprint": null,
+    "active_route_count": 0,
+    "companion_process_running": true,
+    "message": "VPN 已停止。",
+    "unsupported_fields": [
+      "serial"
+    ],
+    "stats": {
+      "download_ip_checksum_failures": 0,
+      "download_ip_length_mismatches": 0,
+      "download_tcp_syn_ack_packets": 0,
+      "download_transport_checksum_failures": 0,
+      "impairment_delay_millis_total": 0,
+      "impairment_mss_clamps": 0,
+      "impairment_packets_corrupted": 0,
+      "impairment_packets_dropped": 0,
+      "impairment_packets_duplicated": 0,
+      "impairment_packets_reordered": 0,
+      "impairment_pmtu_fragments": 0,
+      "impairment_pmtu_signals": 0,
+      "impairment_unimplemented_pmtu_actions": 0,
+      "last_error": null,
+      "protect_failures": 0,
+      "proxy_download_packets": 0,
+      "proxy_upload_packets": 4,
+      "socks_clients": 0,
+      "socks_connect_attempts": 0,
+      "socks_connect_successes": 0,
+      "tun_download_bytes": 0,
+      "tun_download_packets": 0,
+      "tun_upload_bytes": 316,
+      "tun_upload_packets": 4,
+      "upload_tcp_ack_packets": 0,
+      "upload_tcp_syn_packets": 0
+    }
+  },
+  "cleanup_tun": {
+    "before": [],
+    "after": []
+  },
+  "fixture_request_counts": {
+    "dll": 0,
+    "transaction": 0
+  },
+  "heartbeat_errors": [],
+  "finished_at": "2026-09-08T11:48:13.320+08:00"
+}

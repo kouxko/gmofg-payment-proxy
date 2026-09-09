@@ -1,0 +1,4189 @@
+diff --git a/scripts/check-architecture-docs.mjs b/scripts/check-architecture-docs.mjs
+index 4f1a3375..454fdb95 100644
+--- a/scripts/check-architecture-docs.mjs
++++ b/scripts/check-architecture-docs.mjs
+@@ -12,6 +12,7 @@ const currentDocuments = [
+   "exchange-pipeline.md",
+   "data-flow.md",
+   "rules-and-protocol-packages.md",
++  "http-finalize.md",
+   "runtime-observability.md",
+   "security-and-persistence.md",
+   "android-vpn-transparent-routing.md",
+@@ -23,6 +24,7 @@ const mermaidDocuments = new Set([
+   "modules.md",
+   "exchange-pipeline.md",
+   "data-flow.md",
++  "http-finalize.md",
+ ]);
+ 
+ const decisions = new Map([
+@@ -79,6 +81,7 @@ const decisions = new Map([
+     "decisions/ADR-010-in-process-webassembly-protocol-packages.md",
+     { status: "Accepted" },
+   ],
++  ["decisions/ADR-011-http-finalize-capability.md", { status: "Accepted" }],
+ ]);
+ 
+ const rootDocuments = [
+diff --git a/src-tauri/crates/application/src/models/diagnostics.rs b/src-tauri/crates/application/src/models/diagnostics.rs
+index 173a8d7d..7b8bfa67 100644
+--- a/src-tauri/crates/application/src/models/diagnostics.rs
++++ b/src-tauri/crates/application/src/models/diagnostics.rs
+@@ -123,10 +123,11 @@ pub enum ExternalPackageCallStage {
+     Decode,
+     Encode,
+     Display,
++    Finalize,
+ }
+ 
+ #[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize, Type)]
+-/// 外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
++/// 本地 Wasm 或远端 JSON-RPC 包调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+ /// 在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
+ pub struct ExternalPackageCallDiagnosticViewModel {
+     pub package: ProtocolPackageRef,
+diff --git a/src-tauri/crates/exchange/src/error.rs b/src-tauri/crates/exchange/src/error.rs
+index 0d11e749..fcf8cd8f 100644
+--- a/src-tauri/crates/exchange/src/error.rs
++++ b/src-tauri/crates/exchange/src/error.rs
+@@ -17,6 +17,7 @@ pub enum ErrorStage {
+     Display,
+     Rules,
+     Encode,
++    Finalize,
+     Write,
+     Flush,
+     Shutdown,
+@@ -34,6 +35,7 @@ impl ErrorStage {
+             Self::Display => "display",
+             Self::Rules => "rules",
+             Self::Encode => "encode",
++            Self::Finalize => "finalize",
+             Self::Write => "write",
+             Self::Flush => "flush",
+             Self::Shutdown => "shutdown",
+@@ -48,6 +50,7 @@ pub enum ExternalPackageCallStage {
+     Decode,
+     Display,
+     Encode,
++    Finalize,
+ }
+ 
+ #[derive(Clone, Debug, Eq, PartialEq)]
+diff --git a/src-tauri/crates/exchange/src/observation/failure.rs b/src-tauri/crates/exchange/src/observation/failure.rs
+index 3e2dd34a..59eb409c 100644
+--- a/src-tauri/crates/exchange/src/observation/failure.rs
++++ b/src-tauri/crates/exchange/src/observation/failure.rs
+@@ -96,6 +96,7 @@ const fn external_stage(stage: crate::ExternalPackageCallStage) -> &'static str
+         crate::ExternalPackageCallStage::Decode => "decode",
+         crate::ExternalPackageCallStage::Display => "display",
+         crate::ExternalPackageCallStage::Encode => "encode",
++        crate::ExternalPackageCallStage::Finalize => "finalize",
+     }
+ }
+ 
+diff --git a/src-tauri/crates/exchange/src/pipeline.rs b/src-tauri/crates/exchange/src/pipeline.rs
+index df855f0d..c7d88151 100644
+--- a/src-tauri/crates/exchange/src/pipeline.rs
++++ b/src-tauri/crates/exchange/src/pipeline.rs
+@@ -414,6 +414,7 @@ fn stage_error<D: Direction>(stage: ErrorStage, mut error: Error) -> Error {
+             ErrorStage::Display => "DISPLAY_FAILED",
+             ErrorStage::Rules => "RULE_FAILED",
+             ErrorStage::Encode => "ENCODE_FAILED",
++            ErrorStage::Finalize => "FINALIZE_FAILED",
+             ErrorStage::Write | ErrorStage::Flush | ErrorStage::Shutdown => "WRITE_FAILED",
+             _ => "PROCESSING_FAILED",
+         };
+diff --git a/src-tauri/crates/exchange/src/tests/pipeline.rs b/src-tauri/crates/exchange/src/tests/pipeline.rs
+index 0f9b46d4..6f6c8f26 100644
+--- a/src-tauri/crates/exchange/src/tests/pipeline.rs
++++ b/src-tauri/crates/exchange/src/tests/pipeline.rs
+@@ -65,6 +65,49 @@ impl Rules for SuffixRules {
+ 
+ struct TextEncode;
+ 
++struct FailingFinalize;
++
++#[async_trait]
++impl PrepareWrite<Http, Downstream> for FailingFinalize {
++    async fn prepare(
++        &mut self,
++        _envelope: &Envelope<Http, Downstream>,
++    ) -> Result<HttpContext, Error> {
++        Err(
++            Error::coded("FINALIZE_REJECTED", "finalized response rejected")
++                .with_stage(ErrorStage::Finalize),
++        )
++    }
++}
++
++#[tokio::test]
++async fn finalize_failure_keeps_its_stage_and_never_reaches_writer() {
++    let mut reader = QueueReader::<Http, Downstream>::contexts([HttpContext {
++        header: "HTTP/1.1 200 OK".into(),
++        body: "response".into(),
++        body_is_utf8: true,
++        wire_body: b"response".to_vec(),
++    }]);
++    let mut pipeline = Pipeline::new(
++        Box::new(HttpRead::new(
++            Box::new(TextDecode),
++            Box::new(DocumentDisplay { fail: false }),
++        )),
++        Box::new(Write::prepared(Box::new(FailingFinalize))),
++    );
++    let envelope = pipeline.read(&mut reader).await.unwrap().unwrap();
++    let recorded = Arc::new(Mutex::new(Vec::new()));
++    let mut writer = RecordingWriter::<Http, Downstream>::new(Arc::clone(&recorded));
++
++    let error = pipeline.write(&mut writer, &envelope).await.unwrap_err();
++
++    assert_eq!(error.stage, Some(ErrorStage::Finalize));
++    assert_eq!(error.direction, Some(DirectionKind::Downstream));
++    assert_eq!(error.code.as_deref(), Some("FINALIZE_REJECTED"));
++    assert_eq!(envelope.context().body, "response");
++    assert!(recorded.lock().is_empty());
++}
++
+ #[async_trait]
+ impl<D: Direction> Encode<Http, D> for TextEncode {
+     async fn encode(
+diff --git a/src-tauri/crates/infrastructure/src/adapters/in_process_wasm.rs b/src-tauri/crates/infrastructure/src/adapters/in_process_wasm.rs
+index 696a4b71..27b5ca1c 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/in_process_wasm.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/in_process_wasm.rs
+@@ -20,13 +20,26 @@ pub(crate) struct InProcessWasmRuntime {
+ struct RuntimeGeneration {
+     runtime: tokio::sync::Mutex<WasmPackageRuntime>,
+     cancelled: CancellationToken,
++    has_upstream_finalize: bool,
++    has_downstream_finalize: bool,
+ }
+ 
+ impl RuntimeGeneration {
+     fn new(runtime: WasmPackageRuntime) -> Self {
++        let has_upstream_finalize = runtime.has_http_finalize(ProtocolDirection::Upstream);
++        let has_downstream_finalize = runtime.has_http_finalize(ProtocolDirection::Downstream);
+         Self {
+             runtime: tokio::sync::Mutex::new(runtime),
+             cancelled: CancellationToken::new(),
++            has_upstream_finalize,
++            has_downstream_finalize,
++        }
++    }
++
++    fn has_http_finalize(&self, direction: ProtocolDirection) -> bool {
++        match direction {
++            ProtocolDirection::Upstream => self.has_upstream_finalize,
++            ProtocolDirection::Downstream => self.has_downstream_finalize,
+         }
+     }
+ }
+@@ -88,6 +101,32 @@ fn runtime_offline() -> PackageTransportError {
+ 
+ #[async_trait]
+ impl ProtocolPackageRuntime for InProcessWasmRuntime {
++    fn has_http_finalize(
++        &self,
++        direction: ProtocolDirection,
++    ) -> Result<bool, PackageTransportError> {
++        self.runtime
++            .lock()
++            .as_ref()
++            .map(|runtime| runtime.has_http_finalize(direction))
++            .ok_or_else(runtime_offline)
++    }
++
++    async fn finalize_http(
++        &self,
++        direction: ProtocolDirection,
++        http_json: String,
++    ) -> Result<Option<String>, PackageTransportError> {
++        let runtime = self.runtime.lock().clone().ok_or_else(runtime_offline)?;
++        tokio::select! {
++            biased;
++            () = runtime.cancelled.cancelled() => Err(runtime_offline()),
++            result = async {
++                runtime.runtime.lock().await.finalize_http(direction, &http_json).await
++            } => result.map_err(package_error),
++        }
++    }
++
+     async fn frame(
+         &self,
+         direction: ProtocolDirection,
+@@ -217,6 +256,157 @@ mod tests {
+         embed_package_manifest(&component, &manifest).unwrap()
+     }
+ 
++    fn http_finalize_component(features: &[&str]) -> Vec<u8> {
++        let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
++        let fixture =
++            repository.join("src-tauri/crates/package-runtime/tests/fixtures/http-finalize");
++        let feature_key = if features.is_empty() {
++            "none".to_owned()
++        } else {
++            features.join("-")
++        };
++        let target_dir = fixture.join("target").join(feature_key);
++        let mut command = Command::new(std::env::var_os("CARGO").unwrap_or_else(|| "cargo".into()));
++        command.args([
++            "build",
++            "--locked",
++            "--manifest-path",
++            fixture.join("Cargo.toml").to_str().unwrap(),
++            "--target",
++            "wasm32-wasip2",
++            "--target-dir",
++            target_dir.to_str().unwrap(),
++            "--no-default-features",
++        ]);
++        if !features.is_empty() {
++            command.args(["--features", &features.join(",")]);
++        }
++        let output = command.output().unwrap();
++        assert!(
++            output.status.success(),
++            "{}",
++            String::from_utf8_lossy(&output.stderr)
++        );
++        let component = std::fs::read(
++            target_dir.join("wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm"),
++        )
++        .unwrap();
++        let manifest = std::fs::read(fixture.join("manifest.json")).unwrap();
++        embed_package_manifest(&component, &manifest).unwrap()
++    }
++
++    async fn load_http_finalize_runtime(features: &[&str]) -> WasmPackageRuntime {
++        let component = read_package_component(&http_finalize_component(features)).unwrap();
++        WasmPackageRuntime::load(&component).await.unwrap()
++    }
++
++    #[tokio::test]
++    async fn finalize_capabilities_follow_the_active_runtime_generation() {
++        let runtime = InProcessWasmRuntime::new(load_http_finalize_runtime(&[]).await);
++        assert!(
++            !runtime
++                .has_http_finalize(ProtocolDirection::Upstream)
++                .unwrap()
++        );
++        assert!(
++            !runtime
++                .has_http_finalize(ProtocolDirection::Downstream)
++                .unwrap()
++        );
++        assert_eq!(
++            runtime
++                .finalize_http(ProtocolDirection::Downstream, "base".to_owned())
++                .await
++                .unwrap(),
++            None
++        );
++
++        runtime.replace(load_http_finalize_runtime(&["downstream"]).await);
++        assert!(
++            !runtime
++                .has_http_finalize(ProtocolDirection::Upstream)
++                .unwrap()
++        );
++        assert!(
++            runtime
++                .has_http_finalize(ProtocolDirection::Downstream)
++                .unwrap()
++        );
++        assert_eq!(
++            runtime
++                .finalize_http(ProtocolDirection::Downstream, "before".to_owned())
++                .await
++                .unwrap()
++                .as_deref(),
++            Some("downstream")
++        );
++
++        assert!(runtime.deactivate());
++        assert!(
++            runtime
++                .has_http_finalize(ProtocolDirection::Upstream)
++                .is_err()
++        );
++        assert!(
++            runtime
++                .has_http_finalize(ProtocolDirection::Downstream)
++                .is_err()
++        );
++    }
++
++    #[tokio::test]
++    async fn replace_cancels_an_old_call_and_publishes_new_finalize_capabilities() {
++        let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
++        let address = listener.local_addr().unwrap();
++        let (blocked, entered) = tokio::sync::oneshot::channel();
++        let peer = tokio::spawn(async move {
++            let (stream, _) = listener.accept().await.unwrap();
++            let mut websocket = tokio_tungstenite::accept_async(stream).await.unwrap();
++            websocket.next().await.unwrap().unwrap();
++            websocket.next().await.unwrap().unwrap();
++            let _ = blocked.send(());
++            std::future::pending::<()>().await;
++        });
++
++        let old_component = read_package_component(&blocking_websocket_component()).unwrap();
++        let old_runtime = WasmPackageRuntime::load(&old_component).await.unwrap();
++        let new_runtime = load_http_finalize_runtime(&["downstream"]).await;
++        let runtime = Arc::new(InProcessWasmRuntime::new(old_runtime));
++        let call_runtime = Arc::clone(&runtime);
++        let call = tokio::spawn(async move {
++            call_runtime
++                .decode_http(
++                    ProtocolDirection::Upstream,
++                    format!("websocket-roundtrip:ws://{address}"),
++                )
++                .await
++        });
++        tokio::time::timeout(Duration::from_secs(5), entered)
++            .await
++            .expect("old generation entered WebSocket receive")
++            .unwrap();
++
++        runtime.replace(new_runtime);
++        assert!(
++            !runtime
++                .has_http_finalize(ProtocolDirection::Upstream)
++                .unwrap()
++        );
++        assert!(
++            runtime
++                .has_http_finalize(ProtocolDirection::Downstream)
++                .unwrap()
++        );
++        assert!(
++            tokio::time::timeout(Duration::from_millis(100), call)
++                .await
++                .expect("old generation call must be cancelled")
++                .unwrap()
++                .is_err()
++        );
++        peer.abort();
++    }
++
+     #[tokio::test]
+     async fn deactivate_does_not_wait_for_a_guest_blocked_in_websocket_receive() {
+         let listener = tokio::net::TcpListener::bind("127.0.0.1:0").await.unwrap();
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs
+index ea310d29..365da359 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime.rs
+@@ -43,6 +43,7 @@ use crate::SqliteStore;
+ use super::common::{app_error, encode_workspace_record};
+ use super::{ManagedListenerCertificateAdapter, ProtectedSecretAdapter};
+ 
++mod http_finalize;
+ mod joint_document;
+ mod package_error;
+ pub(super) use joint_document::JointDocumentEvaluation;
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs
+index 5fbbe8c7..f1eea9bb 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/external_relay/capabilities.rs
+@@ -238,6 +238,7 @@ fn rpc_error(
+                 ExternalPackageCallStage::Decode => ExchangeExternalPackageCallStage::Decode,
+                 ExternalPackageCallStage::Display => ExchangeExternalPackageCallStage::Display,
+                 ExternalPackageCallStage::Encode => ExchangeExternalPackageCallStage::Encode,
++                ExternalPackageCallStage::Finalize => ExchangeExternalPackageCallStage::Finalize,
+             },
+             method: diagnostic.method,
+             request_id: diagnostic.request_id,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs
+index 017ea432..0dd8eb3b 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/external_http.rs
+@@ -8,7 +8,7 @@ use intercept_proxy_exchange::{
+ };
+ use intercept_proxy_product_api::BodyCodec;
+ use intercept_proxy_runtime::{
+-    ConnectionContext, FaultAction, HttpDirectionCapabilities, HttpMessagePrepare,
++    ConnectionContext, FaultAction, Finalize, HttpDirectionCapabilities, HttpMessagePrepare,
+     HttpRequestMetadata, Message, PipelinePorts,
+ };
+ use parking_lot::Mutex;
+@@ -16,6 +16,7 @@ use parking_lot::Mutex;
+ use crate::adapters::{ProtocolPackageRuntime, body_codecs::resolve_message_codec};
+ 
+ use super::super::external_relay::RuntimeExternalSocketPackageBinding;
++use super::super::http_finalize::{ExternalHttpFinalizeCall, local_finalize_error};
+ use super::super::package_error::external_rpc_error;
+ use super::{HttpDocumentRulePrograms, JointDocumentEvaluation};
+ 
+@@ -93,6 +94,13 @@ pub(super) fn build_capabilities<D: Direction>(
+             package.clone(),
+         )),
+         Box::new(ExternalHttpPrepare::<D> {
++            package_runtime: Arc::clone(&runtime_handle),
++            direction,
++            observed: Arc::clone(&observed),
++            package: package.clone(),
++            marker: PhantomData,
++        }),
++        Box::new(ExternalHttpFinalize::<D> {
+             package_runtime: runtime_handle,
+             direction,
+             observed,
+@@ -261,3 +269,57 @@ impl<D: Direction> HttpMessagePrepare<D> for ExternalHttpPrepare<D> {
+         .await
+     }
+ }
++
++struct ExternalHttpFinalize<D: Direction> {
++    package_runtime: Arc<dyn ProtocolPackageRuntime>,
++    direction: ProtocolDirection,
++    observed: Arc<Mutex<Option<ExternalHttpObserved>>>,
++    package: intercept_proxy_domain::ProtocolPackageRef,
++    marker: PhantomData<fn() -> D>,
++}
++
++#[async_trait]
++impl<D: Direction> Finalize for ExternalHttpFinalize<D> {
++    async fn finalize(
++        &mut self,
++        request: &HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), Error> {
++        let observed = self
++            .observed
++            .lock()
++            .take()
++            .ok_or_else(|| {
++                Error::coded(
++                    "HTTP_PROTOCOL_CONTEXT_MISSING",
++                    "Document 缺少对应 HTTP 上下文",
++                )
++            })
++            .map_err(|error| {
++                local_finalize_error(
++                    &self.package,
++                    self.direction,
++                    finalize_method(self.direction),
++                    error,
++                )
++                .at(intercept_proxy_exchange::ErrorStage::Finalize, D::KIND)
++            })?;
++        let mut finalize = ExternalHttpFinalizeCall::new(
++            Arc::clone(&self.package_runtime),
++            self.package.clone(),
++            self.direction,
++            observed.codec,
++        );
++        finalize
++            .finalize(request, message)
++            .await
++            .map_err(|error| error.at(intercept_proxy_exchange::ErrorStage::Finalize, D::KIND))
++    }
++}
++
++fn finalize_method(direction: ProtocolDirection) -> &'static str {
++    match direction {
++        ProtocolDirection::Upstream => "upstream-finalize",
++        ProtocolDirection::Downstream => "downstream-finalize",
++    }
++}
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs
+index ad2e5918..d4c232ff 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_protocol_pipeline/plain_json.rs
+@@ -35,6 +35,7 @@ pub(super) fn build_capabilities<D: Direction>(
+             observed,
+             marker: PhantomData,
+         }),
++        Box::new(intercept_proxy_runtime::NoopHttpFinalize),
+     )
+ }
+ 
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs
+index 0f73d57e..8f5060ce 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/joint_document.rs
+@@ -11,12 +11,13 @@ use intercept_proxy_exchange::{
+ };
+ use intercept_proxy_product_api::BodyCodec;
+ use intercept_proxy_runtime::{
+-    HttpJointEvaluation, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
++    Finalize, HttpJointEvaluation, JointRuleConditionEvaluation, Message, SocketJointEvaluation,
+ };
+ use uuid::Uuid;
+ 
+ use crate::adapters::ProtocolPackageRuntime;
+ 
++use super::http_finalize::ExternalHttpFinalizeCall;
+ use super::package_error::external_rpc_error;
+ 
+ pub(crate) struct JointDocumentEvaluation {
+@@ -38,6 +39,7 @@ enum JointDocumentEncoder {
+         direction: ProtocolDirection,
+         codec: Arc<dyn BodyCodec>,
+         package: ProtocolPackageRef,
++        finalizer: ExternalHttpFinalizeCall,
+     },
+     SocketExternal {
+         original_input: Vec<u8>,
+@@ -86,6 +88,12 @@ impl JointDocumentEvaluation {
+         programs: impl IntoIterator<Item = Arc<UnifiedRuleProgram>>,
+     ) -> Self {
+         let programs = program_index(programs);
++        let finalizer = ExternalHttpFinalizeCall::new(
++            Arc::clone(&runtime),
++            package.clone(),
++            direction,
++            Arc::clone(&codec),
++        );
+         Self {
+             document,
+             original_document,
+@@ -95,6 +103,7 @@ impl JointDocumentEvaluation {
+                 direction,
+                 codec,
+                 package,
++                finalizer,
+             },
+             programs,
+             changes: RuleProcessingAccumulator::default(),
+@@ -201,14 +210,14 @@ impl JointDocumentEvaluation {
+         ))
+     }
+ 
+-    pub(crate) async fn encode_into(self, message: &mut Message) -> Result<(), Error> {
++    pub(crate) async fn encode_into(&mut self, message: &mut Message) -> Result<(), Error> {
+         let direction = match &self.encoder {
+             JointDocumentEncoder::PlainJson { direction }
+             | JointDocumentEncoder::External { direction, .. }
+             | JointDocumentEncoder::SocketExternal { direction, .. } => *direction,
+         };
+         rules_processed(direction, &self.changes, &self.document);
+-        let written = match self.encoder {
++        let written = match &self.encoder {
+             JointDocumentEncoder::PlainJson { .. } => {
+                 if self.document == self.original_document {
+                     return Ok(());
+@@ -224,17 +233,18 @@ impl JointDocumentEvaluation {
+                 direction,
+                 codec,
+                 package,
++                ..
+             } => {
+                 if self.document == self.original_document {
+                     return Ok(());
+                 }
+                 let encoded = runtime
+-                    .encode_http(direction, original_input, self.document)
++                    .encode_http(*direction, original_input.clone(), self.document.clone())
+                     .await
+                     .map_err(|error| {
+                         external_rpc_error(
+-                            package,
+-                            direction,
++                            package.clone(),
++                            *direction,
+                             ExternalPackageCallStage::Encode,
+                             "hooks.encode",
+                             &error,
+@@ -255,6 +265,23 @@ impl JointDocumentEvaluation {
+         Ok(())
+     }
+ 
++    async fn finalize_into(
++        &mut self,
++        request: &intercept_proxy_runtime::HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), Error> {
++        match &mut self.encoder {
++            JointDocumentEncoder::PlainJson { .. } => Ok(()),
++            JointDocumentEncoder::External { finalizer, .. } => {
++                finalizer.finalize(request, message).await
++            }
++            JointDocumentEncoder::SocketExternal { .. } => Err(Error::coded(
++                "SOCKET_JOINT_OUTPUT_MISMATCH",
++                "Socket evaluation reached HTTP Finalize",
++            )),
++        }
++    }
++
+     async fn encode_socket(self) -> Result<SocketContext, Error> {
+         let direction = match &self.encoder {
+             JointDocumentEncoder::PlainJson { direction }
+@@ -310,8 +337,19 @@ impl HttpJointEvaluation for JointDocumentEvaluation {
+         self.gate_http(RuleId::from_uuid(rule_id), context, message, apply_action)
+     }
+ 
+-    async fn encode(self: Box<Self>, message: &mut Message) -> Result<(), Error> {
+-        (*self).encode_into(message).await
++    async fn encode(&mut self, message: &mut Message) -> Result<(), Error> {
++        self.encode_into(message).await
++    }
++}
++
++#[async_trait]
++impl Finalize for JointDocumentEvaluation {
++    async fn finalize(
++        &mut self,
++        request: &intercept_proxy_runtime::HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), Error> {
++        self.finalize_into(request, message).await
+     }
+ }
+ 
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs
+index 6ee1c241..f79af037 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/socket_diagnostics/mapping.rs
+@@ -22,6 +22,7 @@ pub(super) fn external_package_call_view(
+             ExchangeExternalPackageCallStage::Decode => ExternalPackageCallStage::Decode,
+             ExchangeExternalPackageCallStage::Display => ExternalPackageCallStage::Display,
+             ExchangeExternalPackageCallStage::Encode => ExternalPackageCallStage::Encode,
++            ExchangeExternalPackageCallStage::Finalize => ExternalPackageCallStage::Finalize,
+         },
+         method: call.method.clone(),
+         request_id: call.request_id.clone(),
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
+index 7f11d814..362e7a13 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline.rs
+@@ -107,6 +107,8 @@ mod local_http_response;
+ mod plain_json_rules;
+ #[path = "phase10_http_pipeline/production_shape.rs"]
+ mod production_shape;
++#[path = "phase10_http_pipeline/real_wasm_finalize_wire.rs"]
++mod real_wasm_finalize_wire;
+ #[path = "phase10_http_pipeline/request_metadata.rs"]
+ mod request_metadata;
+ #[path = "phase10_http_pipeline/unified_working_exchange.rs"]
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs
+index f7ba4fb1..484dcb0a 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/production_shape.rs
+@@ -4,6 +4,7 @@ pub(super) fn http_request_metadata() -> intercept_proxy_runtime::http::HttpRequ
+     intercept_proxy_runtime::http::HttpRequestMetadata {
+         method: "POST".into(),
+         request_target: "/phase10".into(),
++        url: "/phase10".into(),
+     }
+ }
+ 
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs
+index b7e4abc6..0f677544 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime.rs
+@@ -86,6 +86,7 @@ impl RuleRuntimeService {
+             stage,
+             method: Some(request.method.clone()),
+             request_target: Some(request.request_target.clone()),
++            request: Some(request.clone()),
+             joint_document,
+             socket_joint: None,
+             message: message.cloned(),
+@@ -106,6 +107,7 @@ impl RuleRuntimeService {
+                 stage,
+                 method: None,
+                 request_target: None,
++                request: None,
+                 joint_document: None,
+                 socket_joint: Some(joint),
+                 message: None,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs
+index 96cf7e48..9a1c7e82 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/rule_runtime/actor.rs
+@@ -31,6 +31,7 @@ pub(super) struct EvaluationInput {
+     pub(super) stage: MessageStage,
+     pub(super) method: Option<String>,
+     pub(super) request_target: Option<String>,
++    pub(super) request: Option<intercept_proxy_runtime::HttpRequestMetadata>,
+     pub(super) joint_document: Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
+     pub(super) socket_joint: Option<Box<dyn SocketJointEvaluation>>,
+     pub(super) message: Option<intercept_proxy_runtime::Message>,
+@@ -155,7 +156,7 @@ async fn evaluate_owned(
+         input.body_codec.as_deref(),
+     )?;
+     let hit_rules = matched_rule_summaries(&evaluation, &current.snapshot.rules, channel_labels);
+-    let (prepared_message, prepared_socket, fault_actions) =
++    let (prepared_message, prepared_socket, fault_actions, joint_transaction) =
+         match prepare_evaluated_message(input, &evaluation, &hit_rules).await {
+             Ok(prepared) => prepared,
+             Err(error) => {
+@@ -191,6 +192,7 @@ async fn evaluate_owned(
+             }
+         }
+     }
++    drop(joint_transaction);
+     let traces = rule_trace_text(&evaluation);
+     let matched_ids = evaluation
+         .traces
+@@ -216,6 +218,7 @@ async fn prepare_evaluated_message(
+     Option<intercept_proxy_runtime::Message>,
+     Option<SocketContext>,
+     Vec<intercept_proxy_runtime::FaultAction>,
++    Option<Box<dyn intercept_proxy_runtime::HttpJointEvaluation>>,
+ )> {
+     let mut prepared_message = input.message.clone();
+     let Some(message) = prepared_message.as_mut() else {
+@@ -226,9 +229,10 @@ async fn prepare_evaluated_message(
+             })?),
+             None => None,
+         };
+-        return Ok((prepared_message, prepared_socket, Vec::new()));
++        return Ok((prepared_message, prepared_socket, Vec::new(), None));
+     };
+-    if let Some(joint) = input.joint_document.take() {
++    let mut joint = input.joint_document.take();
++    if let Some(joint) = joint.as_mut() {
+         joint.encode(message).await.map_err(|error| {
+             let message = format!("联合 Document Encode 失败：{}", error.message);
+             joint_encode_error(error, input.stage, message)
+@@ -249,7 +253,17 @@ async fn prepare_evaluated_message(
+         &evaluation.composed_actions,
+         seed,
+     )?;
+-    Ok((prepared_message, None, fault_actions))
++    if let Some(joint) = joint.as_mut() {
++        let request = input
++            .request
++            .as_ref()
++            .expect("HTTP joint message policy input always includes associated request metadata");
++        joint.finalize(request, message).await.map_err(|error| {
++            let message = format!("联合 HTTP Finalize 失败：{}", error.message);
++            joint_finalize_error(error, input.stage, message)
++        })?;
++    }
++    Ok((prepared_message, None, fault_actions, joint))
+ }
+ 
+ fn joint_encode_error(
+@@ -275,6 +289,29 @@ fn joint_encode_error(
+     )
+ }
+ 
++fn joint_finalize_error(
++    error: intercept_proxy_exchange::Error,
++    stage: intercept_proxy_domain::MessageStage,
++    message: String,
++) -> intercept_proxy_runtime::ProxyError {
++    let direction = match stage {
++        intercept_proxy_domain::MessageStage::Request => {
++            intercept_proxy_exchange::DirectionKind::Upstream
++        }
++        intercept_proxy_domain::MessageStage::Response => {
++            intercept_proxy_exchange::DirectionKind::Downstream
++        }
++        intercept_proxy_domain::MessageStage::TlsHandshake => {
++            unreachable!("HTTP Finalize cannot run during TLS handshake")
++        }
++    };
++    intercept_proxy_runtime::ProxyError::from_exchange_error(
++        intercept_proxy_runtime::ErrorCode::ExternalPackageCallFailed,
++        message,
++        error.at(intercept_proxy_exchange::ErrorStage::Finalize, direction),
++    )
++}
++
+ async fn prepare_runtime(
+     runtime: &mut Option<RuleRuntime>,
+     input: &EvaluationInput,
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests.rs
+index 02fea5cb..f213af07 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests.rs
+@@ -2,5 +2,6 @@ include!("tests/support.rs");
+ include!("tests/runtime_support.rs");
+ include!("tests/runtime_cancellation.rs");
+ include!("tests/socket_joint_transaction.rs");
++include!("tests/http_finalize_transaction.rs");
+ include!("tests/session_runtime.rs");
+ include!("tests/body_codec_persistence.rs");
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs
+index e8cac141..f1f701d2 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/socket_joint_transaction.rs
+@@ -2,6 +2,7 @@
+ struct SocketTransactionRules {
+     snapshot: Mutex<RuleRuntimeSnapshot>,
+     commit_attempts: AtomicUsize,
++    commit_guard: Option<Arc<std::sync::atomic::AtomicBool>>,
+ }
+ 
+ #[async_trait]
+@@ -15,6 +16,12 @@ impl RuntimeRuleRepository for SocketTransactionRules {
+         snapshot: &RuleRuntimeSnapshot,
+         deltas: &[RuleLifecycleDelta],
+     ) -> AppResult<u64> {
++        if let Some(guard) = &self.commit_guard {
++            assert!(
++                guard.load(std::sync::atomic::Ordering::Acquire),
++                "HTTP joint transaction must remain alive through lifecycle commit"
++            );
++        }
+         self.commit_attempts.fetch_add(1, AtomicOrdering::AcqRel);
+         let mut current = self.snapshot.lock();
+         let revision = current.collection_revision + 1;
+@@ -141,6 +148,7 @@ async fn socket_encode_failure_rolls_back_lifecycle_before_successful_commit() {
+     let rules = Arc::new(SocketTransactionRules {
+         snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![rule])),
+         commit_attempts: AtomicUsize::new(0),
++        commit_guard: None,
+     });
+     let pipeline = RuntimePipelineAdapter::new(
+         test_product_hooks(),
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/support.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/support.rs
+index 5c485bcf..5ef2fd02 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/support.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/support.rs
+@@ -52,6 +52,7 @@ fn request_metadata() -> &'static HttpRequestMetadata {
+     static METADATA: LazyLock<HttpRequestMetadata> = LazyLock::new(|| HttpRequestMetadata {
+         method: "POST".into(),
+         request_target: "/payment".into(),
++        url: "/payment".into(),
+     });
+     &METADATA
+ }
+diff --git a/src-tauri/crates/infrastructure/src/adapters/protocol_package_runtime.rs b/src-tauri/crates/infrastructure/src/adapters/protocol_package_runtime.rs
+index 771fffee..4c1921b9 100644
+--- a/src-tauri/crates/infrastructure/src/adapters/protocol_package_runtime.rs
++++ b/src-tauri/crates/infrastructure/src/adapters/protocol_package_runtime.rs
+@@ -16,6 +16,21 @@ use super::{PackageTransportClient, PackageTransportError};
+ 
+ #[async_trait]
+ pub(crate) trait ProtocolPackageRuntime: fmt::Debug + Send + Sync {
++    fn has_http_finalize(
++        &self,
++        _direction: ProtocolDirection,
++    ) -> Result<bool, PackageTransportError> {
++        Ok(false)
++    }
++
++    async fn finalize_http(
++        &self,
++        _direction: ProtocolDirection,
++        _http_json: String,
++    ) -> Result<Option<String>, PackageTransportError> {
++        Ok(None)
++    }
++
+     async fn frame(
+         &self,
+         _direction: ProtocolDirection,
+diff --git a/src-tauri/crates/infrastructure/src/sqlite/tests/mod.rs b/src-tauri/crates/infrastructure/src/sqlite/tests/mod.rs
+index 778f08ca..d9694620 100644
+--- a/src-tauri/crates/infrastructure/src/sqlite/tests/mod.rs
++++ b/src-tauri/crates/infrastructure/src/sqlite/tests/mod.rs
+@@ -8,6 +8,7 @@ mod environment_configuration_baseline_observer;
+ mod environment_configuration_commit;
+ mod environment_configuration_material_arena;
+ mod external_packages;
++mod http_finalize_compatibility;
+ mod phase14_schema100;
+ /// SECURITY-001, SECURITY-002, SECURITY-003: HTTP 与 Socket 运行时报文均为内存数据。
+ mod workspace_and_settings;
+diff --git a/src-tauri/crates/package-runtime/src/wasm_component.rs b/src-tauri/crates/package-runtime/src/wasm_component.rs
+index d421178f..f652f702 100644
+--- a/src-tauri/crates/package-runtime/src/wasm_component.rs
++++ b/src-tauri/crates/package-runtime/src/wasm_component.rs
+@@ -35,8 +35,10 @@ mod socket_bindings {
+     });
+ }
+ 
++mod finalize;
+ mod host;
+ 
++use finalize::{HttpFinalizeExports, OptionalHttpFinalizeIndices};
+ pub use host::HostWebSocket;
+ use host::{HostState, host_state};
+ 
+@@ -54,6 +56,7 @@ enum PackageInstance {
+     Http {
+         store: Store<HostState>,
+         bindings: http_bindings::HttpPackage,
++        finalize: HttpFinalizeExports,
+     },
+     Socket {
+         store: Store<HostState>,
+@@ -132,14 +135,27 @@ impl WasmPackageRuntime {
+         }
+         let mut store = Store::new(&engine, host_state()?);
+         let instance = match package.manifest().kind() {
+-            PackageKind::Http => PackageInstance::Http {
+-                bindings: http_bindings::HttpPackage::instantiate_async(
+-                    &mut store, &component, &linker,
+-                )
+-                .await
+-                .map_err(|error| invalid_component(error.to_string()))?,
+-                store,
+-            },
++            PackageKind::Http => {
++                let instance_pre = linker
++                    .instantiate_pre(&component)
++                    .map_err(|error| invalid_component(error.to_string()))?;
++                let finalize = OptionalHttpFinalizeIndices::new(&component)?;
++                let bindings = http_bindings::HttpPackageIndices::new(&instance_pre)
++                    .map_err(|error| invalid_component(error.to_string()))?;
++                let instance = instance_pre
++                    .instantiate_async(&mut store)
++                    .await
++                    .map_err(|error| invalid_component(error.to_string()))?;
++                let bindings = bindings
++                    .load(&mut store, &instance)
++                    .map_err(|error| invalid_component(error.to_string()))?;
++                let finalize = finalize.load(&mut store, &instance)?;
++                PackageInstance::Http {
++                    store,
++                    bindings,
++                    finalize,
++                }
++            }
+             PackageKind::Socket => PackageInstance::Socket {
+                 bindings: socket_bindings::SocketPackage::instantiate_async(
+                     &mut store, &component, &linker,
+@@ -198,7 +214,10 @@ impl WasmPackageRuntime {
+         direction: ProtocolDirection,
+         input: &str,
+     ) -> Result<Document, DomainError> {
+-        let PackageInstance::Http { store, bindings } = &mut self.instance else {
++        let PackageInstance::Http {
++            store, bindings, ..
++        } = &mut self.instance
++        else {
+             return Err(invalid_component(
+                 "Socket protocol packages do not export HTTP decode hooks",
+             ));
+@@ -240,7 +259,10 @@ impl WasmPackageRuntime {
+         document: &Document,
+     ) -> Result<String, DomainError> {
+         let document_json = document_json(document)?;
+-        let PackageInstance::Http { store, bindings } = &mut self.instance else {
++        let PackageInstance::Http {
++            store, bindings, ..
++        } = &mut self.instance
++        else {
+             return Err(invalid_component(
+                 "Socket protocol packages do not export HTTP encode hooks",
+             ));
+@@ -298,7 +320,9 @@ impl WasmPackageRuntime {
+     ) -> Result<String, DomainError> {
+         let document_json = document_json(document)?;
+         match &mut self.instance {
+-            PackageInstance::Http { store, bindings } => match direction {
++            PackageInstance::Http {
++                store, bindings, ..
++            } => match direction {
+                 ProtocolDirection::Upstream => {
+                     bindings.call_upstream_display(store, &document_json).await
+                 }
+diff --git a/src-tauri/crates/package-runtime/wit/protocol-package.wit b/src-tauri/crates/package-runtime/wit/protocol-package.wit
+index 1454f31b..ce67fdb7 100644
+--- a/src-tauri/crates/package-runtime/wit/protocol-package.wit
++++ b/src-tauri/crates/package-runtime/wit/protocol-package.wit
+@@ -40,6 +40,25 @@ world http-package {
+   export downstream-display: func(document-json: string) -> result<string, package-error>;
+ }
+ 
++world http-package-upstream-finalize {
++  include http-package;
++  use types.{package-error as finalize-package-error};
++  export upstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
++}
++
++world http-package-downstream-finalize {
++  include http-package;
++  use types.{package-error as finalize-package-error};
++  export downstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
++}
++
++world http-package-finalize {
++  include http-package;
++  use types.{package-error as finalize-package-error};
++  export upstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
++  export downstream-finalize: func(http-json: string) -> result<string, finalize-package-error>;
++}
++
+ world socket-package {
+   use types.{frame-result, package-error};
+   import websocket;
+diff --git a/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs b/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs
+index 7f3e210c..fef40f9f 100644
+--- a/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs
++++ b/src-tauri/crates/proxy/src/forward/tests/capability_sequence.rs
+@@ -36,6 +36,7 @@ impl SequencedHttpCapabilities {
+                 events: Arc::clone(&self.events),
+                 event: events[2],
+             }),
++            capabilities.finalize,
+         )
+     }
+ }
+diff --git a/src-tauri/crates/proxy/src/http.rs b/src-tauri/crates/proxy/src/http.rs
+index 3bc7bee1..f3b9170c 100644
+--- a/src-tauri/crates/proxy/src/http.rs
++++ b/src-tauri/crates/proxy/src/http.rs
+@@ -48,6 +48,8 @@ mod capabilities;
+ mod contracts;
+ mod egress;
+ mod exchange;
++mod finalize;
++mod joint;
+ pub(crate) use egress::{Http1TransportSettings, send_http1_exchange};
+ mod exchange_runtime;
+ pub(crate) use exchange_runtime::{
+@@ -83,6 +85,8 @@ pub use contracts::{
+     ForwardRequest, HttpRequestMetadata, NoopPipelinePorts, PipelinePorts, UpstreamConnector,
+     UpstreamExchange,
+ };
++pub use finalize::{Finalize, NoopHttpFinalize};
++pub use joint::HttpJointEvaluation;
+ pub use local_server::{LocalHttpServerConfig, LocalHttpServerService};
+ pub use service::{ConnectionAdmission, ConnectionService};
+ pub use stream_io::InformationalResponseSink;
+diff --git a/src-tauri/crates/proxy/src/http/capabilities.rs b/src-tauri/crates/proxy/src/http/capabilities.rs
+index 35e893ad..fb756a92 100644
+--- a/src-tauri/crates/proxy/src/http/capabilities.rs
++++ b/src-tauri/crates/proxy/src/http/capabilities.rs
+@@ -14,7 +14,10 @@ use intercept_proxy_exchange::{
+ };
+ use uuid::Uuid;
+ 
+-use super::{FaultAction, HttpRequestMetadata, Message, PipelinePorts, ProxyError};
++use super::{
++    FaultAction, Finalize, HttpRequestMetadata, Message, NoopHttpFinalize, PipelinePorts,
++    ProxyError,
++};
+ use crate::transport::ConnectionContext;
+ 
+ const HEADER_FIELD: &str = "header";
+@@ -63,6 +66,7 @@ pub struct HttpDirectionCapabilities<D: Direction> {
+     pub decode: Box<dyn Decode<Http, D>>,
+     pub display: Box<dyn Display>,
+     pub prepare: Box<dyn HttpMessagePrepare<D>>,
++    pub finalize: Box<dyn Finalize>,
+ }
+ 
+ impl<D: Direction> Debug for HttpDirectionCapabilities<D> {
+@@ -87,6 +91,7 @@ impl<D: Direction> HttpDirectionCapabilities<D> {
+             Box::new(SequentialHttpMessagePrepare::<D> {
+                 prepare: SequentialPrepare::new(rules, encode),
+             }),
++            Box::new(NoopHttpFinalize),
+         )
+     }
+ 
+@@ -94,11 +99,13 @@ impl<D: Direction> HttpDirectionCapabilities<D> {
+         decode: Box<dyn Decode<Http, D>>,
+         display: Box<dyn Display>,
+         prepare: Box<dyn HttpMessagePrepare<D>>,
++        finalize: Box<dyn Finalize>,
+     ) -> Self {
+         Self {
+             decode,
+             display,
+             prepare,
++            finalize,
+         }
+     }
+ }
+@@ -463,6 +470,7 @@ mod tests {
+                 &crate::HttpRequestMetadata {
+                     method: "POST".into(),
+                     request_target: "/".into(),
++                    url: "/".into(),
+                 },
+                 &mut message,
+                 &original,
+diff --git a/src-tauri/crates/proxy/src/http/contracts.rs b/src-tauri/crates/proxy/src/http/contracts.rs
+index d9b4b718..641e27e5 100644
+--- a/src-tauri/crates/proxy/src/http/contracts.rs
++++ b/src-tauri/crates/proxy/src/http/contracts.rs
+@@ -102,6 +102,10 @@ pub trait PipelinePorts: HandshakePolicy {
+ pub struct HttpRequestMetadata {
+     pub method: String,
+     pub request_target: String,
++    /// Request target exactly as observed on the App-facing start-line.
++    /// It can be absolute-form or origin-form; the proxy does not invent an
++    /// origin when the App supplied only a relative target.
++    pub url: String,
+ }
+ 
+ impl HttpRequestMetadata {
+@@ -115,6 +119,7 @@ impl HttpRequestMetadata {
+         Ok(Self {
+             method: method.as_str().to_owned(),
+             request_target: request_target.as_str().to_owned(),
++            url: uri.to_string(),
+         })
+     }
+ }
+diff --git a/src-tauri/crates/proxy/src/http/exchange_runtime.rs b/src-tauri/crates/proxy/src/http/exchange_runtime.rs
+index 00d524ab..9e3ceb42 100644
+--- a/src-tauri/crates/proxy/src/http/exchange_runtime.rs
++++ b/src-tauri/crates/proxy/src/http/exchange_runtime.rs
+@@ -18,17 +18,19 @@ use tokio_util::sync::CancellationToken;
+ use tracing::Instrument;
+ 
+ use super::{
+-    Clock, ConnectionContext, ErrorCode, FaultAction, ForwardRequest, HttpConnectionIdentity,
+-    HttpDirectionCapabilities, HttpMessagePrepare, HttpProtocolCapabilityFactory,
+-    InformationalResponseSink, Message, PipelinePorts, ProxyError, ResponseDisposition, Result,
+-    UpstreamConnector,
++    Clock, ConnectionContext, ErrorCode, FaultAction, Finalize, ForwardRequest,
++    HttpConnectionIdentity, HttpDirectionCapabilities, HttpMessagePrepare,
++    HttpProtocolCapabilityFactory, InformationalResponseSink, Message, PipelinePorts, ProxyError,
++    ResponseDisposition, Result, UpstreamConnector,
+ };
+ use crate::listener::{ChildTaskError, ConnectionTaskScope};
+ 
+ mod endpoints;
++mod request_target;
+ 
+ pub(crate) use endpoints::LocalHttpServerConnector;
+ use endpoints::{BufferedApp, BufferedHttpServer};
++use request_target::finalized_upstream_uri;
+ 
+ /// Exchange 完成后交回 HTTP wire 层的结果。
+ pub(crate) struct HttpExchangeOutput {
+@@ -67,6 +69,7 @@ pub(super) struct HttpExchangeState {
+ struct HttpTransaction {
+     method: Method,
+     uri: Uri,
++    app_request_url: String,
+     request: Option<Message>,
+     response: Option<Message>,
+     request_actions: Option<Vec<FaultAction>>,
+@@ -93,15 +96,29 @@ impl HttpExchangeState {
+         }
+     }
+ 
+-    fn begin(&mut self, command: HttpExchangeCommand) {
++    fn begin(&mut self, command: HttpExchangeCommand) -> Result<()> {
+         debug_assert!(
+             self.current.is_none(),
+             "HTTP transactions are strictly paired"
+         );
+         let close_requested = requests_connection_close(&command.request.message);
++        let app_request_url = command
++            .request
++            .message
++            .start_line
++            .split_ascii_whitespace()
++            .nth(1)
++            .map(str::to_owned)
++            .ok_or_else(|| {
++                ProxyError::new(
++                    ErrorCode::Internal,
++                    "HTTP request start-line has no request target",
++                )
++            })?;
+         self.current = Some(HttpTransaction {
+             method: command.request.method,
+             uri: command.request.uri,
++            app_request_url,
+             request: Some(command.request.message),
+             response: None,
+             request_actions: None,
+@@ -113,6 +130,7 @@ impl HttpExchangeState {
+             drop_response_after_read: false,
+             completed: Some(command.completed),
+         });
++        Ok(())
+     }
+ 
+     fn complete(&mut self) -> Option<oneshot::Receiver<Result<()>>> {
+@@ -315,6 +333,7 @@ fn pipeline<D: intercept_proxy_exchange::Direction>(
+         Box::new(Write::prepared(Box::new(BufferedHttpPrepare {
+             state,
+             prepare: capabilities.prepare,
++            finalize: capabilities.finalize,
+         }))),
+     )
+ }
+@@ -322,6 +341,7 @@ fn pipeline<D: intercept_proxy_exchange::Direction>(
+ struct BufferedHttpPrepare<D: Direction> {
+     state: Arc<Mutex<HttpExchangeState>>,
+     prepare: Box<dyn HttpMessagePrepare<D>>,
++    finalize: Box<dyn Finalize>,
+ }
+ 
+ #[async_trait::async_trait]
+@@ -338,7 +358,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
+             let transaction = state.current.as_ref().ok_or_else(|| {
+                 ExchangeError::coded("HTTP_TRANSACTION_MISSING", "HTTP transaction missing")
+             })?;
+-            let request = super::HttpRequestMetadata::from_method_and_uri(
++            let mut request = super::HttpRequestMetadata::from_method_and_uri(
+                 &transaction.method,
+                 &transaction.uri,
+             )
+@@ -353,6 +373,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
+                     "HTTP transaction message missing before write preparation",
+                 )
+             })?;
++            request.url.clone_from(&transaction.app_request_url);
+             (
+                 state.context.clone(),
+                 Arc::clone(&state.ports),
+@@ -362,6 +383,10 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
+             )
+         };
+         let actions = if D::KIND == DirectionKind::Downstream && mocked {
++            self.finalize
++                .finalize(&request, &mut message)
++                .await
++                .map_err(|error| error.at(ErrorStage::Finalize, D::KIND))?;
+             Vec::new()
+         } else {
+             self.prepare
+@@ -385,6 +410,7 @@ impl<D: Direction> PrepareWrite<Http, D> for BufferedHttpPrepare<D> {
+         })?;
+         match D::KIND {
+             DirectionKind::Upstream => {
++                transaction.uri = finalized_upstream_uri(&transaction.uri, &request, &message)?;
+                 transaction.request = Some(message);
+                 transaction.request_actions = Some(actions);
+             }
+diff --git a/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs b/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs
+index 9639d64c..96b591f1 100644
+--- a/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs
++++ b/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/app.rs
+@@ -75,7 +75,8 @@ impl Reader<Http, Upstream> for BufferedAppReader {
+         self.state
+             .lock()
+             .expect("HTTP Exchange state mutex poisoned")
+-            .begin(command);
++            .begin(command)
++            .map_err(proxy_write_error)?;
+         let state = self
+             .state
+             .lock()
+diff --git a/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs b/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs
+index 04845a03..6c64df4d 100644
+--- a/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs
++++ b/src-tauri/crates/proxy/src/http/exchange_runtime/endpoints/tests.rs
+@@ -182,7 +182,8 @@ async fn response_reader_preserves_original_and_writer_reports_effective_wire_me
+     state
+         .lock()
+         .expect("HTTP Exchange state mutex poisoned")
+-        .begin(command("server:80", request("request"), completed));
++        .begin(command("server:80", request("request"), completed))
++        .unwrap();
+     state
+         .lock()
+         .expect("HTTP Exchange state mutex poisoned")
+@@ -314,7 +315,8 @@ fn prepared_request_state(policy: Arc<RecordingWirePolicy>) -> Arc<Mutex<HttpExc
+     state
+         .lock()
+         .unwrap()
+-        .begin(command("server:80", request("prepared-request"), completed));
++        .begin(command("server:80", request("prepared-request"), completed))
++        .unwrap();
+     state
+         .lock()
+         .unwrap()
+diff --git a/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs b/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs
+index 7c838c3c..73bf7309 100644
+--- a/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs
++++ b/src-tauri/crates/proxy/src/http/exchange_runtime/tests.rs
+@@ -1,10 +1,28 @@
++use std::sync::{
++    Arc,
++    atomic::{AtomicUsize, Ordering},
++};
++
++use async_trait::async_trait;
++use bytes::Bytes;
++use http::{HeaderMap, StatusCode};
+ use intercept_proxy_exchange::{
+-    Error, ExternalPackageCallFailure, ExternalPackageCallStage, ProtocolDirection,
+-    ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
++    DirectionKind, Document, Downstream, Error, ErrorStage, ExternalPackageCallFailure,
++    ExternalPackageCallStage, HttpContext, ProtocolDirection, ProtocolPackageId,
++    ProtocolPackageRef, ProtocolPackageVersion, Upstream,
+ };
++use tokio_util::sync::CancellationToken;
+ 
+-use super::exchange_error;
+-use crate::ErrorCode;
++use super::{exchange_error, finalized_upstream_uri};
++use crate::http::{
++    ChannelId, Clock, ConnectionContext, FaultAction, Finalize, ForwardRequest, HandshakePolicy,
++    HttpConnectionIdentity, HttpDirectionCapabilities, HttpExchangeRequest, HttpExchangeRuntime,
++    HttpMessagePrepare, HttpObservationMetadata, HttpProtocolCapabilityFactory,
++    InformationalResponseSink, PipelinePorts, PlainHttpCapabilityFactory, SystemClock,
++    UpstreamConnector, UpstreamExchange, UpstreamWriteReceipt,
++};
++use crate::listener::ConnectionTaskScope;
++use crate::{ErrorCode, HttpRequestMetadata, Message};
+ 
+ #[test]
+ fn exchange_error_preserves_adapter_error_code() {
+@@ -53,3 +71,224 @@ fn exchange_error_preserves_typed_external_package_failure() {
+     assert_ne!(error.code, ErrorCode::Internal.as_str());
+     assert_eq!(error.external_package_call.as_deref(), Some(&failure));
+ }
++
++#[test]
++fn finalized_upstream_uri_changes_only_path_and_query() {
++    let outgoing = "/old?amount=1".parse().unwrap();
++    let request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/old?amount=1".into(),
++        url: "https://payments.example/old?amount=1".into(),
++    };
++    let message = Message {
++        start_line: "POST https://payments.example/new?amount=2 HTTP/1.1".into(),
++        headers: Vec::new(),
++        body: bytes::Bytes::new(),
++        body_modified: false,
++    };
++
++    assert_eq!(
++        finalized_upstream_uri(&outgoing, &request, &message).unwrap(),
++        "/new?amount=2"
++    );
++}
++
++#[test]
++fn finalized_upstream_uri_rejects_method_and_origin_changes() {
++    let outgoing = "/old".parse().unwrap();
++    let request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/old".into(),
++        url: "https://payments.example/old".into(),
++    };
++    for start_line in [
++        "PUT https://payments.example/new HTTP/1.1",
++        "POST http://payments.example/new HTTP/1.1",
++        "POST https://other.example/new HTTP/1.1",
++        "POST /new HTTP/1.1",
++    ] {
++        let message = Message {
++            start_line: start_line.into(),
++            headers: Vec::new(),
++            body: bytes::Bytes::new(),
++            body_modified: false,
++        };
++        assert!(finalized_upstream_uri(&outgoing, &request, &message).is_err());
++    }
++}
++
++#[derive(Debug, Default)]
++struct LegacyMockPolicy;
++
++impl HandshakePolicy for LegacyMockPolicy {}
++
++#[async_trait]
++impl PipelinePorts for LegacyMockPolicy {
++    async fn apply_request_policy(
++        &self,
++        _context: &ConnectionContext,
++        _request: &HttpRequestMetadata,
++        _message: &mut Message,
++    ) -> crate::Result<Vec<FaultAction>> {
++        Ok(vec![FaultAction::MockResponse {
++            status: StatusCode::OK,
++            headers: HeaderMap::new(),
++            body: Bytes::from_static(b"mocked"),
++        }])
++    }
++}
++
++#[derive(Debug)]
++struct LegacyMockCapabilities {
++    prepare_calls: Arc<AtomicUsize>,
++    finalize_calls: Arc<AtomicUsize>,
++}
++
++impl HttpProtocolCapabilityFactory for LegacyMockCapabilities {
++    fn observation_metadata(&self) -> HttpObservationMetadata {
++        HttpObservationMetadata {
++            workspace_id: "test".into(),
++            listener_id: "test".into(),
++        }
++    }
++
++    fn create_upstream(
++        &self,
++        connection: HttpConnectionIdentity,
++    ) -> Result<HttpDirectionCapabilities<Upstream>, Error> {
++        PlainHttpCapabilityFactory::new("test", "test").create_upstream(connection)
++    }
++
++    fn create_downstream(
++        &self,
++        connection: HttpConnectionIdentity,
++    ) -> Result<HttpDirectionCapabilities<Downstream>, Error> {
++        let mut capabilities =
++            PlainHttpCapabilityFactory::new("test", "test").create_downstream(connection)?;
++        capabilities.prepare = Box::new(CountingDownstreamPrepare {
++            calls: Arc::clone(&self.prepare_calls),
++        });
++        capabilities.finalize = Box::new(FailingLegacyMockFinalize {
++            finalize_calls: Arc::clone(&self.finalize_calls),
++        });
++        Ok(capabilities)
++    }
++}
++
++struct CountingDownstreamPrepare {
++    calls: Arc<AtomicUsize>,
++}
++
++#[async_trait]
++impl HttpMessagePrepare<Downstream> for CountingDownstreamPrepare {
++    async fn prepare(
++        &mut self,
++        _connection: &ConnectionContext,
++        _request: &HttpRequestMetadata,
++        _message: &mut Message,
++        _original: &HttpContext,
++        _document: &Document,
++        _ports: &dyn PipelinePorts,
++    ) -> Result<Vec<FaultAction>, Error> {
++        self.calls.fetch_add(1, Ordering::SeqCst);
++        Ok(Vec::new())
++    }
++}
++
++struct FailingLegacyMockFinalize {
++    finalize_calls: Arc<AtomicUsize>,
++}
++
++#[async_trait]
++impl Finalize for FailingLegacyMockFinalize {
++    async fn finalize(
++        &mut self,
++        _request: &HttpRequestMetadata,
++        _message: &mut Message,
++    ) -> Result<(), Error> {
++        self.finalize_calls.fetch_add(1, Ordering::SeqCst);
++        Err(Error::coded(
++            "MOCK_FINALIZE_FAILED",
++            "legacy Mock Finalize failed",
++        ))
++    }
++}
++
++#[derive(Debug)]
++struct NoWriteConnector(Arc<AtomicUsize>);
++
++#[async_trait]
++impl UpstreamConnector for NoWriteConnector {
++    async fn send(
++        &self,
++        _context: &ConnectionContext,
++        _ports: &dyn PipelinePorts,
++        _request: ForwardRequest,
++        _actions: &[FaultAction],
++        _write_receipt: UpstreamWriteReceipt,
++        _informational: Option<&InformationalResponseSink>,
++        _cancellation: &CancellationToken,
++    ) -> crate::Result<UpstreamExchange> {
++        self.0.fetch_add(1, Ordering::SeqCst);
++        Err(crate::ProxyError::new(
++            ErrorCode::Internal,
++            "legacy Mock must not reach the upstream connector",
++        ))
++    }
++}
++
++#[tokio::test]
++async fn legacy_mock_finalize_failure_is_finalize_stage_and_writes_nothing() {
++    let prepare_calls = Arc::new(AtomicUsize::new(0));
++    let finalize_calls = Arc::new(AtomicUsize::new(0));
++    let upstream_writes = Arc::new(AtomicUsize::new(0));
++    let context = ConnectionContext {
++        runtime_epoch: uuid::Uuid::from_u128(1),
++        connection_id: uuid::Uuid::from_u128(2),
++        channel: ChannelId::new("legacy-mock-finalize").unwrap(),
++        peer_addr: "127.0.0.1:12345".parse().unwrap(),
++        accepted_at: std::time::SystemTime::UNIX_EPOCH,
++        tls_peer: None,
++    };
++    let task_scope = ConnectionTaskScope::new();
++    let exchange = HttpExchangeRuntime {
++        context,
++        ports: Arc::new(LegacyMockPolicy),
++        upstream: Arc::new(NoWriteConnector(Arc::clone(&upstream_writes))),
++        clock: Arc::new(SystemClock) as Arc<dyn Clock>,
++        cancellation: CancellationToken::new(),
++        informational: None,
++        capabilities: Arc::new(LegacyMockCapabilities {
++            prepare_calls: Arc::clone(&prepare_calls),
++            finalize_calls: Arc::clone(&finalize_calls),
++        }),
++        endpoint: "example.test:80".into(),
++    }
++    .start(&task_scope)
++    .unwrap();
++
++    let result = exchange
++        .exchange(
++            "example.test:80".into(),
++            HttpExchangeRequest {
++                method: http::Method::POST,
++                uri: "/payment".parse().unwrap(),
++                message: Message {
++                    start_line: "POST /payment HTTP/1.1".into(),
++                    headers: Vec::new(),
++                    body: Bytes::from_static(b"request"),
++                    body_modified: false,
++                },
++            },
++        )
++        .await;
++    let Err(error) = result else {
++        panic!("legacy Mock Finalize failure must stop before App write");
++    };
++
++    assert_eq!(error.stage, Some(ErrorStage::Finalize));
++    assert_eq!(error.direction, Some(DirectionKind::Downstream));
++    assert_eq!(prepare_calls.load(Ordering::SeqCst), 0);
++    assert_eq!(finalize_calls.load(Ordering::SeqCst), 1);
++    assert_eq!(upstream_writes.load(Ordering::SeqCst), 0);
++}
+diff --git a/src-tauri/crates/proxy/src/lib.rs b/src-tauri/crates/proxy/src/lib.rs
+index 7e729a41..a685c641 100644
+--- a/src-tauri/crates/proxy/src/lib.rs
++++ b/src-tauri/crates/proxy/src/lib.rs
+@@ -24,10 +24,11 @@ pub use forward::{
+     strip_hop_by_hop_headers,
+ };
+ pub use http::{
+-    ConnectionAdmission, ConnectionService, HttpConnectionIdentity, HttpDirectionCapabilities,
+-    HttpMessagePrepare, HttpObservationMetadata, HttpProtocolCapabilityFactory,
+-    HttpRequestMetadata, LocalHttpServerConfig, LocalHttpServerService, NoopPipelinePorts,
+-    PipelinePorts, PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
++    ConnectionAdmission, ConnectionService, Finalize, HttpConnectionIdentity,
++    HttpDirectionCapabilities, HttpJointEvaluation, HttpMessagePrepare, HttpObservationMetadata,
++    HttpProtocolCapabilityFactory, HttpRequestMetadata, LocalHttpServerConfig,
++    LocalHttpServerService, NoopHttpFinalize, NoopPipelinePorts, PipelinePorts,
++    PlainHttpCapabilityFactory, RulesChain, UpstreamConnector,
+ };
+ pub use message::{Message, MessageLimits, RawHeader};
+ pub use metrics::{ChannelRuntimeMetrics, RuntimeMetricsProvider, RuntimeMetricsSnapshot};
+@@ -38,18 +39,18 @@ pub use reverse::{
+ };
+ pub use socket_relay::{
+     BoundedSocketConnectionObserver, BoundedSocketJointEvaluation, FrameBoundary,
+-    HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
+-    NoopSocketConnectionObserver, SocketConnectionEvent, SocketConnectionIdentity,
+-    SocketConnectionObserver, SocketConnectionTarget, SocketDirectionCapabilities,
+-    SocketDocumentFieldPreview, SocketDocumentPreview, SocketDownstreamSecurity,
+-    SocketDownstreamTlsConfig, SocketEndpoint, SocketJointEvaluation, SocketLocalRequestPreview,
+-    SocketLocalResponderConfig, SocketObservationMetadata, SocketOpenedEvidence,
+-    SocketPayloadDirection, SocketPipelineLimits, SocketProcessingFailure,
+-    SocketProcessingFailureKind, SocketProtocolCapabilityFactory, SocketRejectionReason,
+-    SocketRelayBytes, SocketRelayConfig, SocketRelayDirection, SocketRelayFailure,
+-    SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity, SocketRelayService,
+-    SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity, SocketTransportMode,
+-    SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig, SocketUpstreamTransport,
++    JointConditionEvaluation, JointRuleConditionEvaluation, NoopSocketConnectionObserver,
++    SocketConnectionEvent, SocketConnectionIdentity, SocketConnectionObserver,
++    SocketConnectionTarget, SocketDirectionCapabilities, SocketDocumentFieldPreview,
++    SocketDocumentPreview, SocketDownstreamSecurity, SocketDownstreamTlsConfig, SocketEndpoint,
++    SocketJointEvaluation, SocketLocalRequestPreview, SocketLocalResponderConfig,
++    SocketObservationMetadata, SocketOpenedEvidence, SocketPayloadDirection, SocketPipelineLimits,
++    SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,
++    SocketRejectionReason, SocketRelayBytes, SocketRelayConfig, SocketRelayDirection,
++    SocketRelayFailure, SocketRelayMetricsSnapshot, SocketRelayRunContext, SocketRelaySecurity,
++    SocketRelayService, SocketRelayStage, SocketTlsEvidence, SocketTlsIdentity,
++    SocketTransportMode, SocketUpstreamConnectionTestResult, SocketUpstreamTlsConfig,
++    SocketUpstreamTransport,
+ };
+ pub use supervisor::{
+     ChannelConfig, ChannelId, DEFAULT_MAX_CONNECTIONS, ProxyConfig, ProxyState, ProxySupervisor,
+diff --git a/src-tauri/crates/proxy/src/socket_relay.rs b/src-tauri/crates/proxy/src/socket_relay.rs
+index a1a26547..669a0f75 100644
+--- a/src-tauri/crates/proxy/src/socket_relay.rs
++++ b/src-tauri/crates/proxy/src/socket_relay.rs
+@@ -34,7 +34,7 @@ pub use observer::{
+ pub use output_validation::BoundedSocketJointEvaluation;
+ pub(crate) use output_validation::validate_socket_output;
+ pub use processing::{
+-    FrameBoundary, HttpJointEvaluation, JointConditionEvaluation, JointRuleConditionEvaluation,
++    FrameBoundary, JointConditionEvaluation, JointRuleConditionEvaluation,
+     SocketConnectionIdentity, SocketDirectionCapabilities, SocketJointEvaluation,
+     SocketObservationMetadata, SocketPayloadDirection, SocketPipelineLimits,
+     SocketProcessingFailure, SocketProcessingFailureKind, SocketProtocolCapabilityFactory,
+diff --git a/src-tauri/crates/proxy/src/socket_relay/processing.rs b/src-tauri/crates/proxy/src/socket_relay/processing.rs
+index 72355615..b7e2fda7 100644
+--- a/src-tauri/crates/proxy/src/socket_relay/processing.rs
++++ b/src-tauri/crates/proxy/src/socket_relay/processing.rs
+@@ -4,8 +4,7 @@ use std::net::SocketAddr;
+ use async_trait::async_trait;
+ use intercept_proxy_exchange::{
+     Decode, Direction, Display, Downstream, Encode, Error, ExternalPackageCallFailure, Frame,
+-    HttpAction, MatchContext, PrepareWrite, Rules, SequentialPrepare, Socket, SocketContext,
+-    Upstream,
++    PrepareWrite, Rules, SequentialPrepare, Socket, SocketContext, Upstream,
+ };
+ use uuid::Uuid;
+ 
+@@ -45,19 +44,6 @@ pub trait SocketJointEvaluation: Send + Sync {
+     async fn encode(self: Box<Self>) -> Result<SocketContext, Error>;
+ }
+ 
+-#[async_trait]
+-pub trait HttpJointEvaluation: Send + Sync {
+-    fn gate(
+-        &mut self,
+-        rule_id: Uuid,
+-        context: &MatchContext<'_>,
+-        message: &mut crate::Message,
+-        apply_action: &mut dyn FnMut(&mut crate::Message, &HttpAction) -> crate::Result<()>,
+-    ) -> crate::Result<JointRuleConditionEvaluation>;
+-
+-    async fn encode(self: Box<Self>, message: &mut crate::Message) -> Result<(), Error>;
+-}
+-
+ /// Factory 创建连接级 processor 时收到的稳定、无 payload 身份信息。
+ #[derive(Clone, Debug, Eq, PartialEq)]
+ pub struct SocketConnectionIdentity {
+diff --git a/src-tauri/src/runtime_logs/exchange_ui_layer.rs b/src-tauri/src/runtime_logs/exchange_ui_layer.rs
+index abaf0e5d..08abfd15 100644
+--- a/src-tauri/src/runtime_logs/exchange_ui_layer.rs
++++ b/src-tauri/src/runtime_logs/exchange_ui_layer.rs
+@@ -390,6 +390,7 @@ fn external_package_call(fields: &Fields) -> Option<ExternalPackageCallDiagnosti
+         "decode" => ExternalPackageCallStage::Decode,
+         "display" => ExternalPackageCallStage::Display,
+         "encode" => ExternalPackageCallStage::Encode,
++        "finalize" => ExternalPackageCallStage::Finalize,
+         _ => return None,
+     };
+     let optional = |name: &str| fields.text(name).filter(|value| !value.is_empty());
+diff --git a/src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs b/src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs
+index 639a3562..f483797e 100644
+--- a/src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs
++++ b/src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs
+@@ -10,6 +10,8 @@ use tracing_subscriber::prelude::*;
+ use super::{ExchangeUiConsumer, ExchangeUiLayer};
+ use crate::runtime_logs::nonblocking_queue::QueueByteBudget;
+ 
++#[path = "tests/finalize.rs"]
++mod finalize;
+ #[path = "tests/process.rs"]
+ mod process;
+ #[path = "tests/queue.rs"]
+diff --git a/src/generated/rust-types.ts b/src/generated/rust-types.ts
+index 8b844b29..c9e927a9 100644
+--- a/src/generated/rust-types.ts
++++ b/src/generated/rust-types.ts
+@@ -928,7 +928,7 @@ export type ExchangeObservationRecord = {
+ export type ExchangeProtocol = "http" | "socket";
+ 
+ /**
+- *  外部 JSON-RPC 调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
++ *  本地 Wasm 或远端 JSON-RPC 包调用的可查询控制面诊断；业务报文由 Exchange observation 保存，远端 `data`
+  *  在此仅提供有界形状，避免同一 payload 在两个生命周期不同的 store 中重复分配。
+  */
+ export type ExternalPackageCallDiagnosticViewModel = {
+@@ -944,7 +944,7 @@ export type ExternalPackageCallDiagnosticViewModel = {
+ 	remote_data_summary: string | null,
+ };
+ 
+-export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display";
++export type ExternalPackageCallStage = "frame" | "decode" | "encode" | "display" | "finalize";
+ 
+ /**  外部协议包详情的严格连接投影。 */
+ export type ExternalPackageDetailViewModel = {
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize.rs
+new file mode 100644
+index 00000000..8c909197
+--- /dev/null
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize.rs
+@@ -0,0 +1,378 @@
++use std::{collections::BTreeMap, fmt, sync::Arc};
++
++use http::{HeaderName, HeaderValue, StatusCode, Uri};
++use intercept_proxy_domain::{ProtocolDirection, ProtocolPackageRef};
++use intercept_proxy_exchange::{Error, ExternalPackageCallFailure, ExternalPackageCallStage};
++use intercept_proxy_product_api::BodyCodec;
++use intercept_proxy_runtime::{HttpRequestMetadata, Message, RawHeader};
++use serde::{Deserialize, Deserializer, Serialize, Serializer, de::MapAccess, ser::SerializeMap};
++
++use crate::adapters::ProtocolPackageRuntime;
++
++use super::package_error::external_rpc_error;
++
++pub(super) struct ExternalHttpFinalizeCall {
++    runtime: Arc<dyn ProtocolPackageRuntime>,
++    package: ProtocolPackageRef,
++    direction: ProtocolDirection,
++    codec: Arc<dyn BodyCodec>,
++}
++
++impl ExternalHttpFinalizeCall {
++    pub(super) fn new(
++        runtime: Arc<dyn ProtocolPackageRuntime>,
++        package: ProtocolPackageRef,
++        direction: ProtocolDirection,
++        codec: Arc<dyn BodyCodec>,
++    ) -> Self {
++        Self {
++            runtime,
++            package,
++            direction,
++            codec,
++        }
++    }
++
++    pub(super) async fn finalize(
++        &mut self,
++        request: &HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), Error> {
++        finalize_http_message(
++            &self.runtime,
++            &self.package,
++            self.direction,
++            self.codec.as_ref(),
++            request,
++            message,
++        )
++        .await
++    }
++}
++
++#[derive(Clone, Debug, Serialize, Deserialize)]
++#[serde(deny_unknown_fields)]
++struct HttpFinalizeDocument {
++    url: String,
++    method: String,
++    #[serde(deserialize_with = "deserialize_required_code")]
++    code: Option<u16>,
++    header: FinalizeHeaders,
++    body: String,
++}
++
++#[derive(Clone, Debug, Default, Eq, PartialEq)]
++struct FinalizeHeaders(Vec<(String, String)>);
++
++impl FinalizeHeaders {
++    fn from_message(message: &Message) -> Result<Self, Error> {
++        let mut headers = BTreeMap::<String, (String, String)>::new();
++        for header in &message.headers {
++            let name = std::str::from_utf8(&header.name)
++                .map_err(|error| Error::coded("HTTP_FINALIZE_HEADER_INVALID", error.to_string()))?
++                .to_owned();
++            let value = std::str::from_utf8(&header.value)
++                .map_err(|error| Error::coded("HTTP_FINALIZE_HEADER_INVALID", error.to_string()))?
++                .to_owned();
++            headers.insert(name.to_ascii_lowercase(), (name, value));
++        }
++        Ok(Self(headers.into_values().collect()))
++    }
++
++    fn normalized(&self) -> BTreeMap<String, (String, String)> {
++        let mut headers = BTreeMap::new();
++        for (name, value) in &self.0 {
++            headers.insert(
++                name.to_ascii_lowercase(),
++                (name.to_owned(), value.to_owned()),
++            );
++        }
++        headers
++    }
++}
++
++fn deserialize_required_code<'de, D>(deserializer: D) -> Result<Option<u16>, D::Error>
++where
++    D: Deserializer<'de>,
++{
++    Option::<u16>::deserialize(deserializer)
++}
++
++impl Serialize for FinalizeHeaders {
++    fn serialize<S>(&self, serializer: S) -> Result<S::Ok, S::Error>
++    where
++        S: Serializer,
++    {
++        let mut map = serializer.serialize_map(Some(self.0.len()))?;
++        for (name, value) in &self.0 {
++            map.serialize_entry(name, value)?;
++        }
++        map.end()
++    }
++}
++
++impl<'de> Deserialize<'de> for FinalizeHeaders {
++    fn deserialize<D>(deserializer: D) -> Result<Self, D::Error>
++    where
++        D: Deserializer<'de>,
++    {
++        struct HeaderVisitor;
++
++        impl<'de> serde::de::Visitor<'de> for HeaderVisitor {
++            type Value = FinalizeHeaders;
++
++            fn expecting(&self, formatter: &mut fmt::Formatter<'_>) -> fmt::Result {
++                formatter.write_str("an HTTP header object with string values")
++            }
++
++            fn visit_map<A>(self, mut map: A) -> Result<Self::Value, A::Error>
++            where
++                A: MapAccess<'de>,
++            {
++                let mut headers = Vec::new();
++                while let Some((name, value)) = map.next_entry::<String, String>()? {
++                    headers.push((name, value));
++                }
++                Ok(FinalizeHeaders(headers))
++            }
++        }
++
++        deserializer.deserialize_map(HeaderVisitor)
++    }
++}
++
++pub(super) async fn finalize_http_message(
++    runtime: &Arc<dyn ProtocolPackageRuntime>,
++    package: &ProtocolPackageRef,
++    direction: ProtocolDirection,
++    codec: &dyn BodyCodec,
++    request: &HttpRequestMetadata,
++    message: &mut Message,
++) -> Result<(), Error> {
++    let method = finalize_method(direction);
++    let has_finalize = runtime.has_http_finalize(direction).map_err(|error| {
++        external_rpc_error(
++            package.clone(),
++            direction,
++            ExternalPackageCallStage::Finalize,
++            method,
++            &error,
++        )
++    })?;
++    if !has_finalize {
++        return Ok(());
++    }
++    let input = document_from_message(codec, request, message)
++        .map_err(|error| local_finalize_error(package, direction, method, error))?;
++    let input_json = serde_json::to_string(&input)
++        .map_err(|error| Error::coded("HTTP_FINALIZE_INPUT_INVALID", error.to_string()))
++        .map_err(|error| local_finalize_error(package, direction, method, error))?;
++    let output_json = runtime
++        .finalize_http(direction, input_json)
++        .await
++        .map_err(|error| {
++            external_rpc_error(
++                package.clone(),
++                direction,
++                ExternalPackageCallStage::Finalize,
++                method,
++                &error,
++            )
++        })?
++        .ok_or_else(|| {
++            Error::coded(
++                "HTTP_FINALIZE_CAPABILITY_CHANGED",
++                format!("HTTP package advertised `{method}` but returned no capability"),
++            )
++        })
++        .map_err(|error| local_finalize_error(package, direction, method, error))?;
++    let output = serde_json::from_str::<HttpFinalizeDocument>(&output_json)
++        .map_err(|error| Error::coded("HTTP_FINALIZE_OUTPUT_INVALID", error.to_string()))
++        .map_err(|error| local_finalize_error(package, direction, method, error))?;
++    apply_output(direction, codec, request, message, &input, &output)
++        .map_err(|error| local_finalize_error(package, direction, method, error))
++}
++
++pub(super) fn local_finalize_error(
++    package: &ProtocolPackageRef,
++    direction: ProtocolDirection,
++    method: &'static str,
++    error: Error,
++) -> Error {
++    if error.external_package_call.is_some() {
++        return error;
++    }
++    let stable_code = error.code.clone();
++    let remote_message = Some(error.message.clone());
++    error.with_external_package_call(ExternalPackageCallFailure {
++        package: package.clone(),
++        direction,
++        stage: ExternalPackageCallStage::Finalize,
++        method: method.into(),
++        request_id: None,
++        remote_code: None,
++        stable_code,
++        remote_message,
++        remote_data_summary: None,
++    })
++}
++
++fn finalize_method(direction: ProtocolDirection) -> &'static str {
++    match direction {
++        ProtocolDirection::Upstream => "upstream-finalize",
++        ProtocolDirection::Downstream => "downstream-finalize",
++    }
++}
++
++fn document_from_message(
++    codec: &dyn BodyCodec,
++    request: &HttpRequestMetadata,
++    message: &Message,
++) -> Result<HttpFinalizeDocument, Error> {
++    let body = codec
++        .decode(&message.body)
++        .map_err(|error| Error::coded(error.code, error.message))?;
++    Ok(HttpFinalizeDocument {
++        url: request.url.clone(),
++        method: request.method.clone(),
++        code: message.http_status(),
++        header: FinalizeHeaders::from_message(message)?,
++        body,
++    })
++}
++
++fn apply_output(
++    direction: ProtocolDirection,
++    codec: &dyn BodyCodec,
++    request: &HttpRequestMetadata,
++    message: &mut Message,
++    input: &HttpFinalizeDocument,
++    output: &HttpFinalizeDocument,
++) -> Result<(), Error> {
++    if output.method != request.method {
++        return Err(Error::coded(
++            "HTTP_FINALIZE_METHOD_CHANGED",
++            "HTTP Finalize must not change the request method",
++        ));
++    }
++    validate_url(direction, &request.url, &output.url)?;
++    match direction {
++        ProtocolDirection::Upstream if output.code.is_some() => {
++            return Err(Error::coded(
++                "HTTP_FINALIZE_CODE_INVALID",
++                "upstream HTTP Finalize code must remain null",
++            ));
++        }
++        ProtocolDirection::Downstream if output.code.is_none() => {
++            return Err(Error::coded(
++                "HTTP_FINALIZE_CODE_INVALID",
++                "downstream HTTP Finalize code must be an HTTP status",
++            ));
++        }
++        _ => {}
++    }
++
++    let mut candidate = message.clone();
++    apply_start_line(direction, input, output, &mut candidate)?;
++    apply_header_delta(&input.header, &output.header, &mut candidate)?;
++    if output.body != input.body {
++        let body = codec
++            .encode(&output.body)
++            .map_err(|error| Error::coded(error.code, error.message))?;
++        candidate.replace_body(body.into());
++    }
++    candidate
++        .header_map()
++        .map_err(|error| Error::coded(error.code, error.message))?;
++    *message = candidate;
++    Ok(())
++}
++
++fn validate_url(
++    direction: ProtocolDirection,
++    original: &str,
++    finalized: &str,
++) -> Result<(), Error> {
++    if direction == ProtocolDirection::Downstream {
++        return (finalized == original).then_some(()).ok_or_else(|| {
++            Error::coded(
++                "HTTP_FINALIZE_URL_CHANGED",
++                "downstream HTTP Finalize must not change the associated request URL",
++            )
++        });
++    }
++    let original = original
++        .parse::<Uri>()
++        .map_err(|error| Error::coded("HTTP_REQUEST_URL_INVALID", error.to_string()))?;
++    let finalized = finalized
++        .parse::<Uri>()
++        .map_err(|error| Error::coded("HTTP_FINALIZE_URL_INVALID", error.to_string()))?;
++    if original.scheme() != finalized.scheme() || original.authority() != finalized.authority() {
++        return Err(Error::coded(
++            "HTTP_FINALIZE_URL_ORIGIN_CHANGED",
++            "HTTP Finalize may only change the request path and query",
++        ));
++    }
++    Ok(())
++}
++
++fn apply_start_line(
++    direction: ProtocolDirection,
++    input: &HttpFinalizeDocument,
++    output: &HttpFinalizeDocument,
++    message: &mut Message,
++) -> Result<(), Error> {
++    match direction {
++        ProtocolDirection::Upstream if output.url != input.url => {
++            let version = message
++                .start_line
++                .split_ascii_whitespace()
++                .nth(2)
++                .ok_or_else(|| {
++                    Error::coded(
++                        "HTTP_REQUEST_VERSION_MISSING",
++                        "HTTP request start-line has no version",
++                    )
++                })?;
++            message.start_line = format!("{} {} {version}", output.method, output.url);
++        }
++        ProtocolDirection::Downstream if output.code != input.code => {
++            let status = StatusCode::from_u16(output.code.expect("validated downstream code"))
++                .map_err(|error| Error::coded("HTTP_FINALIZE_CODE_INVALID", error.to_string()))?;
++            let reason = status.canonical_reason().unwrap_or("");
++            message.start_line = format!("HTTP/1.1 {} {reason}", status.as_u16());
++        }
++        _ => {}
++    }
++    Ok(())
++}
++
++fn apply_header_delta(
++    before: &FinalizeHeaders,
++    after: &FinalizeHeaders,
++    message: &mut Message,
++) -> Result<(), Error> {
++    let before = before.normalized();
++    let after = after.normalized();
++    for normalized in before.keys().filter(|name| !after.contains_key(*name)) {
++        message.remove_header(normalized);
++    }
++    for (normalized, (name, value)) in after {
++        if before
++            .get(&normalized)
++            .is_some_and(|(_, current)| current == &value)
++        {
++            continue;
++        }
++        HeaderName::from_bytes(name.as_bytes())
++            .map_err(|error| Error::coded("HTTP_FINALIZE_HEADER_INVALID", error.to_string()))?;
++        HeaderValue::from_bytes(value.as_bytes())
++            .map_err(|error| Error::coded("HTTP_FINALIZE_HEADER_INVALID", error.to_string()))?;
++        message.remove_header(&normalized);
++        message.headers.push(RawHeader::new(name, value));
++    }
++    Ok(())
++}
++
++#[cfg(test)]
++mod tests;
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize/tests.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize/tests.rs
+new file mode 100644
+index 00000000..2ee985ae
+--- /dev/null
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/http_finalize/tests.rs
+@@ -0,0 +1,340 @@
++use std::{path::PathBuf, process::Command};
++
++use bytes::Bytes;
++use intercept_proxy_package_runtime::{
++    WasmPackageRuntime, embed_package_manifest, read_package_component,
++};
++use intercept_proxy_product_api::ProductError;
++
++use super::*;
++
++type OutputMutationCase = (&'static str, fn(&mut HttpFinalizeDocument), &'static str);
++
++#[derive(Debug)]
++struct Utf8Codec;
++
++impl BodyCodec for Utf8Codec {
++    fn id(&self) -> &'static str {
++        "test:utf-8"
++    }
++
++    fn name(&self) -> &'static str {
++        "Test UTF-8"
++    }
++
++    fn decode(&self, bytes: &[u8]) -> Result<String, ProductError> {
++        std::str::from_utf8(bytes)
++            .map(str::to_owned)
++            .map_err(|error| ProductError::new("BODY_DECODE_FAILED", error.to_string()))
++    }
++
++    fn encode(&self, text: &str) -> Result<Vec<u8>, ProductError> {
++        Ok(text.as_bytes().to_vec())
++    }
++}
++
++#[test]
++fn local_finalize_contract_error_keeps_package_direction_and_method() {
++    let package = ProtocolPackageRef {
++        id: intercept_proxy_domain::ProtocolPackageId::new("http-finalize-contract").unwrap(),
++        version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0").unwrap(),
++    };
++    let error = local_finalize_error(
++        &package,
++        ProtocolDirection::Downstream,
++        "downstream-finalize",
++        Error::coded("HTTP_FINALIZE_OUTPUT_INVALID", "missing field `code`"),
++    );
++    let failure = error.external_package_call.unwrap();
++    assert_eq!(failure.package, package);
++    assert_eq!(failure.direction, ProtocolDirection::Downstream);
++    assert_eq!(failure.stage, ExternalPackageCallStage::Finalize);
++    assert_eq!(failure.method, "downstream-finalize");
++    assert_eq!(
++        failure.stable_code.as_deref(),
++        Some("HTTP_FINALIZE_OUTPUT_INVALID")
++    );
++}
++
++#[test]
++fn duplicate_json_and_case_insensitive_header_names_use_the_last_value() {
++    let document = serde_json::from_str::<HttpFinalizeDocument>(
++        r#"{"url":"/","method":"GET","code":null,"header":{"X-A":"one","x-a":"two","X-A":"three"},"body":""}"#,
++    )
++    .unwrap();
++    assert_eq!(
++        document.header.normalized().get("x-a").unwrap(),
++        &("X-A".into(), "three".into())
++    );
++}
++
++#[test]
++fn unchanged_effective_header_preserves_original_duplicates() {
++    let mut message = Message {
++        start_line: "HTTP/1.1 200 OK".into(),
++        headers: vec![
++            RawHeader::new("Set-Cookie", "first=1"),
++            RawHeader::new("set-cookie", "last=2"),
++        ],
++        body: Bytes::new(),
++        body_modified: false,
++    };
++    let before = FinalizeHeaders::from_message(&message).unwrap();
++    apply_header_delta(&before, &before, &mut message).unwrap();
++    assert_eq!(message.headers.len(), 2);
++    assert_eq!(&message.headers[0].value[..], b"first=1");
++    assert_eq!(&message.headers[1].value[..], b"last=2");
++}
++
++#[test]
++fn finalize_output_requires_the_code_key() {
++    let error = serde_json::from_str::<HttpFinalizeDocument>(
++        r#"{"url":"/","method":"GET","header":{},"body":""}"#,
++    )
++    .unwrap_err();
++    assert!(error.to_string().contains("missing field `code`"));
++}
++
++#[test]
++fn unchanged_start_line_preserves_version_and_reason_bytes() {
++    let input = HttpFinalizeDocument {
++        url: "/".into(),
++        method: "GET".into(),
++        code: Some(299),
++        header: FinalizeHeaders::default(),
++        body: String::new(),
++    };
++    let mut message = Message {
++        start_line: "HTTP/1.0 299 Custom Reason".into(),
++        headers: Vec::new(),
++        body: Bytes::new(),
++        body_modified: false,
++    };
++    apply_start_line(ProtocolDirection::Downstream, &input, &input, &mut message).unwrap();
++    assert_eq!(message.start_line, "HTTP/1.0 299 Custom Reason");
++}
++
++#[test]
++fn rejected_finalize_output_never_partially_writes_the_message() {
++    let upstream_request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/before".into(),
++        url: "https://example.test:8443/before".into(),
++    };
++    let upstream_message = Message {
++        start_line: "POST https://example.test:8443/before HTTP/1.1".into(),
++        headers: vec![RawHeader::new("X-Value", "before")],
++        body: Bytes::from_static(b"before"),
++        body_modified: false,
++    };
++    let upstream_input =
++        document_from_message(&Utf8Codec, &upstream_request, &upstream_message).unwrap();
++    let upstream_cases: [OutputMutationCase; 4] = [
++        (
++            "method",
++            |output: &mut HttpFinalizeDocument| output.method = "PUT".into(),
++            "HTTP_FINALIZE_METHOD_CHANGED",
++        ),
++        (
++            "scheme",
++            |output: &mut HttpFinalizeDocument| {
++                output.url = "http://example.test:8443/before".into();
++            },
++            "HTTP_FINALIZE_URL_ORIGIN_CHANGED",
++        ),
++        (
++            "host",
++            |output: &mut HttpFinalizeDocument| {
++                output.url = "https://other.test:8443/before".into();
++            },
++            "HTTP_FINALIZE_URL_ORIGIN_CHANGED",
++        ),
++        (
++            "port",
++            |output: &mut HttpFinalizeDocument| {
++                output.url = "https://example.test:9443/before".into();
++            },
++            "HTTP_FINALIZE_URL_ORIGIN_CHANGED",
++        ),
++    ];
++    for (name, mutate, code) in upstream_cases {
++        let mut output = upstream_input.clone();
++        mutate(&mut output);
++        assert_rejected_without_write(
++            name,
++            ProtocolDirection::Upstream,
++            &upstream_request,
++            &upstream_message,
++            &upstream_input,
++            &output,
++            code,
++        );
++    }
++
++    let downstream_request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/fixed".into(),
++        url: "/fixed".into(),
++    };
++    let downstream_message = Message {
++        start_line: "HTTP/1.1 200 OK".into(),
++        headers: vec![RawHeader::new("X-Value", "before")],
++        body: Bytes::from_static(b"before"),
++        body_modified: false,
++    };
++    let downstream_input =
++        document_from_message(&Utf8Codec, &downstream_request, &downstream_message).unwrap();
++    let mut cases = Vec::new();
++    let mut changed_url = downstream_input.clone();
++    changed_url.url = "/changed".into();
++    cases.push(("downstream-url", changed_url, "HTTP_FINALIZE_URL_CHANGED"));
++    let mut invalid_status = downstream_input.clone();
++    invalid_status.code = Some(1000);
++    cases.push(("status", invalid_status, "HTTP_FINALIZE_CODE_INVALID"));
++    let mut invalid_name = downstream_input.clone();
++    invalid_name.header = FinalizeHeaders(vec![("bad header".into(), "value".into())]);
++    cases.push(("header-name", invalid_name, "HTTP_FINALIZE_HEADER_INVALID"));
++    let mut invalid_value = downstream_input.clone();
++    invalid_value.header = FinalizeHeaders(vec![("X-Value".into(), "bad\r\nvalue".into())]);
++    cases.push((
++        "header-value",
++        invalid_value,
++        "HTTP_FINALIZE_HEADER_INVALID",
++    ));
++    for (name, output, code) in cases {
++        assert_rejected_without_write(
++            name,
++            ProtocolDirection::Downstream,
++            &downstream_request,
++            &downstream_message,
++            &downstream_input,
++            &output,
++            code,
++        );
++    }
++}
++
++fn assert_rejected_without_write(
++    name: &str,
++    direction: ProtocolDirection,
++    request: &HttpRequestMetadata,
++    original: &Message,
++    input: &HttpFinalizeDocument,
++    output: &HttpFinalizeDocument,
++    expected_code: &str,
++) {
++    let mut actual = original.clone();
++    let Err(error) = apply_output(direction, &Utf8Codec, request, &mut actual, input, output)
++    else {
++        panic!("{name} output was accepted");
++    };
++    assert_eq!(error.code.as_deref(), Some(expected_code), "{name}");
++    assert_eq!(actual.start_line, original.start_line, "{name}");
++    assert_eq!(actual.headers, original.headers, "{name}");
++    assert_eq!(actual.body, original.body, "{name}");
++    assert_eq!(actual.body_modified, original.body_modified, "{name}");
++}
++
++#[test]
++fn malformed_finalize_json_is_rejected() {
++    for json in [
++        "not-json",
++        r#"{"url":[]}"#,
++        r#"{"url":"/","method":"GET","code":null,"header":{"X":1},"body":""}"#,
++    ] {
++        assert!(serde_json::from_str::<HttpFinalizeDocument>(json).is_err());
++    }
++}
++
++#[tokio::test]
++async fn real_wasm_finalize_updates_http_fields() {
++    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
++    let fixture = manifest_dir.join("../package-runtime/tests/fixtures/http-finalize");
++    let target_dir = fixture.join("target/upstream-downstream");
++    let output = Command::new(env!("CARGO"))
++        .args([
++            "build",
++            "--locked",
++            "--manifest-path",
++            fixture.join("Cargo.toml").to_str().unwrap(),
++            "--target",
++            "wasm32-wasip2",
++            "--target-dir",
++            target_dir.to_str().unwrap(),
++            "--no-default-features",
++            "--features",
++            "upstream,downstream",
++        ])
++        .output()
++        .unwrap();
++    assert!(
++        output.status.success(),
++        "{}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let component = std::fs::read(
++        target_dir.join("wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm"),
++    )
++    .unwrap();
++    let manifest = std::fs::read(fixture.join("manifest.json")).unwrap();
++    let package =
++        read_package_component(&embed_package_manifest(&component, &manifest).unwrap()).unwrap();
++    let runtime: Arc<dyn ProtocolPackageRuntime> =
++        Arc::new(crate::adapters::InProcessWasmRuntime::new(
++            WasmPackageRuntime::load(&package).await.unwrap(),
++        ));
++    let package_ref = package.manifest().package().identity().clone();
++
++    let request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/before?value=before".into(),
++        url: "https://example.test/before?value=before".into(),
++    };
++    let mut upstream = Message {
++        start_line: "POST https://example.test/before?value=before HTTP/1.1".into(),
++        headers: vec![RawHeader::new("X-Value", "before")],
++        body: Bytes::from_static(b"before"),
++        body_modified: false,
++    };
++    finalize_http_message(
++        &runtime,
++        &package_ref,
++        ProtocolDirection::Upstream,
++        &Utf8Codec,
++        &request,
++        &mut upstream,
++    )
++    .await
++    .unwrap();
++    assert_eq!(
++        upstream.start_line,
++        "POST https://example.test/upstream?value=upstream HTTP/1.1"
++    );
++    assert_eq!(&upstream.headers[0].value[..], b"upstream");
++    assert_eq!(&upstream.body[..], b"upstream");
++
++    let request = HttpRequestMetadata {
++        method: "POST".into(),
++        request_target: "/fixed".into(),
++        url: "/fixed".into(),
++    };
++    let mut downstream = Message {
++        start_line: "HTTP/1.1 200 OK".into(),
++        headers: vec![RawHeader::new("X-Value", "before")],
++        body: Bytes::from_static(b"before"),
++        body_modified: false,
++    };
++    finalize_http_message(
++        &runtime,
++        &package_ref,
++        ProtocolDirection::Downstream,
++        &Utf8Codec,
++        &request,
++        &mut downstream,
++    )
++    .await
++    .unwrap();
++    assert_eq!(downstream.start_line, "HTTP/1.1 202 Accepted");
++    assert_eq!(&downstream.headers[0].value[..], b"downstream");
++    assert_eq!(&downstream.body[..], b"downstream");
++}
+diff --git a/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/real_wasm_finalize_wire.rs b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/real_wasm_finalize_wire.rs
+new file mode 100644
+index 00000000..825daa04
+--- /dev/null
++++ b/src-tauri/crates/infrastructure/src/adapters/listener_runtime/tests/phase10_http_pipeline/real_wasm_finalize_wire.rs
+@@ -0,0 +1,320 @@
++use super::production_shape::{Phase10ActorRules, actor_pipeline};
++use super::*;
++use crate::adapters::{InProcessWasmRuntime, ProtocolPackageRuntime};
++use async_trait::async_trait;
++use intercept_proxy_application::ListenerRuntimePort;
++use intercept_proxy_domain::{
++    FixedServerSettings, HttpTopology, ListenerId, Revision, UpstreamTlsSettings,
++};
++use intercept_proxy_package_runtime::{
++    WasmPackageRuntime, embed_package_manifest, read_package_component,
++};
++use std::{path::PathBuf, process::Command};
++use tokio::{
++    io::{AsyncReadExt, AsyncWriteExt},
++    net::{TcpListener, TcpStream},
++};
++
++const IO_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(5);
++
++#[derive(Debug)]
++struct FixedWasmProvider(RuntimeExternalSocketPackageBinding);
++
++#[async_trait]
++impl ExternalSocketPackageProvider for FixedWasmProvider {
++    async fn resolve(
++        &self,
++        package: &ProtocolPackageRef,
++    ) -> intercept_proxy_application::AppResult<Option<RuntimeExternalSocketPackageBinding>> {
++        Ok((self.0.registration().package().identity() == *package).then(|| self.0.clone()))
++    }
++}
++
++#[derive(Debug)]
++struct WireMessage {
++    bytes: Vec<u8>,
++    head: String,
++    body: Vec<u8>,
++}
++
++#[tokio::test]
++#[allow(clippy::too_many_lines)]
++async fn real_wasm_finalize_reaches_fixed_server_and_app_wire() {
++    let package = build_finalize_package();
++    let package_ref = package.manifest().package().identity().clone();
++    let package_runtime: Arc<dyn ProtocolPackageRuntime> = Arc::new(InProcessWasmRuntime::new(
++        WasmPackageRuntime::load(&package).await.unwrap(),
++    ));
++    let binding = RuntimeExternalSocketPackageBinding::new(
++        package.manifest().clone(),
++        Arc::clone(&package_runtime),
++    );
++
++    let origin = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let origin_address = origin.local_addr().unwrap();
++    let path_id = Uuid::new_v4().to_string();
++    let origin_path_id = path_id.clone();
++    let origin_task = tokio::spawn(async move {
++        let (mut stream, peer) = tokio::time::timeout(IO_TIMEOUT, origin.accept())
++            .await
++            .expect("origin accept timed out")
++            .unwrap();
++        let request = read_http_message(&mut stream).await;
++        println!(
++            "origin_observed_head={}origin_observed_body={:?}",
++            request.head, request.body
++        );
++        assert!(
++            request
++                .head
++                .starts_with("POST /upstream?value=upstream HTTP/1.1\r\n")
++        );
++        assert_header(&request.head, "x-value", "upstream");
++        assert_header(&request.head, "x-path-id", &origin_path_id);
++        assert_content_length(&request);
++        assert_eq!(request.body, br#""upstream""#);
++
++        let response = format!(
++            "HTTP/1.1 200 OK\r\nContent-Type: application/json; charset=utf-8\r\nX-Value: before\r\nX-Path-Id: {origin_path_id}\r\nContent-Length: 8\r\nConnection: close\r\n\r\n\"before\""
++        );
++        stream.write_all(response.as_bytes()).await.unwrap();
++        (peer, request, response.into_bytes())
++    });
++
++    let reserved = TcpListener::bind("127.0.0.1:0").await.unwrap();
++    let proxy_address = reserved.local_addr().unwrap();
++    drop(reserved);
++    let listener = ProxyListener {
++        id: ListenerId::new(),
++        name: "real wasm finalize wire".into(),
++        enabled: false,
++        bind_address: proxy_address.ip().to_string(),
++        port: proxy_address.port(),
++        data_plane: ListenerDataPlane::Http(HttpListenerSettings {
++            topology: HttpTopology::remote(Some(FixedServerSettings {
++                upstream_url: format!("http://{origin_address}"),
++                upstream_tls: UpstreamTlsSettings::default(),
++            })),
++            body_processing: HttpBodyProcessing::Protocol {
++                package: package_ref,
++            },
++            ..HttpListenerSettings::default()
++        }),
++        ..ProxyListener::default()
++    };
++    let workspace = ProxyWorkspace {
++        id: intercept_proxy_domain::WorkspaceId::new(),
++        name: "real wasm finalize wire".into(),
++        revision: Revision::INITIAL,
++        listeners: vec![listener.clone()],
++        ..ProxyWorkspace::default()
++    };
++    workspace.validate().unwrap();
++    let store = Arc::new(SqliteStore::in_memory().unwrap());
++    store
++        .insert_workspace(&crate::adapters::WorkspaceRepositoryAdapter::record(&workspace).unwrap())
++        .unwrap();
++    let runtime = test_listener_runtime(store);
++    runtime.set_external_package_provider(Arc::new(FixedWasmProvider(binding)));
++    let snapshot = HttpProtocolRuntimeSnapshot::prepare_async(&runtime, &workspace, &listener)
++        .await
++        .unwrap()
++        .unwrap();
++    let rules = Arc::new(Phase10ActorRules {
++        snapshot: Mutex::new(RuleRuntimeSnapshot::with_collection_identity_and_order(
++            Some(workspace.id.as_uuid()),
++            workspace.revision.get(),
++            Vec::new(),
++            Vec::new(),
++        )),
++        commit_attempts: AtomicUsize::new(0),
++    });
++    runtime.set_pipeline_ports(Arc::new(actor_pipeline(&snapshot, rules)));
++    runtime.start(workspace, listener.clone()).await.unwrap();
++
++    let mut client = TcpStream::connect(proxy_address).await.unwrap();
++    let client_local = client.local_addr().unwrap();
++    let client_input = format!(
++        "POST /before?value=before HTTP/1.1\r\nHost: wire.test\r\nContent-Type: application/json; charset=utf-8\r\nX-Value: before\r\nX-Path-Id: {path_id}\r\nContent-Length: 8\r\nConnection: close\r\n\r\n\"before\""
++    )
++    .into_bytes();
++    client.write_all(&client_input).await.unwrap();
++    let app_response = read_http_message(&mut client).await;
++    runtime.stop(listener.id).await.unwrap();
++    let listener_cleaned_up = runtime.statuses().await.unwrap().is_empty();
++    assert!(listener_cleaned_up);
++
++    let (origin_peer, origin_request, origin_response) =
++        tokio::time::timeout(IO_TIMEOUT, origin_task)
++            .await
++            .expect("origin task join timed out")
++            .unwrap();
++    assert!(app_response.head.starts_with("HTTP/1.1 202 Accepted\r\n"));
++    assert_header(&app_response.head, "x-value", "downstream");
++    assert_header(&app_response.head, "x-path-id", &path_id);
++    assert_content_length(&app_response);
++    assert_eq!(app_response.body, br#""downstream""#);
++
++    write_evidence(
++        &path_id,
++        client_local,
++        proxy_address,
++        origin_peer,
++        origin_address,
++        listener_cleaned_up,
++        [
++            ("client_input", client_input.as_slice()),
++            ("origin_request", origin_request.bytes.as_slice()),
++            ("origin_response", origin_response.as_slice()),
++            ("app_response", app_response.bytes.as_slice()),
++        ],
++    );
++
++    println!("path_id={path_id}");
++    println!(
++        "connection client_local={client_local} proxy={proxy_address} origin_peer={origin_peer} origin={origin_address}"
++    );
++    println!("client_input={}", String::from_utf8_lossy(&client_input));
++    println!(
++        "origin_request_head={}origin_request_body={:?}",
++        origin_request.head, origin_request.body
++    );
++    println!(
++        "origin_response={}",
++        String::from_utf8_lossy(&origin_response)
++    );
++    println!(
++        "app_final_head={}app_final_body={:?}",
++        app_response.head, app_response.body
++    );
++    println!("cleanup=PASS listener_stopped={listener_cleaned_up}");
++    println!("assertions=PASS path_query header body status content_length exact_wire_causality");
++}
++
++fn write_evidence(
++    path_id: &str,
++    client_local: SocketAddr,
++    proxy_address: SocketAddr,
++    origin_peer: SocketAddr,
++    origin_address: SocketAddr,
++    listener_cleaned_up: bool,
++    messages: [(&str, &[u8]); 4],
++) {
++    let Ok(directory) = std::env::var("HTTP_FINALIZE_WIRE_EVIDENCE_DIR") else {
++        return;
++    };
++    let directory = PathBuf::from(directory);
++    std::fs::create_dir_all(&directory).unwrap();
++    for (name, bytes) in messages {
++        std::fs::write(directory.join(format!("{name}.bin")), bytes).unwrap();
++        std::fs::write(directory.join(format!("{name}.http")), bytes).unwrap();
++    }
++    let connection = serde_json::json!({
++        "path_id": path_id,
++        "client_to_proxy": { "client_local": client_local, "proxy_listener": proxy_address },
++        "proxy_to_origin": { "proxy_egress_observed_by_origin": origin_peer, "origin_listener": origin_address },
++        "listener_cleaned_up": listener_cleaned_up,
++        "assertions": "PASS"
++    });
++    std::fs::write(
++        directory.join("connection.json"),
++        serde_json::to_vec_pretty(&connection).unwrap(),
++    )
++    .unwrap();
++}
++
++fn build_finalize_package() -> intercept_proxy_package_runtime::PackageComponent {
++    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
++    let fixture = manifest_dir.join("../package-runtime/tests/fixtures/http-finalize");
++    let target_dir = fixture.join("target/upstream-downstream");
++    let output = Command::new(env!("CARGO"))
++        .args([
++            "build",
++            "--locked",
++            "--manifest-path",
++            fixture.join("Cargo.toml").to_str().unwrap(),
++            "--target",
++            "wasm32-wasip2",
++            "--target-dir",
++            target_dir.to_str().unwrap(),
++            "--no-default-features",
++            "--features",
++            "upstream,downstream",
++        ])
++        .output()
++        .unwrap();
++    assert!(
++        output.status.success(),
++        "{}",
++        String::from_utf8_lossy(&output.stderr)
++    );
++    let component = std::fs::read(
++        target_dir.join("wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm"),
++    )
++    .unwrap();
++    let manifest = std::fs::read(fixture.join("manifest.json")).unwrap();
++    read_package_component(&embed_package_manifest(&component, &manifest).unwrap()).unwrap()
++}
++
++async fn read_http_message(stream: &mut TcpStream) -> WireMessage {
++    tokio::time::timeout(IO_TIMEOUT, async {
++        let mut bytes = Vec::new();
++        loop {
++            let mut buffer = [0_u8; 1024];
++            let read = stream.read(&mut buffer).await.unwrap();
++            assert!(
++                read > 0,
++                "HTTP stream closed before the complete message: {:?}",
++                String::from_utf8_lossy(&bytes)
++            );
++            bytes.extend_from_slice(&buffer[..read]);
++            let Some(head_end) = bytes
++                .windows(4)
++                .position(|part| part == b"\r\n\r\n")
++                .map(|index| index + 4)
++            else {
++                continue;
++            };
++            let head = String::from_utf8(bytes[..head_end].to_vec()).unwrap();
++            let length = header_value(&head, "content-length")
++                .unwrap()
++                .parse::<usize>()
++                .unwrap();
++            if bytes.len() < head_end + length {
++                continue;
++            }
++            assert_eq!(
++                bytes.len(),
++                head_end + length,
++                "expected exactly one HTTP message"
++            );
++            return WireMessage {
++                body: bytes[head_end..].to_vec(),
++                bytes,
++                head,
++            };
++        }
++    })
++    .await
++    .expect("HTTP message read timed out")
++}
++
++fn header_value<'a>(head: &'a str, name: &str) -> Option<&'a str> {
++    head.lines().skip(1).find_map(|line| {
++        let (actual, value) = line.split_once(':')?;
++        actual.eq_ignore_ascii_case(name).then(|| value.trim())
++    })
++}
++
++fn assert_header(head: &str, name: &str, expected: &str) {
++    assert_eq!(header_value(head, name), Some(expected));
++}
++
++fn assert_content_length(message: &WireMessage) {
++    let declared = header_value(&message.head, "content-length")
++        .unwrap()
++        .parse::<usize>()
++        .unwrap();
++    assert_eq!(declared, message.body.len());
++    assert_eq!(message.bytes.len(), message.head.len() + message.body.len());
++}
+diff --git a/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/http_finalize_transaction.rs b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/http_finalize_transaction.rs
+new file mode 100644
+index 00000000..d5b3f4e2
+--- /dev/null
++++ b/src-tauri/crates/infrastructure/src/adapters/pipeline/tests/http_finalize_transaction.rs
+@@ -0,0 +1,223 @@
++struct TestHttpJointEvaluation {
++    fail_finalize: bool,
++    active: Arc<std::sync::atomic::AtomicBool>,
++    encoded: bool,
++    finalize_calls: Arc<AtomicUsize>,
++    gate_matches: bool,
++    encode_body: Option<&'static [u8]>,
++    expected_finalize_body: &'static [u8],
++}
++
++impl Drop for TestHttpJointEvaluation {
++    fn drop(&mut self) {
++        self.active
++            .store(false, std::sync::atomic::Ordering::Release);
++    }
++}
++
++#[async_trait]
++impl intercept_proxy_runtime::HttpJointEvaluation for TestHttpJointEvaluation {
++    fn gate(
++        &mut self,
++        _rule_id: Uuid,
++        _context: &intercept_proxy_domain::MatchContext<'_>,
++        message: &mut Message,
++        apply_action: &mut dyn FnMut(
++            &mut Message,
++            &intercept_proxy_domain::HttpAction,
++        ) -> intercept_proxy_runtime::Result<()>,
++    ) -> intercept_proxy_runtime::Result<intercept_proxy_runtime::JointRuleConditionEvaluation>
++    {
++        if self.gate_matches {
++            apply_action(
++                message,
++                &intercept_proxy_domain::HttpAction::ReplaceBodyText("action-body".into()),
++            )?;
++        }
++        Ok(
++            intercept_proxy_runtime::JointRuleConditionEvaluation::UnifiedOwned(
++                intercept_proxy_runtime::JointConditionEvaluation {
++                    matched: self.gate_matches,
++                },
++            ),
++        )
++    }
++
++    async fn encode(
++        &mut self,
++        message: &mut Message,
++    ) -> Result<(), intercept_proxy_exchange::Error> {
++        self.encoded = true;
++        if let Some(body) = self.encode_body {
++            message.replace_body(bytes::Bytes::from_static(body));
++        }
++        Ok(())
++    }
++}
++
++#[async_trait]
++impl intercept_proxy_runtime::Finalize for TestHttpJointEvaluation {
++    async fn finalize(
++        &mut self,
++        request: &HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), intercept_proxy_exchange::Error> {
++        assert_eq!(request.url, "/payment");
++        assert!(self.encoded, "Finalize must run after Encode");
++        assert_eq!(
++            &message.body[..],
++            self.expected_finalize_body,
++            "Finalize must observe the body after HTTP actions"
++        );
++        self.finalize_calls.fetch_add(1, AtomicOrdering::AcqRel);
++        if self.fail_finalize {
++            return Err(intercept_proxy_exchange::Error::coded(
++                "FINALIZE_FAILED",
++                "Finalize rejected the encoded HTTP message",
++            )
++            .with_external_package_call(
++                intercept_proxy_exchange::ExternalPackageCallFailure {
++                    package: intercept_proxy_domain::ProtocolPackageRef {
++                        id: intercept_proxy_domain::ProtocolPackageId::new("http-finalize")
++                            .unwrap(),
++                        version: intercept_proxy_domain::ProtocolPackageVersion::new("1.0.0")
++                            .unwrap(),
++                    },
++                    direction: intercept_proxy_domain::ProtocolDirection::Upstream,
++                    stage: intercept_proxy_exchange::ExternalPackageCallStage::Finalize,
++                    method: "upstream-finalize".into(),
++                    request_id: None,
++                    remote_code: None,
++                    stable_code: Some("FINALIZE_FAILED".into()),
++                    remote_message: Some("Finalize rejected the encoded HTTP message".into()),
++                    remote_data_summary: None,
++                },
++            ));
++        }
++        message.replace_body(bytes::Bytes::from_static(b"finalized"));
++        Ok(())
++    }
++}
++
++fn http_finalize_rule() -> RuleDefinition {
++    RuleDefinition::create(
++        intercept_proxy_domain::RuleDefinitionDraft {
++            name: "HTTP Finalize transaction".into(),
++            enabled: true,
++            priority: 1,
++            listener_id: intercept_proxy_domain::ListenerId::from_uuid(Uuid::from_u128(0x7472)),
++            stage: intercept_proxy_domain::RuleStage::ProxyToUpstream,
++            content: intercept_proxy_domain::RuleContent::Http(
++                intercept_proxy_domain::HttpRuleContent {
++                    description: String::new(),
++                    condition: intercept_proxy_domain::Condition::Http {
++                        field: intercept_proxy_domain::MatchField::Method,
++                        operator: intercept_proxy_domain::MatchOperator::Equals("POST".into()),
++                    },
++                    action: intercept_proxy_domain::UnifiedAction::Http(
++                        intercept_proxy_domain::HttpAction::ReplaceBodyText("action-body".into()),
++                    ),
++                },
++            ),
++        },
++        1,
++    )
++    .unwrap()
++}
++
++#[tokio::test]
++async fn http_finalize_runs_after_encode_and_before_lifecycle_commit() {
++    let rules = Arc::new(SocketTransactionRules {
++        snapshot: Mutex::new(RuleRuntimeSnapshot::new(vec![http_finalize_rule()])),
++        commit_attempts: AtomicUsize::new(0),
++        commit_guard: Some(Arc::new(std::sync::atomic::AtomicBool::new(true))),
++    });
++    let pipeline = RuntimePipelineAdapter::new(
++        test_product_hooks(),
++        rules.clone(),
++        Arc::new(InMemorySessionStore::default()),
++        Arc::new(EventHub::new(16)),
++        test_capture_repository(),
++    );
++    let context = test_context(Uuid::new_v4(), Uuid::new_v4(), transaction_channel());
++    pipeline.runtime_started(context.runtime_epoch).await;
++    let finalize_calls = Arc::new(AtomicUsize::new(0));
++
++    let error = pipeline
++        .rule_runtime
++        .evaluate(
++            &context,
++            DomainMessageStage::Request,
++            request_metadata(),
++            Some(&request_message("original")),
++            test_body_codec(),
++            Some(Box::new(TestHttpJointEvaluation {
++                fail_finalize: true,
++                active: Arc::new(std::sync::atomic::AtomicBool::new(true)),
++                encoded: false,
++                finalize_calls: Arc::clone(&finalize_calls),
++                gate_matches: true,
++                encode_body: Some(b"encoded"),
++                expected_finalize_body: b"encoded",
++            })),
++        )
++        .await
++        .expect_err("Finalize failure must precede lifecycle commit");
++    assert_eq!(
++        error.stage,
++        Some(intercept_proxy_exchange::ErrorStage::Finalize)
++    );
++    assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 0);
++    assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 0);
++
++    let active = rules.commit_guard.as_ref().unwrap().clone();
++    active.store(true, std::sync::atomic::Ordering::Release);
++    let evaluated = pipeline
++        .rule_runtime
++        .evaluate(
++            &context,
++            DomainMessageStage::Request,
++            request_metadata(),
++            Some(&request_message("original")),
++            test_body_codec(),
++            Some(Box::new(TestHttpJointEvaluation {
++                fail_finalize: false,
++                active: Arc::clone(&active),
++                encoded: false,
++                finalize_calls: Arc::clone(&finalize_calls),
++                gate_matches: true,
++                encode_body: None,
++                expected_finalize_body: b"action-body",
++            })),
++        )
++        .await
++        .unwrap();
++    assert_eq!(&evaluated.prepared_message.unwrap().body[..], b"finalized");
++    assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 1);
++    assert_eq!(rules.snapshot.lock().rules[0].lifecycle().hit_count, 1);
++    assert!(!active.load(std::sync::atomic::Ordering::Acquire));
++
++    let unmatched = pipeline
++        .rule_runtime
++        .evaluate(
++            &context,
++            DomainMessageStage::Request,
++            request_metadata(),
++            Some(&request_message("original")),
++            test_body_codec(),
++            Some(Box::new(TestHttpJointEvaluation {
++                fail_finalize: false,
++                active: Arc::new(std::sync::atomic::AtomicBool::new(true)),
++                encoded: false,
++                finalize_calls: Arc::clone(&finalize_calls),
++                gate_matches: false,
++                encode_body: None,
++                expected_finalize_body: b"original",
++            })),
++        )
++        .await
++        .unwrap();
++    assert_eq!(&unmatched.prepared_message.unwrap().body[..], b"finalized");
++    assert_eq!(rules.commit_attempts.load(AtomicOrdering::Acquire), 1);
++    assert_eq!(finalize_calls.load(AtomicOrdering::Acquire), 3);
++}
+diff --git a/src-tauri/crates/infrastructure/src/sqlite/tests/http_finalize_compatibility.rs b/src-tauri/crates/infrastructure/src/sqlite/tests/http_finalize_compatibility.rs
+new file mode 100644
+index 00000000..376fe111
+--- /dev/null
++++ b/src-tauri/crates/infrastructure/src/sqlite/tests/http_finalize_compatibility.rs
+@@ -0,0 +1,88 @@
++use intercept_proxy_domain::{ProtocolDirection, ProxyWorkspace, Revision};
++use intercept_proxy_package_runtime::{WasmPackageRuntime, read_package_component};
++
++use super::*;
++
++#[tokio::test]
++async fn finalize_host_reopens_schema100_and_keeps_the_existing_http_package_and_workspace() {
++    let repository = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join("../../..");
++    let archive = std::fs::read(
++        repository.join("examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm"),
++    )
++    .expect("existing pre-Finalize HTTP Component");
++    let component = read_package_component(&archive).expect("existing package manifest");
++    let identity = component.manifest().package().identity();
++    let directory = tempfile::tempdir().unwrap();
++    let path = directory.path().join("schema100.sqlite");
++    let now = Utc::now();
++    let workspace_value = ProxyWorkspace {
++        name: "preserved workspace".into(),
++        revision: Revision::new(7),
++        ..ProxyWorkspace::default()
++    };
++    workspace_value.validate().unwrap();
++    let workspace = crate::adapters::WorkspaceRepositoryAdapter::record(&workspace_value).unwrap();
++
++    let before = {
++        let store = SqliteStore::open(&path).unwrap();
++        store.insert_workspace(&workspace).unwrap();
++        store
++            .install_local_external_package(component.manifest(), &archive, now)
++            .unwrap();
++        store
++            .set_external_package_enabled(&identity, false)
++            .unwrap();
++        store.get_external_package(&identity).unwrap().unwrap()
++    };
++
++    let store = SqliteStore::open(&path).expect("reopen the compatible database");
++    assert_eq!(
++        store.load_workspace(workspace.id).unwrap(),
++        Some(workspace.clone())
++    );
++    assert_eq!(
++        store.load_workspaces().unwrap().selected_id,
++        Some(workspace.id)
++    );
++    let after = store.get_external_package(&identity).unwrap().unwrap();
++    assert_eq!(
++        after, before,
++        "Finalize must not migrate or rewrite stored package data"
++    );
++    let version: i64 = store
++        .connection
++        .lock()
++        .query_row(
++            "SELECT version FROM application_schema WHERE singleton_id = 1",
++            [],
++            |row| row.get(0),
++        )
++        .unwrap();
++    assert_eq!(version, 100);
++
++    let persisted = read_package_component(after.local_archive.as_ref().unwrap()).unwrap();
++    let mut runtime = WasmPackageRuntime::load(&persisted)
++        .await
++        .expect("load the unchanged old Component");
++    for direction in [ProtocolDirection::Upstream, ProtocolDirection::Downstream] {
++        assert!(!runtime.has_http_finalize(direction));
++        assert!(
++            runtime
++                .finalize_http(direction, "not needed by an old package")
++                .await
++                .unwrap()
++                .is_none()
++        );
++    }
++    let document = runtime
++        .decode_http(ProtocolDirection::Upstream, r#"{"old":true}"#)
++        .await
++        .unwrap();
++    assert_eq!(
++        runtime
++            .encode_http(ProtocolDirection::Upstream, r#"{"old":true}"#, &document)
++            .await
++            .unwrap(),
++        r#"{"old":true}"#
++    );
++}
+diff --git a/src-tauri/crates/package-runtime/src/wasm_component/finalize.rs b/src-tauri/crates/package-runtime/src/wasm_component/finalize.rs
+new file mode 100644
+index 00000000..ef25de87
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/src/wasm_component/finalize.rs
+@@ -0,0 +1,154 @@
++use intercept_proxy_domain::{DomainError, ProtocolDirection};
++use wasmtime::Store;
++use wasmtime::component::{
++    Component, ComponentExportIndex, Instance, TypedFunc, types::ComponentItem,
++};
++
++use super::{
++    HostState, PackageInstance, WasmPackageRuntime, http_bindings, invalid_component,
++    runtime_guest_error, runtime_trap,
++};
++
++type HttpFinalizeResult =
++    Result<String, http_bindings::intercept_proxy::protocol_package::types::PackageError>;
++type HttpFinalizeFunc = TypedFunc<(String,), (HttpFinalizeResult,)>;
++
++#[derive(Default)]
++pub(super) struct HttpFinalizeExports {
++    upstream: Option<HttpFinalizeFunc>,
++    downstream: Option<HttpFinalizeFunc>,
++}
++
++impl HttpFinalizeExports {
++    pub(super) fn has(&self, direction: ProtocolDirection) -> bool {
++        self.get(direction).is_some()
++    }
++
++    pub(super) async fn call(
++        &self,
++        store: &mut Store<HostState>,
++        direction: ProtocolDirection,
++        http_json: &str,
++    ) -> Result<Option<String>, DomainError> {
++        let Some(function) = self.get(direction) else {
++            return Ok(None);
++        };
++        let (result,) = function
++            .call_async(store, (http_json.to_owned(),))
++            .await
++            .map_err(|error| runtime_trap(&error))?;
++        result
++            .map(Some)
++            .map_err(|error| runtime_guest_error(&error.code, &error.message))
++    }
++
++    fn get(&self, direction: ProtocolDirection) -> Option<&HttpFinalizeFunc> {
++        match direction {
++            ProtocolDirection::Upstream => self.upstream.as_ref(),
++            ProtocolDirection::Downstream => self.downstream.as_ref(),
++        }
++    }
++}
++
++pub(super) struct OptionalHttpFinalizeIndices {
++    upstream: Option<ComponentExportIndex>,
++    downstream: Option<ComponentExportIndex>,
++}
++
++impl OptionalHttpFinalizeIndices {
++    pub(super) fn new(component: &Component) -> Result<Self, DomainError> {
++        Ok(Self {
++            upstream: optional_function_index(component, "upstream-finalize")?,
++            downstream: optional_function_index(component, "downstream-finalize")?,
++        })
++    }
++
++    pub(super) fn load(
++        self,
++        store: &mut Store<HostState>,
++        instance: &Instance,
++    ) -> Result<HttpFinalizeExports, DomainError> {
++        Ok(HttpFinalizeExports {
++            upstream: load_optional_http_finalize(
++                store,
++                instance,
++                self.upstream,
++                "upstream-finalize",
++            )?,
++            downstream: load_optional_http_finalize(
++                store,
++                instance,
++                self.downstream,
++                "downstream-finalize",
++            )?,
++        })
++    }
++}
++
++fn optional_function_index(
++    component: &Component,
++    name: &str,
++) -> Result<Option<ComponentExportIndex>, DomainError> {
++    let component_type = component.component_type();
++    let Some(export) = component_type.get_export(component.engine(), name) else {
++        return Ok(None);
++    };
++    if !matches!(export.ty, ComponentItem::ComponentFunc(_)) {
++        return Err(invalid_component(format!(
++            "optional HTTP package export `{name}` is not a function"
++        )));
++    }
++    Ok(component.get_export_index(None, name))
++}
++
++fn load_optional_http_finalize(
++    store: &mut Store<HostState>,
++    instance: &Instance,
++    index: Option<ComponentExportIndex>,
++    name: &str,
++) -> Result<Option<HttpFinalizeFunc>, DomainError> {
++    let Some(index) = index else {
++        return Ok(None);
++    };
++    let function = instance.get_func(&mut *store, index).ok_or_else(|| {
++        invalid_component(format!(
++            "optional HTTP package export `{name}` is not a function"
++        ))
++    })?;
++    function
++        .typed::<(String,), (HttpFinalizeResult,)>(&mut *store)
++        .map(Some)
++        .map_err(|error| {
++            invalid_component(format!(
++                "optional HTTP package export `{name}` has an invalid signature: {error}"
++            ))
++        })
++}
++
++impl WasmPackageRuntime {
++    /// Returns whether the HTTP package exports Finalize for one direction.
++    #[must_use]
++    pub fn has_http_finalize(&self, direction: ProtocolDirection) -> bool {
++        match &self.instance {
++            PackageInstance::Http { finalize, .. } => finalize.has(direction),
++            PackageInstance::Socket { .. } => false,
++        }
++    }
++
++    /// Calls an optional HTTP Finalize export for one direction.
++    pub async fn finalize_http(
++        &mut self,
++        direction: ProtocolDirection,
++        http_json: &str,
++    ) -> Result<Option<String>, DomainError> {
++        let PackageInstance::Http {
++            store, finalize, ..
++        } = &mut self.instance
++        else {
++            return Err(invalid_component(
++                "Socket protocol packages do not export HTTP finalize hooks",
++            ));
++        };
++        finalize.call(store, direction, http_json).await
++    }
++}
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/.gitignore b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/.gitignore
+new file mode 100644
+index 00000000..556a7675
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/.gitignore
+@@ -0,0 +1,2 @@
++/target/
++!Cargo.lock
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.lock b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.lock
+new file mode 100644
+index 00000000..8c877f6e
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.lock
+@@ -0,0 +1,336 @@
++# This file is automatically @generated by Cargo.
++# It is not intended for manual editing.
++version = 4
++
++[[package]]
++name = "anyhow"
++version = "1.0.104"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "330a5ed07fa54e4702c9d6c4174f74427fc0ef6e214bbd677ae50a5099946470"
++
++[[package]]
++name = "bitflags"
++version = "2.13.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "b588b76d00fde79687d7646a9b5bdf3cc0f655e0bbd080335a95d7e96f3587da"
++
++[[package]]
++name = "equivalent"
++version = "1.0.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "877a4ace8713b0bcf2a4e7eec82529c029f1d0619886d18145fea96c3ffe5c0f"
++
++[[package]]
++name = "foldhash"
++version = "0.1.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "d9c4f5dac5e15c24eb999c26181a6ca40b39fe946cbe4c263c7209467bc83af2"
++
++[[package]]
++name = "hashbrown"
++version = "0.15.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9229cfe53dfd69f0609a49f65461bd93001ea1ef889cd5529dd176593f5338a1"
++dependencies = [
++ "foldhash",
++]
++
++[[package]]
++name = "hashbrown"
++version = "0.17.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ed5909b6e89a2db4456e54cd5f673791d7eca6732202bbf2a9cc504fe2f9b84a"
++
++[[package]]
++name = "heck"
++version = "0.5.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "2304e00983f87ffb38b55b444b5e3b60a884b5d30c0fca7d82fe33449bbe55ea"
++
++[[package]]
++name = "id-arena"
++version = "2.3.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "3d3067d79b975e8844ca9eb072e16b31c3c1c36928edf9c6789548c524d0d954"
++
++[[package]]
++name = "indexmap"
++version = "2.14.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cc4e190f5d26ca7051642629da2c52fc03bde85a03197c99408dcd291734c855"
++dependencies = [
++ "equivalent",
++ "hashbrown 0.17.1",
++ "serde",
++ "serde_core",
++]
++
++[[package]]
++name = "intercept-proxy-http-finalize-component"
++version = "1.0.0"
++dependencies = [
++ "wit-bindgen",
++]
++
++[[package]]
++name = "itoa"
++version = "1.0.18"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8f42a60cbdf9a97f5d2305f08a87dc4e09308d1276d28c869c684d7777685682"
++
++[[package]]
++name = "leb128fmt"
++version = "0.1.0"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "09edd9e8b54e49e587e4f6295a7d29c3ea94d469cb40ab8ca70b288248a81db2"
++
++[[package]]
++name = "log"
++version = "0.4.34"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "f9f8bd3e56ce4dfc153cf470fffbfa98c7620958b312ca5c3a4b8d5181fd13c6"
++
++[[package]]
++name = "memchr"
++version = "2.8.3"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
++
++[[package]]
++name = "prettyplease"
++version = "0.2.37"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "479ca8adacdd7ce8f1fb39ce9ecccbfe93a3f1344b3d0d97f20bc0196208f62b"
++dependencies = [
++ "proc-macro2",
++ "syn 2.0.119",
++]
++
++[[package]]
++name = "proc-macro2"
++version = "1.0.107"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "985e7ec9bb745e6ce6535b544d84d6cd6f7ad8bd711c398938ae983b91a766d9"
++dependencies = [
++ "unicode-ident",
++]
++
++[[package]]
++name = "quote"
++version = "1.0.47"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1fbf4db142a473a8d80c26bbf18454ed458bf8d26c8219c331daecfdbd079001"
++dependencies = [
++ "proc-macro2",
++]
++
++[[package]]
++name = "semver"
++version = "1.0.28"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "8a7852d02fc848982e0c167ef163aaff9cd91dc640ba85e263cb1ce46fae51cd"
++
++[[package]]
++name = "serde"
++version = "1.0.229"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "4148590afebada386688f18773da617792bf2ef03ffc1e4cbd2b1d45b023e0ba"
++dependencies = [
++ "serde_core",
++]
++
++[[package]]
++name = "serde_core"
++version = "1.0.229"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "67dca2c9c51e58a4791a4b1ed58308b39c64224d349a935ab5039aa360942a48"
++dependencies = [
++ "serde_derive",
++]
++
++[[package]]
++name = "serde_derive"
++version = "1.0.229"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e7a5d71263a5a7d47b41f6b3f06ba276f10cc18b0931f1799f710578e2309348"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "syn 3.0.5",
++]
++
++[[package]]
++name = "serde_json"
++version = "1.0.151"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "c841b55ecdae098c80dcae9cf767f6f8a0c2cdb3416bbef72181df4d0fe73f14"
++dependencies = [
++ "itoa",
++ "memchr",
++ "serde",
++ "serde_core",
++ "zmij",
++]
++
++[[package]]
++name = "syn"
++version = "2.0.119"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "872831b642d1a07999a962a351ed35b955ea2cfc8f3862091e2a240a84f17297"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "unicode-ident",
++]
++
++[[package]]
++name = "syn"
++version = "3.0.5"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "12df2e0110f65b775f769bb17ef989067a1d931b2eb822bd4346631eeada89f9"
++dependencies = [
++ "proc-macro2",
++ "quote",
++ "unicode-ident",
++]
++
++[[package]]
++name = "unicode-ident"
++version = "1.0.24"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e6e4313cd5fcd3dad5cafa179702e2b244f760991f45397d14d4ebf38247da75"
++
++[[package]]
++name = "unicode-xid"
++version = "0.2.6"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "ebc1c04c71510c7f702b52b7c350734c9ff1295c464a03335b00bb84fc54f853"
++
++[[package]]
++name = "wasm-encoder"
++version = "0.241.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "e01164c9dda68301e34fdae536c23ed6fe90ce6d97213ccc171eebbd3d02d6b8"
++dependencies = [
++ "leb128fmt",
++ "wasmparser",
++]
++
++[[package]]
++name = "wasm-metadata"
++version = "0.241.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "876fe286f2fa416386deedebe8407e6f19e0b5aeaef3d03161e77a15fa80f167"
++dependencies = [
++ "anyhow",
++ "indexmap",
++ "wasm-encoder",
++ "wasmparser",
++]
++
++[[package]]
++name = "wasmparser"
++version = "0.241.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "46d90019b1afd4b808c263e428de644f3003691f243387d30d673211ee0cb8e8"
++dependencies = [
++ "bitflags",
++ "hashbrown 0.15.5",
++ "indexmap",
++ "semver",
++]
++
++[[package]]
++name = "wit-bindgen"
++version = "0.48.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "7f8c2adb5f74ac9395bc3121c99a1254bf9310482c27b13f97167aedb5887138"
++dependencies = [
++ "bitflags",
++ "wit-bindgen-rust-macro",
++]
++
++[[package]]
++name = "wit-bindgen-core"
++version = "0.48.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "9b881a098cae03686d7a0587f8f306f8a58102ad8da8b5599100fbe0e7f5800b"
++dependencies = [
++ "anyhow",
++ "heck",
++ "wit-parser",
++]
++
++[[package]]
++name = "wit-bindgen-rust"
++version = "0.48.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "69667efa439a453e1d50dac939c6cab6d2c3ac724a9d232b6631dad2472a5b70"
++dependencies = [
++ "anyhow",
++ "heck",
++ "indexmap",
++ "prettyplease",
++ "syn 2.0.119",
++ "wasm-metadata",
++ "wit-bindgen-core",
++ "wit-component",
++]
++
++[[package]]
++name = "wit-bindgen-rust-macro"
++version = "0.48.1"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "eae2e22cceb5d105d52326c07e3e67603a861cc7add70fc467f7cc7ec5265017"
++dependencies = [
++ "anyhow",
++ "prettyplease",
++ "proc-macro2",
++ "quote",
++ "syn 2.0.119",
++ "wit-bindgen-core",
++ "wit-bindgen-rust",
++]
++
++[[package]]
++name = "wit-component"
++version = "0.241.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "1fd0c57df25e7ee612d946d3b7646c1ddb2310f8280aa2c17e543b66e0812241"
++dependencies = [
++ "anyhow",
++ "bitflags",
++ "indexmap",
++ "log",
++ "serde",
++ "serde_derive",
++ "serde_json",
++ "wasm-encoder",
++ "wasm-metadata",
++ "wasmparser",
++ "wit-parser",
++]
++
++[[package]]
++name = "wit-parser"
++version = "0.241.2"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "09ef1c6ad67f35c831abd4039c02894de97034100899614d1c44e2268ad01c91"
++dependencies = [
++ "anyhow",
++ "id-arena",
++ "indexmap",
++ "log",
++ "semver",
++ "serde",
++ "serde_derive",
++ "serde_json",
++ "unicode-xid",
++ "wasmparser",
++]
++
++[[package]]
++name = "zmij"
++version = "1.0.23"
++source = "registry+https://github.com/rust-lang/crates.io-index"
++checksum = "29666d0abbfad1e3dc4dcf6144730dd3a3ab225bbbdac83319345b1b44ccfc1b"
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.toml b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.toml
+new file mode 100644
+index 00000000..9125de7d
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/Cargo.toml
+@@ -0,0 +1,19 @@
++[package]
++name = "intercept-proxy-http-finalize-component"
++version = "1.0.0"
++edition = "2024"
++publish = false
++
++[lib]
++crate-type = ["cdylib"]
++
++[features]
++default = []
++upstream = []
++downstream = []
++invalid-signature = []
++
++[dependencies]
++wit-bindgen = "=0.48.1"
++
++[workspace]
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/manifest.json b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/manifest.json
+new file mode 100644
+index 00000000..f82729a0
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/manifest.json
+@@ -0,0 +1,14 @@
++{
++  "api": 1,
++  "kind": "http",
++  "package": {
++    "id": "http-finalize-contract",
++    "version": "1.0.0",
++    "name": "HTTP Finalize Contract Fixture",
++    "description": "Exercises optional HTTP Finalize Component exports."
++  },
++  "document": {
++    "upstream": {},
++    "downstream": {}
++  }
++}
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/src/lib.rs b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/src/lib.rs
+new file mode 100644
+index 00000000..d3fe0501
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/src/lib.rs
+@@ -0,0 +1,127 @@
++#[cfg(feature = "invalid-signature")]
++wit_bindgen::generate!({
++    path: "wit-invalid",
++    world: "http-package-invalid-finalize",
++});
++
++#[cfg(all(
++    not(feature = "invalid-signature"),
++    feature = "upstream",
++    feature = "downstream"
++))]
++wit_bindgen::generate!({
++    path: "../../../wit",
++    world: "http-package-finalize",
++});
++
++#[cfg(all(
++    not(feature = "invalid-signature"),
++    feature = "upstream",
++    not(feature = "downstream")
++))]
++wit_bindgen::generate!({
++    path: "../../../wit",
++    world: "http-package-upstream-finalize",
++});
++
++#[cfg(all(
++    not(feature = "invalid-signature"),
++    not(feature = "upstream"),
++    feature = "downstream"
++))]
++wit_bindgen::generate!({
++    path: "../../../wit",
++    world: "http-package-downstream-finalize",
++});
++
++#[cfg(all(
++    not(feature = "invalid-signature"),
++    not(feature = "upstream"),
++    not(feature = "downstream")
++))]
++wit_bindgen::generate!({
++    path: "../../../wit",
++    world: "http-package",
++});
++
++struct HttpFinalize;
++
++impl Guest for HttpFinalize {
++    fn upstream_decode(input: String) -> Result<String, PackageError> {
++        Ok(input)
++    }
++
++    fn downstream_decode(input: String) -> Result<String, PackageError> {
++        Ok(input)
++    }
++
++    fn upstream_encode(
++        _original_input: String,
++        document_json: String,
++    ) -> Result<String, PackageError> {
++        Ok(document_json)
++    }
++
++    fn downstream_encode(
++        _original_input: String,
++        document_json: String,
++    ) -> Result<String, PackageError> {
++        Ok(document_json)
++    }
++
++    fn upstream_display(document_json: String) -> Result<String, PackageError> {
++        Ok(document_json)
++    }
++
++    fn downstream_display(document_json: String) -> Result<String, PackageError> {
++        Ok(document_json)
++    }
++
++    #[cfg(all(feature = "upstream", not(feature = "invalid-signature")))]
++    fn upstream_finalize(http_json: String) -> Result<String, PackageError> {
++        finalize(http_json, "upstream")
++    }
++
++    #[cfg(all(feature = "downstream", not(feature = "invalid-signature")))]
++    fn downstream_finalize(http_json: String) -> Result<String, PackageError> {
++        finalize(http_json, "downstream")
++    }
++
++    #[cfg(feature = "invalid-signature")]
++    fn downstream_finalize(http_json: u32) -> u32 {
++        http_json
++    }
++}
++
++#[cfg(any(feature = "upstream", feature = "downstream"))]
++fn finalize(http_json: String, direction: &str) -> Result<String, PackageError> {
++    if http_json == "guest-error" {
++        return Err(PackageError {
++            code: "BODY_ENCODE_FAILED".to_owned(),
++            message: format!("{direction} finalize rejected the HTTP JSON"),
++        });
++    }
++    if http_json == "trap" {
++        panic!("{direction} finalize trap");
++    }
++    let code = match direction {
++        "upstream" => "201",
++        "downstream" => "202",
++        _ => unreachable!(),
++    };
++    let finalized = match direction {
++        "upstream" => http_json.replace("before", direction),
++        "downstream" if http_json == "before" => "downstream".to_owned(),
++        "downstream" => http_json
++            .replace("\"X-Value\":\"before\"", "\"X-Value\":\"downstream\"")
++            .replace("\"body\":\"before\"", "\"body\":\"downstream\"")
++            .replace(
++                "\"body\":\"\\\"before\\\"\"",
++                "\"body\":\"\\\"downstream\\\"\"",
++            ),
++        _ => unreachable!(),
++    };
++    Ok(finalized.replace("\"code\":200", &format!("\"code\":{code}")))
++}
++
++export!(HttpFinalize);
+diff --git a/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/wit-invalid/protocol-package.wit b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/wit-invalid/protocol-package.wit
+new file mode 100644
+index 00000000..b2f61110
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/fixtures/http-finalize/wit-invalid/protocol-package.wit
+@@ -0,0 +1,36 @@
++package intercept-proxy:protocol-package@1.0.0;
++
++interface types {
++  record package-error {
++    code: string,
++    message: string,
++  }
++}
++
++interface websocket {
++  variant message {
++    text(string),
++    binary(list<u8>),
++    closed(option<string>),
++  }
++
++  resource connection {
++    open: static func(url: string) -> result<connection, string>;
++    send-text: func(value: string) -> result<_, string>;
++    send-binary: func(value: list<u8>) -> result<_, string>;
++    receive: func() -> result<message, string>;
++    close: func() -> result<_, string>;
++  }
++}
++
++world http-package-invalid-finalize {
++  use types.{package-error};
++  import websocket;
++  export upstream-decode: func(input: string) -> result<string, package-error>;
++  export downstream-decode: func(input: string) -> result<string, package-error>;
++  export upstream-encode: func(original-input: string, document-json: string) -> result<string, package-error>;
++  export downstream-encode: func(original-input: string, document-json: string) -> result<string, package-error>;
++  export upstream-display: func(document-json: string) -> result<string, package-error>;
++  export downstream-display: func(document-json: string) -> result<string, package-error>;
++  export downstream-finalize: func(http-json: u32) -> u32;
++}
+diff --git a/src-tauri/crates/package-runtime/tests/wasm_http_finalize.rs b/src-tauri/crates/package-runtime/tests/wasm_http_finalize.rs
+new file mode 100644
+index 00000000..8c615185
+--- /dev/null
++++ b/src-tauri/crates/package-runtime/tests/wasm_http_finalize.rs
+@@ -0,0 +1,187 @@
++use std::{path::PathBuf, process::Command};
++
++use intercept_proxy_domain::{ErrorCode, ProtocolDirection};
++use intercept_proxy_package_runtime::{
++    WasmPackageRuntime, embed_package_manifest, read_package_component,
++};
++use wasm_encoder::{
++    Component, ComponentExportKind, ComponentExportSection, ComponentInstanceSection,
++};
++
++fn build_http_finalize_fixture(features: &[&str]) -> Vec<u8> {
++    let manifest_dir = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
++    let fixture = manifest_dir.join("tests/fixtures/http-finalize");
++    let feature_key = if features.is_empty() {
++        "none".to_owned()
++    } else {
++        features.join("-")
++    };
++    let target_dir = fixture.join("target").join(feature_key);
++    let mut command = Command::new(env!("CARGO"));
++    command.args([
++        "build",
++        "--locked",
++        "--manifest-path",
++        fixture.join("Cargo.toml").to_str().expect("UTF-8 path"),
++        "--target",
++        "wasm32-wasip2",
++        "--target-dir",
++        target_dir.to_str().expect("UTF-8 path"),
++        "--no-default-features",
++    ]);
++    if !features.is_empty() {
++        command.args(["--features", &features.join(",")]);
++    }
++    let output = command.output().expect("build HTTP Finalize fixture");
++    assert!(
++        output.status.success(),
++        "fixture build failed:\n{}\n{}",
++        String::from_utf8_lossy(&output.stdout),
++        String::from_utf8_lossy(&output.stderr),
++    );
++    let component = std::fs::read(
++        target_dir.join("wasm32-wasip2/debug/intercept_proxy_http_finalize_component.wasm"),
++    )
++    .expect("read built HTTP Finalize Component fixture");
++    let manifest = std::fs::read(fixture.join("manifest.json")).expect("read HTTP manifest");
++    embed_package_manifest(&component, &manifest).expect("embed top-level HTTP manifest")
++}
++
++#[tokio::test]
++async fn loads_a_committed_legacy_base_world_component_without_finalize() {
++    let repository = PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../../..");
++    let bytes = std::fs::read(
++        repository.join("examples/protocol-packages/json_pretty/dist/json-pretty-1.0.0.wasm"),
++    )
++    .expect("read committed legacy HTTP Component");
++    let package = read_package_component(&bytes).expect("validate legacy HTTP Component");
++    let mut runtime = WasmPackageRuntime::load(&package)
++        .await
++        .expect("load legacy base HTTP world");
++
++    assert!(!runtime.has_http_finalize(ProtocolDirection::Upstream));
++    assert!(!runtime.has_http_finalize(ProtocolDirection::Downstream));
++    assert_eq!(
++        runtime
++            .finalize_http(ProtocolDirection::Upstream, "unchanged")
++            .await
++            .unwrap(),
++        None
++    );
++}
++
++#[tokio::test]
++async fn discovers_and_calls_independent_optional_http_finalize_exports() {
++    let cases: &[(&[&str], bool, bool)] = &[
++        (&[], false, false),
++        (&["upstream"], true, false),
++        (&["downstream"], false, true),
++        (&["upstream", "downstream"], true, true),
++    ];
++
++    for &(features, has_upstream, has_downstream) in cases {
++        let package = read_package_component(&build_http_finalize_fixture(features))
++            .expect("valid HTTP Finalize Component");
++        let mut runtime = WasmPackageRuntime::load(&package)
++            .await
++            .expect("load HTTP Finalize Component");
++
++        assert_eq!(
++            runtime.has_http_finalize(ProtocolDirection::Upstream),
++            has_upstream
++        );
++        assert_eq!(
++            runtime.has_http_finalize(ProtocolDirection::Downstream),
++            has_downstream
++        );
++
++        let upstream = runtime
++            .finalize_http(ProtocolDirection::Upstream, "before")
++            .await
++            .expect("call optional upstream Finalize");
++        assert_eq!(upstream, has_upstream.then(|| "upstream".to_owned()));
++        let downstream = runtime
++            .finalize_http(ProtocolDirection::Downstream, "before")
++            .await
++            .expect("call optional downstream Finalize");
++        assert_eq!(downstream, has_downstream.then(|| "downstream".to_owned()));
++
++        if has_downstream {
++            let repeated = runtime
++                .finalize_http(
++                    ProtocolDirection::Downstream,
++                    downstream.as_deref().expect("downstream result"),
++                )
++                .await
++                .expect("repeat downstream Finalize after post-return");
++            assert_eq!(repeated.as_deref(), Some("downstream"));
++        }
++    }
++}
++
++#[tokio::test]
++async fn preserves_finalize_guest_errors_and_traps() {
++    let package = read_package_component(&build_http_finalize_fixture(&["downstream"]))
++        .expect("valid downstream HTTP Finalize Component");
++    let mut runtime = WasmPackageRuntime::load(&package)
++        .await
++        .expect("load downstream HTTP Finalize Component");
++
++    let guest_error = runtime
++        .finalize_http(ProtocolDirection::Downstream, "guest-error")
++        .await
++        .expect_err("guest error must propagate");
++    assert_eq!(guest_error.code, ErrorCode::BodyEncodeFailed);
++    assert_eq!(
++        guest_error.message,
++        "downstream finalize rejected the HTTP JSON"
++    );
++
++    let trap = runtime
++        .finalize_http(ProtocolDirection::Downstream, "trap")
++        .await
++        .expect_err("guest trap must propagate");
++    assert_eq!(trap.code, ErrorCode::InternalError);
++    assert!(trap.message.starts_with("Wasm package trapped:"));
++}
++
++#[tokio::test]
++async fn rejects_present_http_finalize_export_with_the_wrong_signature() {
++    let package = read_package_component(&build_http_finalize_fixture(&["invalid-signature"]))
++        .expect("statically valid Component");
++    let error = WasmPackageRuntime::load(&package)
++        .await
++        .expect_err("wrong Finalize signature must invalidate the package");
++    assert_eq!(error.code, ErrorCode::ProtocolPackageInvalid);
++    assert!(error.message.contains("downstream-finalize"));
++    assert!(error.message.contains("invalid signature"));
++}
++
++#[tokio::test]
++async fn rejects_present_http_finalize_export_that_is_not_a_function() {
++    let mut instances = ComponentInstanceSection::new();
++    instances.export_items(std::iter::empty::<(&str, ComponentExportKind, u32)>());
++    let mut exports = ComponentExportSection::new();
++    exports.export(
++        "downstream-finalize",
++        ComponentExportKind::Instance,
++        0,
++        None,
++    );
++    let mut component = Component::new();
++    component.section(&instances);
++    component.section(&exports);
++    let manifest = std::fs::read(
++        PathBuf::from(env!("CARGO_MANIFEST_DIR"))
++            .join("tests/fixtures/http-finalize/manifest.json"),
++    )
++    .unwrap();
++    let bytes = embed_package_manifest(&component.finish(), &manifest).unwrap();
++    let package = read_package_component(&bytes).expect("statically valid Component");
++    let error = WasmPackageRuntime::load(&package)
++        .await
++        .expect_err("non-function Finalize export must invalidate the package");
++    assert_eq!(error.code, ErrorCode::ProtocolPackageInvalid);
++    assert!(error.message.contains("downstream-finalize"));
++    assert!(error.message.contains("is not a function"));
++}
+diff --git a/src-tauri/crates/proxy/src/http/exchange_runtime/request_target.rs b/src-tauri/crates/proxy/src/http/exchange_runtime/request_target.rs
+new file mode 100644
+index 00000000..6a544857
+--- /dev/null
++++ b/src-tauri/crates/proxy/src/http/exchange_runtime/request_target.rs
+@@ -0,0 +1,58 @@
++use http::Uri;
++use intercept_proxy_exchange::Error;
++
++use crate::{HttpRequestMetadata, Message};
++
++pub(super) fn request_start_line(message: &Message) -> Result<(String, String), Error> {
++    let mut fields = message.start_line.split_ascii_whitespace();
++    let method = fields.next().ok_or_else(|| {
++        Error::coded(
++            "HTTP_REQUEST_METHOD_MISSING",
++            "HTTP request start-line has no method",
++        )
++    })?;
++    let url = fields.next().ok_or_else(|| {
++        Error::coded(
++            "HTTP_REQUEST_TARGET_MISSING",
++            "HTTP request start-line has no request target",
++        )
++    })?;
++    Ok((method.to_owned(), url.to_owned()))
++}
++
++pub(super) fn finalized_upstream_uri(
++    outgoing: &Uri,
++    request: &HttpRequestMetadata,
++    message: &Message,
++) -> Result<Uri, Error> {
++    let (method, finalized_url) = request_start_line(message)?;
++    if method != request.method {
++        return Err(Error::coded(
++            "HTTP_FINALIZE_METHOD_CHANGED",
++            "HTTP Finalize must not change the request method",
++        ));
++    }
++    let original = request
++        .url
++        .parse::<Uri>()
++        .map_err(|error| Error::coded("HTTP_REQUEST_URL_INVALID", error.to_string()))?;
++    let finalized = finalized_url
++        .parse::<Uri>()
++        .map_err(|error| Error::coded("HTTP_FINALIZE_URL_INVALID", error.to_string()))?;
++    if finalized.scheme() != original.scheme() || finalized.authority() != original.authority() {
++        return Err(Error::coded(
++            "HTTP_FINALIZE_URL_ORIGIN_CHANGED",
++            "HTTP Finalize may only change the request path and query",
++        ));
++    }
++    let path_and_query = finalized.path_and_query().cloned().ok_or_else(|| {
++        Error::coded(
++            "HTTP_FINALIZE_URL_INVALID",
++            "HTTP Finalize URL has no path and query",
++        )
++    })?;
++    let mut parts = outgoing.clone().into_parts();
++    parts.path_and_query = Some(path_and_query);
++    Uri::from_parts(parts)
++        .map_err(|error| Error::coded("HTTP_FINALIZE_URL_INVALID", error.to_string()))
++}
+diff --git a/src-tauri/crates/proxy/src/http/finalize.rs b/src-tauri/crates/proxy/src/http/finalize.rs
+new file mode 100644
+index 00000000..ab1d163a
+--- /dev/null
++++ b/src-tauri/crates/proxy/src/http/finalize.rs
+@@ -0,0 +1,33 @@
++//! HTTP 写准备完成后的独立能力。
++
++use async_trait::async_trait;
++use intercept_proxy_exchange::Error;
++
++use super::{HttpRequestMetadata, Message};
++
++/// Final HTTP transformation after Encode and HTTP rule actions.
++///
++/// The native `Message` remains authoritative so raw header bytes are never
++/// projected through `HttpContext` during Finalize.
++#[async_trait]
++pub trait Finalize: Send {
++    async fn finalize(
++        &mut self,
++        request: &HttpRequestMetadata,
++        message: &mut Message,
++    ) -> Result<(), Error>;
++}
++
++#[derive(Debug, Default)]
++pub struct NoopHttpFinalize;
++
++#[async_trait]
++impl Finalize for NoopHttpFinalize {
++    async fn finalize(
++        &mut self,
++        _request: &HttpRequestMetadata,
++        _message: &mut Message,
++    ) -> Result<(), Error> {
++        Ok(())
++    }
++}
+diff --git a/src-tauri/crates/proxy/src/http/joint.rs b/src-tauri/crates/proxy/src/http/joint.rs
+new file mode 100644
+index 00000000..44e6d52b
+--- /dev/null
++++ b/src-tauri/crates/proxy/src/http/joint.rs
+@@ -0,0 +1,21 @@
++//! HTTP 规则、Encode 与 Finalize 的联合事务端口。
++
++use async_trait::async_trait;
++use intercept_proxy_exchange::{Error, HttpAction, MatchContext};
++use uuid::Uuid;
++
++use super::Finalize;
++use crate::JointRuleConditionEvaluation;
++
++#[async_trait]
++pub trait HttpJointEvaluation: Finalize + Send + Sync {
++    fn gate(
++        &mut self,
++        rule_id: Uuid,
++        context: &MatchContext<'_>,
++        message: &mut crate::Message,
++        apply_action: &mut dyn FnMut(&mut crate::Message, &HttpAction) -> crate::Result<()>,
++    ) -> crate::Result<JointRuleConditionEvaluation>;
++
++    async fn encode(&mut self, message: &mut crate::Message) -> Result<(), Error>;
++}
+diff --git a/src-tauri/src/runtime_logs/exchange_ui_layer/tests/finalize.rs b/src-tauri/src/runtime_logs/exchange_ui_layer/tests/finalize.rs
+new file mode 100644
+index 00000000..447f49f4
+--- /dev/null
++++ b/src-tauri/src/runtime_logs/exchange_ui_layer/tests/finalize.rs
+@@ -0,0 +1,59 @@
++use super::*;
++use intercept_proxy_application::ExternalPackageCallStage;
++
++#[test]
++fn http_finalize_failure_reaches_the_observation_store_with_package_details() {
++    let store = Arc::new(ExchangeObservationStore::new(Arc::new(
++        CapacityLedger::new(64 * 1024),
++    )));
++    let (layer, consumer) = layer(&store);
++    let subscriber = tracing_subscriber::registry().with(layer);
++    with_default(subscriber, || {
++        let span = tracing::info_span!(
++            "exchange",
++            exchange_id = "finalize-rejected",
++            workspace_id = "10000000-0000-0000-0000-000000000001",
++            listener_id = "20000000-0000-0000-0000-000000000002",
++            runtime_epoch = "30000000-0000-0000-0000-000000000003",
++            peer = "127.0.0.1:8080",
++            protocol = "http"
++        );
++        let _entered = span.enter();
++        tracing::info!(target: "intercept_proxy::exchange::ui", event = "opened");
++        tracing::error!(
++            target: "intercept_proxy::exchange::ui",
++            event = "failed",
++            direction = "downstream",
++            stage = "finalize",
++            context_header = "HTTP/1.1 200 OK\r\n\r\n",
++            context_body = "prepared body",
++            context_body_is_utf8 = true,
++            error = "method must remain unchanged",
++            external_package_id = "http-finalize-test",
++            external_package_version = "1.0.0",
++            external_stage = "finalize",
++            external_method = "downstream-finalize",
++            external_stable_code = "FINALIZE_REJECTED"
++        );
++    });
++    consumer.shutdown().unwrap();
++
++    let record = wait_for_record(&store, "finalize-rejected", 2);
++    let ExchangeObservationEvent::Failed {
++        stage,
++        context,
++        external_package_call,
++        ..
++    } = &record.events[1]
++    else {
++        panic!("expected a failed observation");
++    };
++    assert_eq!(stage, "finalize");
++    let call = external_package_call
++        .as_ref()
++        .expect("Finalize package details");
++    assert_eq!(call.stage, ExternalPackageCallStage::Finalize);
++    assert_eq!(call.method, "downstream-finalize");
++    assert_eq!(call.stable_code.as_deref(), Some("FINALIZE_REJECTED"));
++    assert!(matches!(context, Some(ExchangeContext::Http { body, .. }) if body == "prepared body"));
++}

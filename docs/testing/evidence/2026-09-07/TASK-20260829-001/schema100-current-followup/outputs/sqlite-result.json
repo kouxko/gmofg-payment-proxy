@@ -1,0 +1,13 @@
+{
+  "command": [
+    "cargo",
+    "test",
+    "--manifest-path",
+    "src-tauri/Cargo.toml",
+    "-p",
+    "intercept-proxy-infrastructure",
+    "--lib",
+    "sqlite::"
+  ],
+  "exit_code": 0
+}

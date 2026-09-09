@@ -1,0 +1,50 @@
+{
+  "version": 2,
+  "request_id": "6af691ef-9975-4b9f-92e0-e195b36ff046",
+  "ok": true,
+  "status": {
+    "serial": "",
+    "state": "start_requested",
+    "verified": false,
+    "transport": "local_abstract_socket",
+    "active_profile_id": "a920-controlled-v2",
+    "active_profile_fingerprint": "baf5da5790e5a76bf49e13b9c0c9e7591c42dd99bfb66751da6c3372b9d44760",
+    "active_route_fingerprint": "9a5231817034556e84a8ee45af0016e9e871a8be78186a5d42b8d9077d90d5d3",
+    "active_route_count": 2,
+    "companion_process_running": true,
+    "message": "已请求启动目标应用 VPN。",
+    "unsupported_fields": [
+      "serial"
+    ],
+    "stats": {
+      "download_ip_checksum_failures": 0,
+      "download_ip_length_mismatches": 0,
+      "download_tcp_syn_ack_packets": 0,
+      "download_transport_checksum_failures": 0,
+      "impairment_delay_millis_total": 0,
+      "impairment_mss_clamps": 0,
+      "impairment_packets_corrupted": 0,
+      "impairment_packets_dropped": 0,
+      "impairment_packets_duplicated": 0,
+      "impairment_packets_reordered": 0,
+      "impairment_pmtu_fragments": 0,
+      "impairment_pmtu_signals": 0,
+      "impairment_unimplemented_pmtu_actions": 0,
+      "last_error": null,
+      "protect_failures": 0,
+      "proxy_download_packets": 0,
+      "proxy_upload_packets": 0,
+      "socks_clients": 0,
+      "socks_connect_attempts": 0,
+      "socks_connect_successes": 0,
+      "tun_download_bytes": 0,
+      "tun_download_packets": 0,
+      "tun_upload_bytes": 0,
+      "tun_upload_packets": 0,
+      "upload_tcp_ack_packets": 0,
+      "upload_tcp_syn_packets": 0
+    }
+  },
+  "error_code": null,
+  "error_message": null
+}

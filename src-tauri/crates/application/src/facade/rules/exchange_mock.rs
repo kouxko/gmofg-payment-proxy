@@ -149,7 +149,7 @@ mod tests {
 
     #[test]
     fn captured_response_body_becomes_proxy_to_app_replace_body() {
-        let record = ExchangeObservationRecord {
+        let mut record = ExchangeObservationRecord {
             exchange_id: "exchange-1".into(),
             workspace_id: WorkspaceId::new(),
             listener_id: ListenerId::new(),
@@ -195,5 +195,27 @@ mod tests {
             content.action,
             UnifiedAction::Http(HttpAction::ReplaceBodyText(ref body)) if body == "mock body"
         ));
+
+        // 正常显示的 Shift-JIS 日文仍不是可直接回写的 UTF-8 原报文。
+        let ExchangeObservationEvent::Received {
+            context: ExchangeContext::Http {
+                body, body_is_utf8, ..
+            },
+            ..
+        } = &mut record.events[1]
+        else {
+            panic!("received HTTP response expected")
+        };
+        *body = "売上票（署名）保管正常完了。".to_owned();
+        *body_is_utf8 = false;
+        let source = MockDraftSource::from_record(&record, 1).unwrap();
+        assert_eq!(
+            source
+                .into_unified_input(&record)
+                .unwrap_err()
+                .view_model
+                .code,
+            "HTTP_MOCK_DRAFT_BODY_NOT_UTF8"
+        );
     }
 }

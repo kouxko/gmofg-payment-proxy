@@ -1,0 +1,8 @@
+POST /other HTTP/1.1
+Host: 127.0.0.1:28080
+Content-Type: application/json
+Content-Length: 45
+Connection: close
+X-Wire-Case: method
+
+{"customer": {"age": 17, "name": "original"}}

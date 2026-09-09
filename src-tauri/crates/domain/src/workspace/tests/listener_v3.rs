@@ -83,6 +83,49 @@ fn socket_runtime_limits_reject_zero_without_normalization() {
 }
 
 #[test]
+fn socket_read_chunk_cap_accepts_boundaries_and_preserves_serialized_values() {
+    for bytes in [1, 16_384, 1_048_576] {
+        let mut workspace = ProxyWorkspace::default();
+        let mut settings = SocketRelaySettings::default();
+        relay_mut(&mut settings).upstream = SocketEndpoint {
+            host: "127.0.0.1".into(),
+            port: 8080,
+        };
+        settings.runtime_limits.read_chunk_bytes = bytes;
+        workspace.listeners[0].data_plane = ListenerDataPlane::Socket(settings);
+        workspace.validate().expect("legal read chunk size");
+        let restored: ProxyWorkspace =
+            serde_json::from_slice(&serde_json::to_vec(&workspace).unwrap()).unwrap();
+        restored.validate().expect("legal imported read chunk size");
+        assert_eq!(restored, workspace);
+    }
+    assert_eq!(SocketRuntimeLimits::default().read_chunk_bytes, 16_384);
+}
+
+#[test]
+fn socket_read_chunk_cap_rejects_invalid_imports_without_normalization() {
+    for bytes in [0, 1_048_577, u32::MAX] {
+        let mut workspace = ProxyWorkspace::default();
+        let mut settings = SocketRelaySettings::default();
+        relay_mut(&mut settings).upstream = SocketEndpoint {
+            host: "127.0.0.1".into(),
+            port: 8080,
+        };
+        settings.runtime_limits.read_chunk_bytes = bytes;
+        workspace.listeners[0].data_plane = ListenerDataPlane::Socket(settings);
+        let restored: ProxyWorkspace =
+            serde_json::from_slice(&serde_json::to_vec(&workspace).unwrap()).unwrap();
+        let error = restored.validate().expect_err("invalid read chunk size");
+        assert!(
+            error
+                .field_errors
+                .contains_key("listeners.0.data_plane.settings.runtime_limits.read_chunk_bytes")
+        );
+        assert_eq!(restored, workspace);
+    }
+}
+
+#[test]
 fn socket_tls_roles_are_exhaustive_and_round_trip() {
     let server_identity = CertificateReferenceId::new();
     let client_trust = CertificateReferenceId::new();

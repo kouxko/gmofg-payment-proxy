@@ -1,0 +1,6 @@
+{
+  "command": "cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --offline",
+  "exit_code": 101,
+  "reason": "Uncached memfd 0.6.5 requires download; full dependency metadata not required for version-only check",
+  "next_validation": "cargo metadata --manifest-path src-tauri/Cargo.toml --format-version 1 --locked --offline --no-deps"
+}

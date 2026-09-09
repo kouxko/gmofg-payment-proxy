@@ -1,0 +1,69 @@
+{
+  "checked_at": "2026-09-08T03:28:23.383878+00:00",
+  "tag": "v1.0.0",
+  "commit": "a146e75ca03cefc52858887a47f832c9b71d8c5e",
+  "assets": [
+    {
+      "name": "Windows x64 便携 ZIP",
+      "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy-portable-x64.zip",
+      "path": "resources/Intercept-Proxy-portable-x64.zip",
+      "bytes": 39404443,
+      "file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/gitlab-release-audit/resources/Intercept-Proxy-portable-x64.zip: Zip archive data, at least v2.0 to extract, compression method=deflate",
+      "zip_crc_valid": true,
+      "entries": [
+        "resources/android-companion.apk",
+        "Intercept-Proxy.exe",
+        "PORTABLE.txt",
+        "README.md"
+      ]
+    },
+    {
+      "name": "Windows x64 EXE 安装包",
+      "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy_1.0.0_x64-setup.exe",
+      "path": "resources/Intercept-Proxy_1.0.0_x64-setup.exe",
+      "bytes": 26245272,
+      "file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/gitlab-release-audit/resources/Intercept-Proxy_1.0.0_x64-setup.exe: PE32 executable (GUI) Intel 80386, for MS Windows, Nullsoft Installer self-extracting archive"
+    },
+    {
+      "name": "Windows x64 MSI 安装包",
+      "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/Intercept-Proxy_1.0.0_x64_en-US.msi",
+      "path": "resources/Intercept-Proxy_1.0.0_x64_en-US.msi",
+      "bytes": 38080512,
+      "file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/gitlab-release-audit/resources/Intercept-Proxy_1.0.0_x64_en-US.msi: Composite Document File V2 Document, Little Endian, Os: Windows, Version 6.2, MSI Installer, Code page: 1252, Title: Installation Database, Subject: Intercept Proxy, Author: interceptproxy, Keywords: Installer, Comments: This installer database contains the logic and data required to install Intercept Proxy., Template: x64;0, Revision Number: {0ADC5292-E596-4A11-98C1-71408FF533BA}, Create Time/Date: Mon Sep  7 03:41:26 2026, Last Saved Time/Date: Mon Sep  7 03:41:26 2026, Number of Pages: 450, Number of Words: 2, Name of Creating Application: Windows Installer XML Toolset (3.14.1.8722), Security: 2"
+    },
+    {
+      "name": "Android Companion APK",
+      "url": "http://172.16.3.60/api/v4/projects/1023/packages/generic/intercept-proxy/1.0.0/intercept-proxy-android-companion.apk",
+      "path": "resources/intercept-proxy-android-companion.apk",
+      "bytes": 34861183,
+      "file": "/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/gitlab-release-audit/resources/intercept-proxy-android-companion.apk: Zip archive data, at least v0.0 to extract, compression method=deflate",
+      "zip_crc_valid": true,
+      "entries": [
+        "META-INF/com/android/build/gradle/app-metadata.properties",
+        "META-INF/version-control-info.textproto",
+        "classes.dex",
+        "lib/arm64-v8a/libintercept_proxy_android_engine.so",
+        "lib/armeabi-v7a/libintercept_proxy_android_engine.so",
+        "lib/x86/libintercept_proxy_android_engine.so",
+        "lib/x86_64/libintercept_proxy_android_engine.so",
+        "kotlin/annotation/annotation.kotlin_builtins",
+        "kotlin/collections/collections.kotlin_builtins",
+        "kotlin/concurrent/atomics/atomics.kotlin_builtins",
+        "kotlin/coroutines/coroutines.kotlin_builtins",
+        "kotlin/internal/internal.kotlin_builtins",
+        "kotlin/kotlin.kotlin_builtins",
+        "kotlin/ranges/ranges.kotlin_builtins",
+        "kotlin/reflect/reflect.kotlin_builtins",
+        "AndroidManifest.xml",
+        "res/4j.xml",
+        "res/Yd.xml",
+        "resources.arsc",
+        "META-INF/CERT.SF",
+        "META-INF/CERT.RSA",
+        "META-INF/MANIFEST.MF"
+      ]
+    }
+  ],
+  "macos_release_asset_present": false,
+  "read_only": true
+}

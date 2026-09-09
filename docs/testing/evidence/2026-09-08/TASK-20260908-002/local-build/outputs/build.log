@@ -1,0 +1,875 @@
+To honour the JVM settings for this build a single-use Daemon process will be forked. For more on this, please refer to https://docs.gradle.org/9.3.0/userguide/gradle_daemon.html#sec:disabling_the_daemon in the Gradle documentation.
+Daemon will be stopped at the end of the build 
+Warning: SDK processing. This version only understands SDK XML versions up to 3 but an SDK XML file of version 4 was encountered. This can happen if you use versions of Android Studio and the command-line tools that were released at different times.
+> Task :isolation-probe:preBuild UP-TO-DATE
+> Task :target-probe:preBuild UP-TO-DATE
+> Task :isolation-probe:preDebugBuild UP-TO-DATE
+> Task :target-probe:preDebugBuild UP-TO-DATE
+> Task :isolation-probe:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :target-probe:mergeDebugNativeDebugMetadata NO-SOURCE
+> Task :isolation-probe:generateDebugResources FROM-CACHE
+> Task :target-probe:generateDebugResources FROM-CACHE
+> Task :isolation-probe:packageDebugResources FROM-CACHE
+> Task :target-probe:packageDebugResources FROM-CACHE
+> Task :target-probe:processDebugNavigationResources FROM-CACHE
+> Task :isolation-probe:processDebugNavigationResources FROM-CACHE
+> Task :target-probe:parseDebugLocalResources FROM-CACHE
+> Task :isolation-probe:parseDebugLocalResources FROM-CACHE
+> Task :target-probe:generateDebugRFile FROM-CACHE
+> Task :isolation-probe:generateDebugRFile FROM-CACHE
+> Task :isolation-probe:compileDebugKotlin NO-SOURCE
+> Task :target-probe:compileDebugKotlin NO-SOURCE
+> Task :isolation-probe:javaPreCompileDebug FROM-CACHE
+> Task :target-probe:javaPreCompileDebug FROM-CACHE
+
+> Task :app:buildRustAndroid
+info: component rust-std for target aarch64-linux-android is up to date
+   Compiling proc-macro2 v1.0.107
+   Compiling quote v1.0.47
+   Compiling unicode-ident v1.0.24
+   Compiling libc v0.2.189
+   Compiling cfg-if v1.0.4
+   Compiling autocfg v1.5.1
+   Compiling zmij v1.0.23
+   Compiling memchr v2.8.3
+   Compiling serde_json v1.0.151
+   Compiling stable_deref_trait v1.2.1
+   Compiling smallvec v1.15.2
+   Compiling version_check v0.9.5
+   Compiling pin-project-lite v0.2.17
+   Compiling serde_core v1.0.229
+   Compiling num-traits v0.2.19
+   Compiling log v0.4.33
+   Compiling semver v1.0.28
+   Compiling rustc_version v0.4.1
+   Compiling parking_lot_core v0.9.12
+   Compiling bytes v1.12.1
+   Compiling serde v1.0.229
+   Compiling rand_core v0.10.1
+   Compiling getrandom v0.4.3
+
+> Task :isolation-probe:compileDebugJavaWithJavac
+> Task :isolation-probe:generateDebugAssets UP-TO-DATE
+> Task :target-probe:compileDebugJavaWithJavac
+> Task :target-probe:generateDebugAssets UP-TO-DATE
+> Task :target-probe:mergeDebugAssets
+> Task :isolation-probe:mergeDebugAssets
+> Task :target-probe:compressDebugAssets FROM-CACHE
+> Task :target-probe:processDebugJavaRes NO-SOURCE
+> Task :isolation-probe:compressDebugAssets FROM-CACHE
+> Task :isolation-probe:processDebugJavaRes NO-SOURCE
+> Task :target-probe:desugarDebugFileDependencies FROM-CACHE
+> Task :target-probe:checkDebugDuplicateClasses
+> Task :isolation-probe:desugarDebugFileDependencies FROM-CACHE
+> Task :isolation-probe:checkDebugDuplicateClasses
+> Task :target-probe:checkDebugAarMetadata
+> Task :isolation-probe:checkDebugAarMetadata
+> Task :target-probe:mergeExtDexDebug FROM-CACHE
+> Task :isolation-probe:mergeExtDexDebug FROM-CACHE
+> Task :target-probe:mergeLibDexDebug FROM-CACHE
+> Task :target-probe:compileDebugNavigationResources FROM-CACHE
+> Task :isolation-probe:mergeLibDexDebug FROM-CACHE
+> Task :isolation-probe:compileDebugNavigationResources FROM-CACHE
+> Task :isolation-probe:mapDebugSourceSetPaths
+> Task :target-probe:mapDebugSourceSetPaths
+> Task :target-probe:mergeDebugResources FROM-CACHE
+> Task :isolation-probe:mergeDebugResources FROM-CACHE
+> Task :target-probe:createDebugCompatibleScreenManifests
+> Task :isolation-probe:createDebugCompatibleScreenManifests
+> Task :target-probe:extractDeepLinksDebug FROM-CACHE
+> Task :isolation-probe:extractDeepLinksDebug FROM-CACHE
+> Task :target-probe:processDebugMainManifest FROM-CACHE
+> Task :isolation-probe:processDebugMainManifest FROM-CACHE
+> Task :isolation-probe:processDebugManifest FROM-CACHE
+> Task :isolation-probe:processDebugManifestForPackage FROM-CACHE
+> Task :target-probe:processDebugManifest FROM-CACHE
+> Task :target-probe:processDebugManifestForPackage FROM-CACHE
+> Task :isolation-probe:processDebugResources FROM-CACHE
+
+> Task :app:buildRustAndroid
+   Compiling litemap v0.8.2
+   Compiling itoa v1.0.18
+   Compiling scopeguard v1.2.0
+   Compiling writeable v0.6.4
+   Compiling syn v2.0.119
+
+> Task :isolation-probe:dexBuilderDebug FROM-CACHE
+> Task :target-probe:processDebugResources FROM-CACHE
+> Task :isolation-probe:mergeProjectDexDebug FROM-CACHE
+> Task :target-probe:mergeDebugJavaResource
+> Task :isolation-probe:mergeDebugJavaResource
+> Task :isolation-probe:mergeDebugJniLibFolders
+> Task :target-probe:dexBuilderDebug FROM-CACHE
+> Task :target-probe:mergeProjectDexDebug FROM-CACHE
+> Task :target-probe:mergeDebugJniLibFolders
+> Task :target-probe:mergeDebugNativeLibs NO-SOURCE
+> Task :isolation-probe:mergeDebugNativeLibs NO-SOURCE
+> Task :target-probe:stripDebugDebugSymbols NO-SOURCE
+> Task :isolation-probe:stripDebugDebugSymbols NO-SOURCE
+> Task :isolation-probe:validateSigningDebug
+> Task :isolation-probe:writeDebugAppMetadata
+> Task :target-probe:validateSigningDebug
+> Task :isolation-probe:writeDebugSigningConfigVersions
+> Task :target-probe:writeDebugAppMetadata
+> Task :target-probe:writeDebugSigningConfigVersions
+> Task :isolation-probe:packageDebug
+> Task :isolation-probe:createDebugApkListingFileRedirect
+> Task :isolation-probe:assembleDebug
+> Task :target-probe:packageDebug
+> Task :target-probe:createDebugApkListingFileRedirect
+> Task :target-probe:assembleDebug
+
+> Task :app:buildRustAndroid
+   Compiling syn v3.0.4
+   Compiling lock_api v0.4.14
+   Compiling errno v0.3.14
+   Compiling aho-corasick v1.1.4
+   Compiling generic-array v0.14.7
+   Compiling utf8_iter v1.0.4
+   Compiling icu_normalizer_data v2.3.0
+   Compiling zerocopy v0.8.55
+   Compiling thiserror v2.0.20
+   Compiling icu_properties_data v2.3.0
+   Compiling portable-atomic v1.15.0
+   Compiling regex-syntax v0.8.11
+   Compiling parking_lot v0.12.5
+   Compiling signal-hook-registry v1.4.8
+   Compiling socket2 v0.6.5
+   Compiling mio v1.2.2
+   Compiling bitflags v2.13.1
+   Compiling futures-sink v0.3.33
+   Compiling typenum v1.20.1
+   Compiling futures-core v0.3.33
+   Compiling critical-section v1.2.0
+   Compiling zerovec-derive v0.11.6
+   Compiling serde_derive v1.0.229
+   Compiling synstructure v0.13.2
+   Compiling displaydoc v0.2.6
+   Compiling tokio-macros v2.7.1
+   Compiling thiserror-impl v2.0.20
+   Compiling zerofrom-derive v0.1.7
+   Compiling yoke-derive v0.8.2
+   Compiling tokio v1.53.1
+   Compiling regex-automata v0.4.16
+   Compiling zerofrom v0.1.8
+   Compiling once_cell v1.21.4
+   Compiling android_system_properties v0.1.5
+   Compiling memoffset v0.9.1
+   Compiling yoke v0.8.3
+   Compiling rustix v1.1.4
+   Compiling same-file v1.0.6
+   Compiling utf8parse v0.2.2
+   Compiling cfg_aliases v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling nix v0.31.3
+   Compiling zerovec v0.11.8
+   Compiling zerotrie v0.2.5
+   Compiling walkdir v2.5.0
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.5
+   Compiling icu_locale_core v2.3.0
+   Compiling icu_collections v2.3.0
+   Compiling iana-time-zone v0.1.65
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling futures-macro v0.3.33
+   Compiling futures-channel v0.3.33
+   Compiling getrandom v0.2.17
+   Compiling jni-macros v0.22.4
+   Compiling simdutf8 v0.1.5
+   Compiling linux-raw-sys v0.12.1
+   Compiling percent-encoding v2.3.2
+   Compiling icu_provider v2.3.1
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling anstyle-query v1.1.5
+   Compiling anstyle v1.0.14
+   Compiling slab v0.4.12
+   Compiling colorchoice v1.0.5
+   Compiling futures-task v0.3.33
+   Compiling core-foundation-sys v0.8.7
+   Compiling futures-io v0.3.33
+   Compiling anstream v1.0.0
+   Compiling form_urlencoded v1.2.2
+   Compiling futures-util v0.3.33
+   Compiling regex v1.13.1
+   Compiling rand_core v0.6.4
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling simd_cesu8 v1.2.0
+   Compiling digest v0.10.7
+   Compiling chrono v0.4.45
+   Compiling ppv-lite86 v0.2.21
+   Compiling jni v0.22.4
+   Compiling jni-sys-macros v0.4.1
+   Compiling chacha20 v0.10.1
+   Compiling specta v2.0.0-rc.25
+   Compiling ahash v0.8.12
+   Compiling Inflector v0.11.4
+   Compiling idna_adapter v1.2.2
+   Compiling rand v0.10.2
+   Compiling idna v1.1.0
+   Compiling specta-macros v2.0.0-rc.25
+   Compiling jni-sys v0.4.1
+   Compiling rand_chacha v0.3.1
+   Compiling terminal_size v0.4.4
+   Compiling futures-executor v0.3.33
+   Compiling tracing-core v0.1.36
+   Compiling ipstack v1.0.1
+   Compiling tun v0.8.14
+   Compiling url v2.5.8
+   Compiling uuid v1.24.0
+   Compiling cpufeatures v0.2.17
+   Compiling combine v4.6.7
+   Compiling arrayvec v0.7.8
+   Compiling clap_lex v1.1.0
+   Compiling httparse v1.10.1
+   Compiling tinyvec_macros v0.1.1
+   Compiling foldhash v0.2.0
+   Compiling heck v0.5.0
+   Compiling strsim v0.11.1
+   Compiling jiff-core v0.1.0
+   Compiling clap_derive v4.6.4
+   Compiling hashbrown v0.17.1
+   Compiling clap_builder v4.6.5
+   Compiling rand v0.8.7
+   Compiling tinyvec v1.12.0
+   Compiling tracing v0.1.44
+   Compiling etherparse v0.20.3
+   Compiling jiff v0.2.35
+   Compiling sha2 v0.10.9
+   Compiling tun2proxy v0.8.3
+   Compiling futures v0.3.33
+   Compiling tokio-util v0.7.19
+   Compiling md-5 v0.10.6
+   Compiling env_filter v0.1.4
+   Compiling env_filter v2.0.0
+   Compiling cidr v0.3.2
+   Compiling async-trait v0.1.91
+   Compiling libloading v0.9.0
+   Compiling data-encoding v2.11.0
+   Compiling android_log-sys v0.3.2
+   Compiling ipnet v2.12.0
+   Compiling hex v0.4.3
+   Compiling clap v4.6.5
+   Compiling android_logger v0.15.1
+   Compiling tproxy-config v7.0.7
+   Compiling digest_auth v0.3.1
+   Compiling env_logger v0.11.11
+   Compiling specta-typescript v0.0.12
+   Compiling socks5-impl v0.9.5
+   Compiling hashlink v0.12.1
+   Compiling ctrlc2 v4.0.0
+   Compiling udp-stream v0.0.12
+   Compiling daemonize v0.5.0
+   Compiling unicase v2.9.0
+   Compiling shlex v2.0.1
+   Compiling base64 v0.22.1
+   Compiling base64easy v0.1.7
+   Compiling dotenvy v0.15.7
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling hickory-proto v0.26.1
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 2m 28s
+info: component rust-std for target armv7-linux-androideabi is up to date
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling libc v0.2.189
+   Compiling stable_deref_trait v1.2.1
+   Compiling smallvec v1.15.2
+   Compiling pin-project-lite v0.2.17
+   Compiling zerofrom v0.1.8
+   Compiling serde_core v1.0.229
+   Compiling log v0.4.33
+   Compiling bytes v1.12.1
+   Compiling parking_lot_core v0.9.12
+   Compiling yoke v0.8.3
+   Compiling rand_core v0.10.1
+   Compiling scopeguard v1.2.0
+   Compiling zerovec v0.11.8
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.2
+   Compiling serde v1.0.229
+   Compiling aho-corasick v1.1.4
+   Compiling lock_api v0.4.14
+   Compiling getrandom v0.4.3
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.5
+   Compiling icu_locale_core v2.3.0
+   Compiling zerotrie v0.2.5
+   Compiling utf8_iter v1.0.4
+   Compiling regex-syntax v0.8.11
+   Compiling thiserror v2.0.20
+   Compiling portable-atomic v1.15.0
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling icu_collections v2.3.0
+   Compiling parking_lot v0.12.5
+   Compiling mio v1.2.2
+   Compiling socket2 v0.6.5
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_normalizer_data v2.3.0
+   Compiling zerocopy v0.8.55
+   Compiling generic-array v0.14.7
+   Compiling futures-sink v0.3.33
+   Compiling icu_provider v2.3.1
+   Compiling bitflags v2.13.1
+   Compiling futures-core v0.3.33
+   Compiling typenum v1.20.1
+   Compiling zmij v1.0.23
+   Compiling critical-section v1.2.0
+   Compiling tokio v1.53.1
+   Compiling icu_properties v2.3.0
+   Compiling icu_normalizer v2.3.0
+   Compiling once_cell v1.21.4
+   Compiling android_system_properties v0.1.5
+   Compiling num-traits v0.2.19
+   Compiling serde_json v1.0.151
+   Compiling itoa v1.0.18
+   Compiling utf8parse v0.2.2
+   Compiling rustix v1.1.4
+   Compiling iana-time-zone v0.1.65
+   Compiling anstyle-parse v1.0.0
+   Compiling memoffset v0.9.1
+   Compiling idna_adapter v1.2.2
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling regex-automata v0.4.16
+   Compiling futures-channel v0.3.33
+   Compiling getrandom v0.2.17
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling slab v0.4.12
+   Compiling futures-io v0.3.33
+   Compiling linux-raw-sys v0.12.1
+   Compiling anstyle v1.0.14
+   Compiling percent-encoding v2.3.2
+   Compiling anstyle-query v1.1.5
+   Compiling futures-task v0.3.33
+   Compiling anstream v1.0.0
+   Compiling form_urlencoded v1.2.2
+   Compiling chrono v0.4.45
+   Compiling futures-util v0.3.33
+   Compiling rand_core v0.6.4
+   Compiling digest v0.10.7
+   Compiling ppv-lite86 v0.2.21
+   Compiling idna v1.1.0
+   Compiling nix v0.31.3
+   Compiling chacha20 v0.10.1
+   Compiling simdutf8 v0.1.5
+   Compiling simd_cesu8 v1.2.0
+   Compiling rand v0.10.2
+   Compiling ahash v0.8.12
+   Compiling jni-sys v0.4.1
+   Compiling specta v2.0.0-rc.25
+   Compiling rand_chacha v0.3.1
+   Compiling url v2.5.8
+   Compiling jni v0.22.4
+   Compiling terminal_size v0.4.4
+   Compiling tracing-core v0.1.36
+   Compiling uuid v1.24.0
+   Compiling futures-executor v0.3.33
+   Compiling combine v4.6.7
+   Compiling tinyvec_macros v0.1.1
+   Compiling clap_lex v1.1.0
+   Compiling jiff-core v0.1.0
+   Compiling regex v1.13.1
+   Compiling foldhash v0.2.0
+   Compiling strsim v0.11.1
+   Compiling arrayvec v0.7.8
+   Compiling futures v0.3.33
+   Compiling httparse v1.10.1
+   Compiling hashbrown v0.17.1
+   Compiling clap_builder v4.6.5
+   Compiling env_filter v2.0.0
+   Compiling env_filter v0.1.4
+   Compiling jiff v0.2.35
+   Compiling etherparse v0.20.3
+   Compiling tokio-util v0.7.19
+   Compiling tinyvec v1.12.0
+   Compiling ipstack v1.0.1
+   Compiling tun v0.8.14
+   Compiling rand v0.8.7
+   Compiling tracing v0.1.44
+   Compiling md-5 v0.10.6
+   Compiling sha2 v0.10.9
+   Compiling cidr v0.3.2
+   Compiling libloading v0.9.0
+   Compiling android_log-sys v0.3.2
+   Compiling ipnet v2.12.0
+   Compiling data-encoding v2.11.0
+   Compiling hex v0.4.3
+   Compiling tproxy-config v7.0.7
+   Compiling clap v4.6.5
+   Compiling digest_auth v0.3.1
+   Compiling env_logger v0.11.11
+   Compiling android_logger v0.15.1
+   Compiling socks5-impl v0.9.5
+   Compiling specta-typescript v0.0.12
+   Compiling tun2proxy v0.8.3
+   Compiling hashlink v0.12.1
+   Compiling udp-stream v0.0.12
+   Compiling ctrlc2 v4.0.0
+   Compiling daemonize v0.5.0
+   Compiling unicase v2.9.0
+   Compiling base64easy v0.1.7
+   Compiling semver v1.0.28
+   Compiling shlex v2.0.1
+   Compiling base64 v0.22.1
+   Compiling dotenvy v0.15.7
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling hickory-proto v0.26.1
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 2m 27s
+info: component rust-std for target x86_64-linux-android is up to date
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling libc v0.2.189
+   Compiling stable_deref_trait v1.2.1
+   Compiling smallvec v1.15.2
+   Compiling pin-project-lite v0.2.17
+   Compiling zerofrom v0.1.8
+   Compiling serde_core v1.0.229
+   Compiling log v0.4.33
+   Compiling bytes v1.12.1
+   Compiling parking_lot_core v0.9.12
+   Compiling yoke v0.8.3
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.2
+   Compiling zerovec v0.11.8
+   Compiling rand_core v0.10.1
+   Compiling scopeguard v1.2.0
+   Compiling serde v1.0.229
+   Compiling aho-corasick v1.1.4
+   Compiling lock_api v0.4.14
+   Compiling zerotrie v0.2.5
+   Compiling tinystr v0.8.4
+   Compiling potential_utf v0.1.5
+   Compiling getrandom v0.4.3
+   Compiling icu_locale_core v2.3.0
+   Compiling utf8_iter v1.0.4
+   Compiling regex-syntax v0.8.11
+   Compiling thiserror v2.0.20
+   Compiling icu_normalizer_data v2.3.0
+   Compiling icu_properties_data v2.3.0
+   Compiling icu_collections v2.3.0
+   Compiling zerocopy v0.8.55
+   Compiling portable-atomic v1.15.0
+   Compiling generic-array v0.14.7
+   Compiling typenum v1.20.1
+   Compiling futures-core v0.3.33
+   Compiling bitflags v2.13.1
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.2
+   Compiling parking_lot v0.12.5
+   Compiling socket2 v0.6.5
+   Compiling icu_provider v2.3.1
+   Compiling futures-sink v0.3.33
+   Compiling tokio v1.53.1
+   Compiling zmij v1.0.23
+   Compiling critical-section v1.2.0
+   Compiling icu_properties v2.3.0
+   Compiling regex-automata v0.4.16
+   Compiling once_cell v1.21.4
+   Compiling icu_normalizer v2.3.0
+   Compiling android_system_properties v0.1.5
+   Compiling num-traits v0.2.19
+   Compiling serde_json v1.0.151
+   Compiling itoa v1.0.18
+   Compiling utf8parse v0.2.2
+   Compiling anstyle-parse v1.0.0
+   Compiling rustix v1.1.4
+   Compiling memoffset v0.9.1
+   Compiling iana-time-zone v0.1.65
+   Compiling idna_adapter v1.2.2
+   Compiling block-buffer v0.10.4
+   Compiling crypto-common v0.1.7
+   Compiling futures-channel v0.3.33
+   Compiling getrandom v0.2.17
+   Compiling futures-io v0.3.33
+   Compiling percent-encoding v2.3.2
+   Compiling futures-task v0.3.33
+   Compiling colorchoice v1.0.5
+   Compiling anstyle-query v1.1.5
+   Compiling slab v0.4.12
+   Compiling anstyle v1.0.14
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling linux-raw-sys v0.12.1
+   Compiling cpufeatures v0.3.0
+   Compiling futures-util v0.3.33
+   Compiling form_urlencoded v1.2.2
+   Compiling chacha20 v0.10.1
+   Compiling anstream v1.0.0
+   Compiling rand_core v0.6.4
+   Compiling digest v0.10.7
+   Compiling idna v1.1.0
+   Compiling chrono v0.4.45
+   Compiling nix v0.31.3
+   Compiling simdutf8 v0.1.5
+   Compiling terminal_size v0.4.4
+   Compiling ppv-lite86 v0.2.21
+   Compiling url v2.5.8
+   Compiling ahash v0.8.12
+   Compiling simd_cesu8 v1.2.0
+   Compiling rand_chacha v0.3.1
+   Compiling jni-sys v0.4.1
+   Compiling futures-executor v0.3.33
+   Compiling specta v2.0.0-rc.25
+   Compiling regex v1.13.1
+   Compiling jni v0.22.4
+   Compiling rand v0.10.2
+   Compiling tracing-core v0.1.36
+   Compiling uuid v1.24.0
+   Compiling combine v4.6.7
+   Compiling clap_lex v1.1.0
+   Compiling tinyvec_macros v0.1.1
+   Compiling foldhash v0.2.0
+   Compiling cpufeatures v0.2.17
+   Compiling strsim v0.11.1
+   Compiling arrayvec v0.7.8
+   Compiling jiff-core v0.1.0
+   Compiling tokio-util v0.7.19
+   Compiling etherparse v0.20.3
+   Compiling tracing v0.1.44
+   Compiling clap_builder v4.6.5
+   Compiling hashbrown v0.17.1
+   Compiling httparse v1.10.1
+   Compiling sha2 v0.10.9
+   Compiling tinyvec v1.12.0
+   Compiling jiff v0.2.35
+   Compiling env_filter v2.0.0
+   Compiling env_filter v0.1.4
+   Compiling tun v0.8.14
+   Compiling ipstack v1.0.1
+   Compiling rand v0.8.7
+   Compiling futures v0.3.33
+   Compiling md-5 v0.10.6
+   Compiling cidr v0.3.2
+   Compiling libloading v0.9.0
+   Compiling hex v0.4.3
+   Compiling android_log-sys v0.3.2
+   Compiling ipnet v2.12.0
+   Compiling data-encoding v2.11.0
+   Compiling clap v4.6.5
+   Compiling android_logger v0.15.1
+   Compiling digest_auth v0.3.1
+   Compiling tproxy-config v7.0.7
+   Compiling socks5-impl v0.9.5
+   Compiling tun2proxy v0.8.3
+   Compiling env_logger v0.11.11
+   Compiling specta-typescript v0.0.12
+   Compiling ctrlc2 v4.0.0
+   Compiling hashlink v0.12.1
+   Compiling udp-stream v0.0.12
+   Compiling daemonize v0.5.0
+   Compiling unicase v2.9.0
+   Compiling dotenvy v0.15.7
+   Compiling semver v1.0.28
+   Compiling base64 v0.22.1
+   Compiling base64easy v0.1.7
+   Compiling shlex v2.0.1
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling hickory-proto v0.26.1
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 2m 03s
+info: component rust-std for target i686-linux-android is up to date
+   Compiling cfg-if v1.0.4
+   Compiling memchr v2.8.3
+   Compiling libc v0.2.189
+   Compiling stable_deref_trait v1.2.1
+   Compiling smallvec v1.15.2
+   Compiling pin-project-lite v0.2.17
+   Compiling zerofrom v0.1.8
+   Compiling serde_core v1.0.229
+   Compiling log v0.4.33
+   Compiling bytes v1.12.1
+   Compiling parking_lot_core v0.9.12
+   Compiling yoke v0.8.3
+   Compiling scopeguard v1.2.0
+   Compiling rand_core v0.10.1
+   Compiling zerovec v0.11.8
+   Compiling writeable v0.6.4
+   Compiling litemap v0.8.2
+   Compiling lock_api v0.4.14
+   Compiling aho-corasick v1.1.4
+   Compiling zerotrie v0.2.5
+   Compiling getrandom v0.4.3
+   Compiling serde v1.0.229
+   Compiling tinystr v0.8.4
+   Compiling icu_locale_core v2.3.0
+   Compiling potential_utf v0.1.5
+   Compiling utf8_iter v1.0.4
+   Compiling regex-syntax v0.8.11
+   Compiling portable-atomic v1.15.0
+   Compiling icu_collections v2.3.0
+   Compiling errno v0.3.14
+   Compiling signal-hook-registry v1.4.8
+   Compiling mio v1.2.2
+   Compiling parking_lot v0.12.5
+   Compiling socket2 v0.6.5
+   Compiling icu_properties_data v2.3.0
+   Compiling zerocopy v0.8.55
+   Compiling icu_normalizer_data v2.3.0
+   Compiling thiserror v2.0.20
+   Compiling generic-array v0.14.7
+   Compiling bitflags v2.13.1
+   Compiling typenum v1.20.1
+   Compiling futures-sink v0.3.33
+   Compiling icu_provider v2.3.1
+   Compiling futures-core v0.3.33
+   Compiling tokio v1.53.1
+   Compiling zmij v1.0.23
+   Compiling critical-section v1.2.0
+   Compiling icu_properties v2.3.0
+   Compiling once_cell v1.21.4
+   Compiling regex-automata v0.4.16
+   Compiling icu_normalizer v2.3.0
+   Compiling android_system_properties v0.1.5
+   Compiling num-traits v0.2.19
+   Compiling serde_json v1.0.151
+   Compiling utf8parse v0.2.2
+   Compiling itoa v1.0.18
+   Compiling rustix v1.1.4
+   Compiling anstyle-parse v1.0.0
+   Compiling memoffset v0.9.1
+   Compiling crypto-common v0.1.7
+   Compiling block-buffer v0.10.4
+   Compiling idna_adapter v1.2.2
+   Compiling iana-time-zone v0.1.65
+   Compiling futures-channel v0.3.33
+   Compiling getrandom v0.2.17
+   Compiling anstyle-query v1.1.5
+   Compiling is_terminal_polyfill v1.70.2
+   Compiling colorchoice v1.0.5
+   Compiling futures-io v0.3.33
+   Compiling anstyle v1.0.14
+   Compiling slab v0.4.12
+   Compiling futures-task v0.3.33
+   Compiling linux-raw-sys v0.12.1
+   Compiling percent-encoding v2.3.2
+   Compiling cpufeatures v0.3.0
+   Compiling anstream v1.0.0
+   Compiling form_urlencoded v1.2.2
+   Compiling chacha20 v0.10.1
+   Compiling futures-util v0.3.33
+   Compiling rand_core v0.6.4
+   Compiling chrono v0.4.45
+   Compiling idna v1.1.0
+   Compiling digest v0.10.7
+   Compiling ppv-lite86 v0.2.21
+   Compiling nix v0.31.3
+   Compiling simdutf8 v0.1.5
+   Compiling ahash v0.8.12
+   Compiling jni-sys v0.4.1
+   Compiling futures-executor v0.3.33
+   Compiling specta v2.0.0-rc.25
+   Compiling regex v1.13.1
+   Compiling rand_chacha v0.3.1
+   Compiling url v2.5.8
+   Compiling jni v0.22.4
+   Compiling simd_cesu8 v1.2.0
+   Compiling terminal_size v0.4.4
+   Compiling rand v0.10.2
+   Compiling tracing-core v0.1.36
+   Compiling uuid v1.24.0
+   Compiling combine v4.6.7
+   Compiling strsim v0.11.1
+   Compiling foldhash v0.2.0
+   Compiling clap_lex v1.1.0
+   Compiling arrayvec v0.7.8
+   Compiling jiff-core v0.1.0
+   Compiling cpufeatures v0.2.17
+   Compiling tinyvec_macros v0.1.1
+   Compiling httparse v1.10.1
+   Compiling tinyvec v1.12.0
+   Compiling rand v0.8.7
+   Compiling etherparse v0.20.3
+   Compiling sha2 v0.10.9
+   Compiling clap_builder v4.6.5
+   Compiling hashbrown v0.17.1
+   Compiling tracing v0.1.44
+   Compiling jiff v0.2.35
+   Compiling tokio-util v0.7.19
+   Compiling tun v0.8.14
+   Compiling ipstack v1.0.1
+   Compiling env_filter v0.1.4
+   Compiling env_filter v2.0.0
+   Compiling futures v0.3.33
+   Compiling md-5 v0.10.6
+   Compiling cidr v0.3.2
+   Compiling libloading v0.9.0
+   Compiling android_log-sys v0.3.2
+   Compiling hex v0.4.3
+   Compiling data-encoding v2.11.0
+   Compiling ipnet v2.12.0
+   Compiling digest_auth v0.3.1
+   Compiling android_logger v0.15.1
+   Compiling clap v4.6.5
+   Compiling tproxy-config v7.0.7
+   Compiling specta-typescript v0.0.12
+   Compiling socks5-impl v0.9.5
+   Compiling env_logger v0.11.11
+   Compiling tun2proxy v0.8.3
+   Compiling ctrlc2 v4.0.0
+   Compiling hashlink v0.12.1
+   Compiling udp-stream v0.0.12
+   Compiling daemonize v0.5.0
+   Compiling base64 v0.22.1
+   Compiling dotenvy v0.15.7
+   Compiling shlex v2.0.1
+   Compiling base64easy v0.1.7
+   Compiling semver v1.0.28
+   Compiling unicase v2.9.0
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/domain)
+   Compiling hickory-proto v0.26.1
+   Compiling intercept-proxy-android-engine v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/crates/android-engine)
+    Finished `release` profile [optimized] target(s) in 1m 43s
+
+> Task :app:preBuild
+> Task :app:preReleaseBuild
+> Task :app:generateReleaseBuildConfig FROM-CACHE
+> Task :app:generateReleaseResources FROM-CACHE
+> Task :app:packageReleaseResources FROM-CACHE
+> Task :app:processReleaseNavigationResources FROM-CACHE
+> Task :app:parseReleaseLocalResources FROM-CACHE
+> Task :app:generateReleaseRFile FROM-CACHE
+> Task :app:javaPreCompileRelease FROM-CACHE
+> Task :app:extractProguardFiles
+> Task :app:extractDeepLinksRelease FROM-CACHE
+> Task :app:processReleaseMainManifest FROM-CACHE
+> Task :app:preDebugBuild
+> Task :app:generateDebugBuildConfig FROM-CACHE
+> Task :app:generateDebugResources FROM-CACHE
+> Task :app:packageDebugResources FROM-CACHE
+> Task :app:processDebugNavigationResources FROM-CACHE
+> Task :app:parseDebugLocalResources FROM-CACHE
+> Task :app:generateDebugRFile FROM-CACHE
+> Task :app:javaPreCompileDebug FROM-CACHE
+> Task :app:checkDebugAarMetadata
+> Task :app:compileDebugNavigationResources FROM-CACHE
+> Task :app:mapDebugSourceSetPaths
+> Task :app:mergeDebugResources FROM-CACHE
+> Task :app:createDebugCompatibleScreenManifests
+> Task :app:extractDeepLinksDebug FROM-CACHE
+> Task :app:processDebugMainManifest FROM-CACHE
+> Task :app:processDebugManifest FROM-CACHE
+> Task :app:processDebugManifestForPackage FROM-CACHE
+> Task :app:processDebugResources FROM-CACHE
+> Task :app:preDebugUnitTestBuild
+> Task :app:javaPreCompileDebugUnitTest FROM-CACHE
+> Task :app:mergeReleaseJniLibFolders
+> Task :app:checkReleaseDuplicateClasses
+> Task :app:checkReleaseAarMetadata
+> Task :app:compileReleaseNavigationResources FROM-CACHE
+> Task :app:mapReleaseSourceSetPaths
+> Task :app:mergeReleaseResources FROM-CACHE
+> Task :app:createReleaseCompatibleScreenManifests
+> Task :app:processReleaseManifest FROM-CACHE
+> Task :app:processReleaseManifestForPackage FROM-CACHE
+> Task :app:processReleaseResources FROM-CACHE
+> Task :app:desugarReleaseFileDependencies FROM-CACHE
+> Task :app:mergeReleaseStartupProfile
+> Task :app:mergeExtDexRelease FROM-CACHE
+> Task :app:generateReleaseAssets UP-TO-DATE
+> Task :app:mergeReleaseNativeLibs
+> Task :app:mergeReleaseArtProfile
+> Task :app:mergeReleaseAssets
+> Task :app:compressReleaseAssets FROM-CACHE
+> Task :app:extractReleaseVersionControlInfo
+> Task :app:optimizeReleaseResources FROM-CACHE
+
+> Task :app:stripReleaseDebugSymbols
+Unable to strip the following libraries, packaging them as they are: libintercept_proxy_android_engine.so. Run with --info option to learn more.
+
+> Task :app:collectReleaseDependencies
+> Task :app:extractReleaseNativeSymbolTables
+> Task :app:sdkReleaseDependencyData
+> Task :app:mergeReleaseNativeDebugMetadata NO-SOURCE
+> Task :app:validateSigningRelease
+> Task :app:writeReleaseAppMetadata
+> Task :app:writeReleaseSigningConfigVersions
+> Task :app:compileReleaseKotlin
+> Task :app:compileDebugKotlin
+> Task :app:compileReleaseJavaWithJavac
+> Task :app:generateReleaseLintReportModel
+> Task :app:compileDebugJavaWithJavac
+> Task :app:bundleDebugClassesToCompileJar
+> Task :app:bundleDebugClassesToRuntimeJar
+> Task :app:processDebugJavaRes
+> Task :app:dexBuilderRelease
+> Task :app:mergeReleaseGlobalSynthetics FROM-CACHE
+> Task :app:generateReleaseLintVitalReportModel
+> Task :app:processReleaseJavaRes
+> Task :app:mergeReleaseJavaResource
+> Task :app:compileDebugUnitTestKotlin
+> Task :app:compileDebugUnitTestJavaWithJavac NO-SOURCE
+> Task :app:processDebugUnitTestJavaRes
+> Task :app:mergeDexRelease
+> Task :app:testDebugUnitTest
+> Task :app:compileReleaseArtProfile
+> Task :app:lintAnalyzeRelease
+> Task :app:lintVitalAnalyzeRelease
+> Task :app:lintVitalReportRelease SKIPPED
+> Task :app:lintVitalRelease SKIPPED
+> Task :app:packageRelease
+> Task :app:createReleaseApkListingFileRedirect
+> Task :app:assembleRelease
+
+> Task :app:lintReportRelease
+Wrote HTML report to file:///Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build/reports/lint-results-release.html
+
+> Task :app:lintRelease
+
+BUILD SUCCESSFUL in 10m 24s
+143 actionable tasks: 71 executed, 72 from cache
+Consider enabling configuration cache to speed up this build: https://docs.gradle.org/9.3.0/userguide/configuration_cache_enabling.html
+WARNING: A restricted method in java.lang.System has been called
+WARNING: java.lang.System::loadLibrary has been called by org.conscrypt.NativeLibraryUtil in an unnamed module (file:/Users/codin/Library/Android/sdk/build-tools/36.1.0/lib/apksigner.jar)
+WARNING: Use --enable-native-access=ALL-UNNAMED to avoid a warning for callers in this module
+WARNING: Restricted methods will be blocked in a future release unless native access is enabled
+
+Verifies
+Verified using v1 scheme (JAR signing): false
+Verified using v2 scheme (APK Signature Scheme v2): true
+Verified using v3 scheme (APK Signature Scheme v3): true
+Verified using v3.1 scheme (APK Signature Scheme v3.1): false
+Verified using v4 scheme (APK Signature Scheme v4): false
+Verified for SourceStamp: false
+Number of signers: 1
+Signer #1 certificate DN: CN=Intercept Proxy Companion, O=Intercept Proxy, C=CN
+Signer #1 certificate SHA-256 digest: c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2
+Signer #1 certificate SHA-1 digest: 1a565aa79e5a9bf74b1e5833067c8af06cdd882e
+Signer #1 certificate MD5 digest: 258f89ac80fc0ac59c3b5bc8a4caa021
+Signer #1 key algorithm: RSA
+Signer #1 key size (bits): 4096
+Signer #1 public key SHA-256 digest: 65f01bb8632eec0b5f85fb463109be6a53b39b0bf54f7b0a8a7b0a072413de1f
+Signer #1 public key SHA-1 digest: 1f45e2399461547b61d2058c3978de0acc67c36d
+Signer #1 public key MD5 digest: c940153ac1ccfa85660830ef8727049e
+package: name='com.interceptproxy.vpn' versionCode='1' versionName='1.0.0' platformBuildVersionName='16' platformBuildVersionCode='36' compileSdkVersion='36' compileSdkVersionCodename='16'
+Verifying alignment of /Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build/outputs/apk/release/app-release.apk (4)...
+      87 META-INF/com/android/build/gradle/app-metadata.properties (OK - compressed)
+     208 META-INF/version-control-info.textproto (OK - compressed)
+     297 classes.dex (OK - compressed)
+  671744 lib/arm64-v8a/libintercept_proxy_android_engine.so (OK)
+10059776 lib/armeabi-v7a/libintercept_proxy_android_engine.so (OK)
+16613376 lib/x86/libintercept_proxy_android_engine.so (OK)
+25690112 lib/x86_64/libintercept_proxy_android_engine.so (OK)
+34812914 kotlin/annotation/annotation.kotlin_builtins (OK - compressed)
+34813523 kotlin/collections/collections.kotlin_builtins (OK - compressed)
+34815436 kotlin/concurrent/atomics/atomics.kotlin_builtins (OK - compressed)
+34816592 kotlin/coroutines/coroutines.kotlin_builtins (OK - compressed)
+34816778 kotlin/internal/internal.kotlin_builtins (OK - compressed)
+34817194 kotlin/kotlin.kotlin_builtins (OK - compressed)
+34822602 kotlin/ranges/ranges.kotlin_builtins (OK - compressed)
+34824024 kotlin/reflect/reflect.kotlin_builtins (OK - compressed)
+34825508 AndroidManifest.xml (OK - compressed)
+34827285 res/4j.xml (OK - compressed)
+34827714 res/Yd.xml (OK - compressed)
+34828136 resources.arsc (OK)
+34829762 META-INF/CERT.SF (OK - compressed)
+34830923 META-INF/CERT.RSA (OK - compressed)
+34832849 META-INF/MANIFEST.MF (OK - compressed)
+Verification successful
+Android Companion APK 门禁通过: /Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build/outputs/apk/release/app-release.apk
+/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/src-tauri/resources/android-companion.apk
+Companion release APK 已构建、校验并放入桌面资源：/Users/codin/Code/gmofg-payment-proxy-hotfix-vpn-local-tcp/android-companion/app/build/outputs/apk/release/app-release.apk

@@ -1,0 +1,33 @@
+{
+  "task_id": "TASK-20260907-001",
+  "case_id": "http-finalize",
+  "result": "LOCAL_PASS_REVIEW_APPROVED_WITH_EXISTING_FULL_TYPECHECK_FAILURE",
+  "archived_at": "2026-09-07 16:54:25 +08:00",
+  "environment": "inputs/environment.json",
+  "timed_runs": "outputs/timed-runs.json",
+  "tested_state": "inputs/tested-source-sha256.json",
+  "source_changed_after_tests": false,
+  "unique_rust_tests_passed": 53,
+  "review": "APPROVE",
+  "review_findings": 0,
+  "replay": "replay/run.py",
+  "derived_from": {
+    "task_id": "TASK-20260901-001",
+    "case_id": "json-pretty-wasm-example",
+    "evidence_path": "docs/testing/evidence/2026-09-03/TASK-20260901-001/json-pretty-wasm-example",
+    "resource_path": "outputs/json-pretty-1.0.0.wasm",
+    "change": "Same old binary reused to verify optional Finalize absence and Schema100 retained data under new Host."
+  },
+  "limitations": [
+    "Full typecheck: five existing TS2307 errors in historical evidence snapshots",
+    "No pre-100 migration acceptance",
+    "No real device, external business, TLS, installation or CI acceptance"
+  ],
+  "not_applicable": {
+    "certificates": "Plain HTTP loopback only",
+    "ui": "No UI change or UI interaction",
+    "database_file_snapshot": "Fixture-generated temporary DB; archived test reconstructs exact schema and value constraints, randomized IDs/time are asserted unchanged across reopen",
+    "tcp_chunk_boundaries": "HTTP TCP chunk splitting was not the changed contract; complete frames archived; stream read loop is in source snapshot"
+  },
+  "cleanup": "VERIFIED: listener shutdown, runtime deactivation, temp database disposal; no user state changed"
+}

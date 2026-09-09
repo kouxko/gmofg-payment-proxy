@@ -1,0 +1,49 @@
+{
+  "routes": [
+    {
+      "listener_id": "1626aa61-8839-4065-94ef-536cd4e8c3b9",
+      "original_destination": "203.0.113.48",
+      "original_ports": [
+        16127
+      ],
+      "resolved_original_ips": [],
+      "proxy_host": "127.0.0.1",
+      "proxy_port": 6555
+    },
+    {
+      "listener_id": "393c2500-a62a-40e4-a29a-35443467f1cb",
+      "original_destination": "203.0.113.48",
+      "original_ports": [
+        16627
+      ],
+      "resolved_original_ips": [],
+      "proxy_host": "127.0.0.1",
+      "proxy_port": 6556
+    }
+  ],
+  "route_source": [
+    {
+      "listener_id": "1626aa61-8839-4065-94ef-536cd4e8c3b9",
+      "listener_name": "A920 controlled dll fixture",
+      "original_destination": "203.0.113.48",
+      "original_ports": [
+        16127
+      ],
+      "desktop_listener_bind_address": "127.0.0.1",
+      "desktop_listener_port": 58467
+    },
+    {
+      "listener_id": "393c2500-a62a-40e4-a29a-35443467f1cb",
+      "listener_name": "A920 controlled transaction fixture",
+      "original_destination": "203.0.113.48",
+      "original_ports": [
+        16627
+      ],
+      "desktop_listener_bind_address": "127.0.0.1",
+      "desktop_listener_port": 58466
+    }
+  ],
+  "profile_fingerprint": "baf5da5790e5a76bf49e13b9c0c9e7591c42dd99bfb66751da6c3372b9d44760",
+  "route_fingerprint": "9a5231817034556e84a8ee45af0016e9e871a8be78186a5d42b8d9077d90d5d3",
+  "route_count": 2
+}

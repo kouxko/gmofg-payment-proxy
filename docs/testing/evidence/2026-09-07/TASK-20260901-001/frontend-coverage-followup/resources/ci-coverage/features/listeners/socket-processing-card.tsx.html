@@ -1,0 +1,583 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/listeners/socket-processing-card.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/listeners</a> socket-processing-card.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">90.9% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>30/33</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">83% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>83/100</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">100% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>8/8</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">93.54% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>29/31</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a>
+<a name='L82'></a><a href='#L82'>82</a>
+<a name='L83'></a><a href='#L83'>83</a>
+<a name='L84'></a><a href='#L84'>84</a>
+<a name='L85'></a><a href='#L85'>85</a>
+<a name='L86'></a><a href='#L86'>86</a>
+<a name='L87'></a><a href='#L87'>87</a>
+<a name='L88'></a><a href='#L88'>88</a>
+<a name='L89'></a><a href='#L89'>89</a>
+<a name='L90'></a><a href='#L90'>90</a>
+<a name='L91'></a><a href='#L91'>91</a>
+<a name='L92'></a><a href='#L92'>92</a>
+<a name='L93'></a><a href='#L93'>93</a>
+<a name='L94'></a><a href='#L94'>94</a>
+<a name='L95'></a><a href='#L95'>95</a>
+<a name='L96'></a><a href='#L96'>96</a>
+<a name='L97'></a><a href='#L97'>97</a>
+<a name='L98'></a><a href='#L98'>98</a>
+<a name='L99'></a><a href='#L99'>99</a>
+<a name='L100'></a><a href='#L100'>100</a>
+<a name='L101'></a><a href='#L101'>101</a>
+<a name='L102'></a><a href='#L102'>102</a>
+<a name='L103'></a><a href='#L103'>103</a>
+<a name='L104'></a><a href='#L104'>104</a>
+<a name='L105'></a><a href='#L105'>105</a>
+<a name='L106'></a><a href='#L106'>106</a>
+<a name='L107'></a><a href='#L107'>107</a>
+<a name='L108'></a><a href='#L108'>108</a>
+<a name='L109'></a><a href='#L109'>109</a>
+<a name='L110'></a><a href='#L110'>110</a>
+<a name='L111'></a><a href='#L111'>111</a>
+<a name='L112'></a><a href='#L112'>112</a>
+<a name='L113'></a><a href='#L113'>113</a>
+<a name='L114'></a><a href='#L114'>114</a>
+<a name='L115'></a><a href='#L115'>115</a>
+<a name='L116'></a><a href='#L116'>116</a>
+<a name='L117'></a><a href='#L117'>117</a>
+<a name='L118'></a><a href='#L118'>118</a>
+<a name='L119'></a><a href='#L119'>119</a>
+<a name='L120'></a><a href='#L120'>120</a>
+<a name='L121'></a><a href='#L121'>121</a>
+<a name='L122'></a><a href='#L122'>122</a>
+<a name='L123'></a><a href='#L123'>123</a>
+<a name='L124'></a><a href='#L124'>124</a>
+<a name='L125'></a><a href='#L125'>125</a>
+<a name='L126'></a><a href='#L126'>126</a>
+<a name='L127'></a><a href='#L127'>127</a>
+<a name='L128'></a><a href='#L128'>128</a>
+<a name='L129'></a><a href='#L129'>129</a>
+<a name='L130'></a><a href='#L130'>130</a>
+<a name='L131'></a><a href='#L131'>131</a>
+<a name='L132'></a><a href='#L132'>132</a>
+<a name='L133'></a><a href='#L133'>133</a>
+<a name='L134'></a><a href='#L134'>134</a>
+<a name='L135'></a><a href='#L135'>135</a>
+<a name='L136'></a><a href='#L136'>136</a>
+<a name='L137'></a><a href='#L137'>137</a>
+<a name='L138'></a><a href='#L138'>138</a>
+<a name='L139'></a><a href='#L139'>139</a>
+<a name='L140'></a><a href='#L140'>140</a>
+<a name='L141'></a><a href='#L141'>141</a>
+<a name='L142'></a><a href='#L142'>142</a>
+<a name='L143'></a><a href='#L143'>143</a>
+<a name='L144'></a><a href='#L144'>144</a>
+<a name='L145'></a><a href='#L145'>145</a>
+<a name='L146'></a><a href='#L146'>146</a>
+<a name='L147'></a><a href='#L147'>147</a>
+<a name='L148'></a><a href='#L148'>148</a>
+<a name='L149'></a><a href='#L149'>149</a>
+<a name='L150'></a><a href='#L150'>150</a>
+<a name='L151'></a><a href='#L151'>151</a>
+<a name='L152'></a><a href='#L152'>152</a>
+<a name='L153'></a><a href='#L153'>153</a>
+<a name='L154'></a><a href='#L154'>154</a>
+<a name='L155'></a><a href='#L155'>155</a>
+<a name='L156'></a><a href='#L156'>156</a>
+<a name='L157'></a><a href='#L157'>157</a>
+<a name='L158'></a><a href='#L158'>158</a>
+<a name='L159'></a><a href='#L159'>159</a>
+<a name='L160'></a><a href='#L160'>160</a>
+<a name='L161'></a><a href='#L161'>161</a>
+<a name='L162'></a><a href='#L162'>162</a>
+<a name='L163'></a><a href='#L163'>163</a>
+<a name='L164'></a><a href='#L164'>164</a>
+<a name='L165'></a><a href='#L165'>165</a>
+<a name='L166'></a><a href='#L166'>166</a>
+<a name='L167'></a><a href='#L167'>167</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">12x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">3x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">100x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">14x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">7x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">28x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">35x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">35x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Alert, Button, Card, Chip, Label, ListBox, Select, Spinner } from "@heroui/react";
+import { useState, type Key } from "react";
+import type {
+  ListenerProtocolPackageCatalogViewModel,
+  ListenerProtocolPackageOptionViewModel,
+  ListenerDraftTransition,
+  ProtocolPackageRef,
+  SocketRelayDraftSettings,
+} from "@/generated/rust-types";
+import { bindPackage, exactPackageKey, matchingOption, socketCatalogOptions } from "./socket-listener-model";
+import { SocketProtocolPackageDialog } from "./socket-protocol-package-dialog";
+&nbsp;
+export interface ProtocolCatalogState {
+  data?: ListenerProtocolPackageCatalogViewModel;
+  error?: string;
+  loading: boolean;
+  refresh: () =&gt; Promise&lt;void&gt;;
+}
+&nbsp;
+const TRANSPARENT_RELAY_KEY = "__transparent_relay__";
+&nbsp;
+export function SocketProcessingCard({ settings, catalog, locked, onChange, onTransition }: {
+  settings: SocketRelayDraftSettings;
+  catalog: ProtocolCatalogState;
+  locked: boolean;
+  onChange: (settings: SocketRelayDraftSettings) =&gt; void;
+  onTransition: (
+    transition: ListenerDraftTransition,
+    recommendedPackage?: ProtocolPackageRef | null,
+  ) =&gt; void;
+}) {
+  // 包切换可能按能力原子关闭开关，必须通过 live region 告知键盘/读屏用户。
+  const [announcement, setAnnouncement] = useState("");
+  const processing = settings.processing;
+  const scripted = processing.mode === "scripted" ? processing.settings : undefined;
+  const boundPackage = scripted?.package ?? undefined;
+  const local = settings.topology.mode === "local_responder";
+  // useIpcQuery 刷新时会保留旧 data。加载或错误状态下必须把旧快照视为不可用，
+  // 否则用户可能在 Rust 正在重验/已经拒绝目录时继续修改方向开关。
+  const selected = catalog.loading || catalog.error
+    ? undefined
+    : matchingOption(catalog.data, boundPackage ?? null);
+  const selectedKey = boundPackage ? exactPackageKey(boundPackage) : local ? <span class="branch-0 cbranch-no" title="branch not covered" >undefined : T</span>RANSPARENT_RELAY_KEY;
+  const hasBoundPackage = Boolean(boundPackage);
+  const missingFromCatalog = hasBoundPackage &amp;&amp; !selected;
+  const unavailableBound = missingFromCatalog
+    &amp;&amp; !catalog.loading
+    &amp;&amp; !catalog.error
+    &amp;&amp; Boolean(catalog.data);
+  const socketOptions = socketCatalogOptions(catalog.data);
+&nbsp;
+  function selectPackage(key: Key | null) {
+    if (!local &amp;&amp; key === TRANSPARENT_RELAY_KEY) {
+      onTransition({ type: "processing", mode: "direct" });
+      setAnnouncement("已取消协议包；数据将保持原样透明转发。");
+      return;
+    }
+    const option = socketOptions.find((item) =&gt; exactPackageKey(item.package) === key);
+    <span class="missing-if-branch" title="if path not taken" >I</span>if (!option) <span class="cstat-no" title="statement not covered" >return;</span>
+    setAnnouncement(`已选择 ${option.name}；完整的分帧、解析、规则、编码和显示处理链将自动应用。`);
+    <span class="missing-if-branch" title="else path not taken" >E</span>if (processing.mode !== "scripted") {
+      onTransition({ type: "processing", mode: "scripted" }, option.package);
+      return;
+    }
+<span class="cstat-no" title="statement not covered" >    onChange({ ...settings, processing: bindPackage(processing, option) });</span>
+  }
+&nbsp;
+  return (
+    &lt;Card&gt;
+      &lt;Card.Header&gt;
+        &lt;Card.Title&gt;4. 协议处理&lt;/Card.Title&gt;
+        &lt;Card.Description&gt;{local
+          ? "选择用于解析请求并生成本机应答的协议包。"
+          : "不选择协议包时透明转发；选择协议包后可按字段匹配和改写数据。"}&lt;/Card.Description&gt;
+      &lt;/Card.Header&gt;
+      &lt;Card.Content className="space-y-4"&gt;
+        {catalog.loading &amp;&amp; &lt;Spinner aria-label="正在读取入口协议包目录" /&gt;}
+        {catalog.error &amp;&amp; &lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+          &lt;Alert.Title&gt;协议包目录读取失败&lt;/Alert.Title&gt;&lt;Alert.Description&gt;{catalog.error}&lt;/Alert.Description&gt;
+          &lt;Button size="sm" variant="outline" onPress={() =&gt; void catalog.refresh()}&gt;重试&lt;/Button&gt;
+        &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+        {local &amp;&amp; !hasBoundPackage &amp;&amp; <span class="branch-2 cbranch-no" title="branch not covered" >&lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;</span>
+          &lt;Alert.Title&gt;尚未选择处理方案&lt;/Alert.Title&gt;
+          &lt;Alert.Description&gt;请选择一个可用的处理方案后再配置处理步骤。&lt;/Alert.Description&gt;
+        &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+        {!catalog.loading &amp;&amp; !catalog.error &amp;&amp; socketOptions.length === 0 &amp;&amp; (
+          &lt;Alert status="warning"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+            &lt;Alert.Title&gt;没有可绑定的 Socket 协议包版本&lt;/Alert.Title&gt;
+            &lt;Alert.Description&gt;
+              已安装 {catalog.data?.installed_version_count ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>个版本，其中 {catalog.data?.unavailable_version_count ?? <span class="branch-1 cbranch-no" title="branch not covered" >0} </span>个当前不可用。
+              HTTP 协议包不会出现在此处；请先在协议包页面导入、修复或启用兼容的 Socket 版本。
+            &lt;/Alert.Description&gt;
+          &lt;/Alert.Content&gt;&lt;/Alert&gt;
+        )}
+        {unavailableBound &amp;&amp; &lt;Alert status="warning"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+          &lt;Alert.Title&gt;当前处理方案已不可用&lt;/Alert.Title&gt;
+          &lt;Alert.Description&gt;
+            精确身份 {boundPackage?.id}@{boundPackage?.version} 仍会保留，不会自动替换。
+            该版本可能已停用、校验失败，或其外部进程已离线；恢复可用后刷新目录，或选择新的方案。
+          &lt;/Alert.Description&gt;
+        &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+        &lt;div className="grid gap-3 lg:grid-cols-[minmax(0,1fr)_auto] lg:items-end"&gt;
+          &lt;Select aria-label="Socket 协议处理方案" selectedKey={selectedKey}
+            isDisabled={locked || (local &amp;&amp; (catalog.loading || Boolean(catalog.error) || socketOptions.length === 0))}
+            onSelectionChange={selectPackage}&gt;
+            &lt;Label&gt;协议包&lt;/Label&gt;
+            &lt;Select.Trigger className="h-10 min-h-10"&gt;&lt;Select.Value className="truncate" /&gt;&lt;Select.Indicator /&gt;&lt;/Select.Trigger&gt;
+            &lt;Select.Popover&gt;&lt;ListBox&gt;
+              {!local &amp;&amp; &lt;ListBox.Item id={TRANSPARENT_RELAY_KEY} textValue="不使用协议包（透明转发）"&gt;
+                不使用协议包（透明转发）
+              &lt;/ListBox.Item&gt;}
+              {missingFromCatalog &amp;&amp; boundPackage &amp;&amp; &lt;ListBox.Item id={selectedKey} isDisabled textValue="当前选择（不可用）"&gt;
+                {boundPackage.id}@{boundPackage.version} · 当前选择（不可用）
+              &lt;/ListBox.Item&gt;}
+              {(!catalog.loading &amp;&amp; !catalog.error ? socketOptions : []).map((option) =&gt; (
+                &lt;ListBox.Item key={exactPackageKey(option.package)} id={exactPackageKey(option.package)} textValue={optionLabel(option)}&gt;
+                  {optionLabel(option)}
+                &lt;/ListBox.Item&gt;
+              ))}
+            &lt;/ListBox&gt;&lt;/Select.Popover&gt;
+          &lt;/Select&gt;
+        &lt;/div&gt;
+        {boundPackage &amp;&amp; &lt;details className="rounded-xl border border-[var(--telemetry-line)] p-3"&gt;
+          &lt;summary className="cursor-pointer text-sm font-medium"&gt;高级技术信息&lt;/summary&gt;
+          &lt;div className="mt-3 space-y-3"&gt;
+            {selected &amp;&amp; &lt;PackageSummary option={selected} /&gt;}
+            {!selected &amp;&amp; &lt;Chip variant="soft"&gt;{boundPackage.id}@{boundPackage.version}&lt;/Chip&gt;}
+            &lt;SocketProtocolPackageDialog packageRef={boundPackage} disabled={locked || catalog.loading || Boolean(catalog.error)} /&gt;
+          &lt;/div&gt;
+        &lt;/details&gt;}
+        {announcement &amp;&amp; &lt;p role="status" aria-live="polite" className="text-sm text-[var(--telemetry-muted)]"&gt;
+          {announcement}
+        &lt;/p&gt;}
+        {!scripted &amp;&amp; !local &amp;&amp; &lt;p className="text-sm text-[var(--telemetry-muted)]"&gt;
+          当前未使用协议包，应用与上游之间的数据保持原样转发。
+        &lt;/p&gt;}
+        {scripted &amp;&amp; selected &amp;&amp; &lt;p className="text-sm text-[var(--telemetry-muted)]"&gt;
+          {local
+            ? "应用请求会自动解析为字段，规则处理后自动编码为本机应答；协议视图按包声明生成。"
+            : "双向数据会自动解析为字段，规则处理后按包能力重新编码；协议视图按包声明生成。"}
+        &lt;/p&gt;}
+      &lt;/Card.Content&gt;
+    &lt;/Card&gt;
+  );
+}
+&nbsp;
+function PackageSummary({ option }: { option: ListenerProtocolPackageOptionViewModel }) {
+  return &lt;div className="flex flex-wrap gap-2 text-sm"&gt;&lt;Chip variant="soft"&gt;{option.package.id}@{option.package.version}&lt;/Chip&gt;
+    &lt;Chip variant="soft" color={option.package_source.type === "external" ? "warning" : <span class="branch-1 cbranch-no" title="branch not covered" >"accent"}&gt;{s</span>ourceLabel(option)}&lt;/Chip&gt;
+    &lt;Chip variant="soft"&gt;上行字段结构 {option.upstream_schema?.root.title || <span class="branch-1 cbranch-no" title="branch not covered" >"未命名 Schema"}&lt;/Chip&gt;</span>
+    &lt;Chip variant="soft"&gt;下行字段结构 {option.downstream_schema?.root.title || <span class="branch-1 cbranch-no" title="branch not covered" >"未命名 Schema"}&lt;/Chip&gt;</span>
+    &lt;Chip variant="soft"&gt;报文边界与字段解析：双向支持&lt;/Chip&gt;
+    &lt;Chip variant="soft"&gt;报文重建：上行 {option.capabilities.upstream.encode ? "支持" : <span class="branch-1 cbranch-no" title="branch not covered" >"不支持"}，</span>下行 {option.capabilities.downstream.encode ? "支持" : <span class="branch-1 cbranch-no" title="branch not covered" >"不支持"}&lt;/Chip&gt;</span>
+    &lt;Chip variant="soft" color={option.capabilities.display ? "success" : <span class="branch-1 cbranch-no" title="branch not covered" >"default"}&gt;协</span>议视图：{option.capabilities.display ? "支持" : <span class="branch-1 cbranch-no" title="branch not covered" >"未提供"}&lt;/Chip&gt;</span>&lt;/div&gt;;
+}
+&nbsp;
+function optionLabel(option: ListenerProtocolPackageOptionViewModel): string {
+  return `${option.name} · ${option.package.version} · ${sourceLabel(option)}`;
+}
+&nbsp;
+function sourceLabel(option: ListenerProtocolPackageOptionViewModel): string {
+  <span class="missing-if-branch" title="if path not taken" >I</span>if (option.package_source.type === "managed") {
+<span class="cstat-no" title="statement not covered" >    return option.package_source.online ? "本地管理 · 运行中" : "本地管理 · 已停止";</span>
+  }
+  return option.package_source.online ? "远端调试 · 在线" : <span class="branch-1 cbranch-no" title="branch not covered" >"远端调试 · 离线";</span>
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

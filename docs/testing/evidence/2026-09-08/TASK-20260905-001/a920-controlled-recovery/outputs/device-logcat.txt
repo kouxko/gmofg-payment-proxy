@@ -1,0 +1,13 @@
+--------- beginning of crash
+--------- beginning of system
+--------- beginning of main
+09-08 12:50:44.279  9182  9182 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+09-08 12:50:44.287  9182  9182 I AndroidRuntime: Using default boot image
+09-08 12:50:44.288  9182  9182 I AndroidRuntime: Leaving lock profiling enabled
+09-08 12:50:44.629  9182  9182 D AndroidRuntime: Calling main entry com.android.commands.am.Am
+09-08 12:50:45.461  9182  9182 D AndroidRuntime: Shutting down VM
+09-08 12:50:51.021  9271  9271 D AndroidRuntime: >>>>>> START com.android.internal.os.RuntimeInit uid 2000 <<<<<<
+09-08 12:50:51.030  9271  9271 I AndroidRuntime: Using default boot image
+09-08 12:50:51.030  9271  9271 I AndroidRuntime: Leaving lock profiling enabled
+09-08 12:50:51.323  9271  9271 D AndroidRuntime: Calling main entry com.android.commands.am.Am
+09-08 12:50:52.118  9271  9271 D AndroidRuntime: Shutting down VM

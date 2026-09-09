@@ -1,0 +1,122 @@
+{
+  "version": 2,
+  "request_id": "e3cb7eb7-a8ef-4df5-b19b-aeb193f811e3",
+  "operation": "apply",
+  "payload": {
+    "profile": {
+      "id": "a920-controlled-v2",
+      "name": "A920 controlled v2 recovery gate",
+      "target_applications": [
+        {
+          "package_name": "com.interceptproxy.vpn.targetprobe",
+          "uid": 10086,
+          "display_name": "Intercept Proxy Target Probe"
+        }
+      ],
+      "destination_targets": [
+        {
+          "cidr": "203.0.113.48",
+          "ports": [
+            16127
+          ]
+        }
+      ],
+      "proxy_routes": [
+        {
+          "destination": "203.0.113.48",
+          "ports": [
+            16127
+          ],
+          "listener_id": "7948517b-2f7f-4513-b6dd-c556d6b57e4e"
+        },
+        {
+          "destination": "203.0.113.48",
+          "ports": [
+            16627
+          ],
+          "listener_id": "ec4273a7-5c20-4696-8651-50a7c7d7daff"
+        }
+      ],
+      "confirmed_shared_uids": [],
+      "auto_resume_after_reboot": false,
+      "stop_vpn_on_control_loss": true,
+      "weak_network": {
+        "seed": 48,
+        "fixed_delay_millis": 120,
+        "uniform_jitter_millis": 30,
+        "upload_bytes_per_second": null,
+        "download_bytes_per_second": null,
+        "random_loss_basis_points": 0,
+        "burst_loss": null,
+        "duplicate_basis_points": 0,
+        "reorder_basis_points": 0,
+        "maximum_reorder_hold_millis": 0,
+        "blackout_windows": [],
+        "dns_blackhole": false,
+        "nth_tcp_flag_drops": [],
+        "path_mtu": {
+          "mtu": null,
+          "mss_clamp": null,
+          "mode": "pass"
+        },
+        "corruption": {
+          "probability_basis_points": 0,
+          "bits_per_packet": 0
+        }
+      }
+    },
+    "proxy_runtime": {
+      "routes": [
+        {
+          "listener_id": "7948517b-2f7f-4513-b6dd-c556d6b57e4e",
+          "original_destination": "203.0.113.48",
+          "original_ports": [
+            16127
+          ],
+          "resolved_original_ips": [],
+          "proxy_host": "127.0.0.1",
+          "proxy_port": 6555
+        },
+        {
+          "listener_id": "ec4273a7-5c20-4696-8651-50a7c7d7daff",
+          "original_destination": "203.0.113.48",
+          "original_ports": [
+            16627
+          ],
+          "resolved_original_ips": [],
+          "proxy_host": "127.0.0.1",
+          "proxy_port": 6556
+        }
+      ],
+      "route_source": [
+        {
+          "listener_id": "7948517b-2f7f-4513-b6dd-c556d6b57e4e",
+          "listener_name": "A920 controlled dll fixture",
+          "original_destination": "203.0.113.48",
+          "original_ports": [
+            16127
+          ],
+          "desktop_listener_bind_address": "127.0.0.1",
+          "desktop_listener_port": 58614
+        },
+        {
+          "listener_id": "ec4273a7-5c20-4696-8651-50a7c7d7daff",
+          "listener_name": "A920 controlled transaction fixture",
+          "original_destination": "203.0.113.48",
+          "original_ports": [
+            16627
+          ],
+          "desktop_listener_bind_address": "127.0.0.1",
+          "desktop_listener_port": 58615
+        }
+      ],
+      "profile_fingerprint": "8d44bc1e2a8e71ee834868bb57051d0947dde5112642399ecfd4f3f9a2ef9088",
+      "route_fingerprint": "07c2d45058fa0d4b11a8a1b7854847f1aba01987c09e52f7713f2b7308319a98",
+      "route_count": 2
+    },
+    "control_lease": {
+      "owner_epoch": "2ea85077-17c0-4b2b-827a-a933897371f8",
+      "timeout_millis": 5000
+    }
+  }
+}

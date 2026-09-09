@@ -1,0 +1,325 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/listeners/listener-list-panel.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/listeners</a> listener-list-panel.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">94.11% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>16/17</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">87.5% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>14/16</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">87.5% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>7/8</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">93.33% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>14/15</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line high'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a>
+<a name='L39'></a><a href='#L39'>39</a>
+<a name='L40'></a><a href='#L40'>40</a>
+<a name='L41'></a><a href='#L41'>41</a>
+<a name='L42'></a><a href='#L42'>42</a>
+<a name='L43'></a><a href='#L43'>43</a>
+<a name='L44'></a><a href='#L44'>44</a>
+<a name='L45'></a><a href='#L45'>45</a>
+<a name='L46'></a><a href='#L46'>46</a>
+<a name='L47'></a><a href='#L47'>47</a>
+<a name='L48'></a><a href='#L48'>48</a>
+<a name='L49'></a><a href='#L49'>49</a>
+<a name='L50'></a><a href='#L50'>50</a>
+<a name='L51'></a><a href='#L51'>51</a>
+<a name='L52'></a><a href='#L52'>52</a>
+<a name='L53'></a><a href='#L53'>53</a>
+<a name='L54'></a><a href='#L54'>54</a>
+<a name='L55'></a><a href='#L55'>55</a>
+<a name='L56'></a><a href='#L56'>56</a>
+<a name='L57'></a><a href='#L57'>57</a>
+<a name='L58'></a><a href='#L58'>58</a>
+<a name='L59'></a><a href='#L59'>59</a>
+<a name='L60'></a><a href='#L60'>60</a>
+<a name='L61'></a><a href='#L61'>61</a>
+<a name='L62'></a><a href='#L62'>62</a>
+<a name='L63'></a><a href='#L63'>63</a>
+<a name='L64'></a><a href='#L64'>64</a>
+<a name='L65'></a><a href='#L65'>65</a>
+<a name='L66'></a><a href='#L66'>66</a>
+<a name='L67'></a><a href='#L67'>67</a>
+<a name='L68'></a><a href='#L68'>68</a>
+<a name='L69'></a><a href='#L69'>69</a>
+<a name='L70'></a><a href='#L70'>70</a>
+<a name='L71'></a><a href='#L71'>71</a>
+<a name='L72'></a><a href='#L72'>72</a>
+<a name='L73'></a><a href='#L73'>73</a>
+<a name='L74'></a><a href='#L74'>74</a>
+<a name='L75'></a><a href='#L75'>75</a>
+<a name='L76'></a><a href='#L76'>76</a>
+<a name='L77'></a><a href='#L77'>77</a>
+<a name='L78'></a><a href='#L78'>78</a>
+<a name='L79'></a><a href='#L79'>79</a>
+<a name='L80'></a><a href='#L80'>80</a>
+<a name='L81'></a><a href='#L81'>81</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">599x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">1x</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">599x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">207x</span>
+<span class="cline-any cline-yes">692x</span>
+<span class="cline-any cline-yes">17x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">692x</span>
+<span class="cline-any cline-yes">57x</span>
+<span class="cline-any cline-yes">57x</span>
+<span class="cline-any cline-yes">50x</span>
+<span class="cline-any cline-yes">50x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">635x</span>
+<span class="cline-any cline-yes">635x</span>
+<span class="cline-any cline-yes">630x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Alert, Button, Spinner, Table } from "@heroui/react";
+import type { ListenerDraft } from "@/generated/rust-types";
+&nbsp;
+export function ListenerListPanel({
+  listeners,
+  selectedIndex,
+  loading,
+  error,
+  disabled,
+  onAdd,
+  onSelect,
+  onNavigate,
+}: {
+  listeners: ListenerDraft[];
+  selectedIndex: number;
+  loading: boolean;
+  error?: string;
+  disabled: boolean;
+  onAdd: () =&gt; void;
+  onSelect: (index: number) =&gt; void;
+  onNavigate: (path: string) =&gt; void;
+}) {
+  return &lt;aside className="min-w-0 space-y-4 overflow-auto border-r border-[var(--telemetry-line)] p-5 max-[900px]:border-r-0 max-[900px]:border-b"&gt;
+    &lt;div&gt;&lt;h1 className="text-2xl font-semibold"&gt;代理监听&lt;/h1&gt;
+      &lt;p className="mt-1 text-sm text-[var(--telemetry-muted)]"&gt;统一管理 HTTP 代理与原始 Socket 双向转发。&lt;/p&gt;
+    &lt;/div&gt;
+    &lt;Button variant="primary" className="w-full" isDisabled={disabled} onPress={onAdd}&gt;新建代理监听&lt;/Button&gt;
+    &lt;Alert status="accent"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+      &lt;Alert.Title&gt;HTTP 与 Socket 两种数据平面&lt;/Alert.Title&gt;
+      &lt;Alert.Description&gt;
+        新建监听默认使用 HTTP；Socket 可透明转发到远端目标，也可在本地生成响应。
+      &lt;/Alert.Description&gt;
+    &lt;/Alert.Content&gt;&lt;/Alert&gt;
+    &lt;Alert status="warning"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+      &lt;Alert.Title&gt;HTTP 故障预设与规则作用于监听流量&lt;/Alert.Title&gt;
+      &lt;Alert.Description&gt;启动监听后，到规则页配置拦截行为；故障预设仅适用于 HTTP。&lt;/Alert.Description&gt;
+      &lt;div className="mt-3 flex gap-2"&gt;
+        &lt;Button size="sm" variant="primary" onPress={() =&gt; onNavigate("/rules?create=fault")}&gt;从故障预设创建规则&lt;/Button&gt;
+        &lt;Button size="sm" variant="outline" <span class="fstat-no" title="function not covered" >onPress={() =&gt; <span class="cstat-no" title="statement not covered" >o</span>nNavigate("/rules")}&gt;去</span>配置拦截规则&lt;/Button&gt;
+      &lt;/div&gt;
+    &lt;/Alert.Content&gt;&lt;/Alert&gt;
+    {loading &amp;&amp; &lt;Spinner aria-label="正在读取代理监听" /&gt;}
+    {error &amp;&amp; <span class="branch-1 cbranch-no" title="branch not covered" >&lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;</span>
+      &lt;Alert.Title&gt;读取失败&lt;/Alert.Title&gt;&lt;Alert.Description&gt;{error}&lt;/Alert.Description&gt;
+    &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+    &lt;ListenerTable listeners={listeners} selectedIndex={selectedIndex} onSelect={onSelect} /&gt;
+  &lt;/aside&gt;;
+}
+&nbsp;
+function ListenerTable({ listeners, selectedIndex, onSelect }: {
+  listeners: ListenerDraft[];
+  selectedIndex: number;
+  onSelect: (index: number) =&gt; void;
+}) {
+  return &lt;Table&gt;&lt;Table.ScrollContainer&gt;&lt;Table.Content aria-label="代理监听列表"&gt;
+    &lt;Table.Header&gt;&lt;Table.Column isRowHeader&gt;监听名称&lt;/Table.Column&gt;&lt;Table.Column&gt;客户端连接 → 请求去向&lt;/Table.Column&gt;&lt;/Table.Header&gt;
+    &lt;Table.Body renderEmptyState={() =&gt; &lt;div className="p-6 text-center text-sm text-[var(--telemetry-muted)]"&gt;当前工作区还没有代理监听&lt;/div&gt;}&gt;
+      {listeners.map((listener, index) =&gt; &lt;Table.Row key={listener.id} id={listener.id}
+        onAction={() =&gt; onSelect(index)} className={index === selectedIndex ? "bg-[var(--telemetry-accent-soft)]" : ""}&gt;
+        &lt;Table.Cell&gt;&lt;span className="font-medium"&gt;{listener.name}&lt;/span&gt;&lt;/Table.Cell&gt;
+        &lt;Table.Cell&gt;&lt;div className="grid min-w-0 gap-1 font-mono text-xs"&gt;
+          &lt;span className="truncate"&gt;{listener.bind_address}:{listener.port}&lt;/span&gt;
+          &lt;span className="truncate text-[var(--telemetry-muted)]"&gt;→ {listenerDestination(listener)}&lt;/span&gt;
+        &lt;/div&gt;&lt;/Table.Cell&gt;
+      &lt;/Table.Row&gt;)}
+    &lt;/Table.Body&gt;
+  &lt;/Table.Content&gt;&lt;/Table.ScrollContainer&gt;&lt;/Table&gt;;
+}
+&nbsp;
+function listenerDestination(listener: ListenerDraft) {
+  if (listener.data_plane.kind === "socket") {
+    const topology = listener.data_plane.settings.topology;
+    if (topology.mode === "local_responder") return "本地应答";
+    const { host, port } = topology.settings.upstream;
+    return `${host || <span class="branch-1 cbranch-no" title="branch not covered" >"未配置主机"}:</span>${port}`;
+  }
+  const topology = listener.data_plane.settings.topology;
+  if (topology.mode === "local_server") return "本地应答";
+  return topology.settings.fixed_server?.upstream_url || "请求中的目标地址";
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

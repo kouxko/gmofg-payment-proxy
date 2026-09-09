@@ -1,0 +1,5 @@
+{
+  "at": "2026-09-08T10:12:40.168847+08:00",
+  "reason": "Blank UI under HOME+CFFIXED_USER_HOME; close through CUA before isolated HOME-only comparison",
+  "expected_controller_exit": "First harness treats UI exit as unexpected; this close is deliberate, not an App crash"
+}

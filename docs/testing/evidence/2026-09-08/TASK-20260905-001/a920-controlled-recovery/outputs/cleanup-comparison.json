@@ -1,0 +1,11 @@
+{
+  "status": "PASS",
+  "original_apk_bytes_restored": true,
+  "original_preferences_four_entries_restored_and_readback_verified": true,
+  "new_test_packages_removed": true,
+  "own_backup_file_removed_after_archival": true,
+  "vpn_service_absent": true,
+  "tun_absent": true,
+  "reverse_and_forward_empty": true,
+  "original_vpn_permission": "ACTIVATE_VPN allow unchanged"
+}

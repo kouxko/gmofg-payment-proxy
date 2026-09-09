@@ -26,7 +26,7 @@ pub enum ExchangeContext {
     Http {
         header: String,
         body: String,
-        /// `false` means the text is only a lossy display projection and cannot seed a rule.
+        /// `false` means wire bytes are not UTF-8; a charset-decoded or lossy preview cannot seed a rule.
         body_is_utf8: bool,
     },
     Socket {

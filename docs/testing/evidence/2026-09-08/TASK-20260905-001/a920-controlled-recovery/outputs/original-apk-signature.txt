@@ -1,0 +1,4 @@
+Signer #1 certificate DN: CN=Intercept Proxy Companion, O=Intercept Proxy, C=CN
+Signer #1 certificate SHA-256 digest: c92ff3da8cb6520775e028abfc1d57d746949e7d83a038ec7626c99b67544db2
+Signer #1 certificate SHA-1 digest: 1a565aa79e5a9bf74b1e5833067c8af06cdd882e
+Signer #1 certificate MD5 digest: 258f89ac80fc0ac59c3b5bc8a4caa021

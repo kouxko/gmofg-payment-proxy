@@ -1,0 +1,34 @@
+    Blocking waiting for file lock on build directory
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+   Compiling intercept-proxy-exchange v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/exchange)
+   Compiling intercept-proxy-package-contract v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-contract)
+   Compiling intercept-proxy-application v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/application)
+   Compiling intercept-proxy-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/proxy)
+   Compiling intercept-proxy-package-runtime v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/package-runtime)
+   Compiling intercept-proxy-traffic-observation v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy-infrastructure v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 3m 20s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_application-d3093a82474913d8)
+
+running 2 tests
+test requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_rejects_invalid_candidates_before_external_validation ... ok
+test requirements_tests::environment_configuration_validation::limits_red::socket_read_chunk_cap_accepts_legal_candidate_boundaries ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 435 filtered out; finished in 0.05s
+
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_domain-ac54160ac2962c29)
+
+running 2 tests
+test workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization ... ok
+test workspace::tests::listener_v3::socket_read_chunk_cap_accepts_boundaries_and_preserves_serialized_values ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 70 filtered out; finished in 0.01s
+
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_infrastructure-86a922c475450391)
+
+running 2 tests
+test adapters::listener_runtime::tests::socket_read_chunk_cap_maximum_relays_bytes_and_releases_port ... ok
+test adapters::listener_runtime::tests::socket_read_chunk_cap_rejects_start_and_probe_before_io ... ok
+
+test result: ok. 2 passed; 0 failed; 0 ignored; 0 measured; 483 filtered out; finished in 0.06s
+

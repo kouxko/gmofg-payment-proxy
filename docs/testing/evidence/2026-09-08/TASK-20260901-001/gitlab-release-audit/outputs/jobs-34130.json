@@ -1,0 +1,116 @@
+[
+  {
+    "id": 104404,
+    "status": "success",
+    "stage": "prepare",
+    "name": "windows_runner_setup",
+    "ref": "codex/windows-longpaths-maintenance",
+    "tag": false,
+    "coverage": null,
+    "allow_failure": false,
+    "created_at": "2026-09-07T03:29:26.899Z",
+    "started_at": "2026-09-07T03:29:29.320Z",
+    "finished_at": "2026-09-07T03:29:36.193Z",
+    "erased_at": null,
+    "duration": 6.873375,
+    "queued_duration": 1.572025,
+    "user": {
+      "id": 15,
+      "username": "kouqurong",
+      "name": "kouqurong",
+      "state": "active",
+      "locked": false,
+      "avatar_url": "https://www.gravatar.com/avatar/828fdc84336618644758593a62c797382be0e96d799c017e962471ed3232952d?s=80&d=identicon",
+      "web_url": "http://172.16.3.60/kouqurong",
+      "created_at": "2024-03-11T02:02:06.443Z",
+      "bio": "",
+      "location": "",
+      "public_email": null,
+      "skype": "",
+      "linkedin": "",
+      "twitter": "",
+      "discord": "",
+      "website_url": "",
+      "organization": "",
+      "job_title": "",
+      "pronouns": null,
+      "bot": false,
+      "work_information": null,
+      "followers": 1,
+      "following": 0,
+      "local_time": null
+    },
+    "commit": {
+      "id": "b6c0a5143940395a0bdbfac256c8f11e95b47a31",
+      "short_id": "b6c0a514",
+      "created_at": "2026-09-07T03:29:26.000+00:00",
+      "parent_ids": [
+        "caa36022f1070caad58085870a4c33c1e6246bbd"
+      ],
+      "title": "ci: configure Windows runner long-path support",
+      "message": "ci: configure Windows runner long-path support",
+      "author_name": "kouqurong",
+      "author_email": "kouqurong@paxsz.com",
+      "authored_date": "2026-09-07T03:29:26.000+00:00",
+      "committer_name": "kouqurong",
+      "committer_email": "kouqurong@paxsz.com",
+      "committed_date": "2026-09-07T03:29:26.000+00:00",
+      "trailers": {},
+      "extended_trailers": {},
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/commit/b6c0a5143940395a0bdbfac256c8f11e95b47a31"
+    },
+    "pipeline": {
+      "id": 34130,
+      "iid": 33,
+      "project_id": 1023,
+      "sha": "b6c0a5143940395a0bdbfac256c8f11e95b47a31",
+      "ref": "codex/windows-longpaths-maintenance",
+      "status": "success",
+      "source": "api",
+      "created_at": "2026-09-07T03:29:26.893Z",
+      "updated_at": "2026-09-07T03:29:36.273Z",
+      "web_url": "http://172.16.3.60/other/intercept_proxy/-/pipelines/34130"
+    },
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/jobs/104404",
+    "project": {
+      "ci_job_token_scope_enabled": false
+    },
+    "artifacts": [
+      {
+        "file_type": "trace",
+        "size": 1201,
+        "filename": "job.log",
+        "file_format": null
+      }
+    ],
+    "runner": {
+      "id": 14,
+      "description": "Slave4",
+      "ip_address": null,
+      "active": true,
+      "paused": false,
+      "is_shared": true,
+      "runner_type": "instance_type",
+      "name": "gitlab-runner",
+      "online": true,
+      "status": "online"
+    },
+    "runner_manager": {
+      "id": 20,
+      "system_id": "s_c67db7cecd85",
+      "version": "17.3.1",
+      "revision": "66269445",
+      "platform": "windows",
+      "architecture": "amd64",
+      "created_at": "2025-03-20T08:53:46.243Z",
+      "contacted_at": "2026-09-08T03:27:59.737Z",
+      "ip_address": "10.0.34.109",
+      "status": "online"
+    },
+    "artifacts_expire_at": null,
+    "archived": false,
+    "tag_list": [
+      "slave4"
+    ]
+  }
+]

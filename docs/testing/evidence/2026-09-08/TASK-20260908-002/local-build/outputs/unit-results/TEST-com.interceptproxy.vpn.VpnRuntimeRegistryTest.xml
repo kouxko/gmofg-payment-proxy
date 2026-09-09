@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<testsuite name="com.interceptproxy.vpn.VpnRuntimeRegistryTest" tests="5" skipped="0" failures="0" errors="0" timestamp="2026-09-08T08:40:40.644Z" hostname="KQR.local" time="0.006">
+  <properties/>
+  <testcase name="queuedStartCancelledBeforeServiceCreationSettlesAsVerifiedStopped" classname="com.interceptproxy.vpn.VpnRuntimeRegistryTest" time="0.005"/>
+  <testcase name="immediateStopInvalidatesQueuedStartUntilTeardownIsConfirmed" classname="com.interceptproxy.vpn.VpnRuntimeRegistryTest" time="0.0"/>
+  <testcase name="activeServiceStopTimeoutClosesTunAndRejectsLateCallback" classname="com.interceptproxy.vpn.VpnRuntimeRegistryTest" time="0.0"/>
+  <testcase name="nullServiceStopCannotClaimVerifiedStoppedBeforeTeardown" classname="com.interceptproxy.vpn.VpnRuntimeRegistryTest" time="0.0"/>
+  <testcase name="staleStartCannotPublishRunningAfterNewGeneration" classname="com.interceptproxy.vpn.VpnRuntimeRegistryTest" time="0.0"/>
+  <system-out><![CDATA[]]></system-out>
+  <system-err><![CDATA[]]></system-err>
+</testsuite>

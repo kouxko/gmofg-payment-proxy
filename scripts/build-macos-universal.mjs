@@ -33,7 +33,7 @@ const app = path.resolve(
 const dmgDirectory = path.resolve(
   "src-tauri/target/universal-apple-darwin/release/bundle/dmg",
 );
-const dmg = path.join(dmgDirectory, "Intercept Proxy_1.0.0_universal.dmg");
+const dmg = path.join(dmgDirectory, "Intercept Proxy_1.0.1_universal.dmg");
 const dmgSource = mkdtempSync(path.join(os.tmpdir(), "intercept-proxy-dmg-"));
 try {
   cpSync(app, path.join(dmgSource, "Intercept Proxy.app"), { recursive: true });

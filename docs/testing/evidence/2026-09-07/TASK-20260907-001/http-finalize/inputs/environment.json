@@ -1,0 +1,10 @@
+{
+  "captured_at": "2026-09-07T08:45:44.343499+00:00",
+  "os": "macOS-27.0-arm64-arm-64bit-Mach-O",
+  "cwd": "/Users/codin/Code/gmofg-payment-proxy",
+  "rustc": "rustc 1.98.0 (88d9e12ae 2026-08-18)",
+  "cargo": "cargo 1.98.0 (797e8a9bc 2026-08-05)",
+  "deno": "deno 2.9.6 (stable, release, aarch64-apple-darwin)\nv8 15.0.245.2-rusty\ntypescript 6.0.3",
+  "git_head": "d13ee9b184fc017f1120f18cfe44870e26ecca4f",
+  "branch": "feature/0907-001-http-finalize-cps-signing"
+}

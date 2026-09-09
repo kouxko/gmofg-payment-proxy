@@ -1,17 +1,23 @@
-use std::sync::{Arc, Mutex};
+use std::{
+    marker::PhantomData,
+    sync::{Arc, Mutex},
+};
 
 use tracing::{Event, Subscriber, field::Visit, subscriber::with_default};
 use tracing_subscriber::{Layer, layer::Context, prelude::*, registry::LookupSpan};
 
-use super::{MAX_OBSERVATION_TEXT_BYTES, failed, failed_with_context, raw_failed, raw_received};
+use super::{
+    MAX_OBSERVATION_TEXT_BYTES, encoded, failed, failed_with_context, raw_failed, raw_received,
+    received, sent,
+};
 use crate::{
-    Error, ExternalPackageCallFailure, ExternalPackageCallStage, Http, HttpContext,
-    ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
+    Document, Envelope, Error, ExternalPackageCallFailure, ExternalPackageCallStage, Http,
+    HttpContext, ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
     RuleProcessingAccumulator, RuleProcessingChange, RuleProcessingOperation,
     RuleProcessingOperationKind, Socket, SocketContext, Upstream, rules_processed,
 };
 
-#[derive(Default)]
+#[derive(Clone, Default)]
 struct CapturedFields {
     event: Option<String>,
     protocol: Option<String>,
@@ -79,6 +85,93 @@ where
         event.record(&mut fields);
         *self.0.lock().unwrap() = fields;
     }
+}
+
+fn capture(action: impl FnOnce()) -> CapturedFields {
+    let captured = Arc::new(Mutex::new(CapturedFields::default()));
+    let subscriber = tracing_subscriber::registry().with(CaptureLayer(Arc::clone(&captured)));
+    with_default(subscriber, action);
+    captured.lock().unwrap().clone()
+}
+
+fn shift_jis_context() -> HttpContext {
+    let wire_body = vec![0x94, 0x84, 0x8F, 0xE3]; // "売上" in Shift-JIS.
+    HttpContext {
+        header: "HTTP/1.1 200 OK\r\nContent-Type: text/plain; charset=Shift_JIS\r\n\r\n".into(),
+        body: String::from_utf8_lossy(&wire_body).into_owned(),
+        body_is_utf8: false,
+        wire_body,
+    }
+}
+
+#[test]
+fn non_utf8_http_observations_keep_text_fields_and_expose_wire_body_for_all_stages() {
+    let context = shift_jis_context();
+    let envelope = Envelope::<Http, Upstream> {
+        context: context.clone(),
+        document: Document::parse_json("{}").unwrap(),
+        display: "売上".into(),
+        direction: PhantomData,
+    };
+    let error = Error::new("decode failed");
+
+    let stages = [
+        capture(|| received(&envelope)),
+        capture(|| sent::<Http, Upstream>(&context)),
+        capture(|| encoded::<Http, Upstream>(&context)),
+        capture(|| failed_with_context::<Http, Upstream>("decode", &context, &error)),
+    ];
+
+    for (captured, expected_event) in stages
+        .into_iter()
+        .zip(["received", "sent", "encoded", "failed"])
+    {
+        assert_eq!(captured.event.as_deref(), Some(expected_event));
+        assert_eq!(captured.protocol.as_deref(), Some("http"));
+        assert_eq!(
+            captured.context_header.as_deref(),
+            Some(context.header.as_str())
+        );
+        assert_eq!(
+            captured.context_body.as_deref(),
+            Some(context.body.as_str())
+        );
+        assert_eq!(captured.context_body_is_utf8, Some(false));
+        assert_eq!(captured.context_bytes.as_deref(), Some("94848FE3"));
+    }
+}
+
+#[test]
+fn utf8_http_observations_do_not_duplicate_body_as_hex() {
+    let context = HttpContext {
+        header: "HTTP/1.1 200 OK\r\n\r\n".into(),
+        body: "売上".into(),
+        body_is_utf8: true,
+        wire_body: "売上".as_bytes().to_vec(),
+    };
+
+    for captured in [
+        capture(|| sent::<Http, Upstream>(&context)),
+        capture(|| encoded::<Http, Upstream>(&context)),
+        capture(|| failed_with_context::<Http, Upstream>("decode", &context, &Error::new("x"))),
+    ] {
+        assert!(captured.context_bytes.is_none());
+    }
+}
+
+#[test]
+fn non_utf8_http_hex_shares_the_total_projection_budget() {
+    let context = HttpContext {
+        header: "x".into(),
+        body: String::new(),
+        body_is_utf8: false,
+        wire_body: vec![0xA5; MAX_OBSERVATION_TEXT_BYTES / 2],
+    };
+
+    let captured = capture(|| sent::<Http, Upstream>(&context));
+    assert_eq!(captured.event.as_deref(), Some("observation_lost"));
+    assert!(captured.context_bytes.is_none());
+    assert!(captured.context_header.is_none());
 }
 
 #[test]

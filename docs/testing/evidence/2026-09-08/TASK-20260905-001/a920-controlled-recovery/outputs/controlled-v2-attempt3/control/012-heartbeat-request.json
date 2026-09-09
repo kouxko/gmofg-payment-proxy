@@ -1,0 +1,8 @@
+{
+  "version": 2,
+  "request_id": "da3f7955-d44d-4964-bc8f-7de5542a8a5d",
+  "operation": "heartbeat",
+  "payload": {
+    "owner_epoch": "38befdb6-80f4-4d38-aea6-744dc01955c6"
+  }
+}

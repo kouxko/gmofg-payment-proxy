@@ -1,0 +1,19 @@
+{
+  "hotfix_mr8": {
+    "iid": 8,
+    "state": "merged",
+    "merged_at": "2026-09-08T09:20:56.111Z",
+    "merge_commit_sha": "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+    "web_url": "http://172.16.3.60/other/intercept_proxy/-/merge_requests/8"
+  },
+  "branches": {
+    "develop": {
+      "sha": "bb47b0ebb7508e8b4684a4192cbf8eb8d78b3b59",
+      "protected": false
+    },
+    "release": {
+      "sha": "10b3b576123c6c3f4e44868f7fc4e86e53a67208",
+      "protected": false
+    }
+  }
+}

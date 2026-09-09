@@ -1,0 +1,6 @@
+{
+  "result": "FAIL",
+  "error_type": "AssertionError",
+  "error": "HTTP upstream expected 6 records, got 0",
+  "traceback": "Traceback (most recent call last):\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/replay/wire_matrix.py\", line 431, in main\n    result = run(args.mcp_port, args.marker_wait_seconds)\n  File \"/Users/codin/Code/gmofg-payment-proxy/docs/testing/evidence/2026-09-08/TASK-20260901-001/local-macos-regression/replay/wire_matrix.py\", line 376, in run\n    raise AssertionError(f\"HTTP upstream expected 6 records, got {len(upstreams.http_records)}\")\nAssertionError: HTTP upstream expected 6 records, got 0\n"
+}

@@ -1,6 +1,6 @@
 //! Failure fields and their shared Context/external-call projection budget.
 
-use super::{MAX_OBSERVATION_TEXT_BYTES, direction, hex, observation_lost};
+use super::{MAX_OBSERVATION_TEXT_BYTES, direction, hex, http_wire_hex, observation_lost};
 use crate::{Direction, Error, ObservedContext, ObservedProtocol};
 
 pub(crate) fn failed<D: Direction>(stage: &'static str, error: &Error) {
@@ -38,7 +38,17 @@ where
             header,
             body,
             body_is_utf8,
-        } if fits_failure_projection(&[header, body], error) => {
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) = failure_projection_bytes(&[header, body], error)
+            else {
+                observation_lost("http_failure_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_failure_projection_too_large");
+                return;
+            };
             tracing::error!(
                 target: "intercept_proxy::exchange::ui",
                 event = "failed",
@@ -48,7 +58,7 @@ where
                 context_header = header,
                 context_body = body,
                 context_body_is_utf8 = body_is_utf8,
-                context_bytes_hex = tracing::field::Empty,
+                context_bytes_hex = wire_hex.as_deref(),
                 error = error.message.as_str(),
                 external_package_id = error.external_package_call.as_ref().map_or("", |value| value.package.id.as_str()),
                 external_package_version = error.external_package_call.as_ref().map_or("", |value| value.package.version.as_str()),
@@ -61,7 +71,6 @@ where
                 external_remote_data_summary = error.external_package_call.as_ref().and_then(|value| value.remote_data_summary.as_deref()).unwrap_or(""),
             );
         }
-        ObservedContext::Http { .. } => observation_lost("http_failure_projection_too_large"),
         ObservedContext::Socket { data } => match hex(data) {
             Some(encoded) if fits_failure_projection(&[&encoded], error) => {
                 tracing::error!(
@@ -101,6 +110,11 @@ const fn external_stage(stage: crate::ExternalPackageCallStage) -> &'static str 
 }
 
 fn fits_failure_projection(context: &[&str], error: &Error) -> bool {
+    failure_projection_bytes(context, error)
+        .is_some_and(|total| total <= MAX_OBSERVATION_TEXT_BYTES)
+}
+
+fn failure_projection_bytes(context: &[&str], error: &Error) -> Option<usize> {
     let mut bytes = context.iter().try_fold(error.message.len(), |sum, value| {
         sum.checked_add(value.len())
     });
@@ -118,5 +132,5 @@ fn fits_failure_projection(context: &[&str], error: &Error) -> bool {
             bytes = bytes.and_then(|sum| sum.checked_add(value.len()));
         }
     }
-    bytes.is_some_and(|total| total <= MAX_OBSERVATION_TEXT_BYTES)
+    bytes
 }

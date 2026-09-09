@@ -99,6 +99,8 @@ fn workspace_with_http_rules(
     workspace
 }
 
+#[path = "phase10_http_pipeline/cps_checksum_wire.rs"]
+mod cps_checksum_wire;
 #[path = "phase10_http_pipeline/live_plain_hot_replacement.rs"]
 mod live_plain_hot_replacement;
 #[path = "phase10_http_pipeline/local_http_response.rs"]

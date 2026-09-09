@@ -1,0 +1,14 @@
+{
+  "api": 1,
+  "kind": "http",
+  "package": {
+    "id": "http-finalize-contract",
+    "version": "1.0.0",
+    "name": "HTTP Finalize Contract Fixture",
+    "description": "Exercises optional HTTP Finalize Component exports."
+  },
+  "document": {
+    "upstream": {},
+    "downstream": {}
+  }
+}

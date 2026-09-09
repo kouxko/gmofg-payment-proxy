@@ -1,0 +1,5 @@
+{
+  "field_equality": true,
+  "unchanged_bytes_equal": false,
+  "byte_source": "Python Shift_JIS encoding of actual Host Unicode input/output, not a network capture"
+}

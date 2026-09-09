@@ -1,0 +1,196 @@
+
+<!doctype html>
+<html lang="en">
+
+<head>
+    <title>Code coverage report for features/listeners/listener-feedback.tsx</title>
+    <meta charset="utf-8" />
+    <link rel="stylesheet" href="../../prettify.css" />
+    <link rel="stylesheet" href="../../base.css" />
+    <link rel="shortcut icon" type="image/x-icon" href="../../favicon.png" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <style type='text/css'>
+        .coverage-summary .sorter {
+            background-image: url(../../sort-arrow-sprite.png);
+        }
+    </style>
+</head>
+    
+<body>
+<div class='wrapper'>
+    <div class='pad1'>
+        <h1><a href="../../index.html">All files</a> / <a href="index.html">features/listeners</a> listener-feedback.tsx</h1>
+        <div class='clearfix'>
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">60% </span>
+                <span class="quiet">Statements</span>
+                <span class='fraction'>3/5</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">70% </span>
+                <span class="quiet">Branches</span>
+                <span class='fraction'>14/20</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">50% </span>
+                <span class="quiet">Functions</span>
+                <span class='fraction'>2/4</span>
+            </div>
+        
+            
+            <div class='fl pad1y space-right2'>
+                <span class="strong">60% </span>
+                <span class="quiet">Lines</span>
+                <span class='fraction'>3/5</span>
+            </div>
+        
+            
+        </div>
+        <p class="quiet">
+            Press <em>n</em> or <em>j</em> to go to the next uncovered block, <em>b</em>, <em>p</em> or <em>k</em> for the previous block.
+        </p>
+        <template id="filterTemplate">
+            <div class="quiet">
+                Filter:
+                <input type="search" id="fileSearch">
+            </div>
+        </template>
+    </div>
+    <div class='status-line medium'></div>
+    <pre><table class="coverage">
+<tr><td class="line-count quiet"><a name='L1'></a><a href='#L1'>1</a>
+<a name='L2'></a><a href='#L2'>2</a>
+<a name='L3'></a><a href='#L3'>3</a>
+<a name='L4'></a><a href='#L4'>4</a>
+<a name='L5'></a><a href='#L5'>5</a>
+<a name='L6'></a><a href='#L6'>6</a>
+<a name='L7'></a><a href='#L7'>7</a>
+<a name='L8'></a><a href='#L8'>8</a>
+<a name='L9'></a><a href='#L9'>9</a>
+<a name='L10'></a><a href='#L10'>10</a>
+<a name='L11'></a><a href='#L11'>11</a>
+<a name='L12'></a><a href='#L12'>12</a>
+<a name='L13'></a><a href='#L13'>13</a>
+<a name='L14'></a><a href='#L14'>14</a>
+<a name='L15'></a><a href='#L15'>15</a>
+<a name='L16'></a><a href='#L16'>16</a>
+<a name='L17'></a><a href='#L17'>17</a>
+<a name='L18'></a><a href='#L18'>18</a>
+<a name='L19'></a><a href='#L19'>19</a>
+<a name='L20'></a><a href='#L20'>20</a>
+<a name='L21'></a><a href='#L21'>21</a>
+<a name='L22'></a><a href='#L22'>22</a>
+<a name='L23'></a><a href='#L23'>23</a>
+<a name='L24'></a><a href='#L24'>24</a>
+<a name='L25'></a><a href='#L25'>25</a>
+<a name='L26'></a><a href='#L26'>26</a>
+<a name='L27'></a><a href='#L27'>27</a>
+<a name='L28'></a><a href='#L28'>28</a>
+<a name='L29'></a><a href='#L29'>29</a>
+<a name='L30'></a><a href='#L30'>30</a>
+<a name='L31'></a><a href='#L31'>31</a>
+<a name='L32'></a><a href='#L32'>32</a>
+<a name='L33'></a><a href='#L33'>33</a>
+<a name='L34'></a><a href='#L34'>34</a>
+<a name='L35'></a><a href='#L35'>35</a>
+<a name='L36'></a><a href='#L36'>36</a>
+<a name='L37'></a><a href='#L37'>37</a>
+<a name='L38'></a><a href='#L38'>38</a></td><td class="line-coverage quiet"><span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">599x</span>
+<span class="cline-any cline-yes">599x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-yes">2x</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-no">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span>
+<span class="cline-any cline-neutral">&nbsp;</span></td><td class="text"><pre class="prettyprint lang-js">import { Alert, Button } from "@heroui/react";
+import type { ListenerDraft, ListenerDraftValidationViewModel } from "@/generated/rust-types";
+import { isLocalResponder } from "./listener-view-model";
+&nbsp;
+export interface ListenerOperationError {
+  message: string;
+  fieldErrors: Record&lt;string, string[]&gt;;
+}
+&nbsp;
+export function ListenerFeedback({ listener, validation, operationError, conflict, pending, onDiscardConflict }: {
+  listener?: ListenerDraft;
+  validation?: ListenerDraftValidationViewModel;
+  operationError?: ListenerOperationError;
+  conflict: boolean;
+  pending: boolean;
+  onDiscardConflict: () =&gt; void;
+}) {
+  const errors = Object.entries(validation?.field_errors ?? {});
+  return &lt;&gt;
+    {conflict &amp;&amp; &lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+      &lt;Alert.Title&gt;当前监听存在外部修改冲突&lt;/Alert.Title&gt;
+      &lt;Alert.Description&gt;本地草稿已保留。为避免覆盖最新配置，保存、启动和删除已暂停。&lt;/Alert.Description&gt;
+      &lt;div className="mt-3"&gt;&lt;Button size="sm" variant="danger-soft" isDisabled={pending} onPress={onDiscardConflict}&gt;放弃当前监听草稿并加载最新配置&lt;/Button&gt;&lt;/div&gt;
+    &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+    {validation &amp;&amp; (validation.valid ? &lt;Alert status="success"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;&lt;Alert.Title&gt;当前监听校验通过&lt;/Alert.Title&gt;&lt;Alert.Description&gt;{conflict ? "结构有效，但须先解决外部修改冲突。" : isLocalResponder(listener) ? <span class="branch-0 cbranch-no" title="branch not covered" >"配置结构有效，可保存并启动；收到请求后将由本机生成响应。" : "</span>当前监听可保存、启动或执行上游 TLS 测试。"}&lt;/Alert.Description&gt;&lt;/Alert.Content&gt;&lt;/Alert&gt; : <span class="branch-1 cbranch-no" title="branch not covered" >&lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;&lt;Alert.Title&gt;当前监听校验未通过&lt;/Alert.Title&gt;&lt;Alert.Description&gt;{listener?.data_plane.kind === "socket" ? "请按下方分类修正 Socket 配置。" : errors.<span class="fstat-no" title="function not covered" >map(([</span>field, messages]) =&gt; <span class="cstat-no" title="statement not covered" >`${field}: ${messages.join("，")}`)</span>.join("；")}&lt;/Alert.Description&gt;&lt;/Alert.Content&gt;&lt;/Alert&gt;)}</span>
+    {operationError &amp;&amp; &lt;Alert status="danger"&gt;&lt;Alert.Indicator /&gt;&lt;Alert.Content&gt;
+      &lt;Alert.Title&gt;{listener?.data_plane.kind === "socket" ? "操作未完成" : <span class="branch-1 cbranch-no" title="branch not covered" >operationError.message}&lt;/Alert.Title&gt;</span>
+      &lt;Alert.Description&gt;{listener?.data_plane.kind === "socket" ? &lt;&gt;
+        &lt;p&gt;请按下方分类修正 Socket 配置。&lt;/p&gt;
+        &lt;details className="mt-2"&gt;&lt;summary className="cursor-pointer font-medium"&gt;高级诊断&lt;/summary&gt;
+          &lt;p className="mt-1"&gt;{operationError.message}&lt;/p&gt;
+          &lt;ul&gt;{Object.entries(operationError.fieldErrors).map(([field, messages]) =&gt; &lt;li key={field}&gt;{field}: {messages.join("，")}&lt;/li&gt;)}&lt;/ul&gt;
+        &lt;/details&gt;
+      &lt;/&gt; : <span class="branch-1 cbranch-no" title="branch not covered" >Object.entries(operationError.fieldErrors).<span class="fstat-no" title="function not covered" >map(([</span>field, messages]) =&gt; <span class="cstat-no" title="statement not covered" >`${field}: ${messages.join("，")}`)</span>.join("；")}&lt;/Alert.Description&gt;</span>
+    &lt;/Alert.Content&gt;&lt;/Alert&gt;}
+  &lt;/&gt;;
+}
+&nbsp;</pre></td></tr></table></pre>
+
+                <div class='push'></div><!-- for sticky footer -->
+            </div><!-- /wrapper -->
+            <div class='footer quiet pad2 space-top1 center small'>
+                Code coverage generated by
+                <a href="https://istanbul.js.org/" target="_blank" rel="noopener noreferrer">istanbul</a>
+                at 2026-09-06T10:02:38.685Z
+            </div>
+        <script src="../../prettify.js"></script>
+        <script>
+            window.onload = function () {
+                prettyPrint();
+            };
+        </script>
+        <script src="../../sorter.js"></script>
+        <script src="../../block-navigation.js"></script>
+    </body>
+</html>
+    

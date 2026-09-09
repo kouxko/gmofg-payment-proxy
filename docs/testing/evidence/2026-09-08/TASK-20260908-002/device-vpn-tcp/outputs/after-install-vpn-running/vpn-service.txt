@@ -1,0 +1,29 @@
+ACTIVITY MANAGER SERVICES (dumpsys activity services)
+  User 0 active services:
+  * ServiceRecord{2944587 u0 com.interceptproxy.vpn/.InterceptVpnService}
+    intent={act=com.interceptproxy.vpn.action.START cmp=com.interceptproxy.vpn/.InterceptVpnService}
+    packageName=com.interceptproxy.vpn
+    processName=com.interceptproxy.vpn
+    permission=android.permission.BIND_VPN_SERVICE
+    baseDir=/data/app/com.interceptproxy.vpn-hRkvgopE0lYtgNqNtaiJOg==/base.apk
+    dataDir=/data/user/0/com.interceptproxy.vpn
+    app=ProcessRecord{d8977f8 3771:com.interceptproxy.vpn/u0a119}
+    isForeground=true foregroundId=41001 foregroundNoti=Notification(channel=intercept_proxy_vpn pri=0 contentView=null vibrate=null sound=null defaults=0x0 flags=0x62 color=0x00000000 actions=1 vis=PRIVATE)
+    createTime=-2m56s665ms startingBgTimeout=--
+    lastActivity=-2m56s573ms restartTime=-2m56s664ms createdFromFg=false
+    startRequested=true delayedStop=false stopIfKilled=true callStart=true lastStartId=1
+    Bindings:
+    * IntentBindRecord{7e5d4d1 CREATE}:
+      intent={act=android.net.VpnService cmp=com.interceptproxy.vpn/.InterceptVpnService}
+      binder=android.os.BinderProxy@e597b36
+      requested=true received=true hasBound=true doRebind=false
+      * Client AppBindRecord{1681a37 ProcessRecord{808b1a7 1303:system/1000}}
+        Per-process Connections:
+          ConnectionRecord{3e5b323 u0 CR FGS com.interceptproxy.vpn/.InterceptVpnService:@fd37452}
+    All Connections:
+      ConnectionRecord{3e5b323 u0 CR FGS com.interceptproxy.vpn/.InterceptVpnService:@fd37452}
+
+  Connection bindings to services:
+  * ConnectionRecord{3e5b323 u0 CR FGS com.interceptproxy.vpn/.InterceptVpnService:@fd37452}
+    binding=AppBindRecord{1681a37 com.interceptproxy.vpn/.InterceptVpnService:system}
+    conn=android.app.LoadedApk$ServiceDispatcher$InnerConnection@fd37452 flags=0x4000001

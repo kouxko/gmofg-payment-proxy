@@ -115,6 +115,11 @@ async fn assert_iso8583_deno_replay(runtime: &mut WasmPackageRuntime) {
         .decode_socket(ProtocolDirection::Upstream, &frame)
         .await
         .expect("decode ISO8583 Deno replay vector");
+    let document_json = document
+        .to_json()
+        .expect("serialize ISO8583 Deno Host Document");
+    assert!(document_json.contains("\"amount\":1000"));
+    assert!(!document_json.contains("\"amount\":1000.0"));
     let html = runtime
         .display(ProtocolDirection::Upstream, &document)
         .await

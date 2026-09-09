@@ -46,7 +46,7 @@ pub use crate::package_transport::{
     PackageTransportClient, PackageTransportConfig, PackageTransportError,
 };
 pub use android_adb::AndroidAdbAdapter;
-pub use body_codecs::WorkspaceBodyCodecResolver;
+pub use body_codecs::{WorkspaceBodyCodecResolver, decode_http_observation_body};
 pub use builtin_protocol_package::BuiltinProtocolPackageAdapter;
 pub use bundle::InfrastructureServiceBundle;
 pub use capture::CaptureRepositoryAdapter;

@@ -1,0 +1,12 @@
+[
+  {
+    "package": "com.interceptproxy.vpn.targetprobe",
+    "before": "absent",
+    "pm_path_exit_code": 1
+  },
+  {
+    "package": "com.interceptproxy.vpn.isolationprobe",
+    "before": "absent",
+    "pm_path_exit_code": 1
+  }
+]

@@ -1,0 +1,10 @@
+{
+  "base_commit": "6764210eb057bb482b86a05cd1df23d7cdea5c5c",
+  "branch": "hotfix/fix-android-vpn-local-tcp",
+  "started_date": "2026-09-08",
+  "java_home": "/Applications/Android Studio.app/Contents/jbr/Contents/Home",
+  "gradle": "9.3.0",
+  "android_sdk": "/Users/codin/Library/Android/sdk",
+  "scope": "VpnTunFactory Kotlin change; Rust unchanged, rebuilt four ABIs",
+  "mutation_during_build": false
+}

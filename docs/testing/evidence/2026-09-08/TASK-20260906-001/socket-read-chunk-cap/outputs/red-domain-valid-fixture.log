@@ -1,0 +1,23 @@
+   Compiling intercept-proxy-domain v1.0.0 (/Users/codin/Code/gmofg-payment-proxy/src-tauri/crates/domain)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 6.79s
+     Running unittests src/lib.rs (src-tauri/target/debug/deps/intercept_proxy_domain-b93b9d01f7f5d30d)
+
+running 2 tests
+test workspace::tests::listener_v3::socket_read_chunk_cap_accepts_boundaries_and_preserves_serialized_values ... ok
+test workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization ... FAILED
+
+failures:
+
+---- workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization stdout ----
+
+thread 'workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization' (11564836) panicked at crates/domain/src/workspace/tests/listener_v3.rs:112:41:
+invalid read chunk size: ()
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+
+failures:
+    workspace::tests::listener_v3::socket_read_chunk_cap_rejects_invalid_imports_without_normalization
+
+test result: FAILED. 1 passed; 1 failed; 0 ignored; 0 measured; 70 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-domain --lib`

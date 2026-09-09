@@ -1,0 +1,2 @@
+Task scan:frontend-boundaries deno run -A scripts/check-frontend-boundaries.mjs
+Frontend Rust-only boundary scan passed.

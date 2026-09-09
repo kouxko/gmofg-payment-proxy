@@ -1,0 +1,8 @@
+running 3 tests from ../../../../../../../var/folders/q8/ztpkwyr54nxgslwrnd8lsjdm0000gn/T/quick-workflow-replay-v5xzceh1/scripts/windows-build-only-workflow.test.mjs
+Windows quick workflow builds Android then one unsigned Windows executable ... ok (2ms)
+full desktop release never exposes the quick-build bypass ... ok (1ms)
+tagged desktop releases distinguish complete signing from explicit unsigned mode ... ok (526µs)
+
+ok | 3 passed | 0 failed (12ms)
+
+PASS: archived workflow contract and executable/APK layout/integrity

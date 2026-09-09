@@ -1,0 +1,2 @@
+
+docs/testing/quick-validations/2026-09-08/QV-20260908-001/resources/device-netd.o:	file format elf64-bpf
