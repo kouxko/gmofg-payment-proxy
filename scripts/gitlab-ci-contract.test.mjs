@@ -83,9 +83,6 @@ test("GitLab jobs preserve Android, coverage, Windows verification and artifact 
   assert.match(coverageJob, /^[ ]{4}- "docker test"$/mu);
   assert.match(verifyJob, /^[ ]{4}- "slave4"$/mu);
   assert.match(packageJob, /^[ ]{4}- "slave4"$/mu);
-  for (const job of [androidJob, coverageJob, verifyJob, packageJob]) {
-    assert.match(job, /prefix: "[^"]+-\$CI_COMMIT_REF_SLUG"/u);
-  }
   for (const job of [coverageJob, verifyJob, packageJob]) {
     assert.match(job, /job: android_companion/u);
     assert.match(job, /artifacts: true/u);
@@ -104,6 +101,29 @@ test("GitLab jobs preserve Android, coverage, Windows verification and artifact 
   );
   assert.match(verifyJob, /deno task test:protocol-packages/u);
   assert.match(verifyJob, /test-support\/socket-relay-gate\/Cargo\.toml/u);
+});
+
+test("Project dependency caches are shared across branches and isolated by environment", async () => {
+  const source = await readWorkflow();
+  for (
+    const [name, key] of [
+      ["android_companion", "android-linux"],
+      ["coverage_gates", "coverage-linux"],
+      ["verify_windows", "desktop-windows"],
+      ["package_windows_unsigned", "desktop-windows"],
+      ["windows_compile", "desktop-windows"],
+      ["windows_build_only", "desktop-windows"],
+    ]
+  ) {
+    const job = topLevelBlock(source, name);
+    assert.match(
+      job,
+      new RegExp(`key: "project-\\$CI_PROJECT_ID-${key}-v1"`, "u"),
+    );
+    assert.match(job, /^[ ]{4}unprotect: true$/mu);
+    assert.match(job, /^[ ]{6}- \.ci-cache\/$/mu);
+    assert.doesNotMatch(job, /CI_COMMIT_REF_SLUG|^[ ]{6}files:/mu);
+  }
 });
 
 test("GitLab toolchains are pinned and frontend commands remain Deno-only", async () => {
@@ -271,6 +291,30 @@ test("Android and Windows build-only mode packages the Companion without running
   const verifyJob = topLevelBlock(source, "verify_windows");
   const packageJob = topLevelBlock(source, "package_windows_unsigned");
   const buildOnlyJob = topLevelBlock(source, "windows_build_only");
+  const compileJob = topLevelBlock(source, "windows_compile");
+  assert.match(compileJob, /^[ ]{2}stage: prepare$/mu);
+  assert.match(compileJob, /^[ ]{2}needs: \[\]$/mu);
+  assert.match(
+    compileJob,
+    /deno task tauri build -vv --no-bundle --config src-tauri\/tauri.ci-compile.conf.json/u,
+  );
+  assert.doesNotMatch(
+    compileJob,
+    /job: android_companion|stage-android-companion/u,
+  );
+  assert.match(compileJob, /windows-compile-artifact\/intercept-proxy.exe/u);
+  assert.match(
+    compileJob,
+    /if \(\$LASTEXITCODE -ne 0\) \{ throw "Windows compilation failed\." \}/u,
+  );
+  assert.match(
+    compileJob,
+    /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,
+  );
+  const compileConfig = JSON.parse(
+    await readRepositoryFile("src-tauri/tauri.ci-compile.conf.json"),
+  );
+  assert.deepEqual(compileConfig, { bundle: { resources: [] } });
 
   assert.match(
     androidJob,
@@ -303,14 +347,22 @@ test("Android and Windows build-only mode packages the Companion without running
     buildOnlyJob,
     /^[ ]{4}GIT_CLEAN_FLAGS: "-ffdx -e \.ci-cache\/ -e src-tauri\/target\/"$/mu,
   );
-  assert.doesNotMatch(buildOnlyJob, /^[ ]{2}cache:$/mu);
   assert.match(
     buildOnlyJob,
     /PIPELINE_MODE == "android-windows-build" && \(\$CI_PIPELINE_SOURCE == "api" \|\| \$CI_PIPELINE_SOURCE == "web"\)/u,
   );
   assert.match(buildOnlyJob, /job: android_companion[^]*?artifacts: true/u);
+  assert.match(buildOnlyJob, /job: windows_compile[^]*?artifacts: true/u);
+  assert.match(
+    buildOnlyJob,
+    /Copy-Item windows-compile-artifact\/intercept-proxy.exe src-tauri\/target\/release\/intercept-proxy.exe -Force/u,
+  );
   assert.match(buildOnlyJob, /stage-android-companion-windows\.ps1/u);
-  assert.match(buildOnlyJob, /deno task tauri build -vv --bundles msi,nsis/u);
+  assert.match(buildOnlyJob, /deno task tauri bundle -vv --bundles msi,nsis/u);
+  assert.doesNotMatch(
+    buildOnlyJob,
+    /deno task tauri build|tauri.ci-compile.conf.json/u,
+  );
   assert.match(buildOnlyJob, /WixTools314/u);
   assert.match(buildOnlyJob, /candle\.exe/u);
   assert.match(buildOnlyJob, /Candle exit code:/u);
@@ -342,7 +394,7 @@ test("Android and Windows build-only mode packages the Companion without running
     /resources\/android-companion\.apk is installed on a selected Android device/u,
   );
   assert.doesNotMatch(
-    buildOnlyJob,
+    compileJob + buildOnlyJob,
     /deno (?:audit|task (?:test|lint|typecheck|scan|check))|cargo (?:test|clippy|fmt|check)|verify-windows-openssl-runtime|Get-AuthenticodeSignature/u,
   );
 });

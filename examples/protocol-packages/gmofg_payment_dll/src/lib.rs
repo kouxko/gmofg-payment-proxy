@@ -3,6 +3,7 @@
 mod codec;
 mod display;
 mod model;
+mod response;
 
 use serde_json::Value;
 
@@ -92,24 +93,22 @@ fn display_upstream(document_json: &str) -> Result<String, String> {
 }
 
 fn decode_downstream(input: &str) -> Result<String, String> {
-    let document = codec::decode(input)?;
+    let document = response::decode(input)?;
     serde_json::to_string(&document)
         .map_err(|error| format!("cannot serialize GMO-FG Payment DLL Document: {error}"))
 }
 
 fn encode_downstream(original_input: &str, document_json: &str) -> Result<String, String> {
-    let original = codec::decode(original_input)?;
-    let document: model::DllDocument = serde_json::from_str(document_json)
-        .map_err(|error| format!("GMO-FG Payment DLL Document is not valid: {error}"))?;
+    let original = response::decode(original_input)?;
+    let document = response::from_document(document_json)?;
     if original == document {
         return Ok(original_input.to_owned());
     }
-    codec::encode(&document)
+    response::encode(&document)
 }
 
 fn display_downstream(document_json: &str) -> Result<String, String> {
-    let document: model::DllDocument = serde_json::from_str(document_json)
-        .map_err(|error| format!("GMO-FG Payment DLL Document is not valid: {error}"))?;
+    let document = response::from_document(document_json)?;
     display::downstream(&document)
 }
 
@@ -595,3 +594,6 @@ mod tests {
         }
     }
 }
+
+#[cfg(test)]
+mod receipt_tests;

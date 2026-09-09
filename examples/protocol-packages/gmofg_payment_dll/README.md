@@ -1,8 +1,24 @@
 # GMO-FG Payment DLL Wasm Component
 
-`gmofg-payment-dll@1.0.0` 是 GMO-FG Payment DLL 的 HTTP 协议包，仅对 downstream 响应执行
+`gmofg-payment-dll@1.0.1` 是 GMO-FG Payment DLL 的 HTTP 协议包，仅对 downstream 响应执行
 字段级业务 Decode、Encode 和 Display。包覆盖连接测试 `0000`、Credit DLL `0001`、UnionPay DLL
-`0002`，并接受 `D48` 等没有下载表的错误响应。
+`0002`，并接受 `D48` 等没有下载表的错误响应；同时支持同一地址上的电子小票
+`U010`（Credit）和 `U011`（UnionPay）响应。
+
+## 1.0.1 电子小票响应
+
+Payment 的电子小票与 DLL 下载共用 DLL Host 地址。包按 `TransactionType` 明确选择模型：
+`0000/0001/0002` 保持原 DLL 校验，`U010/U011` 使用独立小票模型。小票的五个字段
+`ResponseID`、`TransactionType`、`ResponseDateTime`、`ErrorCode`、`ErrorMessage` 均为字符串并完整保留；
+不要求 DLL 的 `ResponseTimeStamp`，不允许混入 DLL 参数表、未知字段或缺失字段。
+成功与失败错误码均进入 Document，不改写、不截断、不把业务错误当作解码失败；业务结果由 Payment 判断。
+小票未修改时返回原文，修改后按小票模型编码，Display 复用现有安全树形展示。未知交易类型仍明确失败。
+
+四个 `receipt-*.json` fixture 是依据 Payment 模型构造的 Credit/UnionPay 成功、失败用例；
+日文及 E01 错误码为合成测试值，不代表服务器实际错误文案或错误码定义。
+`receipt-observed-log.json` 来自故障报告的 19 条日志 Body，仅用于五字段结构回归；
+日志中的日文已为有损显示，不代表原始 Shift-JIS 字节。
+旧 `dist/gmofg-payment-dll-1.0.0.wasm` 保留，新版需导入并在目标入口明确选择 `1.0.1`。
 
 ## Downstream 合同
 
@@ -81,9 +97,9 @@ deno run -A examples/protocol-packages/gmofg_payment_dll/build.mjs
 `intercept-proxy:manifest` section，并输出：
 
 ```text
-examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm
-examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.0.wasm.sha256
+examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.1.wasm
+examples/protocol-packages/gmofg_payment_dll/dist/gmofg-payment-dll-1.0.1.wasm.sha256
 ```
 
 把 `.wasm` 文件导入 Proxy 后即可在 HTTP Listener 的协议包配置中选择
-`gmofg-payment-dll@1.0.0`。
+`gmofg-payment-dll@1.0.1`。

@@ -2,9 +2,7 @@ use std::fmt::Write as _;
 
 use serde_json::{Map, Value};
 
-use crate::model::DllDocument;
-
-pub(crate) fn downstream(document: &DllDocument) -> Result<String, String> {
+pub(crate) fn downstream(document: &impl serde::Serialize) -> Result<String, String> {
     let value = serde_json::to_value(document)
         .map_err(|error| format!("cannot serialize GMO-FG Payment DLL display: {error}"))?;
     Ok(render("GMO-FG Payment DLL downstream", &value))

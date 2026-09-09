@@ -3,9 +3,9 @@
   "kind": "http",
   "package": {
     "id": "gmofg-payment-dll",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "name": "GMO-FG Payment DLL",
-    "description": "Complete downstream decoder, encoder, and display for GMO-FG Payment DLL responses"
+    "description": "Downstream decoder, encoder, and display for GMO-FG DLL and receipt responses"
   },
   "document": {
     "upstream": {},
@@ -14,6 +14,7 @@
         "type": "object",
         "title": "GMO-FG Payment DLL downstream",
         "properties": {
+          "ErrorMessage": { "type": "string", "title": "Receipt response message" },
           "ErrorCode": { "type": "string", "title": "Error code" },
           "ResponseID": { "type": "string", "title": "Response ID" },
           "TransactionType": { "type": "string", "title": "Transaction type" },

@@ -58,11 +58,10 @@ android_companion:
   timeout: 45m
   interruptible: true
   cache:
-    key:
-      files:
-        - android-companion/settings.gradle.kts
-        - src-tauri/Cargo.lock
-      prefix: "android-linux-$CI_COMMIT_REF_SLUG"
+    # Project-wide dependency cache, including protected and unprotected branches.
+    # Keep Linux/Android and Windows toolchains in separate caches.
+    key: "project-$CI_PROJECT_ID-android-linux-v1"
+    unprotect: true
     paths:
       - .ci-cache/
   before_script:
@@ -108,11 +107,8 @@ coverage_gates:
     - job: android_companion
       artifacts: true
   cache:
-    key:
-      files:
-        - deno.lock
-        - src-tauri/Cargo.lock
-      prefix: "coverage-linux-$CI_COMMIT_REF_SLUG"
+    key: "project-$CI_PROJECT_ID-coverage-linux-v1"
+    unprotect: true
     paths:
       - .ci-cache/
       - node_modules/
@@ -153,15 +149,10 @@ verify_windows:
     - job: android_companion
       artifacts: true
   cache:
-    key:
-      files:
-        - deno.lock
-        - src-tauri/Cargo.lock
-      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    key: "project-$CI_PROJECT_ID-desktop-windows-v1"
+    unprotect: true
     paths:
       - .ci-cache/
-      - node_modules/
-      - .next/cache/
   before_script:
     - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
   script:
@@ -238,15 +229,10 @@ package_windows_unsigned:
     - if: '$CI_PIPELINE_SOURCE == "web"'
     - when: never
   cache:
-    key:
-      files:
-        - deno.lock
-        - src-tauri/Cargo.lock
-      prefix: "desktop-windows-$CI_COMMIT_REF_SLUG"
+    key: "project-$CI_PROJECT_ID-desktop-windows-v1"
+    unprotect: true
     paths:
       - .ci-cache/
-      - node_modules/
-      - .next/cache/
   before_script:
     - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
   script:
@@ -285,6 +271,40 @@ package_windows_unsigned:
       - src-tauri/target/release/bundle/nsis/*.exe
       - dist/*.zip
 
+windows_compile:
+  stage: prepare
+  tags:
+    - "slave4"
+  timeout: 2h
+  interruptible: true
+  variables:
+    OPENSSL_STATIC: "1"
+    GIT_CLEAN_FLAGS: "-ffdx -e .ci-cache/ -e src-tauri/target/"
+  needs: []
+  rules:
+    - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
+    - when: never
+  cache:
+    key: "project-$CI_PROJECT_ID-desktop-windows-v1"
+    unprotect: true
+    paths:
+      - .ci-cache/
+  before_script:
+    - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
+  script:
+    - deno ci
+    - |
+        deno task tauri build -vv --no-bundle --config src-tauri/tauri.ci-compile.conf.json
+        if ($LASTEXITCODE -ne 0) { throw "Windows compilation failed." }
+    - New-Item windows-compile-artifact -ItemType Directory -Force | Out-Null
+    - Copy-Item src-tauri/target/release/intercept-proxy.exe windows-compile-artifact/intercept-proxy.exe -Force
+  artifacts:
+    name: "Intercept-Proxy-windows-compiled"
+    expire_in: 14 days
+    when: on_success
+    paths:
+      - windows-compile-artifact/intercept-proxy.exe
+
 windows_build_only:
   stage: package
   tags:
@@ -297,18 +317,29 @@ windows_build_only:
   needs:
     - job: android_companion
       artifacts: true
+    - job: windows_compile
+      artifacts: true
   rules:
     - if: '$PIPELINE_MODE == "android-windows-build" && ($CI_PIPELINE_SOURCE == "api" || $CI_PIPELINE_SOURCE == "web")'
     - when: never
+  cache:
+    key: "project-$CI_PROJECT_ID-desktop-windows-v1"
+    unprotect: true
+    policy: pull
+    paths:
+      - .ci-cache/
   before_script:
     - .\scripts\ci\bootstrap-gitlab-windows.ps1 -RequireMsvc
   script:
     - deno ci
+    # Consume this pipeline's executable even when the Runner retains an older target/.
+    - New-Item src-tauri/target/release -ItemType Directory -Force | Out-Null
+    - Copy-Item windows-compile-artifact/intercept-proxy.exe src-tauri/target/release/intercept-proxy.exe -Force
     - >-
         .\scripts\ci\stage-android-companion-windows.ps1
         -SourceApk android-companion-artifact/intercept-proxy-android-companion.apk
     - |
-        deno task tauri build -vv --bundles msi,nsis
+        deno task tauri bundle -vv --bundles msi,nsis
         if ($LASTEXITCODE -ne 0) {
           $WixTools = Join-Path $env:CI_PROJECT_DIR "src-tauri/target/.tauri/WixTools314"
           $WixSource = Get-Item "src-tauri/target/release/wix/x64/main.wxs" -ErrorAction Stop
