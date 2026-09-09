@@ -6,6 +6,7 @@
 
 | 完成时间 | 任务 | 实现功能 | 验收结果 | 优先级 | 关键词 |
 | --- | --- | --- | --- | --- | --- |
+| 12:33:05 +08:00 | [TASK-20260909-001：HTTP Body 字符集预览](completed/2026-09-09/fix-http-body-charset-preview.md) | 非UTF8正文按Header正确预览、四阶段原字节与预算、Mock门禁保持 | PASS；69测试、严格静态检查、独立APPROVE；真实链路/安装未执行 | 高 | HTTP、Shift_JIS、charset、Exchange、Body |
 | 11:57:43 +08:00 | [TASK-20260909-001：抓包显示最新 App 原始请求路径](completed/2026-09-09/show-http-url-in-capture-list.md) | 完整原始路径与参数、单行省略、悬停查看 | PASS；抓包30/30、类型/lint/边界、Edge布局与Webpack构建；Turbopack符号链接限制 | 低 | HTTP、抓包、原始请求、URL、省略 |
 
 ## 2026-09-08

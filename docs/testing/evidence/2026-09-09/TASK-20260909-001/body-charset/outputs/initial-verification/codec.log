@@ -1,0 +1,16 @@
+   Compiling intercept-proxy-application v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/application)
+   Compiling intercept-proxy-traffic-observation v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy-infrastructure v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/infrastructure)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 56.81s
+     Running unittests src/lib.rs (/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy_infrastructure-6755224112cfa3a8)
+
+running 6 tests
+test adapters::body_codecs::tests::forced_codec_overrides_conflicting_content_type_charset ... ok
+test adapters::body_codecs::tests::declared_charset_aliases_are_canonicalized_without_lossy_decoding ... ok
+test adapters::body_codecs::exchange_preview::tests::exchange_preview_reuses_shift_jis_aliases_without_changing_wire_bytes ... ok
+test adapters::body_codecs::exchange_preview::tests::exchange_preview_does_not_guess_missing_unsupported_or_compressed_encoding ... ok
+test adapters::body_codecs::exchange_preview::tests::exchange_preview_propagates_invalid_text_and_header_errors ... ok
+test adapters::body_codecs::tests::started_epoch_resolves_frozen_shift_jis_per_listener_and_stage ... ok
+
+test result: ok. 6 passed; 0 failed; 0 ignored; 0 measured; 497 filtered out; finished in 0.01s
+

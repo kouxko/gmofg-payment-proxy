@@ -14,7 +14,9 @@ use intercept_proxy_application::{
 use intercept_proxy_domain::{
     ProtocolDirection, ProtocolPackageId, ProtocolPackageRef, ProtocolPackageVersion,
 };
-use intercept_proxy_infrastructure::{ExchangeObservationCounters, ExchangeObservationStore};
+use intercept_proxy_infrastructure::{
+    ExchangeObservationCounters, ExchangeObservationStore, decode_http_observation_body,
+};
 use tracing::{Event, Subscriber, span::Attributes};
 use tracing_subscriber::{Layer, layer::Context, registry::LookupSpan};
 
@@ -441,11 +443,28 @@ fn direction(fields: &Fields) -> Option<ProtocolDirection> {
 
 fn context(fields: &Fields) -> Option<ExchangeContext> {
     match protocol(fields)? {
-        ExchangeProtocol::Http => Some(ExchangeContext::Http {
-            header: fields.text("context_header")?,
-            body: fields.text("context_body")?,
-            body_is_utf8: fields.text("context_body_is_utf8")?.parse().ok()?,
-        }),
+        ExchangeProtocol::Http => {
+            let header = fields.text("context_header")?;
+            let mut body = fields.text("context_body")?;
+            let body_is_utf8: bool = fields.text("context_body_is_utf8")?.parse().ok()?;
+            if !body_is_utf8 {
+                let bytes = decode_hex(&fields.text("context_bytes_hex")?)?;
+                match decode_http_observation_body(&header, &bytes) {
+                    Ok(Some(text)) => body = text,
+                    Ok(None) => {}
+                    Err(error) => {
+                        body = format!("Body 预览解码失败 [{error}]\nUTF-8 有损预览：\n{body}");
+                    }
+                }
+            }
+            // 这里只改变观测文本。原字节不是 UTF-8 时，即使日文预览正常，也不能用它生成
+            // 会写回网络的 UTF-8 Mock 规则；业务 Context 与转发字节均不经过此 consumer。
+            Some(ExchangeContext::Http {
+                header,
+                body,
+                body_is_utf8,
+            })
+        }
         ExchangeProtocol::Socket => Some(ExchangeContext::Socket {
             bytes: decode_hex(&fields.text("context_bytes_hex")?)?,
         }),

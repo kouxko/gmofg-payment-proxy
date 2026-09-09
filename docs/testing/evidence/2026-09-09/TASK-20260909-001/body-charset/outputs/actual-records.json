@@ -1,0 +1,514 @@
+[
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.172999Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.173032Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.173058Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.173080Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.173104Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.165992Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.166892Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\n\r\n",
+          "body": "Body 预览解码失败 [SHIFT_JIS_DECODE_FAILED: invalid Shift-JIS byte sequence in Body]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.166918Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\n\r\n",
+          "body": "Body 预览解码失败 [SHIFT_JIS_DECODE_FAILED: invalid Shift-JIS byte sequence in Body]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.166941Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\n\r\n",
+          "body": "Body 预览解码失败 [SHIFT_JIS_DECODE_FAILED: invalid Shift-JIS byte sequence in Body]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.166967Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\n\r\n",
+          "body": "Body 预览解码失败 [SHIFT_JIS_DECODE_FAILED: invalid Shift-JIS byte sequence in Body]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.172637Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.172728Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": true
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.172795Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": true
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.172825Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": true
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.172848Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "売上票（署名）保管正常完了。",
+          "body_is_utf8": true
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.166113Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.166434Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.167131Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.167156Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.167178Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.174930Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.174960Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.174983Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.175006Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.175028Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.174541Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.174565Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\n\r\n",
+          "body": "Body 预览解码失败 [UTF8_DECODE_FAILED: invalid utf-8 sequence of 1 bytes from index 0]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.174591Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\n\r\n",
+          "body": "Body 预览解码失败 [UTF8_DECODE_FAILED: invalid utf-8 sequence of 1 bytes from index 0]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.174614Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\n\r\n",
+          "body": "Body 预览解码失败 [UTF8_DECODE_FAILED: invalid utf-8 sequence of 1 bytes from index 0]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.174636Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=UTF-8\r\n\r\n",
+          "body": "Body 预览解码失败 [UTF8_DECODE_FAILED: invalid utf-8 sequence of 1 bytes from index 0]\nUTF-8 有损预览：\n�",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.175732Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.175761Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=unknown\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.175784Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=unknown\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.175806Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=unknown\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.175828Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=unknown\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  },
+  {
+    "exchange_id": "charset-preview",
+    "workspace_id": "10000000-0000-0000-0000-000000000001",
+    "listener_id": "20000000-0000-0000-0000-000000000002",
+    "runtime_epoch": "30000000-0000-0000-0000-000000000003",
+    "peer_address": "127.0.0.1:8080",
+    "protocol": "http",
+    "events": [
+      {
+        "event": "opened",
+        "observed_at": "2026-09-09T04:17:40.176334Z"
+      },
+      {
+        "event": "received",
+        "observed_at": "2026-09-09T04:17:40.176362Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\nContent-Encoding: gzip\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "document": null,
+        "display": null
+      },
+      {
+        "event": "encoded",
+        "observed_at": "2026-09-09T04:17:40.176391Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\nContent-Encoding: gzip\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "sent",
+        "observed_at": "2026-09-09T04:17:40.176413Z",
+        "direction": "downstream",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\nContent-Encoding: gzip\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        }
+      },
+      {
+        "event": "failed",
+        "observed_at": "2026-09-09T04:17:40.176434Z",
+        "direction": "downstream",
+        "stage": "display",
+        "context": {
+          "protocol": "http",
+          "header": "HTTP/1.1 200 OK\r\nContent-Type: text/plain;charset=Shift_JIS\r\nContent-Encoding: gzip\r\n\r\n",
+          "body": "����[�i�����j�ۊǐ��튮���B",
+          "body_is_utf8": false
+        },
+        "error": "test failure",
+        "external_package_call": null
+      }
+    ],
+    "evidence_evicted": false
+  }
+]

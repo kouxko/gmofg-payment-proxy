@@ -1,0 +1,49 @@
+{
+  "task_id": "TASK-20260909-001",
+  "case_id": "body-charset",
+  "status": "PASS",
+  "executed_at": "2026-09-09 12:23:41 +08:00",
+  "result": {
+    "tests": 69,
+    "exchange": 33,
+    "codec": 6,
+    "mock": 1,
+    "consumer": 21,
+    "frontend": 8,
+    "static_checks": "PASS",
+    "review": "APPROVE"
+  },
+  "environment": "outputs/environment.json",
+  "source_hashes": "resources/source-sha256.json",
+  "verification_runs": [
+    "outputs/initial-verification/results.json",
+    "outputs/final-verification/results.json"
+  ],
+  "inputs": [
+    "inputs/receipt-shift-jis.bin",
+    "inputs/receipt-shift-jis.hex",
+    "inputs/response-header.txt",
+    "inputs/expected.json"
+  ],
+  "actual": "outputs/actual-records.json",
+  "comparison": "outputs/comparison.json",
+  "replay": "python3 docs/testing/evidence/2026-09-09/TASK-20260909-001/body-charset/replay/run.py",
+  "derived_from": {
+    "task_id": "TASK-20260904-006",
+    "case_id": "manual-trigger-and-artifact",
+    "evidence_path": "docs/testing/evidence/2026-09-07/TASK-20260904-006/manual-trigger-and-artifact",
+    "resource": "resources/artifact/resources/android-companion.apk",
+    "reuse": "build prerequisite only; no prior acceptance reused"
+  },
+  "not_applicable": {
+    "wire_server_device": "Observation-only change, no real external service/device replay",
+    "manual_screenshot": "Unchanged production frontend; DOM visibility verified",
+    "ci_release_install": "Not requested"
+  },
+  "warnings": [
+    "macOS debug lib-test linker __eh_frame size warning; tests pass"
+  ],
+  "completed_at": "2026-09-09 12:33:05 +08:00",
+  "review": "outputs/review.md",
+  "task_document": "docs/tasks/completed/2026-09-09/fix-http-body-charset-preview.md"
+}

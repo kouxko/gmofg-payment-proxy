@@ -15,8 +15,10 @@ use intercept_proxy_runtime::{
 use super::pipeline::RuntimeBodyCodecResolver;
 
 mod content_type;
+mod exchange_preview;
 pub(crate) use content_type::decode_message_body;
 pub(crate) use content_type::resolve_message_codec;
+pub use exchange_preview::decode_http_observation_body;
 
 #[derive(Debug)]
 pub struct WorkspaceBodyCodecResolver {

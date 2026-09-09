@@ -1,0 +1,29 @@
+   Compiling intercept-proxy-domain v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/domain)
+   Compiling intercept-proxy-exchange v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/exchange)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 7.71s
+     Running unittests src/lib.rs (/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy_exchange-c8e2c1f92235cfe9)
+
+running 2 tests
+
+thread 'observation::tests::non_utf8_http_observations_keep_text_fields_and_expose_wire_body_for_all_stages' (15208298) panicked at crates/exchange/src/observation/tests.rs:134:9:
+assertion `left == right` failed
+  left: None
+ right: Some("94848FE3")
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'observation::tests::non_utf8_http_hex_shares_the_total_projection_budget' (15208297) panicked at crates/exchange/src/observation/tests.rs:166:5:
+assertion `left == right` failed
+  left: Some("sent")
+ right: Some("observation_lost")
+test observation::tests::non_utf8_http_hex_shares_the_total_projection_budget ... FAILED
+test observation::tests::non_utf8_http_observations_keep_text_fields_and_expose_wire_body_for_all_stages ... FAILED
+
+failures:
+
+failures:
+    observation::tests::non_utf8_http_hex_shares_the_total_projection_budget
+    observation::tests::non_utf8_http_observations_keep_text_fields_and_expose_wire_body_for_all_stages
+
+test result: FAILED. 0 passed; 2 failed; 0 ignored; 0 measured; 31 filtered out; finished in 0.00s
+
+error: test failed, to rerun pass `-p intercept-proxy-exchange --lib`

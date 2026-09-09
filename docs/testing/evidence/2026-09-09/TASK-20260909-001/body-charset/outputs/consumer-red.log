@@ -1,0 +1,38 @@
+   Compiling intercept-proxy-traffic-observation v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/traffic-observation)
+   Compiling intercept-proxy v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri)
+   Compiling intercept-proxy-infrastructure v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/infrastructure)
+   Compiling intercept-proxy-host v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/host)
+warning: linker stderr: ld: __eh_frame section too large (max 16MB) to encode dwarf unwind offsets in compact unwind table, performance of exception handling might be affected
+  |
+  = note: `#[warn(linker_messages)]` on by default
+
+warning: `intercept-proxy` (lib test) generated 1 warning
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 59.93s
+     Running unittests src/lib.rs (/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy-8988445c6694442e)
+
+running 4 tests
+test runtime_logs::exchange_ui_layer::tests::http_body::utf8_body_preview_keeps_existing_text_and_rule_eligibility ... ok
+
+thread 'runtime_logs::exchange_ui_layer::tests::http_body::invalid_declared_charset_reports_preview_failure_without_changing_event_outcome' (15212514) panicked at src/runtime_logs/exchange_ui_layer/tests/http_body.rs:72:13:
+assertion failed: matches!(context, ExchangeContext::Http { body, body_is_utf8: false, .. } if
+    body.contains("Body 预览解码失败") &&
+    body.contains("DECODE_FAILED"))
+note: run with `RUST_BACKTRACE=1` environment variable to display a backtrace
+
+thread 'runtime_logs::exchange_ui_layer::tests::http_body::shift_jis_body_preview_is_readable_in_all_stages_but_cannot_seed_utf8_rules' (15212516) panicked at src/runtime_logs/exchange_ui_layer/tests/http_body.rs:49:9:
+assertion `left == right` failed
+  left: Http { header: "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n", body: "����[�i�����j�ۊǐ��튮���B", body_is_utf8: false }
+ right: Http { header: "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n", body: "売上票（署名）保管正常完了。", body_is_utf8: false }
+test runtime_logs::exchange_ui_layer::tests::http_body::missing_unsupported_and_compressed_charsets_keep_existing_lossy_observation ... ok
+test runtime_logs::exchange_ui_layer::tests::http_body::shift_jis_body_preview_is_readable_in_all_stages_but_cannot_seed_utf8_rules ... FAILED
+test runtime_logs::exchange_ui_layer::tests::http_body::invalid_declared_charset_reports_preview_failure_without_changing_event_outcome ... FAILED
+
+failures:
+
+failures:
+    runtime_logs::exchange_ui_layer::tests::http_body::invalid_declared_charset_reports_preview_failure_without_changing_event_outcome
+    runtime_logs::exchange_ui_layer::tests::http_body::shift_jis_body_preview_is_readable_in_all_stages_but_cannot_seed_utf8_rules
+
+test result: FAILED. 2 passed; 2 failed; 0 ignored; 0 measured; 135 filtered out; finished in 0.04s
+
+error: test failed, to rerun pass `-p intercept-proxy --lib`

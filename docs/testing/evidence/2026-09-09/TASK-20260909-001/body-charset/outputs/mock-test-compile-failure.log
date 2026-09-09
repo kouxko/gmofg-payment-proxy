@@ -1,0 +1,15 @@
+   Compiling intercept-proxy-android-control-protocol v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/android-control-protocol)
+   Compiling intercept-proxy-application v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/application)
+error[E0609]: no field `code` on type `error::AppError`
+   --> crates/application/src/facade/rules/exchange_mock.rs:213:61
+    |
+213 |             source.into_unified_input(&record).unwrap_err().code,
+    |                                                             ^^^^ unknown field
+    |
+help: one of the expressions' fields has a field of the same name
+    |
+213 |             source.into_unified_input(&record).unwrap_err().view_model.code,
+    |                                                             +++++++++++
+
+For more information about this error, try `rustc --explain E0609`.
+error: could not compile `intercept-proxy-application` (lib test) due to 1 previous error

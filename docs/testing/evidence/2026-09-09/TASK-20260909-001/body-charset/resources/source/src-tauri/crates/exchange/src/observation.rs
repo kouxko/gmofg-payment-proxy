@@ -1,0 +1,454 @@
+//! Exchange UI tracing 的稳定 primitive 字段投影，不解析 `Debug` 文本。
+//! 观测序列化超限或失败时仅记录固定大小的 loss，不改变业务 `Result`。
+
+use serde::Serialize;
+
+mod failure;
+pub(crate) use failure::{failed, failed_with_context};
+
+use crate::{
+    Direction, Document, Envelope, Error, ObservedContext, ObservedProtocol, ProtocolDirection,
+};
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RuleProcessingChange {
+    pub rule_id: String,
+    pub matched: bool,
+    pub operations: Vec<RuleProcessingOperation>,
+}
+
+#[derive(Clone, Copy, Debug, Eq, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum RuleProcessingOperationKind {
+    RecordMatch,
+    Set,
+    Clear,
+    Insert,
+    Append,
+}
+
+#[derive(Clone, Debug, Eq, PartialEq, Serialize)]
+pub struct RuleProcessingOperation {
+    pub kind: RuleProcessingOperationKind,
+    pub path: Option<String>,
+}
+
+#[derive(Clone, Debug, Default)]
+pub struct RuleProcessingAccumulator {
+    changes: Vec<RuleProcessingChange>,
+    retained_bytes: usize,
+    truncated: bool,
+}
+
+impl RuleProcessingAccumulator {
+    pub fn record(&mut self, change: RuleProcessingChange) {
+        if self.truncated {
+            return;
+        }
+        let Ok(bytes) = serde_json::to_vec(&change) else {
+            self.truncated = true;
+            return;
+        };
+        let next = self.retained_bytes.saturating_add(bytes.len());
+        if next > MAX_OBSERVATION_TEXT_BYTES {
+            self.truncated = true;
+            return;
+        }
+        self.retained_bytes = next;
+        self.changes.push(change);
+    }
+
+    #[must_use]
+    pub fn changes(&self) -> &[RuleProcessingChange] {
+        &self.changes
+    }
+
+    #[must_use]
+    pub const fn retained_bytes(&self) -> usize {
+        self.retained_bytes
+    }
+
+    #[must_use]
+    pub const fn truncated(&self) -> bool {
+        self.truncated
+    }
+}
+
+pub fn rules_processed(
+    direction: ProtocolDirection,
+    changes: &RuleProcessingAccumulator,
+    final_document: &Document,
+) {
+    let Some(final_document_json) = document_json(final_document) else {
+        observation_lost("final_document_too_large_or_unserializable");
+        return;
+    };
+    let changes_budget = MAX_OBSERVATION_TEXT_BYTES.saturating_sub(final_document_json.len());
+    let Some((changes_json, serialization_truncated)) =
+        serialize_changes(changes.changes(), changes_budget)
+    else {
+        observation_lost("rule_changes_unserializable");
+        return;
+    };
+    tracing::info!(
+        target: "intercept_proxy::exchange::ui",
+        event = "processed",
+        direction = direction_name(direction),
+        changes_json = changes_json.as_str(),
+        changes_truncated = changes.truncated() || serialization_truncated,
+        final_document_json = final_document_json.as_str(),
+    );
+}
+
+pub(crate) fn encoded<P, D>(context: &P::Context)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    observe_context::<P, D>("encoded", context);
+}
+
+/// A single UI tracing projection may never allocate or copy more than this fixed text budget.
+/// The authoritative network payload remains owned by the business pipeline; overflow only drops
+/// observation evidence and is surfaced through the runtime loss counter.
+pub const MAX_OBSERVATION_TEXT_BYTES: usize = 16 * 1024 * 1024;
+
+fn serialize_changes(changes: &[RuleProcessingChange], budget: usize) -> Option<(String, bool)> {
+    if budget < 2 {
+        return Some(("[]".to_owned(), !changes.is_empty()));
+    }
+    let mut output = String::with_capacity(budget.min(4096));
+    output.push('[');
+    for (index, change) in changes.iter().enumerate() {
+        let item = serde_json::to_string(change).ok()?;
+        let separator = usize::from(index > 0);
+        if output
+            .len()
+            .saturating_add(separator)
+            .saturating_add(item.len())
+            .saturating_add(1)
+            > budget
+        {
+            output.push(']');
+            return Some((output, true));
+        }
+        if index > 0 {
+            output.push(',');
+        }
+        output.push_str(&item);
+    }
+    output.push(']');
+    Some((output, false))
+}
+
+pub(crate) fn received<P, D>(envelope: &Envelope<P, D>)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    let Some(document_json) = document_json(envelope.document()) else {
+        observation_lost("document_too_large_or_unserializable");
+        return;
+    };
+    match P::observed(envelope.context()) {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) =
+                projection_bytes(&[header, body, &document_json, envelope.display()])
+            else {
+                observation_lost("http_received_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_received_projection_too_large");
+                return;
+            };
+            tracing::info!(
+                target: "intercept_proxy::exchange::ui",
+                event = "received",
+                protocol = P::NAME,
+                direction = direction::<D>(),
+                context_header = header,
+                context_body = body,
+                context_body_is_utf8 = body_is_utf8,
+                context_bytes_hex = wire_hex.as_deref(),
+                document_json = document_json.as_str(),
+                display = envelope.display(),
+            );
+        }
+        ObservedContext::Socket { data } => {
+            let Some(encoded) = hex(data) else {
+                observation_lost("socket_received_projection_too_large");
+                return;
+            };
+            if !fits_projection(&[&encoded, &document_json, envelope.display()]) {
+                observation_lost("socket_received_projection_too_large");
+                return;
+            }
+            tracing::info!(
+                target: "intercept_proxy::exchange::ui",
+                event = "received",
+                protocol = P::NAME,
+                direction = direction::<D>(),
+                context_header = tracing::field::Empty,
+                context_body = tracing::field::Empty,
+                context_bytes_hex = encoded.as_str(),
+                document_json = document_json.as_str(),
+                display = envelope.display(),
+            );
+        }
+    }
+}
+
+pub(crate) fn sent<P, D>(context: &P::Context)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    match P::observed(context) {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) = projection_bytes(&[header, body]) else {
+                observation_lost("http_sent_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_sent_projection_too_large");
+                return;
+            };
+            tracing::info!(
+                target: "intercept_proxy::exchange::ui",
+                event = "sent",
+                protocol = P::NAME,
+                direction = direction::<D>(),
+                context_header = header,
+                context_body = body,
+                context_body_is_utf8 = body_is_utf8,
+                context_bytes_hex = wire_hex.as_deref(),
+            );
+        }
+        ObservedContext::Socket { data } => match hex(data) {
+            Some(encoded) => tracing::info!(
+                target: "intercept_proxy::exchange::ui",
+                event = "sent",
+                protocol = P::NAME,
+                direction = direction::<D>(),
+                context_header = tracing::field::Empty,
+                context_body = tracing::field::Empty,
+                context_bytes_hex = encoded.as_str(),
+            ),
+            None => observation_lost("socket_sent_projection_too_large"),
+        },
+    }
+}
+
+fn observe_context<P, D>(event: &'static str, context: &P::Context)
+where
+    P: ObservedProtocol,
+    D: Direction,
+{
+    match P::observed(context) {
+        ObservedContext::Http {
+            header,
+            body,
+            body_is_utf8,
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) = projection_bytes(&[header, body]) else {
+                observation_lost("http_encoded_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_encoded_projection_too_large");
+                return;
+            };
+            tracing::info!(
+                target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
+                direction = direction::<D>(), context_header = header, context_body = body,
+                context_body_is_utf8 = body_is_utf8,
+                context_bytes_hex = wire_hex.as_deref(),
+            );
+        }
+        ObservedContext::Socket { data } => match hex(data) {
+            Some(encoded) => tracing::info!(
+                target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
+                direction = direction::<D>(), context_header = tracing::field::Empty,
+                context_body = tracing::field::Empty, context_bytes_hex = encoded.as_str(),
+            ),
+            None => observation_lost("socket_encoded_projection_too_large"),
+        },
+    }
+}
+
+pub(crate) fn raw_received<D: Direction>(bytes: &[u8]) {
+    let Some(encoded) = hex(bytes) else {
+        observation_lost("raw_received_projection_too_large");
+        return;
+    };
+    tracing::info!(
+        target: "intercept_proxy::exchange::ui",
+        event = "received",
+        protocol = "socket",
+        direction = direction::<D>(),
+        context_bytes_hex = encoded.as_str(),
+    );
+}
+
+pub(crate) fn raw_sent<D: Direction>(bytes: &[u8]) {
+    let Some(encoded) = hex(bytes) else {
+        observation_lost("raw_sent_projection_too_large");
+        return;
+    };
+    tracing::info!(
+        target: "intercept_proxy::exchange::ui",
+        event = "sent",
+        protocol = "socket",
+        direction = direction::<D>(),
+        context_bytes_hex = encoded.as_str(),
+    );
+}
+
+pub(crate) fn raw_failed<D: Direction>(stage: &'static str, bytes: Option<&[u8]>, error: &Error) {
+    if let Some(bytes) = bytes {
+        let Some(encoded) = hex(bytes) else {
+            observation_lost("raw_failure_projection_too_large");
+            return;
+        };
+        if !fits_projection(&[&encoded, error.message.as_str()]) {
+            observation_lost("raw_failure_projection_too_large");
+            return;
+        }
+        tracing::error!(
+            target: "intercept_proxy::exchange::ui",
+            event = "failed",
+            protocol = "socket",
+            direction = direction::<D>(),
+            stage,
+            context_bytes_hex = encoded.as_str(),
+            error = error.message.as_str(),
+        );
+    } else {
+        tracing::error!(
+            target: "intercept_proxy::exchange::ui",
+            event = "failed",
+            protocol = "socket",
+            direction = direction::<D>(),
+            stage,
+            context_bytes_hex = tracing::field::Empty,
+            error = error.message.as_str(),
+        );
+    }
+}
+
+fn direction<D: Direction>() -> &'static str {
+    match D::KIND {
+        crate::DirectionKind::Upstream => "upstream",
+        crate::DirectionKind::Downstream => "downstream",
+    }
+}
+
+fn direction_name(direction: ProtocolDirection) -> &'static str {
+    match direction {
+        ProtocolDirection::Upstream => "upstream",
+        ProtocolDirection::Downstream => "downstream",
+    }
+}
+
+fn document_json(document: &crate::Document) -> Option<String> {
+    let mut output = LimitedBytes::default();
+    match serde_json::to_writer(&mut output, document) {
+        Ok(()) => String::from_utf8(output.bytes).ok(),
+        Err(error) => {
+            tracing::warn!(
+                target: "intercept_proxy::exchange::diagnostic",
+                error = %error,
+                "Document observation serialization failed"
+            );
+            None
+        }
+    }
+}
+
+fn hex(bytes: &[u8]) -> Option<String> {
+    use std::fmt::Write as _;
+
+    if bytes.len().saturating_mul(2) > MAX_OBSERVATION_TEXT_BYTES {
+        return None;
+    }
+    let mut encoded = String::with_capacity(bytes.len().saturating_mul(2));
+    for byte in bytes {
+        let _ = write!(encoded, "{byte:02X}");
+    }
+    Some(encoded)
+}
+
+pub(super) fn http_wire_hex(
+    body_is_utf8: bool,
+    wire_body: &[u8],
+    projected_text_bytes: usize,
+) -> Result<Option<String>, ()> {
+    if body_is_utf8 {
+        return (projected_text_bytes <= MAX_OBSERVATION_TEXT_BYTES)
+            .then_some(None)
+            .ok_or(());
+    }
+    let wire_hex_bytes = wire_body.len().checked_mul(2).ok_or(())?;
+    if projected_text_bytes
+        .checked_add(wire_hex_bytes)
+        .is_none_or(|total| total > MAX_OBSERVATION_TEXT_BYTES)
+    {
+        return Err(());
+    }
+    hex(wire_body).map(Some).ok_or(())
+}
+
+fn projection_bytes(values: &[&str]) -> Option<usize> {
+    values
+        .iter()
+        .try_fold(0_usize, |total, value| total.checked_add(value.len()))
+}
+
+fn fits_projection(values: &[&str]) -> bool {
+    projection_bytes(values).is_some_and(|total| total <= MAX_OBSERVATION_TEXT_BYTES)
+}
+
+fn observation_lost(reason: &'static str) {
+    tracing::warn!(
+        target: "intercept_proxy::exchange::ui",
+        event = "observation_lost",
+        reason,
+    );
+}
+
+#[derive(Default)]
+struct LimitedBytes {
+    bytes: Vec<u8>,
+}
+
+impl std::io::Write for LimitedBytes {
+    fn write(&mut self, input: &[u8]) -> std::io::Result<usize> {
+        if self.bytes.len().saturating_add(input.len()) > MAX_OBSERVATION_TEXT_BYTES {
+            return Err(std::io::Error::other(
+                "observation JSON exceeds fixed projection limit",
+            ));
+        }
+        self.bytes.extend_from_slice(input);
+        Ok(input.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+#[cfg(test)]
+#[path = "observation/tests.rs"]
+mod tests;

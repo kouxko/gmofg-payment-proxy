@@ -1,0 +1,70 @@
+   Compiling intercept-proxy-domain v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/domain)
+   Compiling intercept-proxy-android-control-protocol v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/android-control-protocol)
+   Compiling intercept-proxy-product-api v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/product-api)
+   Compiling intercept-proxy v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri)
+   Compiling intercept-proxy-exchange v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/exchange)
+   Compiling intercept-proxy-runtime v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/proxy)
+   Compiling intercept-proxy-application v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/application)
+   Compiling intercept-proxy-package-contract v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/package-contract)
+   Compiling intercept-proxy-package-runtime v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/package-runtime)
+error: failed to run custom build command for `intercept-proxy v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri)`
+
+Caused by:
+  process didn't exit successfully: `/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/build/intercept-proxy-6dd9ae545df48049/build-script-build` (exit status: 1)
+  --- stdout
+  cargo:rerun-if-changed=../templates/socket-protocol/iso8583-standard
+  cargo:rerun-if-changed=crates/package-runtime/wit
+  cargo:rerun-if-env-changed=TAURI_CONFIG
+  cargo:rustc-check-cfg=cfg(desktop)
+  cargo:rustc-cfg=desktop
+  cargo:rustc-check-cfg=cfg(mobile)
+  cargo:rerun-if-changed=/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/tauri.conf.json
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_APP_NAME=desktop
+  cargo:rustc-env=TAURI_ANDROID_PACKAGE_NAME_PREFIX=com_interceptproxy
+  cargo:rustc-check-cfg=cfg(dev)
+  cargo:rustc-cfg=dev
+  cargo:PERMISSION_FILES_PATH=/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/build/intercept-proxy-e4a65f3bb61448b9/out/app-manifest/__app__-permission-files
+  cargo:rerun-if-changed=capabilities
+  cargo:rerun-if-env-changed=REMOVE_UNUSED_COMMANDS
+  cargo:rustc-env=TAURI_ENV_TARGET_TRIPLE=aarch64-apple-darwin
+  resource path `resources/android-companion.apk` doesn't exist
+
+  --- stderr
+     Compiling serde_core v1.0.229
+     Compiling proc-macro2 v1.0.107
+     Compiling quote v1.0.47
+     Compiling unicode-ident v1.0.24
+     Compiling zmij v1.0.23
+     Compiling hashbrown v0.17.1
+     Compiling wasmparser v0.241.2
+     Compiling foldhash v0.1.5
+     Compiling equivalent v1.0.2
+     Compiling serde_json v1.0.151
+     Compiling hashbrown v0.15.5
+     Compiling anyhow v1.0.104
+     Compiling semver v1.0.28
+     Compiling bitflags v2.13.1
+     Compiling serde v1.0.229
+     Compiling wasm-encoder v0.241.2
+     Compiling memchr v2.8.3
+     Compiling itoa v1.0.18
+     Compiling prettyplease v0.2.37
+     Compiling unicode-xid v0.2.6
+     Compiling leb128fmt v0.1.0
+     Compiling log v0.4.34
+     Compiling id-arena v2.3.0
+     Compiling heck v0.5.0
+     Compiling wit-bindgen-rust v0.48.1
+     Compiling wit-bindgen-rust-macro v0.48.1
+     Compiling wit-bindgen v0.48.1
+     Compiling syn v3.0.4
+     Compiling syn v2.0.119
+     Compiling indexmap v2.14.1
+     Compiling serde_derive v1.0.229
+     Compiling wit-parser v0.241.2
+     Compiling wasm-metadata v0.241.2
+     Compiling wit-component v0.241.2
+     Compiling wit-bindgen-core v0.48.1
+     Compiling intercept-proxy-iso8583-ascii-standard-component v1.0.0 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/templates/socket-protocol/iso8583-standard)
+      Finished `release` profile [optimized] target(s) in 24.93s
+warning: build failed, waiting for other jobs to finish...

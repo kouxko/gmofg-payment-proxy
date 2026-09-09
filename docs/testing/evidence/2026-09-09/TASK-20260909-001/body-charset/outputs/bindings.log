@@ -1,0 +1,4 @@
+   Compiling intercept-proxy v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri)
+    Finished `dev` profile [unoptimized + debuginfo] target(s) in 33.35s
+     Running `/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/export-bindings`
+/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/../src/generated/rust-types.ts

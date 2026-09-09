@@ -155,11 +155,18 @@ where
             header,
             body,
             body_is_utf8,
+            wire_body,
         } => {
-            if !fits_projection(&[header, body, &document_json, envelope.display()]) {
+            let Some(projected_text_bytes) =
+                projection_bytes(&[header, body, &document_json, envelope.display()])
+            else {
                 observation_lost("http_received_projection_too_large");
                 return;
-            }
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_received_projection_too_large");
+                return;
+            };
             tracing::info!(
                 target: "intercept_proxy::exchange::ui",
                 event = "received",
@@ -168,7 +175,7 @@ where
                 context_header = header,
                 context_body = body,
                 context_body_is_utf8 = body_is_utf8,
-                context_bytes_hex = tracing::field::Empty,
+                context_bytes_hex = wire_hex.as_deref(),
                 document_json = document_json.as_str(),
                 display = envelope.display(),
             );
@@ -207,7 +214,16 @@ where
             header,
             body,
             body_is_utf8,
-        } if fits_projection(&[header, body]) => {
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) = projection_bytes(&[header, body]) else {
+                observation_lost("http_sent_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_sent_projection_too_large");
+                return;
+            };
             tracing::info!(
                 target: "intercept_proxy::exchange::ui",
                 event = "sent",
@@ -216,10 +232,9 @@ where
                 context_header = header,
                 context_body = body,
                 context_body_is_utf8 = body_is_utf8,
-                context_bytes_hex = tracing::field::Empty,
+                context_bytes_hex = wire_hex.as_deref(),
             );
         }
-        ObservedContext::Http { .. } => observation_lost("http_sent_projection_too_large"),
         ObservedContext::Socket { data } => match hex(data) {
             Some(encoded) => tracing::info!(
                 target: "intercept_proxy::exchange::ui",
@@ -245,12 +260,23 @@ where
             header,
             body,
             body_is_utf8,
-        } if fits_projection(&[header, body]) => tracing::info!(
-            target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
-            direction = direction::<D>(), context_header = header, context_body = body,
-            context_body_is_utf8 = body_is_utf8, context_bytes_hex = tracing::field::Empty,
-        ),
-        ObservedContext::Http { .. } => observation_lost("http_encoded_projection_too_large"),
+            wire_body,
+        } => {
+            let Some(projected_text_bytes) = projection_bytes(&[header, body]) else {
+                observation_lost("http_encoded_projection_too_large");
+                return;
+            };
+            let Ok(wire_hex) = http_wire_hex(body_is_utf8, wire_body, projected_text_bytes) else {
+                observation_lost("http_encoded_projection_too_large");
+                return;
+            };
+            tracing::info!(
+                target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
+                direction = direction::<D>(), context_header = header, context_body = body,
+                context_body_is_utf8 = body_is_utf8,
+                context_bytes_hex = wire_hex.as_deref(),
+            );
+        }
         ObservedContext::Socket { data } => match hex(data) {
             Some(encoded) => tracing::info!(
                 target: "intercept_proxy::exchange::ui", event, protocol = P::NAME,
@@ -364,11 +390,34 @@ fn hex(bytes: &[u8]) -> Option<String> {
     Some(encoded)
 }
 
-fn fits_projection(values: &[&str]) -> bool {
+pub(super) fn http_wire_hex(
+    body_is_utf8: bool,
+    wire_body: &[u8],
+    projected_text_bytes: usize,
+) -> Result<Option<String>, ()> {
+    if body_is_utf8 {
+        return (projected_text_bytes <= MAX_OBSERVATION_TEXT_BYTES)
+            .then_some(None)
+            .ok_or(());
+    }
+    let wire_hex_bytes = wire_body.len().checked_mul(2).ok_or(())?;
+    if projected_text_bytes
+        .checked_add(wire_hex_bytes)
+        .is_none_or(|total| total > MAX_OBSERVATION_TEXT_BYTES)
+    {
+        return Err(());
+    }
+    hex(wire_body).map(Some).ok_or(())
+}
+
+fn projection_bytes(values: &[&str]) -> Option<usize> {
     values
         .iter()
         .try_fold(0_usize, |total, value| total.checked_add(value.len()))
-        .is_some_and(|total| total <= MAX_OBSERVATION_TEXT_BYTES)
+}
+
+fn fits_projection(values: &[&str]) -> bool {
+    projection_bytes(values).is_some_and(|total| total <= MAX_OBSERVATION_TEXT_BYTES)
 }
 
 fn observation_lost(reason: &'static str) {

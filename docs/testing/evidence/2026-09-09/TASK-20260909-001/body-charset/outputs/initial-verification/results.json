@@ -1,0 +1,138 @@
+{
+  "source_sha256": {
+    "src-tauri/crates/application/src/facade/rules/exchange_mock.rs": "942da94bd78b3914c275e5de0e891064ce64713cddde6b05eb5f3e380d4dd7e2",
+    "src-tauri/crates/application/src/models/exchange_observation.rs": "ff48605c964381084d7ce89193b7bf572c9ee788b028a428fd557e0b9d632fc1",
+    "src-tauri/crates/exchange/src/observation.rs": "3869968c8116808a0beacb3e1e2d25ba6040121b32885bb7f4efec4f26587ba7",
+    "src-tauri/crates/exchange/src/observation/failure.rs": "70a82c6880ad167bd7c47f997e0561dba61969177c1b61884e5b6564af63ba68",
+    "src-tauri/crates/exchange/src/observation/tests.rs": "ee0365d42f036b8ba569eed6e38217a2daa4f54ecbab3e82ba2499a53eeb7bf8",
+    "src-tauri/crates/exchange/src/protocol.rs": "0a504cad1629590c80446ddb7fc27429de5e7dabac7b840a8456e652dfb6292b",
+    "src-tauri/crates/infrastructure/src/adapters/body_codecs.rs": "13c384c0d504bbb9695508026881b47e3231a88d5a4bc6d99dd1974d12d83fde",
+    "src-tauri/crates/infrastructure/src/adapters/body_codecs/exchange_preview.rs": "90ac41f1e290368a7b5467c73ed6b9cb83bfc436ff19fb72ee1ec5f3567b79ea",
+    "src-tauri/crates/infrastructure/src/adapters/mod.rs": "85eed49311ec95ca2d4fbd11a71ce60470914beb7f26657774b25cf4bd20bda4",
+    "src-tauri/crates/infrastructure/src/lib.rs": "fef169ea47247c73da3b338f0c76639378242a36bd94693e0b80bf0a3b1ea3e9",
+    "src-tauri/src/runtime_logs/exchange_ui_layer.rs": "62fed03e7088fe3f6de17a2df4b75d302e8607d4193cc11df25642cf6affda5a",
+    "src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs": "6958b645285e94a8d7a17a86b6f8aa5d99b1d7c127c5fbe367858c5ef57a97bd",
+    "src-tauri/src/runtime_logs/exchange_ui_layer/tests/fixtures/receipt-shift-jis.bin": "6177b844385e6788740915a61ce48e7bd2ea6b78b3821a9e41fed07c6d95e6a0",
+    "src-tauri/src/runtime_logs/exchange_ui_layer/tests/http_body.rs": "2dfb623c287c60a12a563e8ee5a4120f8c543312e5585c6f2c0f67216cf9ebd1",
+    "src/features/capture/exchange-observation-detail.test.tsx": "759099e0a17602baa98b975a0c3e1ce52dff1ee885427e102a5644b838667fc6",
+    "src/generated/rust-types.ts": "1fda33fbbd1c6a1def35f8950833dc56675ab8fcbf4bc075734c712f16c5bc09"
+  },
+  "results": [
+    {
+      "name": "fmt",
+      "command": [
+        "cargo",
+        "fmt",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "--all",
+        "--",
+        "--check"
+      ],
+      "started_at": "2026-09-09T12:14:59.276313+08:00",
+      "ended_at": "2026-09-09T12:15:00.722164+08:00",
+      "exit_code": 0,
+      "source_stable": true
+    },
+    {
+      "name": "exchange",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "intercept-proxy-exchange",
+        "--lib",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-09-09T12:15:00.722548+08:00",
+      "ended_at": "2026-09-09T12:15:02.487678+08:00",
+      "exit_code": 0,
+      "source_stable": true
+    },
+    {
+      "name": "codec",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "intercept-proxy-infrastructure",
+        "--lib",
+        "body_codecs",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-09-09T12:15:02.488019+08:00",
+      "ended_at": "2026-09-09T12:16:03.019329+08:00",
+      "exit_code": 0,
+      "source_stable": true
+    },
+    {
+      "name": "mock",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "intercept-proxy-application",
+        "--lib",
+        "exchange_mock",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-09-09T12:16:03.019890+08:00",
+      "ended_at": "2026-09-09T12:16:24.096242+08:00",
+      "exit_code": 0,
+      "source_stable": true
+    },
+    {
+      "name": "consumer",
+      "command": [
+        "cargo",
+        "test",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "intercept-proxy",
+        "--lib",
+        "runtime_logs::exchange_ui_layer",
+        "--",
+        "--nocapture"
+      ],
+      "started_at": "2026-09-09T12:16:24.096593+08:00",
+      "ended_at": "2026-09-09T12:17:40.352693+08:00",
+      "exit_code": 0,
+      "source_stable": true
+    },
+    {
+      "name": "clippy",
+      "command": [
+        "cargo",
+        "clippy",
+        "--manifest-path",
+        "src-tauri/Cargo.toml",
+        "-p",
+        "intercept-proxy-exchange",
+        "-p",
+        "intercept-proxy-application",
+        "-p",
+        "intercept-proxy-infrastructure",
+        "-p",
+        "intercept-proxy",
+        "--all-targets",
+        "--",
+        "-D",
+        "warnings"
+      ],
+      "started_at": "2026-09-09T12:17:40.353262+08:00",
+      "ended_at": "2026-09-09T12:18:29.400130+08:00",
+      "exit_code": 101,
+      "source_stable": true
+    }
+  ]
+}
