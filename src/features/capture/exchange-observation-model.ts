@@ -45,6 +45,19 @@ export function openedAt(record: ExchangeObservationRecord): string | undefined 
   return record.events.find((event) => event.event === "opened")?.observed_at;
 }
 
+export function latestAppRequestTarget(record: ExchangeObservationRecord): string | undefined {
+  if (record.protocol !== "http") return undefined;
+  // 只读取 App 原始请求；后续规则改写、编码和响应不能覆盖它，也不回退到旧请求。
+  for (let index = record.events.length - 1; index >= 0; index -= 1) {
+    const event = record.events[index];
+    if (event.event === "received" && event.direction === "upstream" && event.context.protocol === "http") {
+      const startLine = event.context.header.split(/\r?\n/, 1)[0];
+      return /^\S+ (\S+) HTTP\/\S+$/.exec(startLine)?.[1];
+    }
+  }
+  return undefined;
+}
+
 export type ConnectionStatus = "保持连接" | "正常结束" | "异常结束";
 
 export function connectionStatus(record: ExchangeObservationRecord): ConnectionStatus {

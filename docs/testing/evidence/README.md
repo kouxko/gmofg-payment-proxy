@@ -8,6 +8,7 @@
 | 任务 | 用例 | 内容 | 结果 | 父任务 | 父用例 | 父证据 | 证据 |
 | --- | --- | --- | --- | --- | --- | --- | --- |
 | TASK-20260909-001 | body-charset | Shift_JIS预览、原字节/预算和Mock门禁 | PASS；69测试与独立APPROVE | TASK-20260904-006 | manual-trigger-and-artifact（仅复用构建资源） | [父证据](2026-09-07/TASK-20260904-006/manual-trigger-and-artifact/README.md) | [证据](2026-09-09/TASK-20260909-001/body-charset/README.md) |
+| TASK-20260909-001 | capture-url | 最新App原始请求路径、参数保持、单行省略、交互及构建 | PASS_WITH_TURBOPACK_WORKTREE_SYMLINK_LIMITATION | 无 | 无 | 无 | [证据](2026-09-09/TASK-20260909-001/capture-url/README.md) |
 
 ## 2026-09-08
 

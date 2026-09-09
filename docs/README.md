@@ -15,6 +15,8 @@
 
 ## 待实现任务
 
+- [TASK-20260909-002：Body字符集修复合并与Windows构建](tasks/pending/2026-09-09/merge-body-charset-develop-windows.md)（高，进行中）
+
 - [TASK-20260908-004：1.0.1顺序合并与Windows构建](tasks/pending/2026-09-08/merge-1-0-1-develop-release-windows.md)（高，进行中）
 
 - [TASK-20260908-002：修复 Android VPN 本地 TCP](tasks/pending/2026-09-08/fix-android-vpn-local-tcp.md)（高，进行中）

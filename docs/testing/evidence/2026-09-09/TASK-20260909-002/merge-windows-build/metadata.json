@@ -1,0 +1,15 @@
+{
+  "task_id": "TASK-20260909-002",
+  "case_id": "merge-windows-build",
+  "result": "IN_PROGRESS",
+  "derived_from": {
+    "task_id": "TASK-20260909-001",
+    "case_id": "body-charset",
+    "evidence_path": "docs/testing/evidence/2026-09-09/TASK-20260909-001/body-charset"
+  },
+  "not_applicable": [
+    "protocol-wire",
+    "Windows runtime",
+    "business acceptance"
+  ]
+}

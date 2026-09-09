@@ -1,0 +1,30 @@
+[
+  {
+    "name": "capture-tests",
+    "command": [
+      "node",
+      "node_modules/vitest/vitest.mjs",
+      "run",
+      "src/features/capture"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "typecheck",
+    "command": [
+      "node",
+      "node_modules/typescript/bin/tsc",
+      "--noEmit"
+    ],
+    "exit_code": 0
+  },
+  {
+    "name": "frontend-boundaries",
+    "command": [
+      "deno",
+      "task",
+      "scan:frontend-boundaries"
+    ],
+    "exit_code": 0
+  }
+]
