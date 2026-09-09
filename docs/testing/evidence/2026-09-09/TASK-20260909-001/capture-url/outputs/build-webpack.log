@@ -1,0 +1,32 @@
+Task build next build '--webpack'
+▲ Next.js 16.2.12 (webpack)
+
+  Creating an optimized production build ...
+✓ Compiled successfully in 11.9s
+  Running TypeScript ...
+  Finished TypeScript in 5.5s ...
+  Collecting page data using 7 workers ...
+  Generating static pages using 7 workers (0/13) ...
+  Generating static pages using 7 workers (3/13) 
+  Generating static pages using 7 workers (6/13) 
+  Generating static pages using 7 workers (9/13) 
+✓ Generating static pages using 7 workers (13/13) in 481ms
+  Finalizing page optimization ...
+  Collecting build traces ...
+
+Route (app)
+┌ ○ /
+├ ○ /_not-found
+├ ○ /android-network
+├ ○ /capture
+├ ○ /certificates
+├ ○ /diagnostics
+├ ○ /listeners
+├ ○ /protocol-packages
+├ ○ /rules
+├ ○ /settings
+└ ○ /workspaces
+
+
+○  (Static)  prerendered as static content
+
