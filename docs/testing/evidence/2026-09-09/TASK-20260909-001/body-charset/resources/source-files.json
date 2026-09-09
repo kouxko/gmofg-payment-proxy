@@ -1,0 +1,18 @@
+[
+  "src-tauri/crates/application/src/facade/rules/exchange_mock.rs",
+  "src-tauri/crates/application/src/models/exchange_observation.rs",
+  "src-tauri/crates/exchange/src/observation.rs",
+  "src-tauri/crates/exchange/src/observation/failure.rs",
+  "src-tauri/crates/exchange/src/observation/tests.rs",
+  "src-tauri/crates/exchange/src/protocol.rs",
+  "src-tauri/crates/infrastructure/src/adapters/body_codecs.rs",
+  "src-tauri/crates/infrastructure/src/adapters/body_codecs/exchange_preview.rs",
+  "src-tauri/crates/infrastructure/src/adapters/mod.rs",
+  "src-tauri/crates/infrastructure/src/lib.rs",
+  "src-tauri/src/runtime_logs/exchange_ui_layer.rs",
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests.rs",
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests/fixtures/receipt-shift-jis.bin",
+  "src-tauri/src/runtime_logs/exchange_ui_layer/tests/http_body.rs",
+  "src/features/capture/exchange-observation-detail.test.tsx",
+  "src/generated/rust-types.ts"
+]

@@ -1,0 +1,11 @@
+{
+  "body": "売上票（署名）保管正常完了。",
+  "body_is_utf8": false,
+  "stages": [
+    "received",
+    "encoded",
+    "sent",
+    "failed"
+  ],
+  "wire_hex": "94848fe3955b81698f9096bc816a95db8ac790b38fed8aae97b98142"
+}

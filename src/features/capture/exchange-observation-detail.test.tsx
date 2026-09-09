@@ -60,6 +60,22 @@ describe("ExchangeObservationDetail", () => {
     expect(frames[0].getAttribute("srcdoc")).not.toContain("unsafe()");
   });
 
+  it("renders a charset-decoded Japanese Body while preserving its non-UTF8 flag", () => {
+    const record = httpExchangeRecord();
+    const response = record.events[3];
+    if (response.event !== "received" || response.context.protocol !== "http") {
+      throw new Error("expected a received HTTP response fixture");
+    }
+    response.context.header = "HTTP/1.1 200 OK\r\nContent-Type: text/csv;charset=Shift_JIS\r\n\r\n";
+    response.context.body = "売上票（署名）保管正常完了。";
+    response.context.body_is_utf8 = false;
+
+    render(<ExchangeObservationDetail selected={record} detail={record} loading={false} onClose={vi.fn()} onRetry={vi.fn()} onCreateMockDraft={vi.fn()} />);
+
+    expect(screen.getByText("売上票（署名）保管正常完了。")).toBeVisible();
+    expect(response.context.body_is_utf8).toBe(false);
+  });
+
   it("offers the action on a server HTTP response and passes the exact event index", async () => {
     const onCreateMockDraft = vi.fn();
     const record = httpExchangeRecord();

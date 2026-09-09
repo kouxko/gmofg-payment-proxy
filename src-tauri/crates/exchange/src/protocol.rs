@@ -20,6 +20,7 @@ pub enum ObservedContext<'a> {
         header: &'a str,
         body: &'a str,
         body_is_utf8: bool,
+        wire_body: &'a [u8],
     },
     Socket {
         data: &'a [u8],
@@ -72,6 +73,7 @@ impl ObservedProtocol for Http {
             header: &context.header,
             body: &context.body,
             body_is_utf8: context.body_is_utf8,
+            wire_body: &context.wire_body,
         }
     }
 }

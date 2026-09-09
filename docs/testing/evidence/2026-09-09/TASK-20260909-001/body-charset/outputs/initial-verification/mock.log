@@ -1,0 +1,9 @@
+   Compiling intercept-proxy-application v1.0.1 (/Users/codin/Code/gmofg-payment-proxy-hotfix-body-charset/src-tauri/crates/application)
+    Finished `test` profile [unoptimized + debuginfo] target(s) in 20.14s
+     Running unittests src/lib.rs (/Users/codin/Code/gmofg-payment-proxy/src-tauri/target/debug/deps/intercept_proxy_application-838933e596633c79)
+
+running 1 test
+test facade::rules::exchange_mock::tests::captured_response_body_becomes_proxy_to_app_replace_body ... ok
+
+test result: ok. 1 passed; 0 failed; 0 ignored; 0 measured; 436 filtered out; finished in 0.00s
+
