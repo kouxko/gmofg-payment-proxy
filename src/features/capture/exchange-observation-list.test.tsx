@@ -1,4 +1,5 @@
 import { render, screen } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { describe, expect, it, vi } from "vitest";
 import { ExchangeObservationList } from "./exchange-observation-list";
 import {
@@ -6,9 +7,29 @@ import {
   exchangePage,
   exchangeRecord,
   failedExchangeRecord,
+  httpExchangeRecord,
 } from "./exchange-observation-test-fixture";
 
 describe("ExchangeObservationList", () => {
+  it("updates the original request path in place and keeps the complete value and row selection", async () => {
+    const user = userEvent.setup();
+    const onSelect = vi.fn();
+    const props = { loading: false, onSelect, onPage: vi.fn(), onRetry: vi.fn(), onClear: vi.fn() };
+    const { rerender } = render(<ExchangeObservationList {...props} page={exchangePage()} />);
+    expect(screen.getByRole("columnheader", { name: "App 原始请求路径（最新）" })).toBeVisible();
+    expect(screen.getByTitle("/pay")).toBeVisible();
+    expect(screen.getByText("—")).toBeVisible();
+    const record = httpExchangeRecord();
+    const target = `/api/pay?token=a%2Fb+c&empty=&long=${"x".repeat(2048)}`;
+    record.events.push({ event: "received", observed_at: "2026-09-09T01:00:00Z", direction: "upstream", context: { protocol: "http", header: `POST ${target} HTTP/1.1`, body: "", body_is_utf8: true }, document: null, display: null });
+    rerender(<ExchangeObservationList {...props} page={{ ...exchangePage(), rows: [record, exchangeRecord()] }} />);
+    expect(screen.queryByTitle("/pay")).not.toBeInTheDocument();
+    const path = screen.getByTitle(target);
+    expect(path).toHaveTextContent(target);
+    await user.click(path);
+    expect(onSelect).toHaveBeenCalledWith(record);
+  });
+
   it("shows HTTP and Socket connections in one table with loss counters", () => {
     const page = { ...exchangePage(), evicted_records: 2, dropped_events: 4, ignored_events: 3 };
     render(<ExchangeObservationList page={page} loading={false} onSelect={vi.fn()} onPage={vi.fn()} onRetry={vi.fn()} onClear={vi.fn()} />);

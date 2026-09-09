@@ -1,0 +1,77 @@
+@import "tailwindcss";
+@import "@heroui/styles";
+
+/*
+ * 全局视觉令牌只定义颜色、字体和系统可访问性，不自制 Button/Input 等组件。
+ * 所有交互控件必须继续使用 HeroUI；页面文件中的 Tailwind 只负责布局和间距。
+ */
+:root {
+  color-scheme: light;
+  --telemetry-background: #ffffff;
+  --telemetry-surface: #ffffff;
+  --telemetry-ink: #16212b;
+  --telemetry-muted: #5f6b76;
+  --telemetry-line: #d9e0e6;
+  --telemetry-soft: #f5f8fa;
+  --telemetry-accent: #007f8c;
+  --telemetry-accent-soft: #e9f7f8;
+  --telemetry-good: #2c9c45;
+  --telemetry-warning: #d77a00;
+  --telemetry-danger: #d92d35;
+}
+
+[data-theme="dark"] {
+  color-scheme: dark;
+  /* HeroUI v3 默认字段边框为透明；深色表面必须显式提供可辨识边界。 */
+  --field-border-width: 1px;
+  --field-background: #181b1f;
+  --field-border: #4b5560;
+  --field-border-hover: #68727d;
+  --field-border-focus: var(--telemetry-accent);
+  --telemetry-background: #111315;
+  --telemetry-surface: #1c1f22;
+  --telemetry-ink: #f2f5f7;
+  --telemetry-muted: #aeb8c1;
+  --telemetry-line: #343a40;
+  --telemetry-soft: #252a2f;
+  --telemetry-accent: #5ccbd3;
+  --telemetry-accent-soft: #17383c;
+  --telemetry-good: #65c77a;
+  --telemetry-warning: #ffb454;
+  --telemetry-danger: #ff7379;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  background: var(--telemetry-background);
+  color: var(--telemetry-ink);
+  font-family:
+    "Segoe UI", "Microsoft YaHei UI", "Microsoft YaHei", Arial, sans-serif;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+::selection {
+  background: #bee9ec;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  /* 尊重系统“减少动态效果”设置，避免滚动和动画造成不适。 */
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}
